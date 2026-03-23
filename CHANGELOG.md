@@ -10,11 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.1] - 2026-03-23
 
 ### Changed
+
 - Renamed Go module path and all repository references from `dietermayrhofer/dtwiz` to `dynatrace-oss/dtwiz`
 
 ## [0.1.0] - 2026-03-23
 
 ### Added
+
 - Initial release of **dtwiz** — zero-config Dynatrace observability setup CLI
 - `dtwiz setup` — interactive analyze → recommend → pick → install workflow
 - `dtwiz analyze` — detect platform, Docker, Kubernetes, OneAgent, OTel Collector, AWS, Azure, services (Linux, macOS, Windows)
