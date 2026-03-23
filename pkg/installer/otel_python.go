@@ -336,7 +336,7 @@ func DetectPythonPlan(apiURL, token string) *PythonInstrumentationPlan {
 		return nil
 	}
 
-	otelHeader := color.New(color.FgMagenta, color.Bold)
+	otelHeader := color.New(color.FgMagenta)
 	otelMuted := color.New()
 
 	fmt.Println()

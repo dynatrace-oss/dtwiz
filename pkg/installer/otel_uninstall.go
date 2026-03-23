@@ -22,16 +22,19 @@ type otelProcessInfo struct {
 // findRunningOtelProcesses returns detailed info for every running
 // dynatrace-otel-collector process, including its install directory.
 func findRunningOtelProcesses() []otelProcessInfo {
-	pids := findRunningOtelCollectors()
+	procs := findRunningOtelCollectors()
 	var infos []otelProcessInfo
-	for _, pid := range pids {
-		binPath := binaryPathFromPID(pid)
+	for _, rc := range procs {
+		binPath := rc.path
+		if binPath == "" {
+			binPath = binaryPathFromPID(rc.pid)
+		}
 		installDir := ""
 		if binPath != "" {
 			installDir = filepath.Dir(binPath)
 		}
 		infos = append(infos, otelProcessInfo{
-			pid:        pid,
+			pid:        rc.pid,
 			binaryPath: binPath,
 			installDir: installDir,
 		})

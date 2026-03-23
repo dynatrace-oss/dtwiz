@@ -22,6 +22,8 @@ import (
 	"strings"
 	"text/template"
 	"time"
+
+	"github.com/fatih/color"
 )
 
 //go:embed otel.tmpl
@@ -588,44 +590,66 @@ func generateOtelConfig(apiURL, token string) (string, error) {
 	return buf.String(), nil
 }
 
-// printFileBox prints file content inside a box-drawing frame so it is
-// visually distinct from action/command lines in the plan output.
-func printFileBox(path, content string) {
-	label := filepath.Base(path)
-	// Build the top border: ┌── filename ──────…
-	minWidth := 50
-	top := fmt.Sprintf("     ┌── %s ", label)
-	if pad := minWidth - len(top); pad > 0 {
-		top += strings.Repeat("─", pad)
+// printConfigPreview prints the OTel Collector config in the separator+title
+// style consistent with the AWS and Kubernetes install previews.
+func (cp *collectorPlan) printConfigPreview(cyan *color.Color, sep string) {
+	label := filepath.Base(cp.configPath)
+	fmt.Println()
+	fmt.Printf("  %s\n", sep)
+	cyan.Printf("  %s:\n", label)
+	fmt.Printf("  %s\n", sep)
+	for _, line := range strings.Split(strings.TrimRight(cp.configPreview, "\n"), "\n") {
+		fmt.Printf("    %s\n", line)
 	}
-	fmt.Println(top)
-	for _, line := range strings.Split(strings.TrimRight(content, "\n"), "\n") {
-		fmt.Printf("     │ %s\n", line)
-	}
-	bottom := "     └" + strings.Repeat("─", minWidth-len("     └"))
-	fmt.Println(bottom)
+	fmt.Printf("  %s\n", sep)
 }
 
 // findRunningOtelCollectors returns the PIDs of all running dynatrace-otel-collector
+// runningCollector holds info about a detected running OTel Collector process.
+type runningCollector struct {
+	pid  int
+	path string
+}
+
+// findRunningOtelCollectors returns info about all running dynatrace-otel-collector
 // processes (there may be more than one if a previous kill was incomplete).
-func findRunningOtelCollectors() []int {
+func findRunningOtelCollectors() []runningCollector {
 	if runtime.GOOS == "windows" {
-		return findRunningOtelCollectorsWindows()
+		pids := findRunningOtelCollectorsWindows()
+		result := make([]runningCollector, len(pids))
+		for i, p := range pids {
+			result[i] = runningCollector{pid: p}
+		}
+		return result
 	}
-	// Unix: use -f to match the full command line, catching processes started
-	// via an absolute path or through a wrapper (e.g. go run).
 	out, err := exec.Command("pgrep", "-f", "dynatrace-otel-collector").Output()
 	if err != nil {
 		return nil
 	}
-	var pids []int
+	var result []runningCollector
 	for _, s := range strings.Fields(strings.TrimSpace(string(out))) {
 		pid, err := strconv.Atoi(s)
-		if err == nil {
-			pids = append(pids, pid)
+		if err != nil {
+			continue
 		}
+		rc := runningCollector{pid: pid}
+		if exe, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid)); err == nil {
+			rc.path = exe
+		} else if out, err := exec.Command("ps", "-o", "comm=", "-p", strconv.Itoa(pid)).Output(); err == nil {
+			rc.path = strings.TrimSpace(string(out))
+		}
+		result = append(result, rc)
 	}
-	return pids
+	return result
+}
+
+// formatPIDs formats a slice of PIDs as a comma-separated string.
+func formatPIDs(procs []runningCollector) string {
+	s := make([]string, len(procs))
+	for i, p := range procs {
+		s[i] = strconv.Itoa(p.pid)
+	}
+	return strings.Join(s, ", ")
 }
 
 // findRunningOtelCollectorsWindows searches for all known OTel Collector
@@ -743,6 +767,7 @@ type collectorPlan struct {
 	binaryPath     string
 	configContent  string
 	configPreview  string
+	runningPIDs    []runningCollector
 }
 
 func prepareCollectorPlan(envURL, token, ingestToken string) (*collectorPlan, error) {
@@ -768,22 +793,19 @@ func prepareCollectorPlan(envURL, token, ingestToken string) (*collectorPlan, er
 		binaryPath:     filepath.Join(installDir, otelCollectorBinaryName()),
 		configContent:  configContent,
 		configPreview:  strings.ReplaceAll(configContent, collectorToken, "<redacted>"),
+		runningPIDs:    findRunningOtelCollectors(),
 	}, nil
 }
 
-func (cp *collectorPlan) printPlanSteps() {
-	fmt.Printf("     Directory : %s\n", cp.installDir)
-	fmt.Printf("     Binary    : %s\n", cp.binaryPath)
-	fmt.Println()
-	printFileBox(cp.configPath, cp.configPreview)
-}
-
 func (cp *collectorPlan) printDryRun(ingestToken string) {
-	assetName, _ := otelPlatformAssetName("latest")
+	cyan := color.New(color.FgMagenta)
+	sep := strings.Repeat("─", 60)
+
 	fmt.Println("[dry-run] Would install Dynatrace OpenTelemetry Collector")
 	fmt.Printf("  Install dir:  %s\n", cp.installDir)
 	fmt.Printf("  Binary:       %s\n", cp.binaryPath)
 	fmt.Printf("  Config:       %s\n", cp.configPath)
+	assetName, _ := otelPlatformAssetName("latest")
 	fmt.Printf("  Asset:        %s\n", assetName)
 	fmt.Printf("  Ingest token: %s\n", func() string {
 		if ingestToken != "" {
@@ -791,8 +813,8 @@ func (cp *collectorPlan) printDryRun(ingestToken string) {
 		}
 		return "(from token)"
 	}())
-	fmt.Println()
-	printFileBox(cp.configPath, cp.configPreview)
+
+	cp.printConfigPreview(cyan, sep)
 }
 
 // execute downloads, writes config, and starts the collector.
@@ -813,26 +835,19 @@ func (cp *collectorPlan) execute(envURL, platformToken string, skipVerification 
 	}
 	fmt.Printf("  Config written to: %s\n", cp.configPath)
 
-	if pids := findRunningOtelCollectors(); len(pids) > 0 {
-		fmt.Printf("\n  Dynatrace OTel Collector already running (PIDs: %v).\n", pids)
-		fmt.Print("  Kill them and start the new one? [Y/n]: ")
-		reader := bufio.NewReader(os.Stdin)
-		answer, _ := reader.ReadString('\n')
-		answer = strings.TrimSpace(strings.ToLower(answer))
-		if answer != "" && answer != "y" && answer != "yes" {
-			return fmt.Errorf("aborted: collector already running (PIDs: %v)", pids)
-		}
-		for _, pid := range pids {
-			proc, err := os.FindProcess(pid)
+	if procs := cp.runningPIDs; len(procs) > 0 {
+		fmt.Printf("  Stopping existing collector (PIDs: %s)...\n", formatPIDs(procs))
+		for _, rc := range procs {
+			proc, err := os.FindProcess(rc.pid)
 			if err != nil {
-				fmt.Printf("  Warning: could not find process %d: %v\n", pid, err)
+				fmt.Printf("  Warning: could not find process %d: %v\n", rc.pid, err)
 				continue
 			}
 			if err := proc.Kill(); err != nil {
-				fmt.Printf("  Warning: could not kill process %d: %v\n", pid, err)
+				fmt.Printf("  Warning: could not kill process %d: %v\n", rc.pid, err)
 				continue
 			}
-			fmt.Printf("  Stopped collector (PID %d).\n", pid)
+			fmt.Printf("  Stopped collector (PID %d).\n", rc.pid)
 		}
 	}
 
@@ -857,8 +872,10 @@ func (cp *collectorPlan) execute(envURL, platformToken string, skipVerification 
 // InstallOtelCollectorOnly installs the Dynatrace OTel Collector without
 // runtime instrumentation.
 func InstallOtelCollectorOnly(envURL, token, ingestToken, platformToken string, dryRun bool) error {
+	cyan := color.New(color.FgMagenta)
+
 	fmt.Println()
-	fmt.Println("  This installer will set up the Dynatrace OpenTelemetry Collector.")
+	cyan.Println("  Dynatrace OpenTelemetry Installation")
 	fmt.Println()
 
 	cp, err := prepareCollectorPlan(envURL, token, ingestToken)
@@ -871,18 +888,30 @@ func InstallOtelCollectorOnly(envURL, token, ingestToken, platformToken string, 
 		return nil
 	}
 
-	fmt.Println()
-	fmt.Println("  ── Plan ──")
-	fmt.Println()
-	cp.printPlanSteps()
+	sep := strings.Repeat("─", 60)
+
+	fmt.Printf("  Directory: %s\n", cp.installDir)
+	fmt.Printf("  Binary:    %s\n", cp.binaryPath)
+	if len(cp.runningPIDs) > 0 {
+		for _, rc := range cp.runningPIDs {
+			if rc.path != "" {
+				fmt.Printf("  Running:  Existing OTel Collector PID %d at %s (will be stopped)\n", rc.pid, rc.path)
+			} else {
+				fmt.Printf("  Running:  Existing OTel Collector PID %d (will be stopped)\n", rc.pid)
+			}
+		}
+	}
+
+	cp.printConfigPreview(cyan, sep)
 
 	fmt.Println()
-	fmt.Print("  Apply? [Y/n]: ")
-	reader := bufio.NewReader(os.Stdin)
-	answer, _ := reader.ReadString('\n')
-	answer = strings.TrimSpace(strings.ToLower(answer))
-	if answer != "" && answer != "y" && answer != "yes" {
-		return fmt.Errorf("installation aborted")
+	ok, err := confirmProceed("  Proceed with installation?")
+	if err != nil {
+		return fmt.Errorf("reading confirmation: %w", err)
+	}
+	if !ok {
+		fmt.Println("  Installation cancelled.")
+		return nil
 	}
 	fmt.Println()
 
