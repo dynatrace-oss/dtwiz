@@ -1,8 +1,5 @@
 # dtwiz
 
-> **Note**
-> This product is not officially supported by Dynatrace!
-
 **Dynatrace Ingest CLI** — analyzes your system and deploys the best Dynatrace observability method.
 
 `dtwiz` is a Go CLI that analyzes your system and deploys the best Dynatrace observability method automatically.
