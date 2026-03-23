@@ -534,7 +534,7 @@ func InstallAWS(envURL, token, platformToken string, dryRun bool) error {
 
 	// ── Confirm ───────────────────────────────────────────────────────────────
 
-	ok, err := confirmProceed("  Proceed with deployment?")
+	ok, err := confirmProceed("  Proceed with installation?")
 	if err != nil {
 		return fmt.Errorf("reading confirmation: %w", err)
 	}
