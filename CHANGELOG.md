@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-03-23
+
+### Changed
+- Renamed Go module path and all repository references from `dietermayrhofer/dtwiz` to `dynatrace-oss/dtwiz`
+
 ## [0.1.0] - 2026-03-23
 
 ### Added
@@ -30,5 +35,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/dynatrace-oss/dtwiz/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/dynatrace-oss/dtwiz/releases/tag/v0.1.0
