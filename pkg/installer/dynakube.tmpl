@@ -1,0 +1,114 @@
+apiVersion: v1
+stringData:
+  apiToken: {{ .APIToken }}
+  dataIngestToken: {{ .DataIngestToken }}
+kind: Secret
+metadata:
+  name: {{ .ClusterName }}
+  namespace: dynatrace
+  labels:
+    dynatrace.com/created-by: "dynatrace.kubernetes"
+type: Opaque
+---
+apiVersion: dynatrace.com/v1beta6
+kind: DynaKube
+metadata:
+  name: {{ .ClusterName }}
+  namespace: dynatrace
+  labels:
+    dynatrace.com/created-by: "dynatrace.kubernetes"
+spec:
+  apiUrl: {{ .APIURL }}
+  tokens: {{ .ClusterName }}
+  activeGate:
+    capabilities:
+      - kubernetes-monitoring
+    resources:
+      requests:
+        cpu: 1000m
+        memory: 10Gi
+      limits:
+        cpu: 2000m
+        memory: 10Gi
+    replicas: 1
+  templates:
+    extensionExecutionController:
+      imageRef:
+        repository: {{ .EECRepository }}
+        tag: latest
+    otelCollector:
+      imageRef:
+        repository: public.ecr.aws/dynatrace/dynatrace-otel-collector
+        tag: latest
+    logMonitoring:
+      imageRef:
+        repository: public.ecr.aws/dynatrace/dynatrace-logmodule
+        tag: 1.331.49.20260227-104933
+    kspmNodeConfigurationCollector:
+      imageRef:
+        repository: public.ecr.aws/dynatrace/dynatrace-k8s-node-config-collector
+        tag: 1.5.4
+  kspm:
+    mappedHostPaths:
+      - /boot
+      - /etc
+      - /proc/sys/kernel
+      - /sys/fs
+      - /sys/kernel/security/apparmor
+      - /usr/lib/systemd/system
+      - /var/lib
+  telemetryIngest:
+    protocols:
+      - jaeger
+      - otlp
+      - statsd
+      - zipkin
+    serviceName: telemetry-ingest
+  logMonitoring: {}
+  extensions:
+    prometheus: {}
+---
+apiVersion: dynatrace.com/v1beta6
+kind: DynaKube
+metadata:
+  name: {{ .ClusterName }}-agents
+  namespace: dynatrace
+  labels:
+    dynatrace.com/created-by: "dynatrace.kubernetes"
+spec:
+  apiUrl: {{ .APIURL }}
+  tokens: {{ .ClusterName }}
+  metadataEnrichment:
+    enabled: true
+  oneAgent:
+    applicationMonitoring: {}
+  activeGate:
+    capabilities:
+      - routing
+      - debugging
+    resources:
+      requests:
+        cpu: 200m
+        memory: 4Gi
+      limits:
+        cpu: 1000m
+        memory: 4Gi
+    replicas: 3
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    rbac.dynatrace.com/aggregate-to-monitoring: "true"
+    dynatrace.com/created-by: "dynatrace.kubernetes"
+  name: dynatrace-kubernetes-monitoring-sensitive
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - secrets
+    verbs:
+      - list
+      - watch
+      - get

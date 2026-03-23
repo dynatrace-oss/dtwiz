@@ -1,0 +1,69 @@
+# Dynatrace AWS Data Acquisition — CloudFormation Stack Parameters
+# Rendered by dtwiz. Review the values below before deployment.
+
+stack:
+  # Name of the CloudFormation stack to create or update.
+  # Must be unique within the AWS account and region.
+  name: "{{ .StackName }}"
+
+  # Pinned CloudFormation template (hosted by Dynatrace).
+  template_url: "https://dynatrace-data-acquisition.s3.amazonaws.com/aws/deployment/cfn/v1.0.0/da-aws-activation.yaml"
+
+  # IAM resources are created by the template — CAPABILITY_NAMED_IAM is required.
+  capabilities:
+    - CAPABILITY_NAMED_IAM
+
+parameters:
+  # ── Dynatrace Connection ────────────────────────────────────────────────────
+
+  # Full URL of your Dynatrace Platform environment.
+  # e.g. https://<env-id>.apps.dynatrace.com
+  pDynatraceUrl: "{{ .DynatraceURL }}"
+
+  # Platform token with scopes: settings:objects:write,
+  # extensions:configurations:write, extensions:configurations:read
+  # Pattern: dt0s16.<8-char-id>.<64-char-secret>
+  pDtApiToken: "{{ .SettingsToken }}"
+
+  # Platform token with scopes: data-acquisition:logs:ingest,
+  # data-acquisition:events:ingest  (leave empty to reuse pDtApiToken).
+  # Pattern: dt0s16.<8-char-id>.<64-char-secret>
+  pDtIngestToken: "{{ .IngestToken }}"
+
+  # ── Monitoring Configuration ────────────────────────────────────────────────
+
+  # Monitoring configuration ID created in Dynatrace.
+  pMonitoringConfigId: "{{ .MonitoringConfigID }}"
+
+  # ── Log Ingestion ───────────────────────────────────────────────────────────
+
+  # Set to TRUE to deploy log-forwarder resources (Lambda + S3 trigger).
+  pDtLogsIngestEnabled: "{{ .LogsEnabled }}"
+
+  # Comma-separated list of AWS regions where log ingestion is enabled.
+  # Leave empty to use the deployment region only.
+  pDtLogsIngestRegions: "{{ .LogsRegions }}"
+
+  # ── Event Ingestion ─────────────────────────────────────────────────────────
+
+  # Set to TRUE to deploy event-forwarder resources (EventBridge rules).
+  pDtEventsIngestEnabled: "{{ .EventsEnabled }}"
+
+  # Comma-separated list of AWS regions where event ingestion is enabled.
+  # Leave empty to use the deployment region only.
+  pDtEventsIngestRegions: "{{ .EventsRegions }}"
+
+  # ── EventBridge ─────────────────────────────────────────────────────────────
+
+  # Name of the Amazon EventBridge bus to consume events from.
+  # Use "default" for the account-default event bus.
+  pEventBridgeBusName: "{{ .EventBridgeBusName }}"
+
+  # Comma-separated list of event sources to forward to Dynatrace.
+  # e.g. aws.ec2,aws.s3,aws.lambda
+  pEventSources: "{{ .EventSources }}"
+
+  # ── Encryption ──────────────────────────────────────────────────────────────
+
+  # Set to TRUE to create and use a Customer Managed Key (CMK) for encryption.
+  pUseCMK: "{{ .UseCMK }}"

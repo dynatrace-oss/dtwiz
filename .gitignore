@@ -1,0 +1,52 @@
+# Binaries
+bin/
+dist/
+releases/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+dtwiz
+
+# Test binary
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.out
+
+# Dependency directories
+vendor/
+go/
+
+# Go workspace file
+go.work
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config files (might contain tokens)
+config.yaml
+.dtctl/
+
+# Build artifacts
+*.log
+.integrationtests.env
+completions/
+
+# API specs (copied for reference, not tracked)
+.api-spec/
+
+# Downloaded collector binary and generated config (contains tokens)
+opentelemetry/dynatrace-otel-collector
+opentelemetry/config.yaml
+opentelemetry/*.bak*
