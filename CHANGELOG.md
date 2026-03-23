@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-03-23
+
+### Changed
+- All `install` commands now use a consistent "Proceed with installation?" confirmation prompt
+- Overhauled OTel install preview UI: purple title, separator-based config blocks, numbered sections (1) Collector, 2) Python), intro line for two-part installs
+- Running OTel Collector processes are now detected before install and shown in the preview with their PID and binary path; stopped unconditionally without a separate prompt
+- `install otel-python` standalone preview now matches the style of other installers (purple title, separator, purple "Steps:" header)
+- Removed unofficial support disclaimer from README
+
 ## [0.1.1] - 2026-03-23
 
 ### Changed
@@ -35,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/dynatrace-oss/dtwiz/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/dynatrace-oss/dtwiz/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/dynatrace-oss/dtwiz/releases/tag/v0.1.0
