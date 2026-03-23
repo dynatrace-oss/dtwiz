@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/dietermayrhofer/dtwiz/pkg/analyzer"
+	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 	"github.com/fatih/color"
 )
 

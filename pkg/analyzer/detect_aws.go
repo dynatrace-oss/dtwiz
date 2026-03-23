@@ -31,20 +31,6 @@ type awsServiceProbe struct {
 	countFn func(out string) int
 }
 
-func countLines(out string) int {
-	var n int
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		if strings.TrimSpace(line) != "" {
-			n++
-		}
-	}
-	return n
-}
-
-func countFields(out string) int {
-	return len(strings.Fields(strings.TrimSpace(out)))
-}
-
 func parseIntFirst(out string) int {
 	f := strings.Fields(strings.TrimSpace(out))
 	if len(f) == 0 {

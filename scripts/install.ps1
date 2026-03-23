@@ -18,7 +18,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$Repo = "dietermayrhofer/dtwiz"
+$Repo = "dynatrace-oss/dtwiz"
 
 # ── Detect architecture ────────────────────────────────────────────────────────
 # Try .NET RuntimeInformation first (PowerShell 7+ / .NET 4.7.1+), then fall

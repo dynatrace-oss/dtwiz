@@ -30,17 +30,6 @@ type azureServiceProbe struct {
 	countFn func(out string) int
 }
 
-func parseAzureCount(out string) int {
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	var n int
-	for _, line := range lines {
-		if t := strings.TrimSpace(line); t != "" && t != "[]" {
-			n++
-		}
-	}
-	return n
-}
-
 func parseAzureInt(out string) int {
 	f := strings.Fields(strings.TrimSpace(out))
 	if len(f) == 0 {

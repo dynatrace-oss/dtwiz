@@ -1,4 +1,4 @@
-module github.com/dietermayrhofer/dtwiz
+module github.com/dynatrace-oss/dtwiz
 
 go 1.24.13
 

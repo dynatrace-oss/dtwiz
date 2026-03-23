@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/dietermayrhofer/dtwiz/pkg/analyzer"
+	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )

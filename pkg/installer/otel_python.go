@@ -279,7 +279,7 @@ func stopProcesses(pids []int) {
 			continue
 		}
 		// Wait for the process to actually exit so ports are released.
-		proc.Wait()
+		_, _ = proc.Wait()
 		fmt.Printf("    Stopped PID %d\n", pid)
 	}
 }
@@ -488,8 +488,6 @@ func (p *PythonInstrumentationPlan) Execute() {
 	}
 	fmt.Println("done.")
 
-	otelInstrument = resolveVenvBinary(proj.Path, "opentelemetry-instrument")
-
 	// Launch each entrypoint.
 	fmt.Println()
 	var startedServices []string
@@ -659,7 +657,7 @@ func querySmartscapeServices(apiURL, platformToken, dql string) []string {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		io.Copy(io.Discard, resp.Body)
+		_, _ = io.Copy(io.Discard, resp.Body)
 		return nil
 	}
 

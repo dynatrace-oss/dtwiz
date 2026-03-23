@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/dietermayrhofer/dtwiz/pkg/analyzer"
+	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 	"github.com/spf13/cobra"
 )
 

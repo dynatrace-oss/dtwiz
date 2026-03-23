@@ -17,7 +17,7 @@ Run the following commands in your terminal/console to install and launch `dtwiz
 export DT_ENVIRONMENT="https://<your-tenant-domain>"
 export DT_ACCESS_TOKEN="dt0c01.XXXX..."
 export DT_PLATFORM_TOKEN="dt0s16.XXXX..."
-source <(curl -sSL https://raw.githubusercontent.com/dietermayrhofer/dtwiz/main/scripts/install.sh)
+source <(curl -sSL https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.sh)
 dtwiz setup
 ```
 
@@ -29,7 +29,7 @@ dtwiz setup
 $env:DT_ENVIRONMENT="https://<your-tenant-domain>"
 $env:DT_ACCESS_TOKEN="dt0c01.XXXX..."
 $env:DT_PLATFORM_TOKEN="dt0s16.XXXX..."
-irm https://raw.githubusercontent.com/dietermayrhofer/dtwiz/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.ps1 | iex
 dtwiz setup
 ```
 
@@ -47,17 +47,17 @@ Set the following environment variables before running `dtwiz`:
 
 **Linux / macOS:**
 ```bash
-source <(curl -sSL https://raw.githubusercontent.com/dietermayrhofer/dtwiz/main/scripts/install.sh)
+source <(curl -sSL https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.sh)
 ```
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/dietermayrhofer/dtwiz/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.ps1 | iex
 ```
 
 **From source:**
 ```bash
-git clone https://github.com/dietermayrhofer/dtwiz.git
+git clone https://github.com/dynatrace-oss/dtwiz.git
 cd dtwiz
 make install
 ```

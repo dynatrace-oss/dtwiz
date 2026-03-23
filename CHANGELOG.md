@@ -30,5 +30,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dietermayrhofer/dtwiz/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/dietermayrhofer/dtwiz/releases/tag/v0.1.0
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/dynatrace-oss/dtwiz/releases/tag/v0.1.0
