@@ -362,16 +362,20 @@ func InstallKubernetes(envURL, token, apiToken, name string, dryRun bool) error 
 	}
 
 	// --- Preview ---
+	cyan := color.New(color.FgMagenta)
 	sep := strings.Repeat("─", 60)
-	fmt.Printf("\n  Cluster name:  %s\n", name)
+
+	fmt.Println()
+	cyan.Println("  Dynatrace Kubernetes Integration")
+	fmt.Println()
+	fmt.Printf("  Cluster name:  %s\n", name)
 	fmt.Printf("  API URL:       %s\n\n", apiURL)
 	fmt.Printf("  %s\n", sep)
-	fmt.Println("  YAML manifest to be applied:")
+	cyan.Println("  dynakube.yaml manifest to be applied:")
 	fmt.Printf("  %s\n", sep)
 	for _, line := range strings.Split(strings.TrimRight(manifest, "\n"), "\n") {
 		fmt.Printf("    %s\n", line)
 	}
-	cyan := color.New(color.FgMagenta)
 	fmt.Printf("\n  %s\n", sep)
 	cyan.Printf("  Commands to be executed:\n")
 	fmt.Printf("  %s\n", sep)

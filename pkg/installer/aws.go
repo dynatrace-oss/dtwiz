@@ -3,7 +3,6 @@ package installer
 import (
 	"bufio"
 	"bytes"
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,30 +10,14 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"text/template"
 
 	"github.com/fatih/color"
 )
 
-//go:embed aws.tmpl
-var awsTemplateText string
-
 // awsTemplateURL is the pinned Dynatrace CloudFormation template.
 const awsTemplateURL = "https://dynatrace-data-acquisition.s3.amazonaws.com/aws/deployment/cfn/v1.0.0/da-aws-activation.yaml"
 
-// defaultLogsRegions is the pre-selected set of AWS regions for log ingestion.
-// Only generally-available regions are included; newer opt-in-only regions
-// (e.g. ap-east-2, ap-southeast-6, ap-southeast-7, mx-central-1) are excluded
-// because they cause CREATE_FAILED on accounts that haven't enabled them.
-const defaultLogsRegions = "us-east-1,us-east-2,us-west-1,us-west-2," +
-	"ca-central-1,ca-west-1," +
-	"ap-east-1,ap-northeast-1,ap-northeast-2,ap-northeast-3," +
-	"ap-south-1,ap-south-2," +
-	"ap-southeast-1,ap-southeast-2,ap-southeast-3,ap-southeast-4,ap-southeast-5," +
-	"eu-central-1,eu-central-2,eu-north-1,eu-south-1,eu-south-2," +
-	"eu-west-1,eu-west-2,eu-west-3," +
-	"me-central-1,me-south-1," +
-	"af-south-1,il-central-1,sa-east-1"
+
 
 // awsStackConfig holds all values required to render aws.tmpl and drive the
 // CloudFormation deployment.
@@ -334,20 +317,6 @@ func min(a, b int) int {
 	return b
 }
 
-// renderAWSTemplate fills aws.tmpl with the provided config and returns the
-// rendered YAML string.
-func renderAWSTemplate(cfg awsStackConfig) (string, error) {
-	tmpl, err := template.New("aws").Parse(awsTemplateText)
-	if err != nil {
-		return "", fmt.Errorf("parsing aws template: %w", err)
-	}
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, cfg); err != nil {
-		return "", fmt.Errorf("rendering aws template: %w", err)
-	}
-	return buf.String(), nil
-}
-
 // downloadAWSTemplate fetches the CloudFormation template from S3 to a
 // temporary file and returns its path.  The caller is responsible for
 // removing the file when done.
@@ -372,6 +341,66 @@ func downloadAWSTemplate() (string, error) {
 		return "", fmt.Errorf("writing CloudFormation template: %w", err)
 	}
 	return tmp.Name(), nil
+}
+
+// maskTokenArgs returns a copy of args with token values truncated to their
+// first 10 characters followed by "***".
+func maskTokenArgs(args []string) []string {
+	tokenPrefixes := []string{"pDtApiToken=", "pDtIngestToken="}
+	out := make([]string, len(args))
+	copy(out, args)
+	for i, a := range out {
+		for _, p := range tokenPrefixes {
+			if strings.HasPrefix(a, p) {
+				val := a[len(p):]
+				if len(val) > 10 {
+					out[i] = p + val[:10] + "***"
+				}
+				break
+			}
+		}
+	}
+	return out
+}
+
+// formatDeployCmd formats the argument slice for display, keeping --flag value
+// pairs on the same line and placing each --parameter-overrides value on its
+// own indented line.
+func formatDeployCmd(args []string) string {
+	var b strings.Builder
+	indent := "\n        "
+	paramIndent := "\n            "
+	inParams := false
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--parameter-overrides" {
+			b.WriteString(" \\")
+			b.WriteString(indent)
+			b.WriteString(a)
+			inParams = true
+			continue
+		}
+		if inParams {
+			b.WriteString(" \\")
+			b.WriteString(paramIndent)
+			b.WriteString(a)
+			continue
+		}
+		if strings.HasPrefix(a, "--") && i+1 < len(args) && !strings.HasPrefix(args[i+1], "--") {
+			b.WriteString(" \\")
+			b.WriteString(indent)
+			b.WriteString(a)
+			b.WriteString(" ")
+			i++
+			b.WriteString(args[i])
+		} else {
+			if b.Len() > 0 {
+				b.WriteString(" ")
+			}
+			b.WriteString(a)
+		}
+	}
+	return b.String()
 }
 
 // buildDeployArgs returns the argument slice for `aws cloudformation deploy`.
@@ -420,44 +449,20 @@ func InstallAWS(envURL, token, platformToken string, dryRun bool) error {
 	fmt.Println()
 	cyan.Println("  Dynatrace AWS CloudFormation Integration")
 	fmt.Println()
-	fmt.Println("  Please provide the following configuration values.")
-	fmt.Println("  Press Enter to accept the default shown in [brackets].")
-	fmt.Println()
 
-	// ── Collect parameters ────────────────────────────────────────────────────
+	// ── Validate parameters ──────────────────────────────────────────────────
 
-	stackName, err := promptLine("CloudFormation stack name", "dynatrace-data-acquisition")
-	if err != nil {
-		return fmt.Errorf("reading stack name: %w", err)
-	}
-	if stackName == "" {
-		return fmt.Errorf("stack name is required")
-	}
-
-	dynatraceURL, err := promptLine("Dynatrace environment URL", envURL)
-	if err != nil {
-		return fmt.Errorf("reading Dynatrace URL: %w", err)
-	}
+	stackName := "dynatrace-data-acquisition"
+	dynatraceURL := envURL
 	if dynatraceURL == "" {
-		return fmt.Errorf("Dynatrace environment URL is required")
+		return fmt.Errorf("Dynatrace environment URL is required (--environment or DT_ENVIRONMENT)")
 	}
 
-	var settingsToken, ingestToken string
-	settingsToken, err = promptLineSecret("API token (scopes: settings:objects:write, extensions:configurations:write/read)", defaultToken)
-	if err != nil {
-		return fmt.Errorf("reading settings token: %w", err)
+	if defaultToken == "" {
+		return fmt.Errorf("platform token is required (--platform-token or DT_PLATFORM_TOKEN)")
 	}
-	if settingsToken == "" {
-		return fmt.Errorf("API token is required")
-	}
-
-	ingestToken, err = promptLineSecret("Ingest token (scopes: data-acquisition:logs:ingest, data-acquisition:events:ingest)", defaultToken)
-	if err != nil {
-		return fmt.Errorf("reading ingest token: %w", err)
-	}
-	if ingestToken == "" {
-		return fmt.Errorf("ingest token is required")
-	}
+	settingsToken := defaultToken
+	ingestToken := defaultToken
 
 	// ── Auto-create monitoring configuration ──────────────────────────────────
 
@@ -486,6 +491,7 @@ func InstallAWS(envURL, token, platformToken string, dryRun bool) error {
 		}
 		fmt.Printf("  Monitoring config: created %s\n", monitoringConfigID)
 	}
+	fmt.Printf("  Template: %s\n", awsTemplateURL)
 
 	cfg := awsStackConfig{
 		StackName:          stackName,
@@ -494,9 +500,9 @@ func InstallAWS(envURL, token, platformToken string, dryRun bool) error {
 		IngestToken:        ingestToken,
 		MonitoringConfigID: monitoringConfigID,
 		LogsEnabled:        "TRUE",
-		LogsRegions:        defaultLogsRegions,
-		EventsEnabled:      "FALSE",
-		EventsRegions:      "",
+		LogsRegions:        region,
+		EventsEnabled:      "TRUE",
+		EventsRegions:      region,
 		EventBridgeBusName: "default",
 		EventSources:       "aws.health",
 		UseCMK:             "FALSE",
@@ -504,27 +510,15 @@ func InstallAWS(envURL, token, platformToken string, dryRun bool) error {
 
 	// ── Render preview ────────────────────────────────────────────────────────
 
-	rendered, err := renderAWSTemplate(cfg)
-	if err != nil {
-		return err
-	}
-
 	// Use a placeholder path in the preview; the real temp file is created just
 	// before deployment.
 	deployArgs := buildDeployArgs(cfg, "/tmp/da-aws-activation.yaml")
 
 	fmt.Println()
 	fmt.Printf("  %s\n", sep)
-	fmt.Println("  CloudFormation stack parameters:")
+	cyan.Println("  Command to be executed:")
 	fmt.Printf("  %s\n", sep)
-	for _, line := range strings.Split(strings.TrimRight(rendered, "\n"), "\n") {
-		fmt.Printf("    %s\n", line)
-	}
-
-	fmt.Printf("\n  %s\n", sep)
-	cyan.Printf("  Command to be executed:\n")
-	fmt.Printf("  %s\n", sep)
-	cyan.Printf("    aws %s\n", strings.Join(deployArgs, " \\\n        "))
+	fmt.Printf("    aws %s\n", formatDeployCmd(maskTokenArgs(deployArgs)))
 	fmt.Printf("  %s\n\n", sep)
 
 	if dryRun {

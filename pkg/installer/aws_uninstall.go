@@ -56,13 +56,7 @@ func UninstallAWS(envURL, token string, dryRun bool) error {
 	}
 	fmt.Printf("  AWS account: %s  region: %s\n\n", accountID, region)
 
-	stackName, err := promptLine("CloudFormation stack name to delete", "dynatrace-data-acquisition")
-	if err != nil {
-		return fmt.Errorf("reading stack name: %w", err)
-	}
-	if stackName == "" {
-		return fmt.Errorf("stack name is required")
-	}
+	stackName := "dynatrace-data-acquisition"
 
 	// Resolve the API token for monitoring config lookup.
 	// Prefer DT_ACCESS_TOKEN (classic dt0c01.*) per the same convention as install.
