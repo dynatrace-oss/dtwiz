@@ -1,74 +1,143 @@
-# :tada: :tada: Welcome to your new Project on GitHub :tada: :tada:
+# dtwiz
 
-> **Note**
-> This product is not officially supported by Dynatrace!
+**Dynatrace Ingest CLI** — analyzes your system and deploys the best Dynatrace observability method.
 
-Congratulations, your project on GitHub was successfully created and you can start your Open Source Adventure!
+`dtwiz` is a Go CLI that analyzes your system and deploys the best Dynatrace observability method automatically.
 
-As each adventure starts with good preparations, we also have something we would like you to do upe front.
+## Quickstart
 
-- [ ] Read this ReadMe carefully, to get an overview of the files within your project.
-- [ ] Write your own ReadMe which reflects your project
-- [ ] Check if the [default community files](https://docs.github.com/en/communities/setting-up-your-project-for-healthy-contributions/creating-a-default-community-health-file)(CONTRIBUTING.md, SECURITY.md, CODE_OF_CONDUCT.md, ..) within the organization `.github`[-project](https://github.com/dynatrace-oss/.github/) match your project's needs. If not, you can always provide your own, but we kindly ask you, that you also update those from time to time.
-- [ ] Check if there is a `LICENSE` file within your project. If not, please create one containing the `Apache License 2.0`.
-- [ ] Explicitly state that this project is not officially supported by Dynatrace in your ReadMe, eg. by using following lines on top of your ReadMe:
+Run the following commands in your terminal/console to install and launch `dtwiz`:
 
-    > **Note**
-    > This product is not officially supported by Dynatrace!
+### Linux / macOS
 
-## How can I make my project public?
+```bash
+export DT_ENVIRONMENT="https://<your-tenant-domain>"
+export DT_ACCESS_TOKEN="dt0c01.XXXX..."
+export DT_PLATFORM_TOKEN="dt0s16.XXXX..."
+source <(curl -sSL https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.sh)
+dtwiz setup
+```
 
-At first, the project will be private, as we (OSPO) want to ensure that you followed the guidelines and that everything is in place.
+> Requires bash or zsh. Using `source <(...)` makes `dtwiz` available in your current terminal immediately — no need to open a new one.
 
-As soon as you are done with your initial commits, you can inform OSPO and we will take a close look at the project, and set it to public if we do think all guidelines are followed.
+### Windows (PowerShell)
 
-There is also some automation running, which will set projects, which do not follow the guidelines, to private.
+```powershell
+$env:DT_ENVIRONMENT="https://<your-tenant-domain>"
+$env:DT_ACCESS_TOKEN="dt0c01.XXXX..."
+$env:DT_PLATFORM_TOKEN="dt0s16.XXXX..."
+irm https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.ps1 | iex
+dtwiz setup
+```
 
-## Provided Tools
+## Prerequisites
 
-### Markdownlint
+Set the following environment variables before running `dtwiz`:
 
-To make it easier for the project to keep the Markdown files in a good shape, we added `markdownlint-cli` to the project.
+| Variable | Description |
+|----------|-------------|
+| `DT_ENVIRONMENT` | Your Dynatrace environment URL (e.g. `https://<your-tenant-domain>`) |
+| `DT_ACCESS_TOKEN` | Classic API token (`dt0c01.*`) — used for OneAgent installer download, OTel ingest, etc. |
+| `DT_PLATFORM_TOKEN` | Platform token (`dt0s16.*`) — used for AWS integration and DQL log verification |
 
-1. with a `makefile` for easier execution locally, based on docker images, so it can be used in every environment as long as `docker` and `make` are available.
-1. with a workflow for pull request verification based on the `makefile`.
+## Installation
 
-The following files are part of this integration:
+**Linux / macOS:**
+```bash
+source <(curl -sSL https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.sh)
+```
 
-- `makefile`: as it contains the targets for execution
-- `.markdownlint.yml`: as it contains the configuration for `markdownlint-cli`
-- `.github/workflows/makefile.yml`: as it contains the GitHub Action configuration
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.ps1 | iex
+```
 
-## Licensing
+**From source:**
+```bash
+git clone https://github.com/dynatrace-oss/dtwiz.git
+cd dtwiz
+make install
+```
 
-We are using Apache License 2.0 as our default.
+## Available commands
 
-### Source Code Headers
+| Command | Description |
+|---------|-------------|
+| `dtwiz setup` | Interactive analyze → recommend → install workflow |
+| `dtwiz analyze` | Detect platform, containers, K8s, existing agents, cloud, and services |
+| `dtwiz recommend` | Generate ranked ingestion recommendations |
+| `dtwiz install oneagent` | Install Dynatrace OneAgent on this host |
+| `dtwiz install kubernetes` | Deploy Dynatrace Operator on Kubernetes |
+| `dtwiz install docker` | Install OneAgent for Docker |
+| `dtwiz install otel` | Install/configure OpenTelemetry Collector |
+| `dtwiz install aws` | Set up Dynatrace AWS CloudFormation integration |
+| `dtwiz install azure` | Set up Dynatrace Azure Monitor integration *(coming soon)* |
+| `dtwiz install gcp` | Set up Dynatrace Google Cloud Platform integration *(coming soon)* |
+| `dtwiz uninstall oneagent` | Uninstall Dynatrace OneAgent from this host |
+| `dtwiz uninstall kubernetes` | Remove Dynatrace Operator and DynaKube resources from Kubernetes |
+| `dtwiz uninstall otel` | Kill running OTel Collector processes and remove installation files |
+| `dtwiz uninstall aws` | Remove the Dynatrace AWS CloudFormation stack and monitoring configuration |
+| `dtwiz uninstall self` | Remove the dtwiz binary and its PATH entry |
+| `dtwiz update otel` | Patch an existing OTel Collector config with the Dynatrace exporter |
+| `dtwiz status` | Show Dynatrace connection status and system state |
 
-Every file containing source code must include copyright and license
-information. This includes any JS/CSS files that you might be serving out to
-browsers. (This is to help well-intentioned people avoid accidental copying that
-doesn't comply with the license.)
+## Example workflow
 
-Apache header:
+```bash
+# 1. Set credentials
+export DT_ENVIRONMENT="https://<your-tenant-domain>"
+export DT_ACCESS_TOKEN="dt0c01.XXXX..."
+export DT_PLATFORM_TOKEN="dt0s16.XXXX..."
 
-    Copyright 2022 Dynatrace LLC
+# 2. Analyze the current system
+dtwiz analyze
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+# 3. Get ranked recommendations
+dtwiz recommend
 
-        https://www.apache.org/licenses/LICENSE-2.0
+# 4. Install the recommended method (e.g., Kubernetes)
+dtwiz install kubernetes
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+# 5. Check status
+dtwiz status
+```
 
-## Additional Questions/Remarks
+## JSON output
 
-If you do have additional questions/remarks, feel free to reach out to OSPO, either via slack or email.
+`analyze` and `recommend` support `--json` for structured output:
 
-If you think this template did not solve all your problems, please also let us know, either with a message or a pull request.
-Together we can improve this template to make it easier for our future projects.
+```bash
+dtwiz analyze --json | jq .platform
+dtwiz recommend --json | jq '.[0].method'
+```
+
+## Building
+
+```bash
+cd dtwiz
+make build        # builds ./dtwiz binary
+make test         # runs go test ./...
+make install      # installs to $GOPATH/bin
+make clean        # removes build artifacts
+```
+
+## Architecture
+
+```
+dtwiz/
+├── main.go
+├── cmd/
+│   ├── root.go       # Cobra root + persistent flags
+│   ├── auth.go       # dtctl auth bridge (loadDtctlConfig, newDtClient, getDtEnvironment)
+│   ├── analyze.go
+│   ├── recommend.go
+│   ├── setup.go
+│   ├── install.go
+│   └── status.go
+└── pkg/
+    ├── analyzer/     # System detection (platform, Docker, K8s, agents, cloud, services)
+    ├── recommender/  # Recommendation engine
+    └── installer/    # Shared utilities + per-method stubs
+```
+
+Credentials are read from `DT_ENVIRONMENT`, `DT_ACCESS_TOKEN`, and `DT_PLATFORM_TOKEN` environment variables — `dtwiz` never stores tokens itself.
