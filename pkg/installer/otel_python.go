@@ -855,23 +855,29 @@ func InstallOtelPython(envURL, token, platformToken, serviceName string, dryRun 
 		return nil
 	}
 
+	cyan := color.New(color.FgMagenta)
+	sep := strings.Repeat("─", 60)
+
+	fmt.Println()
+	cyan.Println("  Dynatrace Python Auto-Instrumentation")
+	fmt.Println("  " + sep)
+
 	plan := DetectPythonPlan(apiURL, token)
 	if plan == nil {
 		printManualInstructions(envVars)
 		return nil
 	}
 
-	// Show the plan and confirm.
+	// Show the plan.
 	fmt.Println()
-	fmt.Println("  Steps:")
+	cyan.Println("  Steps:")
 	plan.PrintPlanSteps()
 
-	fmt.Print("\n  Apply? [Y/n]: ")
-	reader := bufio.NewReader(os.Stdin)
-	answer, _ := reader.ReadString('\n')
-	answer = strings.TrimSpace(strings.ToLower(answer))
-	if answer != "" && answer != "y" && answer != "yes" {
-		fmt.Println("  Aborted.")
+	ok, err := confirmProceed("  Proceed with installation?")
+	if err != nil {
+		return err
+	}
+	if !ok {
 		return nil
 	}
 
