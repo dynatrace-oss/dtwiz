@@ -18,13 +18,16 @@ var installOneAgentCmd = &cobra.Command{
 	Short: "Install Dynatrace OneAgent on this host",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		envURL, token, err := getDtEnvironment()
+		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
+			return err
+		}
+		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
 			return err
 		}
 		quiet, _ := cmd.Flags().GetBool("quiet")
 		hostGroup, _ := cmd.Flags().GetString("host-group")
-		return installer.InstallOneAgent(envURL, token, installDryRun, quiet, hostGroup)
+		return installer.InstallOneAgent(envURL, accessTok, installDryRun, quiet, hostGroup)
 	},
 }
 
@@ -33,11 +36,14 @@ var installKubernetesCmd = &cobra.Command{
 	Short: "Deploy Dynatrace Operator on Kubernetes",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		envURL, token, err := getDtEnvironment()
+		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
 			return err
 		}
-		return installer.InstallKubernetes(envURL, token, accessToken(), "", installDryRun)
+		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+			return err
+		}
+		return installer.InstallKubernetes(envURL, accessTok, accessTok, "", installDryRun)
 	},
 }
 
@@ -46,11 +52,14 @@ var installDockerCmd = &cobra.Command{
 	Short: "Install Dynatrace OneAgent for Docker",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		envURL, token, err := getDtEnvironment()
+		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
 			return err
 		}
-		return installer.InstallDocker(envURL, token, installDryRun)
+		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+			return err
+		}
+		return installer.InstallDocker(envURL, accessTok, installDryRun)
 	},
 }
 
@@ -59,11 +68,14 @@ var installOtelCmd = &cobra.Command{
 	Short: "Install OTel Collector and instrument your application",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		envURL, token, err := getDtEnvironment()
+		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
 			return err
 		}
-		return installer.InstallOtelCollector(envURL, token, accessToken(), platformToken(), installDryRun)
+		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+			return err
+		}
+		return installer.InstallOtelCollector(envURL, accessTok, accessTok, platformTok, installDryRun)
 	},
 }
 
@@ -72,11 +84,14 @@ var installOtelCollectorCmd = &cobra.Command{
 	Short: "Install the Dynatrace OpenTelemetry Collector only",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		envURL, token, err := getDtEnvironment()
+		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
 			return err
 		}
-		return installer.InstallOtelCollectorOnly(envURL, token, accessToken(), platformToken(), installDryRun)
+		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+			return err
+		}
+		return installer.InstallOtelCollectorOnly(envURL, accessTok, accessTok, platformTok, installDryRun)
 	},
 }
 
@@ -86,11 +101,14 @@ var installOtelPythonCmd = &cobra.Command{
 	Short: "Set up OpenTelemetry Python auto-instrumentation",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		envURL, token, err := getDtEnvironment()
+		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
 			return err
 		}
-		return installer.InstallOtelPython(envURL, token, platformToken(), otelPythonServiceName, installDryRun)
+		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+			return err
+		}
+		return installer.InstallOtelPython(envURL, accessTok, platformTok, otelPythonServiceName, installDryRun)
 	},
 }
 
@@ -100,11 +118,14 @@ var installOtelJavaCmd = &cobra.Command{
 	Short: "Set up OpenTelemetry Java auto-instrumentation",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		envURL, token, err := getDtEnvironment()
+		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
 			return err
 		}
-		return installer.InstallOtelJava(envURL, token, otelJavaServiceName, installDryRun)
+		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+			return err
+		}
+		return installer.InstallOtelJava(envURL, accessTok, otelJavaServiceName, installDryRun)
 	},
 }
 
@@ -113,11 +134,14 @@ var installAWSCmd = &cobra.Command{
 	Short: "Set up Dynatrace AWS CloudFormation integration",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		envURL, token, err := getDtEnvironment()
+		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
 			return err
 		}
-		return installer.InstallAWS(envURL, token, platformToken(), installDryRun)
+		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+			return err
+		}
+		return installer.InstallAWS(envURL, accessTok, platformTok, installDryRun)
 	},
 }
 

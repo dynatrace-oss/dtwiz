@@ -19,11 +19,14 @@ var updateOtelCmd = &cobra.Command{
 	Short: "Patch an existing OTel Collector config with the Dynatrace exporter",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		envURL, token, err := getDtEnvironment()
+		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
 			return err
 		}
-		return installer.UpdateOtelConfig(updateOtelConfigPath, envURL, token, platformToken(), updateDryRun)
+		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+			return err
+		}
+		return installer.UpdateOtelConfig(updateOtelConfigPath, envURL, accessTok, platformTok, updateDryRun)
 	},
 }
 

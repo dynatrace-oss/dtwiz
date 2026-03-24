@@ -84,28 +84,31 @@ var setupCmd = &cobra.Command{
 		setupHeader.Printf("  Installing: %s\n", selected.Title)
 		setupMuted.Println("  " + strings.Repeat("─", 42))
 
-		envURL, token, err := getDtEnvironment()
+		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
+			return err
+		}
+		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
 			return err
 		}
 
 		switch selected.Method {
 		case recommender.MethodOneAgent:
-			return installer.InstallOneAgent(envURL, token, setupDryRun, false, "")
+			return installer.InstallOneAgent(envURL, accessTok, setupDryRun, false, "")
 		case recommender.MethodKubernetes:
-			return installer.InstallKubernetes(envURL, token, accessToken(), "" /* name */, setupDryRun)
+			return installer.InstallKubernetes(envURL, accessTok, accessTok, "" /* name */, setupDryRun)
 		case recommender.MethodDocker:
-			return installer.InstallDocker(envURL, token, setupDryRun)
+			return installer.InstallDocker(envURL, accessTok, setupDryRun)
 		case recommender.MethodOtelCollector:
-			return installer.InstallOtelCollector(envURL, token, accessToken(), platformToken(), setupDryRun)
+			return installer.InstallOtelCollector(envURL, accessTok, accessTok, platformTok, setupDryRun)
 		case recommender.MethodOtelUpdate:
 			cfgPath := selected.ConfigPath
 			if cfgPath == "" {
 				cfgPath = "config.yaml" // fall back to CWD default
 			}
-			return installer.UpdateOtelConfig(cfgPath, envURL, token, platformToken(), setupDryRun)
+			return installer.UpdateOtelConfig(cfgPath, envURL, accessTok, platformTok, setupDryRun)
 		case recommender.MethodAWS:
-			return installer.InstallAWS(envURL, token, platformToken(), setupDryRun)
+			return installer.InstallAWS(envURL, accessTok, platformTok, setupDryRun)
 		default:
 			return fmt.Errorf("unsupported method: %s", selected.Method)
 		}

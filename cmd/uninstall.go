@@ -36,8 +36,14 @@ var uninstallAWSCmd = &cobra.Command{
 	Short: "Remove the Dynatrace AWS CloudFormation stack and monitoring configuration",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		envURL, token, _ := getDtEnvironment()
-		return installer.UninstallAWS(envURL, token, uninstallDryRun)
+		envURL, accessTok, platformTok, err := getDtEnvironment()
+		if err != nil {
+			return err
+		}
+		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+			return err
+		}
+		return installer.UninstallAWS(envURL, accessTok, uninstallDryRun)
 	},
 }
 
