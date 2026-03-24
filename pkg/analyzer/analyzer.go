@@ -198,7 +198,7 @@ func (s *SystemInfo) Summary() string {
 	} else {
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("Kubernetes"),
-			colorMuted.Sprint("none")))
+			colorMuted.Sprint("none — connect to a cluster with 'kubectl' to detect it")))
 	}
 
 	if s.AWS != nil && s.AWS.Available {
@@ -217,7 +217,7 @@ func (s *SystemInfo) Summary() string {
 	} else {
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("AWS"),
-			colorMuted.Sprint("none")))
+			colorMuted.Sprint("none — sign in with 'aws configure' to detect your account")))
 	}
 
 	if s.Azure != nil && s.Azure.Available {
@@ -237,12 +237,12 @@ func (s *SystemInfo) Summary() string {
 	} else {
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("Azure"),
-			colorMuted.Sprint("none")))
+			colorMuted.Sprint("none — sign in with 'az login' to detect your subscription")))
 	}
 
 	sb.WriteString(fmt.Sprintf("  %s %s\n",
 		label("GCP"),
-		colorMuted.Sprint("none")))
+		colorMuted.Sprint("none — sign in with 'gcloud auth login' to detect your project")))
 
 	if s.OneAgentRunning {
 		sb.WriteString(fmt.Sprintf("  %s running\n",
