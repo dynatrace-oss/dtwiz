@@ -7,7 +7,7 @@ releases/
 *.dll
 *.so
 *.dylib
-dtwiz
+/dtwiz
 
 # Test binary
 *.test
