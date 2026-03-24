@@ -128,7 +128,7 @@ dtwiz/
 ├── main.go
 ├── cmd/
 │   ├── root.go       # Cobra root + persistent flags
-│   ├── auth.go       # dtctl auth bridge (loadDtctlConfig, newDtClient, getDtEnvironment)
+│   ├── auth.go       # credential resolution (getDtEnvironment, accessToken, platformToken)
 │   ├── analyze.go
 │   ├── recommend.go
 │   ├── setup.go

@@ -440,7 +440,7 @@ func InstallAWS(envURL, token, platformToken string, dryRun bool) error {
 	cyan := color.New(color.FgMagenta)
 	sep := strings.Repeat("─", 60)
 
-	// Prefer the explicit platform token; fall back to the dtctl token.
+	// Prefer the explicit platform token; fall back to the access token.
 	defaultToken := platformToken
 	if defaultToken == "" {
 		defaultToken = token
