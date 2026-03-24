@@ -35,8 +35,11 @@ Install packages: `@opentelemetry/sdk-node`, `@opentelemetry/auto-instrumentatio
 
 Alternative: Always use npm — rejected because it would conflict with projects using yarn/pnpm lockfiles.
 
-**3. Launch via `node --require` flag**
-Run `node --require @opentelemetry/auto-instrumentations-node/register <entrypoint>` with OTEL_* env vars. This is the officially recommended zero-code approach.
+**3. Function signature mirrors Python installer**
+`InstallOtelNode(envURL, token, platformToken, serviceName string, dryRun bool) error` — matches the Python pattern. `platformToken` is needed for DQL verification via `waitForServices()`. `serviceName` defaults to project name if empty.
+
+**4. Launch via `node --require` flag**
+Run `node --require @opentelemetry/auto-instrumentations-node/register <entrypoint>` with OTEL_* env vars. Detach via `cmd.Start()` + `cmd.Process.Release()` (same pattern as `startOtelCollector()` and Python entrypoint launch). This is the officially recommended zero-code approach.
 
 Alternative: Programmatic SDK setup — rejected because it requires code changes, violating zero-config principle.
 

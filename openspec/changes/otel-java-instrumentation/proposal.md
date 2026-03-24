@@ -22,7 +22,7 @@ Java is a first-priority language in our OTel roadmap (alongside Python). The cu
 
 ## Impact
 
-- `pkg/installer/otel_java.go` — replace stub with full implementation
+- `pkg/installer/otel_java.go` — replace stub with full implementation, extend function signature to add `platformToken` parameter, extend `generateOtelJavaEnvVars()` to include missing env vars (`OTEL_EXPORTER_OTLP_PROTOCOL`, `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE`)
 - New file: `pkg/installer/otel_java_uninstall.go` — uninstall logic
 - `cmd/install.go` — `otel-java` subcommand already exists, no CLI change needed
 - `cmd/uninstall.go` — register `otel-java` subcommand

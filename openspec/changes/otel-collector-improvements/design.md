@@ -18,10 +18,10 @@ The collector setup also already checks for running collectors in the `execute()
 
 ## Decisions
 
-**1. Runtime detection reuses `detect_services.go`**
-The analyzer already detects java, node, python3, go. We'll call the analyzer from the collector flow to get available runtimes, rather than duplicating `exec.LookPath` calls. This keeps detection logic in one place.
+**1. Runtime detection uses `exec.LookPath` directly (not the analyzer)**
+The collector setup needs to know which runtimes are available for instrumentation. While `detect_services.go` uses `which` via shell, the existing Python code in `InstallOtelCollector()` uses `exec.LookPath("python3")` directly. We'll follow the established pattern: `exec.LookPath` for each supported binary (`python3`/`python`, `java`, `node`, `go`). This avoids adding an analyzer dependency to the installer package.
 
-Alternative: Inline `LookPath` calls in collector setup — rejected because it duplicates logic and won't benefit from future analyzer improvements.
+Alternative: Call `detectServices()` from the analyzer — rejected because it returns a flat `[]string` mixing runtimes with daemons (nginx, postgres), and would create a cross-package dependency.
 
 **2. Single-select menu with "None" option**
 Present detected runtimes as a numbered menu with an additional "None — collector only" option. User picks one. This matches the meeting requirement of single-app instrumentation only.

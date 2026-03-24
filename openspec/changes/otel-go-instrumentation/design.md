@@ -36,7 +36,10 @@ Print a Go code snippet that initializes TracerProvider, MeterProvider, and Logg
 
 Alternative: Use `go generate` or AST rewriting — rejected because Go source modification is too risky and the variety of `main()` patterns makes automation unreliable.
 
-**3. OTEL_* env vars for exporter configuration**
+**3. Function signature mirrors other installers**
+`InstallOtelGo(envURL, token, platformToken, serviceName string, dryRun bool) error` — `platformToken` included for consistency even though Go doesn't auto-launch processes. In future, if we add a `go run` launch step, verification will need it.
+
+**4. OTEL_* env vars for exporter configuration**
 Use environment variables (same as other languages) so the bootstrap snippet stays generic. The snippet reads endpoint and auth from `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS`.
 
 **4. Uninstall via `go mod edit -droprequire`**

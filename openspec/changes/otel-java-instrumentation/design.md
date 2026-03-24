@@ -30,7 +30,13 @@ Detect running Java processes using `ps ax` filtered for `java` commands. If `jp
 
 Alternative: Only use `jps` — rejected because it requires JDK (not just JRE) and may not be in PATH.
 
-**3. Restart by re-running the original command with added JVM flags**
+**3. Extend function signature to include `platformToken`**
+The existing `InstallOtelJava(envURL, token, serviceName string, dryRun bool)` does not accept `platformToken`, but DQL verification (reused from the collector/Python pattern) requires it. Change signature to `InstallOtelJava(envURL, token, platformToken, serviceName string, dryRun bool)` and update `cmd/install.go` to pass `platformTok`.
+
+**4. Extend `generateOtelJavaEnvVars` to match Python**
+The existing function is missing `OTEL_EXPORTER_OTLP_PROTOCOL` and `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE`. Add these to match the Python env var set for consistency across languages.
+
+**5. Restart by re-running the original command with added JVM flags**
 Parse the original Java command from `ps`, prepend `-javaagent:` and `OTEL_*` env vars, terminate the old process, run the new command. This is the most straightforward approach since Java agent attachment doesn't require source changes.
 
 Alternative: Dynamic attach via `com.sun.tools.attach` — rejected because it requires JDK tools.jar and is more fragile.
