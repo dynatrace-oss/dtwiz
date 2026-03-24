@@ -43,16 +43,19 @@ Set the following environment variables before running `dtwiz`:
 ## Installation
 
 **Linux / macOS:**
+
 ```bash
 source <(curl -sSL https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.sh)
 ```
 
 **Windows (PowerShell):**
+
 ```powershell
 irm https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.ps1 | iex
 ```
 
 **From source:**
+
 ```bash
 git clone https://github.com/dynatrace-oss/dtwiz.git
 cd dtwiz
@@ -123,7 +126,7 @@ make clean        # removes build artifacts
 
 ## Architecture
 
-```
+```text
 dtwiz/
 ├── main.go
 ├── cmd/

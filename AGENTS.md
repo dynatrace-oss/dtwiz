@@ -8,7 +8,7 @@ Go CLI that analyzes a system and deploys the best Dynatrace observability metho
 
 ## CLI commands
 
-```
+```text
 dtwiz setup                  # interactive: analyze → recommend → pick → install
 dtwiz analyze [--json]       # detect platform, containers, K8s, agents, cloud, services
 dtwiz recommend [--json]     # ranked ingestion recommendations
@@ -22,7 +22,7 @@ All install/update/uninstall commands support `--dry-run`. Destructive commands 
 
 ## Project structure
 
-```
+```text
 main.go                         # entry point → cmd.Execute()
 cmd/
   root.go                       # cobra root, persistent flags: --environment, --access-token, --platform-token
@@ -51,6 +51,7 @@ Two URL families — getting this wrong causes 404s or auth errors:
 | **Platform** (with `.apps.`) | `<env-id>.apps.<domain>/platform/...` | `Bearer <token>` | DQL/Grail queries, Platform APIs |
 
 **URL conversion helpers in `pkg/installer/installer.go`:**
+
 - `APIURL()` / `ClassicAPIURL()` — strip `.apps.` → classic URL
 - `AppsURL()` — insert `.apps.` → platform URL
 - `ExtractTenantID()` — first DNS label from URL
