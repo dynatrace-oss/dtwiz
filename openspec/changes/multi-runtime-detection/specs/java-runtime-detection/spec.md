@@ -8,7 +8,7 @@ The system SHALL detect Java installations by looking up `java` on PATH and veri
 
 #### Scenario: Java is available
 
-- **GIVEN** the user selected Java from the runtime selection menu
+- **GIVEN** the system is checking for available runtimes
 - **WHEN** `java` is found on PATH and `java -version` succeeds
 - **THEN** the system reports the Java path and version and proceeds with project scanning
 
@@ -42,7 +42,7 @@ The system SHALL scan the filesystem for Java project markers (`pom.xml`, `build
 
 ### Requirement: Java process detection
 
-The system SHALL detect running `java` processes and attempt to match them to discovered projects by working directory. SHALL use the shared `detectProcesses()` and `processMatchPIDs()` utilities in `pkg/installer/otel_common.go`. On Unix, process detection uses `ps ax` and `lsof`. On Windows, it uses `powershell Get-Process` and `WMIC`. Both are best-effort — they may fail on processes owned by other users or on systems with restricted permissions.
+The system SHALL detect running `java` processes and attempt to match them to discovered projects by working directory. SHALL use the shared `detectProcesses()` and `processMatchPIDs()` utilities in `pkg/installer/otel_common.go`. On Unix, process detection uses `ps ax` and `lsof`. On Windows, it uses PowerShell `Get-CimInstance Win32_Process`. Both are best-effort — they may fail on processes owned by other users or on systems with restricted permissions.
 
 #### Scenario: Running Java process matched to project
 
@@ -50,21 +50,6 @@ The system SHALL detect running `java` processes and attempt to match them to di
 - **WHEN** a running `java` process has a CWD matching a detected project directory
 - **THEN** the project listing shows the associated PIDs
 
-### Requirement: Java project selection prompt
-
-The system SHALL present discovered Java projects and prompt the user to select one or skip.
-
-#### Scenario: User selects a project
-
-- **GIVEN** one or more Java projects are listed
-- **WHEN** the user enters a valid project number
-- **THEN** the system creates a `JavaInstrumentationPlan` for that project
-
-#### Scenario: User skips
-
-- **GIVEN** one or more Java projects are listed
-- **WHEN** the user presses Enter without selecting
-- **THEN** `DetectJavaPlan` returns nil
 
 ### Requirement: JavaInstrumentationPlan struct
 

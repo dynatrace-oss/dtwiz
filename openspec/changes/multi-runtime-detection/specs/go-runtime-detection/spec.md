@@ -8,7 +8,7 @@ The system SHALL detect Go installations by looking up `go` on PATH and verifyin
 
 #### Scenario: Go is available
 
-- **GIVEN** the user selected Go from the runtime selection menu
+- **GIVEN** the system is checking for available runtimes
 - **WHEN** `go` is found on PATH and `go version` succeeds
 - **THEN** the system reports the Go path and version and proceeds with project scanning
 
@@ -33,22 +33,6 @@ The system SHALL scan the filesystem for Go project markers (`go.mod`) starting 
 - **GIVEN** Go is available on the system
 - **WHEN** no directories contain `go.mod`
 - **THEN** `DetectGoPlan` returns nil without prompting the user
-
-### Requirement: Go project selection prompt
-
-The system SHALL present discovered Go projects and prompt the user to select one or skip.
-
-#### Scenario: User selects a project
-
-- **GIVEN** one or more Go projects are listed
-- **WHEN** the user enters a valid project number
-- **THEN** the system creates a `GoInstrumentationPlan` for that project
-
-#### Scenario: User skips
-
-- **GIVEN** one or more Go projects are listed
-- **WHEN** the user presses Enter without selecting
-- **THEN** `DetectGoPlan` returns nil
 
 ### Requirement: Go instrumentation is SDK-based guidance
 

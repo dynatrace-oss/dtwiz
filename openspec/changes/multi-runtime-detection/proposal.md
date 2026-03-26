@@ -20,9 +20,9 @@ The `InstallOtelCollector` flow currently detects only Python projects during it
 
 ### New Capabilities
 
-- `java-runtime-detection`: Detect Java projects/processes, build a `JavaInstrumentationPlan`, and execute auto-instrumentation via the OTel Java agent JAR.
-- `nodejs-runtime-detection`: Detect Node.js projects/processes (including TypeScript entrypoints), build a `NodeInstrumentationPlan`, and execute auto-instrumentation via `@opentelemetry/auto-instrumentations-node`.
-- `go-runtime-detection`: Detect Go projects, extract module names, build a `GoInstrumentationPlan`, and provide compile-time instrumentation guidance (Go lacks a runtime agent).
+- `java-runtime-detection`: Detect Java projects/processes, build a `JavaInstrumentationPlan`, and print instrumentation guidance (agent JAR download, `-javaagent` flag, env vars).
+- `nodejs-runtime-detection`: Detect Node.js projects/processes (including TypeScript entrypoints), build a `NodeInstrumentationPlan`, and print instrumentation guidance (`npm install` commands, env vars, `--require` flag).
+- `go-runtime-detection`: Detect Go projects, extract module names, build a `GoInstrumentationPlan`, and print compile-time instrumentation guidance (`go get` commands, env vars, SDK initialization).
 - `multi-runtime-orchestration`: Update the collector install flow to detect available runtimes, scan all GA runtimes for projects, present a unified project list, and execute the chosen project's instrumentation plan alongside the collector install.
 
 ### Modified Capabilities

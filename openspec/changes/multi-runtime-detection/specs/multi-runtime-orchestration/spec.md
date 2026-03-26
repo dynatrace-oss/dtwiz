@@ -12,12 +12,6 @@ The `InstallOtelCollector` function in `pkg/installer/otel.go` SHALL detect avai
 - **WHEN** `java` and `node` are on PATH and Java/Node.js projects exist
 - **THEN** the list shows e.g. `[1] Java     /home/user/projects/api  (pom.xml)`, `[2] Node.js  /home/user/projects/web  (package.json)`, `[3] Skip — collector only` and the user picks one
 
-#### Scenario: Single project detected
-
-- **GIVEN** an OTel Collector installation is in progress via `InstallOtelCollector`
-- **WHEN** only one Java project is found
-- **THEN** the list shows `[1] Java     /home/user/projects/api  (pom.xml)`, `[2] Skip — collector only`
-
 #### Scenario: No projects detected
 
 - **GIVEN** an OTel Collector installation is in progress via `InstallOtelCollector`

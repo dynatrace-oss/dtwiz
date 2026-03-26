@@ -8,7 +8,7 @@ The system SHALL detect Node.js installations by looking up `node` on PATH and v
 
 #### Scenario: Node.js is available
 
-- **GIVEN** the user selected Node.js from the runtime selection menu
+- **GIVEN** the system is checking for available runtimes
 - **WHEN** `node` is found on PATH and `node --version` succeeds
 - **THEN** the system reports the Node.js path and version and proceeds with project scanning
 
@@ -36,29 +36,13 @@ The system SHALL scan the filesystem for Node.js project markers (`package.json`
 
 ### Requirement: Node.js process detection
 
-The system SHALL detect running `node` processes and attempt to match them to discovered projects by working directory. SHALL use the shared `detectProcesses()` and `processMatchPIDs()` utilities in `pkg/installer/otel_common.go`. On Unix, process detection uses `ps ax` and `lsof`. On Windows, it uses `powershell Get-Process` and `WMIC`. Both are best-effort — they may fail on processes owned by other users or on systems with restricted permissions.
+The system SHALL detect running `node` processes and attempt to match them to discovered projects by working directory. SHALL use the shared `detectProcesses()` and `processMatchPIDs()` utilities in `pkg/installer/otel_common.go`. On Unix, process detection uses `ps ax` and `lsof`. On Windows, it uses PowerShell `Get-CimInstance Win32_Process`. Both are best-effort — they may fail on processes owned by other users or on systems with restricted permissions.
 
 #### Scenario: Running Node process matched to project
 
 - **GIVEN** one or more Node.js projects have been detected on the filesystem
 - **WHEN** a running `node` process has a CWD matching a detected project directory
 - **THEN** the project listing shows the associated PIDs
-
-### Requirement: Node.js project selection prompt
-
-The system SHALL present discovered Node.js projects and prompt the user to select one or skip.
-
-#### Scenario: User selects a project
-
-- **GIVEN** one or more Node.js projects are listed
-- **WHEN** the user enters a valid project number
-- **THEN** the system creates a `NodeInstrumentationPlan` for that project
-
-#### Scenario: User skips
-
-- **GIVEN** one or more Node.js projects are listed
-- **WHEN** the user presses Enter without selecting
-- **THEN** `DetectNodePlan` returns nil
 
 ### Requirement: Node.js entrypoint detection
 
@@ -96,4 +80,4 @@ The system SHALL define a `NodeInstrumentationPlan` struct with fields for the s
 
 - **GIVEN** the user confirmed the combined installation plan
 - **WHEN** `Execute()` is called
-- **THEN** it installs `@opentelemetry/auto-instrumentations-node` and related packages via npm, configures environment variables, and launches the entrypoint with `--require @opentelemetry/auto-instrumentations-node/register`
+- **THEN** it prints the `npm install` command for `@opentelemetry/auto-instrumentations-node` and related packages, the required environment variable export statements, and the instrumented run command with `--require @opentelemetry/auto-instrumentations-node/register` — the user runs these commands manually

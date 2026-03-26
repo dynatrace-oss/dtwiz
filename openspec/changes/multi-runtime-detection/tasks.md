@@ -37,7 +37,7 @@ Add project scanning, process detection, entrypoint detection (JS + TypeScript),
 - [ ] 3.3 Add `detectNodeEntrypoints()` — parse `package.json` `main`/`scripts.start`, fall back to `index.js`/`app.js`/`server.js` (including TypeScript variants `.ts`/`.mts`/`.cts`)
 - [ ] 3.4 Define `NodeInstrumentationPlan` struct and `generateOtelNodeEnvVars()`
 - [ ] 3.5 Implement `DetectNodePlan(apiURL, token)` — project listing, user prompt, entrypoint detection, plan assembly
-- [ ] 3.6 Implement `PrintPlanSteps()` and `Execute()` — npm install OTel packages, launch with `--require` flag
+- [ ] 3.6 Implement `PrintPlanSteps()` and `Execute()` — print `npm install` commands for OTel packages, env vars, and instrumented run command with `--require` flag
 - [ ] 3.7 Add tests: project detected, `node_modules` excluded, entrypoint from `main`/`scripts.start`/fallback, TypeScript variants, no entrypoint returns empty
 
 ## 4. Go runtime detection and plan
