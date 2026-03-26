@@ -4,6 +4,8 @@
 
 `dtwiz` is a Go CLI that analyzes your system and deploys the best Dynatrace observability method automatically.
 
+> **Early Development**: This project is in active development. If you encounter any bugs or issues, please [file a GitHub issue](https://github.com/dynatrace-oss/dtwiz/issues/new). Contributions and feedback are welcome!
+
 ## Quickstart
 
 Run the following commands in your terminal/console to install and launch `dtwiz`:
