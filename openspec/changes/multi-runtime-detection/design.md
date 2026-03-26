@@ -69,7 +69,7 @@ Each function: finds projects on the filesystem → detects running processes �
 
 Instead of a two-step flow (pick a runtime → pick a project), the orchestrator scans all GA runtimes at once and shows a single list:
 
-```
+```text
   Detected projects:
   ──────────────────────────────────────────────────
   [1] Python   /home/user/projects/api  (pyproject.toml)
