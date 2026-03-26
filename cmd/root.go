@@ -28,6 +28,15 @@ Set your Dynatrace credentials via environment variables:
 Then use dtwiz commands to analyze and instrument your system.`,
 }
 
+func printBanner() {
+	fmt.Printf("  ____   _______   __        __ ___  ____\n")
+	fmt.Printf(" |  _ \\ |__   __| \\ \\      / /|_ _||_  /\n")
+	fmt.Printf(" | | | |   | |     \\ \\ /\\ / /  | |  / / \n")
+	fmt.Printf(" | |_| |   | |      \\ V  V /   | | / /_ \n")
+	fmt.Printf(" |____/    |_|       \\_/\\_/   |___|/____| %s\n", Version)
+	fmt.Printf("\n HASTA LA VISTA - BLIND SPOTS!\n\n")
+}
+
 // Execute runs the root command.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
@@ -37,6 +46,18 @@ func Execute() {
 }
 
 func init() {
+	// Show banner when no subcommand is given or --help is used on the root command.
+	defaultHelp := rootCmd.HelpFunc()
+	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		if cmd == rootCmd {
+			printBanner()
+		}
+		defaultHelp(cmd, args)
+	})
+	rootCmd.Run = func(cmd *cobra.Command, args []string) {
+		cmd.Help()
+	}
+
 	rootCmd.PersistentFlags().StringVar(&environmentFlag, "environment", "", "Dynatrace environment URL (also read from DT_ENVIRONMENT)")
 	rootCmd.PersistentFlags().StringVar(&accessTokenFlag, "access-token", "", "Dynatrace API access token (also read from DT_ACCESS_TOKEN)")
 	rootCmd.PersistentFlags().StringVar(&platformTokenFlag, "platform-token", "", "Dynatrace platform token (dt0s16.*) for AWS installer (also read from DT_PLATFORM_TOKEN)")

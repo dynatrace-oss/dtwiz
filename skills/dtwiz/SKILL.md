@@ -1,6 +1,6 @@
 ---
 name: dtwiz
-description: Deploy Dynatrace observability with dtwiz — analyze systems, get ranked recommendations, and install monitoring (OneAgent, Kubernetes, Docker, OTel, AWS, Azure, GCP). Use when the user wants to set up or manage Dynatrace monitoring via dtwiz.
+description: Deploy Dynatrace observability with dtwiz — analyze systems, get ranked recommendations, and install monitoring (OneAgent, Kubernetes, Docker, OTel, AWS, Azure, GCP). Use when the user wants to set up, manage, or ingest data into Dynatrace monitoring. Covers ingesting metrics, logs, and traces from AWS, Azure, GCP, Kubernetes, containers, or hosts into Dynatrace via dtwiz.
 ---
 
 # Dynatrace Setup with dtwiz
