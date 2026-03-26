@@ -32,3 +32,12 @@ The `InstallOtelCollector` flow currently detects only Python projects during it
 - **Dependencies**: No new Go module dependencies. Runtime detection uses `exec.LookPath` and filesystem scanning already established by the Python implementation.
 - **UX**: A runtime selection menu lists detected runtimes (plus "Skip — collector only"). The user picks one; its plan is shown in the confirmation preview alongside the collector. Unimplemented runtimes appear with a "coming soon" label. The confirmation prompt remains a single `Proceed? [Y/n]`.
 - **Non-regression**: `InstallOtelCollectorOnly()` path must remain functional and unchanged.
+
+## Rollback Plan
+
+All new code lives in isolated files (`pkg/installer/otel_nodejs.go`, `pkg/installer/otel_go.go`) or additive changes to existing files (`pkg/installer/otel_java.go`, `pkg/installer/otel.go`). To roll back:
+
+1. **Revert `pkg/installer/otel.go`** — remove the runtime detection menu and selection logic from `InstallOtelCollector()`, restoring the previous Python-only path.
+2. **Delete new files** — remove `pkg/installer/otel_nodejs.go` and `pkg/installer/otel_go.go`.
+3. **Revert `pkg/installer/otel_java.go`** — remove the `JavaInstrumentationPlan`, `DetectJavaPlan`, and related additions; keep existing `detectJava()` and `generateOtelJavaEnvVars()` unchanged.
+4. No database, config, or external service changes are involved — rollback is purely code deletion and revert.
