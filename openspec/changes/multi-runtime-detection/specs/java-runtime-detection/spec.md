@@ -50,7 +50,6 @@ The system SHALL detect running `java` processes and attempt to match them to di
 - **WHEN** a running `java` process has a CWD matching a detected project directory
 - **THEN** the project listing shows the associated PIDs
 
-
 ### Requirement: JavaInstrumentationPlan struct
 
 The system SHALL define a `JavaInstrumentationPlan` struct with fields for the selected project, OTel environment variables, `EnvURL`, and `PlatformToken`. It SHALL implement `PrintPlanSteps()` and `Execute()` methods. Follows the pattern established by `PythonInstrumentationPlan` in `pkg/installer/otel_python.go`. OTel environment variables SHALL be generated via the shared `generateBaseOtelEnvVars()` in `pkg/installer/otel_common.go` to ensure consistent URL-encoded header values across all runtimes.
