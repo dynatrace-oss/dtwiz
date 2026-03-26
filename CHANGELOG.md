@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-03-26
+
+### Added
+- ASCII banner displayed on `dtwiz setup`, `dtwiz` (no command), and `dtwiz --help`
+- Banner includes version number and tagline "HASTA LA VISTA - BLIND SPOTS!"
+
 ## [0.1.2] - 2026-03-23
 
 ### Changed
