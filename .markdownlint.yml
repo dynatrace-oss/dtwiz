@@ -7,3 +7,6 @@ MD024:
 
 # punctuation in headings
 MD026: false
+
+# duplicate headings allowed (needed for CHANGELOG)
+MD024: false

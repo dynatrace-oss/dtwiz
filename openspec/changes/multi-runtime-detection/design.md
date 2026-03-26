@@ -1,3 +1,5 @@
+# Design
+
 ## Context
 
 `InstallOtelCollector` in `otel.go` orchestrates the Dynatrace OTel Collector installation and runtime auto-instrumentation. Today it only detects Python via `DetectPythonPlan`. The codebase already has a partial `otel_java.go` with `detectJava()` and `generateOtelJavaEnvVars()` but no plan struct or detection flow. Node.js and Go have no files at all.
@@ -7,12 +9,14 @@ The Python implementation establishes a clear pattern: a `*InstrumentationPlan` 
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Extend the preparation phase of `InstallOtelCollector` to detect Java, Node.js, and Go runtimes alongside Python.
 - Follow the established pattern: `Detect<Lang>Plan()` → `*<Lang>InstrumentationPlan` with `PrintPlanSteps()` and `Execute()`.
 - Present a single runtime selection menu; the user picks one runtime (or skips). Only one runtime is instrumented per invocation.
 - Keep each runtime's detection and instrumentation logic in its own file (`otel_java.go`, `otel_nodejs.go`, `otel_go.go`).
 
 **Non-Goals:**
+
 - Full end-to-end execution of Java/Node/Go instrumentation is not required in this change — execution stubs that print TODO/guidance are acceptable. The priority is detection and plan creation.
 - Modifying the existing Python flow.
 - Support for additional runtimes beyond Java, Node.js, Go.

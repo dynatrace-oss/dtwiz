@@ -1,3 +1,5 @@
+# Proposal
+
 ## Why
 
 The `InstallOtelCollector` flow currently detects only Python projects during its preparation phase. Java, Node.js, and Go runtimes are ignored, meaning users must manually instrument those applications after the collector is installed. Extending detection to all supported runtimes makes the guided flow language-agnostic and delivers on the zero-config promise.
@@ -15,6 +17,7 @@ The `InstallOtelCollector` flow currently detects only Python projects during it
 ## Capabilities
 
 ### New Capabilities
+
 - `java-runtime-detection`: Detect Java projects/processes, build a `JavaInstrumentationPlan`, and execute auto-instrumentation via the OTel Java agent JAR.
 - `nodejs-runtime-detection`: Detect Node.js projects/processes, build a `NodeInstrumentationPlan`, and execute auto-instrumentation via `@opentelemetry/auto-instrumentations-node`.
 - `go-runtime-detection`: Detect Go projects/binaries, build a `GoInstrumentationPlan`, and provide compile-time instrumentation guidance (Go lacks a runtime agent).

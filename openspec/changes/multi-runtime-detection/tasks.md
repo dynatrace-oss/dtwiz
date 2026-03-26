@@ -1,3 +1,5 @@
+# Tasks
+
 ## 1. Java Detection & Plan
 
 - [ ] 1.1 Add `JavaProject` struct and `detectJavaProjects()` scanner (scan for `pom.xml`, `build.gradle`, `build.gradle.kts`) in `otel_java.go`
