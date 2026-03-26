@@ -20,7 +20,7 @@ The system SHALL detect Java installations by looking up `java` on PATH and veri
 
 ### Requirement: Java project scanning
 
-The system SHALL scan the filesystem for Java project markers (`pom.xml`, `build.gradle`, `build.gradle.kts`) starting from the current directory and common project locations. Follows the same scanning pattern established by `DetectPythonPlan` in `pkg/installer/otel_python.go`.
+The system SHALL scan the filesystem for Java project markers (`pom.xml`, `build.gradle`, `build.gradle.kts`) starting from the current directory and common project locations. SHALL use the shared `scanProjectDirs()` utility in `pkg/installer/otel_common.go` — NOT duplicate the scanning logic.
 
 #### Scenario: Maven project detected
 
@@ -42,7 +42,7 @@ The system SHALL scan the filesystem for Java project markers (`pom.xml`, `build
 
 ### Requirement: Java process detection
 
-The system SHALL detect running `java` processes and attempt to match them to discovered projects by working directory.
+The system SHALL detect running `java` processes and attempt to match them to discovered projects by working directory. SHALL use the shared `detectProcesses()` and `processMatchPIDs()` utilities in `pkg/installer/otel_common.go`. On Unix, process detection uses `ps ax` and `lsof`. On Windows, it uses `powershell Get-Process` and `WMIC`. Both are best-effort — they may fail on processes owned by other users or on systems with restricted permissions.
 
 #### Scenario: Running Java process matched to project
 
@@ -68,16 +68,16 @@ The system SHALL present discovered Java projects and prompt the user to select 
 
 ### Requirement: JavaInstrumentationPlan struct
 
-The system SHALL define a `JavaInstrumentationPlan` struct with fields for the selected project, the Java agent JAR path, OTel environment variables, `EnvURL`, and `PlatformToken`. It SHALL implement `PrintPlanSteps()` and `Execute()` methods. Follows the pattern established by `PythonInstrumentationPlan` in `pkg/installer/otel_python.go`.
+The system SHALL define a `JavaInstrumentationPlan` struct with fields for the selected project, OTel environment variables, `EnvURL`, and `PlatformToken`. It SHALL implement `PrintPlanSteps()` and `Execute()` methods. Follows the pattern established by `PythonInstrumentationPlan` in `pkg/installer/otel_python.go`. OTel environment variables SHALL be generated via the shared `generateBaseOtelEnvVars()` in `pkg/installer/otel_common.go` to ensure consistent URL-encoded header values across all runtimes.
 
 #### Scenario: PrintPlanSteps displays plan
 
 - **GIVEN** a `JavaInstrumentationPlan` was created for a selected project
 - **WHEN** `PrintPlanSteps()` is called
-- **THEN** it prints the project path, agent JAR download URL, and environment variables to be set
+- **THEN** it prints the project path, agent JAR download URL, and the `-javaagent` JVM flag
 
-#### Scenario: Execute performs instrumentation
+#### Scenario: Execute prints instrumentation instructions
 
 - **GIVEN** the user confirmed the combined installation plan
 - **WHEN** `Execute()` is called
-- **THEN** it downloads the OTel Java agent JAR, sets the required environment variables, and provides the `-javaagent` JVM flag to the user
+- **THEN** it prints the agent JAR download URL, the required environment variable export statements, and the `-javaagent` JVM flag — the user downloads the JAR manually

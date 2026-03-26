@@ -20,7 +20,7 @@ The system SHALL detect Go installations by looking up `go` on PATH and verifyin
 
 ### Requirement: Go project scanning
 
-The system SHALL scan the filesystem for Go project markers (`go.mod`) starting from the current directory and common project locations. Follows the same scanning pattern established by `DetectPythonPlan` in `pkg/installer/otel_python.go`.
+The system SHALL scan the filesystem for Go project markers (`go.mod`) starting from the current directory and common project locations. SHALL use the shared `scanProjectDirs()` utility in `pkg/installer/otel_common.go` — NOT duplicate the scanning logic.
 
 #### Scenario: Go project detected
 
@@ -68,7 +68,7 @@ The system SHALL communicate that Go requires compile-time SDK integration and c
 
 ### Requirement: GoInstrumentationPlan struct
 
-The system SHALL define a `GoInstrumentationPlan` struct with fields for the selected project, module name, OTel environment variables, `EnvURL`, and `PlatformToken`. It SHALL implement `PrintPlanSteps()` and `Execute()` methods. Follows the pattern established by `PythonInstrumentationPlan` in `pkg/installer/otel_python.go`.
+The system SHALL define a `GoInstrumentationPlan` struct with fields for the selected project, module name, OTel environment variables, `EnvURL`, and `PlatformToken`. It SHALL implement `PrintPlanSteps()` and `Execute()` methods. Follows the pattern established by `PythonInstrumentationPlan` in `pkg/installer/otel_python.go`. OTel environment variables SHALL be generated via the shared `generateBaseOtelEnvVars()` in `pkg/installer/otel_common.go` to ensure consistent URL-encoded header values across all runtimes.
 
 #### Scenario: Struct fields populated
 

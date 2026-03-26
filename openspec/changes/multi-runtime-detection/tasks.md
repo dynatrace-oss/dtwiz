@@ -1,59 +1,70 @@
 # Tasks
 
-## 1. Java Detection & Plan
+## 1. Shared utilities and Python refactor
 
-- [ ] 1.1 Add `JavaProject` struct and `detectJavaProjects()` scanner (scan for `pom.xml`, `build.gradle`, `build.gradle.kts`) in `pkg/installer/otel_java.go`
-- [ ] 1.2 Add `detectJavaProcesses()` and `matchJavaProcessesToProjects()` in `pkg/installer/otel_java.go`
-- [ ] 1.3 Define `JavaInstrumentationPlan` struct with project, agent JAR path, env vars, `EnvURL`, `PlatformToken` in `pkg/installer/otel_java.go`
-- [ ] 1.4 Implement `DetectJavaPlan(apiURL, token string) *JavaInstrumentationPlan` — project listing, user prompt, plan assembly in `pkg/installer/otel_java.go`
-- [ ] 1.5 Implement `PrintPlanSteps()` on `JavaInstrumentationPlan`
-- [ ] 1.6 Implement `Execute()` on `JavaInstrumentationPlan` — download agent JAR, print `-javaagent` flag and env vars
+Extract duplicated scanning, process detection, and env var generation from `otel_python.go` into a new shared module. Refactor Python to use the shared code. This is the foundation all subsequent tasks depend on.
 
-## 2. Node.js Detection & Plan
+**Files:** `pkg/installer/otel_common.go` (create), `pkg/installer/otel_python.go` (modify)
 
-- [ ] 2.1 Create `pkg/installer/otel_nodejs.go` with `NodeProject` struct and `detectNodeProjects()` scanner (scan for `package.json`, exclude `node_modules`)
-- [ ] 2.2 Add `detectNodeProcesses()` and `matchNodeProcessesToProjects()` in `pkg/installer/otel_nodejs.go`
-- [ ] 2.3 Add `detectNodeEntrypoints()` in `pkg/installer/otel_nodejs.go` — parse `package.json` `main`/`scripts.start`, fall back to `index.js`/`app.js`/`server.js`
-- [ ] 2.4 Define `NodeInstrumentationPlan` struct with project, entrypoints, env vars, `EnvURL`, `PlatformToken` in `pkg/installer/otel_nodejs.go`
-- [ ] 2.5 Implement `DetectNodePlan(apiURL, token string) *NodeInstrumentationPlan` — project listing, user prompt, entrypoint detection, plan assembly in `pkg/installer/otel_nodejs.go`
-- [ ] 2.6 Implement `PrintPlanSteps()` on `NodeInstrumentationPlan`
-- [ ] 2.7 Implement `Execute()` on `NodeInstrumentationPlan` — npm install OTel packages, launch with `--require` flag
-- [ ] 2.8 Add `generateOtelNodeEnvVars()` function in `pkg/installer/otel_nodejs.go`
+- [ ] 1.1 Create `otel_common.go` with `scanProjectDirs(markers, excludeNames)` — scans CWD + home-directory project locations for directories containing marker files
+- [ ] 1.2 Add `detectProcesses(filterTerm, excludeTerms)` — Unix: `ps ax`/`lsof`; Windows: PowerShell `Get-CimInstance Win32_Process`
+- [ ] 1.3 Add `getProcessCWD(pid)` — Unix: `lsof`; Windows: `Get-CimInstance` executable path fallback
+- [ ] 1.4 Add `processMatchPIDs(dirPath, procs)` — match processes to project directories by CWD or command line
+- [ ] 1.5 Add `generateBaseOtelEnvVars(apiURL, token, serviceName)` — common OTEL_* env vars shared by all runtimes
+- [ ] 1.6 Refactor `otel_python.go` to call shared `scanProjectDirs`, `detectProcesses`, `processMatchPIDs`, and `generateBaseOtelEnvVars` instead of its own duplicated implementations
 
-## 3. Go Detection & Plan
+## 2. Java runtime detection and plan
 
-- [ ] 3.1 Create `pkg/installer/otel_go.go` with `GoProject` struct and `detectGoProjects()` scanner (scan for `go.mod`, extract module name)
-- [ ] 3.2 Define `GoInstrumentationPlan` struct with project, module name, env vars, `EnvURL`, `PlatformToken` in `pkg/installer/otel_go.go`
-- [ ] 3.3 Implement `DetectGoPlan(apiURL, token string) *GoInstrumentationPlan` — project listing, user prompt, plan assembly in `pkg/installer/otel_go.go`
-- [ ] 3.4 Implement `PrintPlanSteps()` on `GoInstrumentationPlan` — label as "SDK integration (manual)"
-- [ ] 3.5 Implement `Execute()` on `GoInstrumentationPlan` — print `go get` commands, env vars, and SDK initialization guidance
-- [ ] 3.6 Add `generateOtelGoEnvVars()` function in `pkg/installer/otel_go.go`
+Add project scanning, process detection, and instrumentation plan for Java. Depends on task 1 (shared utilities).
 
-## 4. Orchestration in `pkg/installer/otel.go`
+**Files:** `pkg/installer/otel_java.go` (modify), `pkg/installer/otel_java_test.go` (create)
 
-- [ ] 4.1 Add `detectAvailableRuntimes()` in `pkg/installer/otel.go` that uses `exec.LookPath` for each runtime and returns the list of available ones
-- [ ] 4.2 Add runtime selection menu with "Skip — collector only" option and "coming soon" labels in `pkg/installer/otel.go`
-- [ ] 4.3 Call the selected runtime's `Detect<Lang>Plan` after menu selection in `InstallOtelCollector()`
-- [ ] 4.4 Update confirmation preview to show collector + at most one runtime plan in `InstallOtelCollector()`
-- [ ] 4.5 Update intro message to reflect whether a runtime was selected
-- [ ] 4.6 Add execution block for the selected plan after collector install, with separator header
-- [ ] 4.7 Pass `EnvURL`, `PlatformToken`, and generated env vars to the selected plan before execution
+- [ ] 2.1 Add `JavaProject` struct and `detectJavaProjects()` using `scanProjectDirs` for `pom.xml`, `build.gradle`, `build.gradle.kts`
+- [ ] 2.2 Add `detectJavaProcesses()` and `matchJavaProcessesToProjects()` using shared `detectProcesses`/`processMatchPIDs`
+- [ ] 2.3 Define `JavaInstrumentationPlan` struct with project, env vars, `EnvURL`, `PlatformToken`
+- [ ] 2.4 Implement `DetectJavaPlan(apiURL, token)` — project listing, user prompt, plan assembly
+- [ ] 2.5 Implement `PrintPlanSteps()` and `Execute()` on `JavaInstrumentationPlan`
+- [ ] 2.6 Add tests: Maven project detected, Gradle project detected, no projects returns nil
 
-## 5. Coming Soon & Dry-Run
+## 3. Node.js runtime detection and plan
 
-- [ ] 5.1 Add "coming soon" label rendering for unimplemented runtimes in the selection menu
-- [ ] 5.2 Ensure unimplemented runtime entries are not selectable (print "not yet available" on selection)
-- [ ] 5.3 Ensure `--dry-run` prints the runtime selection menu and combined preview without installing
-- [ ] 5.4 Verify `InstallOtelCollectorOnly()` in `pkg/installer/otel.go` is not modified and existing tests pass
+Add project scanning, process detection, entrypoint detection (JS + TypeScript), and instrumentation plan for Node.js. Depends on task 1 (shared utilities).
 
-## 6. Testing
+**Files:** `pkg/installer/otel_nodejs.go` (create), `pkg/installer/otel_nodejs_test.go` (create)
 
-Tests derived from spec scenarios to ensure coverage of new behavior and edge cases:
+- [ ] 3.1 Add `NodeProject` struct and `detectNodeProjects()` using `scanProjectDirs` for `package.json`, excluding `node_modules`
+- [ ] 3.2 Add `detectNodeProcesses()` and `matchNodeProcessesToProjects()` using shared utilities
+- [ ] 3.3 Add `detectNodeEntrypoints()` — parse `package.json` `main`/`scripts.start`, fall back to `index.js`/`app.js`/`server.js` (including TypeScript variants `.ts`/`.mts`/`.cts`)
+- [ ] 3.4 Define `NodeInstrumentationPlan` struct and `generateOtelNodeEnvVars()`
+- [ ] 3.5 Implement `DetectNodePlan(apiURL, token)` — project listing, user prompt, entrypoint detection, plan assembly
+- [ ] 3.6 Implement `PrintPlanSteps()` and `Execute()` — npm install OTel packages, launch with `--require` flag
+- [ ] 3.7 Add tests: project detected, `node_modules` excluded, entrypoint from `main`/`scripts.start`/fallback, TypeScript variants, no entrypoint returns empty
 
-- [ ] 6.1 `pkg/installer/otel_java_test.go`: test `detectJavaProjects()` — Maven project detected (dir with `pom.xml`), Gradle project detected (`build.gradle`/`build.gradle.kts`), no projects found returns nil (spec: Java project scanning)
-- [ ] 6.2 `pkg/installer/otel_nodejs_test.go`: test `detectNodeProjects()` — project detected (dir with `package.json`), `node_modules` excluded, no projects found returns nil (spec: Node.js project scanning)
-- [ ] 6.3 `pkg/installer/otel_nodejs_test.go`: test `detectNodeEntrypoints()` — entrypoint from `main` field, from `scripts.start`, fallback to `index.js`/`app.js`/`server.js`, no entrypoint returns empty (spec: Node.js entrypoint detection)
-- [ ] 6.4 `pkg/installer/otel_go_test.go`: test `detectGoProjects()` — project detected with module name extraction from `go.mod`, no projects found returns nil (spec: Go project scanning)
-- [ ] 6.5 `pkg/installer/otel_test.go`: test `detectAvailableRuntimes()` — multiple runtimes on PATH, single runtime, no runtimes (spec: Runtime selection menu)
-- [ ] 6.6 `pkg/installer/otel_test.go`: test "coming soon" label logic — unimplemented runtime shown with label, all implemented hides label (spec: Unimplemented runtimes shown as "coming soon")
-- [ ] 6.7 Run `make test` and `make lint` to verify no regressions (spec: InstallOtelCollectorOnly non-regression)
+## 4. Go runtime detection and plan
+
+Add project scanning, module name extraction, and SDK integration guidance for Go. Depends on task 1 (shared utilities).
+
+**Files:** `pkg/installer/otel_go.go` (create), `pkg/installer/otel_go_test.go` (create)
+
+- [ ] 4.1 Add `GoProject` struct (with `ModuleName`) and `detectGoProjects()` using `scanProjectDirs` for `go.mod`, extracting module name
+- [ ] 4.2 Define `GoInstrumentationPlan` struct and `generateOtelGoEnvVars()`
+- [ ] 4.3 Implement `DetectGoPlan(apiURL, token)` — project listing, user prompt, plan assembly
+- [ ] 4.4 Implement `PrintPlanSteps()` (label as "SDK integration (manual)") and `Execute()` — print `go get` commands, env vars, SDK initialization guidance
+- [ ] 4.5 Add tests: project detected with module name extraction, no projects returns nil
+
+## 5. Orchestration, coming-soon filtering, and dry-run
+
+Replace the runtime selection menu with a unified project list across all GA runtimes. Only Python is GA by default; `DTWIZ_ALL_RUNTIMES=true` unlocks all. Depends on tasks 1–4 (all runtime detectors must exist).
+
+**Files:** `pkg/installer/otel.go` (modify), `pkg/installer/otel_test.go` (modify)
+
+- [ ] 5.1 Add `allRuntimesEnabled()` checking `DTWIZ_ALL_RUNTIMES` env var (`"true"` or `"1"`)
+- [ ] 5.2 Update `detectAvailableRuntimes()` — Python `comingSoon: false`, Java/Node.js/Go `comingSoon: !unlockAll`
+- [ ] 5.3 Add `detectedProject` struct and `detectAllProjects(runtimes)` — scan all GA runtimes, skip coming-soon, return unified list
+- [ ] 5.4 Add `printProjectList()` and `selectProject()` for unified project selection UX
+- [ ] 5.5 Add `createRuntimePlan()` to dispatch plan creation based on selected project's runtime
+- [ ] 5.6 Rewrite `InstallOtelCollector()` — scan projects, show unified list, create plan, show combined preview, execute after collector install
+- [ ] 5.7 Ensure `--dry-run` prints the project list and combined preview without installing
+- [ ] 5.8 Verify `InstallOtelCollectorOnly()` is not modified
+- [ ] 5.9 Add tests: `detectAvailableRuntimes` coming-soon defaults (Python GA), `DTWIZ_ALL_RUNTIMES=true` unlocks all, `printProjectList` formatting, `detectAllProjects` skips coming-soon / includes all when unlocked
+- [ ] 5.10 Run `make test` and `make lint` to verify no regressions

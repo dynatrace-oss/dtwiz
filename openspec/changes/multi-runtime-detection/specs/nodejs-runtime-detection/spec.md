@@ -20,7 +20,7 @@ The system SHALL detect Node.js installations by looking up `node` on PATH and v
 
 ### Requirement: Node.js project scanning
 
-The system SHALL scan the filesystem for Node.js project markers (`package.json`) starting from the current directory and common project locations, excluding `node_modules` directories. Follows the same scanning pattern established by `DetectPythonPlan` in `pkg/installer/otel_python.go`.
+The system SHALL scan the filesystem for Node.js project markers (`package.json`) starting from the current directory and common project locations, excluding `node_modules` directories. SHALL use the shared `scanProjectDirs()` utility in `pkg/installer/otel_common.go` with `excludeNames: ["node_modules"]` — NOT duplicate the scanning logic.
 
 #### Scenario: Node.js project detected
 
@@ -36,7 +36,7 @@ The system SHALL scan the filesystem for Node.js project markers (`package.json`
 
 ### Requirement: Node.js process detection
 
-The system SHALL detect running `node` processes and attempt to match them to discovered projects by working directory.
+The system SHALL detect running `node` processes and attempt to match them to discovered projects by working directory. SHALL use the shared `detectProcesses()` and `processMatchPIDs()` utilities in `pkg/installer/otel_common.go`. On Unix, process detection uses `ps ax` and `lsof`. On Windows, it uses `powershell Get-Process` and `WMIC`. Both are best-effort — they may fail on processes owned by other users or on systems with restricted permissions.
 
 #### Scenario: Running Node process matched to project
 
@@ -62,7 +62,7 @@ The system SHALL present discovered Node.js projects and prompt the user to sele
 
 ### Requirement: Node.js entrypoint detection
 
-The system SHALL infer entrypoints from `package.json` fields (`main`, `scripts.start`) or common filenames (`index.js`, `app.js`, `server.js`).
+The system SHALL infer entrypoints from `package.json` fields (`main`, `scripts.start`) or common filenames. Recognized file extensions include `.js`, `.mjs`, `.cjs`, `.ts`, `.mts`, and `.cts`. Convention fallbacks SHALL check both `.js` and `.ts` variants for each base name (`index`, `app`, `server`).
 
 #### Scenario: Entrypoint found in package.json
 
@@ -73,7 +73,7 @@ The system SHALL infer entrypoints from `package.json` fields (`main`, `scripts.
 #### Scenario: Entrypoint found by convention
 
 - **GIVEN** the user selected a Node.js project
-- **WHEN** `package.json` does not specify an entrypoint but `index.js`, `app.js`, or `server.js` exists in the project root
+- **WHEN** `package.json` does not specify an entrypoint but `index.js`, `index.ts`, `app.js`, `app.ts`, `server.js`, or `server.ts` exists in the project root
 - **THEN** the system uses the first matching file as the entrypoint
 
 #### Scenario: No entrypoint detected
@@ -84,7 +84,7 @@ The system SHALL infer entrypoints from `package.json` fields (`main`, `scripts.
 
 ### Requirement: NodeInstrumentationPlan struct
 
-The system SHALL define a `NodeInstrumentationPlan` struct with fields for the selected project, entrypoints, OTel environment variables, `EnvURL`, and `PlatformToken`. It SHALL implement `PrintPlanSteps()` and `Execute()` methods. Follows the pattern established by `PythonInstrumentationPlan` in `pkg/installer/otel_python.go`.
+The system SHALL define a `NodeInstrumentationPlan` struct with fields for the selected project, entrypoints, OTel environment variables, `EnvURL`, and `PlatformToken`. It SHALL implement `PrintPlanSteps()` and `Execute()` methods. Follows the pattern established by `PythonInstrumentationPlan` in `pkg/installer/otel_python.go`. OTel environment variables SHALL be generated via the shared `generateBaseOtelEnvVars()` in `pkg/installer/otel_common.go` to ensure consistent URL-encoded header values across all runtimes.
 
 #### Scenario: PrintPlanSteps displays plan
 

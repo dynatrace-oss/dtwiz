@@ -10,10 +10,12 @@ The Python implementation establishes a clear pattern: a `*InstrumentationPlan` 
 
 **Goals:**
 
-- Extend the preparation phase of `InstallOtelCollector` to detect Java, Node.js, and Go runtimes alongside Python.
+- Extend the preparation phase of `InstallOtelCollector` to detect Java, Node.js, and Go projects alongside Python.
 - Follow the established pattern: `Detect<Lang>Plan()` → `*<Lang>InstrumentationPlan` with `PrintPlanSteps()` and `Execute()`.
-- Present a single runtime selection menu; the user picks one runtime (or skips). Only one runtime is instrumented per invocation.
+- Scan all GA runtimes for projects and present a single unified project list; the user picks one project (or skips). Only one project is instrumented per invocation.
 - Keep each runtime's detection and instrumentation logic in its own file (`otel_java.go`, `otel_nodejs.go`, `otel_go.go`).
+- Extract shared project scanning, process detection, and env var generation into `otel_common.go` to avoid duplication.
+- Support Windows process detection alongside Unix.
 
 **Non-Goals:**
 
@@ -37,9 +39,19 @@ No formal Go interface is introduced — the orchestrator in `otel.go` calls the
 
 **Alternative considered:** A shared `InstrumentationPlan` interface. Rejected because it would require refactoring the existing Python code and the plans have different fields (virtualenv flags, JAR paths, etc.).
 
-**Alternative considered:** Supporting multiple runtime selections in a single invocation. Rejected for now — adds complexity to the confirmation preview, execution ordering, and error handling. Users can re-run `dtwiz install otel` to instrument additional runtimes.
+**Alternative considered:** Supporting multiple project selections in a single invocation. Rejected for now — adds complexity to the confirmation preview, execution ordering, and error handling. Users can re-run `dtwiz install otel` to instrument additional projects.
 
-### 2. Detection functions per runtime
+### 2. Shared utilities in `otel_common.go`
+
+Common logic extracted into `otel_common.go` to eliminate duplication across runtime-specific files:
+
+- `scanProjectDirs(markers, excludeNames)` — scans CWD + home-directory project locations for directories containing marker files.
+- `detectProcesses(filterTerm, excludeTerms)` — finds running processes. On Unix uses `ps ax` and `lsof`; on Windows uses PowerShell `Get-CimInstance Win32_Process`.
+- `processMatchPIDs(dirPath, procs)` — matches processes to project directories by CWD or command line.
+- `generateBaseOtelEnvVars(apiURL, token, serviceName)` — returns the common OTEL_* environment variables shared by all runtimes.
+- `getProcessCWD(pid)` — resolves process working directory. On Unix uses `lsof`; on Windows uses `Get-CimInstance`.
+
+### 3. Detection functions per runtime
 
 Each file exports a single detection entry point matching the Python pattern:
 
@@ -51,37 +63,56 @@ Each file exports a single detection entry point matching the Python pattern:
 
 Each function: finds projects on the filesystem → detects running processes → matches them → prompts the user to pick a project → infers entrypoints → returns a plan or `nil`.
 
-### 3. Project detection strategy per runtime
+**Note:** In the unified project list flow, `DetectJavaPlan` / `DetectNodePlan` / `DetectGoPlan` are still available as standalone entry points for direct `dtwiz install otel-java` etc. commands. The unified orchestrator in `otel.go` uses `createRuntimePlan()` which builds plans directly from the selected `detectedProject`, bypassing the per-runtime interactive menus.
 
+### 4. Unified project list replaces runtime menu
+
+Instead of a two-step flow (pick a runtime → pick a project), the orchestrator scans all GA runtimes at once and shows a single list:
+
+```
+  Detected projects:
+  ──────────────────────────────────────────────────
+  [1] Python   /home/user/projects/api  (pyproject.toml)
+  [2] Java     /home/user/projects/svc  (pom.xml)
+  [3] Node.js  /home/user/projects/web  (package.json)  ← PIDs: 1234
+  [4] Skip — collector only
+```
+
+The user picks one project directly. This reduces interaction to a single prompt and gives a complete overview of all detected projects regardless of runtime.
+
+### 5. Project detection strategy per runtime
+
+- **Python**: Scan for `pyproject.toml`, `setup.py`, `setup.cfg`, `requirements.txt`, `Pipfile`, `poetry.lock`, `manage.py`. Detect running `python` processes and match by CWD.
 - **Java**: Scan for `pom.xml`, `build.gradle`, `build.gradle.kts`. Detect running `java` processes and match by CWD.
 - **Node.js**: Scan for `package.json` (excluding `node_modules`). Detect running `node` processes and match by CWD.
-- **Go**: Scan for `go.mod`. Detect running Go binaries by inspecting processes. Note: Go compiles to static binaries, so "auto-instrumentation" means providing OTel SDK integration guidance and env vars rather than attaching an agent.
+- **Go**: Scan for `go.mod`. Note: Go compiles to static binaries, so "auto-instrumentation" means providing OTel SDK integration guidance and env vars rather than attaching an agent.
 
-### 4. Confirmation preview layout
+### 6. Confirmation preview layout
 
-The preview shows `1) OTel Collector` and, if the user selected a runtime, `2) <Runtime> auto-instrumentation` with the plan's details. If the user chose "Skip", only the collector appears.
+The preview shows `1) OTel Collector` and, if the user selected a project, `2) <Runtime> auto-instrumentation` with the plan's details. If the user chose "Skip", only the collector appears.
 
-### 5. Execution
+### 7. Execution
 
 After collector installation completes, the single selected plan (if any) executes. It prints a separator header (`── <Runtime> auto-instrumentation ──`) before its block.
 
-### 6. "Coming soon" for unimplemented runtimes
+### 8. Coming-soon runtimes excluded from scanning
 
-Runtimes detected on PATH but whose installer is not yet implemented are still listed in the selection menu with a "coming soon" suffix (e.g., `[3] Go (coming soon)`). They are not selectable. This gives users visibility into planned support without hiding information.
+Only Python is GA. All other runtimes (Java, Node.js, Go) are "coming soon" by default — their projects are not scanned or shown. The `DTWIZ_ALL_RUNTIMES` environment variable (set to `"true"` or `"1"`) unlocks all runtimes for testing.
 
-**Alternative considered:** Hiding unimplemented runtimes entirely. Rejected because showing them communicates roadmap intent and avoids user confusion when a runtime is installed but not listed.
+**Alternative considered:** Showing coming-soon runtimes in a menu with labels. Rejected — the unified project list shows projects, not runtimes, so there's nothing to label. Coming-soon runtimes are simply excluded from scanning.
 
-### 7. `--dry-run` coverage
+### 9. `--dry-run` coverage
 
-All new flows — runtime detection, selection menu, combined preview — SHALL work under `--dry-run`. When `--dry-run` is set, the menu is printed, the combined plan is shown, but no collector or instrumentation is installed.
+All new flows — project scanning, project list, combined preview — SHALL work under `--dry-run`. When `--dry-run` is set, the project list is printed, the combined plan is shown, but no collector or instrumentation is installed.
 
-### 8. Non-regression: `InstallOtelCollectorOnly()`
+### 10. Non-regression: `InstallOtelCollectorOnly()`
 
-The existing `InstallOtelCollectorOnly()` code path is not modified by this change. It continues to install the collector without any runtime detection or selection menu. All new logic lives in `InstallOtelCollector()` only.
+The existing `InstallOtelCollectorOnly()` code path is not modified by this change. It continues to install the collector without any runtime detection or project list. All new logic lives in `InstallOtelCollector()` only.
 
 ## Risks / Trade-offs
 
-- **[Single runtime per invocation]** → Users who want to instrument multiple runtimes must run `dtwiz install otel` multiple times. Mitigation: this keeps the UX simple and each run focused; multi-runtime support can be added later if needed.
+- **[Single project per invocation]** → Users who want to instrument multiple projects must run `dtwiz install otel` multiple times. Mitigation: this keeps the UX simple and each run focused; multi-project support can be added later if needed.
 - **[Go is fundamentally different]** → Go has no runtime agent. `DetectGoPlan` can detect projects and provide env var configuration + SDK guidance but cannot auto-instrument a running binary. Mitigation: clearly label Go instrumentation as "manual SDK integration" in the preview and execution output.
 - **[Partial execution stubs]** → Java/Node/Go execution may initially be incomplete. Mitigation: the proposal scopes execution as non-goal; stubs print clear guidance on what the user needs to do manually.
 - **[Non-regression risk]** → Changes to `otel.go` could break `InstallOtelCollectorOnly()`. Mitigation: all new logic is scoped to `InstallOtelCollector()` only; existing tests must continue to pass.
+- **[Cross-platform process detection]** → Windows uses PowerShell `Get-CimInstance` which may be slower or unavailable in restricted environments. Mitigation: detection is best-effort; returns nil gracefully on failure.
