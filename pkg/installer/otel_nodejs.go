@@ -87,12 +87,11 @@ type NodeInstrumentationPlan struct {
 	PlatformToken string
 }
 
-func (p *NodeInstrumentationPlan) Runtime() string         { return "Node.js" }
+func (p *NodeInstrumentationPlan) Runtime() string { return "Node.js" }
 func (p *NodeInstrumentationPlan) SetTokens(envURL, platformToken string) {
 	p.EnvURL = envURL
 	p.PlatformToken = platformToken
 }
-
 
 // DetectNodePlan scans for Node.js projects, prompts the user, performs
 // entrypoint detection, and returns a plan or nil.
