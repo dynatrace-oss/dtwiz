@@ -1,12 +1,8 @@
-# line length https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md#md013
+# line length
 MD013: false
 
-# allow duplicate headings under different parents (e.g. changelog sections)
-MD024:
-  siblings_only: true
+# duplicate headings allowed (needed for CHANGELOG sections)
+MD024: false
 
 # punctuation in headings
 MD026: false
-
-# duplicate headings allowed (needed for CHANGELOG)
-MD024: false
