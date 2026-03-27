@@ -102,3 +102,5 @@ GITHUB_TOKEN=$(gh auth token) goreleaser release --clean
 ```
 
 Archives: `dtwiz_{version}_{os}_{arch}.tar.gz` (Linux/macOS), `.zip` (Windows).
+
+**Changelog:** Every release must update `CHANGELOG.md`. Move items from `[Unreleased]` into a new `[x.y.z] - YYYY-MM-DD` section. Follow [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format with `Added`, `Changed`, `Fixed`, `Removed` subsections as needed.

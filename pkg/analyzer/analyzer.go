@@ -65,18 +65,19 @@ const (
 
 // DockerInfo holds details about a detected Docker installation.
 type DockerInfo struct {
-	Available      bool   `json:"available"`
-	ServerVersion  string `json:"server_version,omitempty"`
-	RunningContainerCount int `json:"running_containers"`
+	Available             bool   `json:"available"`
+	ServerVersion         string `json:"server_version,omitempty"`
+	Variant               string `json:"variant,omitempty"`
+	RunningContainerCount int    `json:"running_containers"`
 }
 
 // KubernetesInfo holds details about a detected Kubernetes cluster.
 type KubernetesInfo struct {
-	Available    bool   `json:"available"`
-	Context      string `json:"context,omitempty"`
-	Cluster      string `json:"cluster,omitempty"`
-	Distribution string `json:"distribution,omitempty"`
-	NodeCount    int    `json:"node_count"`
+	Available     bool   `json:"available"`
+	Context       string `json:"context,omitempty"`
+	Cluster       string `json:"cluster,omitempty"`
+	Distribution  string `json:"distribution,omitempty"`
+	NodeCount     int    `json:"node_count"`
 	ServerVersion string `json:"server_version,omitempty"`
 }
 
@@ -109,6 +110,21 @@ type AzureInfo struct {
 	ServicesAuthError bool           `json:"services_auth_error,omitempty"`
 }
 
+// GCPService represents a detected GCP service and its resource count.
+type GCPService struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
+// GCPInfo holds details about a detected GCP environment.
+type GCPInfo struct {
+	Available         bool         `json:"available"`
+	ProjectID         string       `json:"project_id,omitempty"`
+	Account           string       `json:"account,omitempty"`
+	Services          []GCPService `json:"services,omitempty"`
+	ServicesAuthError bool         `json:"services_auth_error,omitempty"`
+}
+
 // SystemInfo is the top-level result of AnalyzeSystem.
 type SystemInfo struct {
 	Hostname         string           `json:"hostname"`
@@ -124,16 +140,17 @@ type SystemInfo struct {
 	OtelConfigPath   string           `json:"otel_config_path,omitempty"`
 	AWS              *AWSInfo         `json:"aws,omitempty"`
 	Azure            *AzureInfo       `json:"azure,omitempty"`
+	GCP              *GCPInfo         `json:"gcp,omitempty"`
 	Services         []string         `json:"services"`
 }
 
 var (
 	colorHeader = color.New(color.FgMagenta, color.Bold)
-	colorMuted  = color.New()
+	colorMuted  = color.New(color.Faint)
 )
 
 const (
-	labelWidth  = 18
+	labelWidth = 18
 )
 
 func label(s string) string {
@@ -145,7 +162,7 @@ func (s *SystemInfo) Summary() string {
 	var sb strings.Builder
 
 	sb.WriteString(colorHeader.Sprint("  System Analysis") + "\n")
-	sb.WriteString(colorMuted.Sprint("  " + strings.Repeat("─", 42)) + "\n")
+	sb.WriteString(colorMuted.Sprint("  "+strings.Repeat("─", 42)) + "\n")
 
 	osName := map[Platform]string{
 		PlatformLinux:   "Linux",
@@ -161,13 +178,7 @@ func (s *SystemInfo) Summary() string {
 	if s.OtelCollector {
 		var line string
 		if s.OtelBinaryPath != "" {
-			line = s.OtelBinaryPath
-			if s.OtelConfigPath != "" {
-				line += "  config=" + s.OtelConfigPath
-			}
-			line += "  (running)"
-		} else if s.OtelConfigPath != "" {
-			line = s.OtelConfigPath + "  (running)"
+			line = s.OtelBinaryPath + "  (running)"
 		} else {
 			line = "running"
 		}
@@ -175,22 +186,23 @@ func (s *SystemInfo) Summary() string {
 	} else {
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("OpenTelemetry"),
-			colorMuted.Sprint("none")))
+			colorMuted.Sprint("<none>")))
 	}
 
 	if s.Docker != nil && s.Docker.Available {
-		sb.WriteString(fmt.Sprintf("  %s version %s, %d containers running\n",
-			label("Docker"),
-			s.Docker.ServerVersion,
-			s.Docker.RunningContainerCount))
+		dockerDesc := fmt.Sprintf("version %s, %d containers running", s.Docker.ServerVersion, s.Docker.RunningContainerCount)
+		if s.Docker.Variant != "" {
+			dockerDesc = s.Docker.Variant + "  " + dockerDesc
+		}
+		sb.WriteString(fmt.Sprintf("  %s %s\n", label("Docker"), dockerDesc))
 	} else {
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("Docker"),
-			colorMuted.Sprint("none")))
+			colorMuted.Sprint("<none>")))
 	}
 
 	if s.Kubernetes != nil && s.Kubernetes.Available {
-		sb.WriteString(fmt.Sprintf("  %s dist=%s  context=%s  nodes=%d\n",
+		sb.WriteString(fmt.Sprintf("  %s %s  context=%s  nodes=%d\n",
 			label("Kubernetes"),
 			s.Kubernetes.Distribution,
 			s.Kubernetes.Context,
@@ -198,7 +210,7 @@ func (s *SystemInfo) Summary() string {
 	} else {
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("Kubernetes"),
-			colorMuted.Sprint("none — connect to a cluster with 'kubectl' to detect it")))
+			colorMuted.Sprint("<none> — connect to a cluster with 'kubectl' to detect it")))
 	}
 
 	if s.AWS != nil && s.AWS.Available {
@@ -217,7 +229,7 @@ func (s *SystemInfo) Summary() string {
 	} else {
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("AWS"),
-			colorMuted.Sprint("none — sign in with 'aws configure' to detect your account")))
+			colorMuted.Sprint("<none> — sign in with 'aws configure' to detect your account")))
 	}
 
 	if s.Azure != nil && s.Azure.Available {
@@ -237,12 +249,28 @@ func (s *SystemInfo) Summary() string {
 	} else {
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("Azure"),
-			colorMuted.Sprint("none — sign in with 'az login' to detect your subscription")))
+			colorMuted.Sprint("<none> — sign in with 'az login' to detect your subscription")))
 	}
 
-	sb.WriteString(fmt.Sprintf("  %s %s\n",
-		label("GCP"),
-		colorMuted.Sprint("none — sign in with 'gcloud auth login' to detect your project")))
+	if s.GCP != nil && s.GCP.Available {
+		gcpLine := fmt.Sprintf("  %s project=%s",
+			label("GCP"),
+			s.GCP.ProjectID)
+		if s.GCP.ServicesAuthError {
+			gcpLine += "  services: auth expired, run 'gcloud auth login'"
+		} else if len(s.GCP.Services) > 0 {
+			parts := make([]string, len(s.GCP.Services))
+			for i, svc := range s.GCP.Services {
+				parts[i] = fmt.Sprintf("%s (%d)", svc.Name, svc.Count)
+			}
+			gcpLine += "  services: " + strings.Join(parts, ", ")
+		}
+		sb.WriteString(gcpLine + "\n")
+	} else {
+		sb.WriteString(fmt.Sprintf("  %s %s\n",
+			label("GCP"),
+			colorMuted.Sprint("<none> — sign in with 'gcloud auth login' to detect your project")))
+	}
 
 	if s.OneAgentRunning {
 		sb.WriteString(fmt.Sprintf("  %s running\n",
@@ -250,11 +278,11 @@ func (s *SystemInfo) Summary() string {
 	} else if s.Platform == PlatformDarwin {
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("OneAgent"),
-			colorMuted.Sprint("none")+colorMuted.Sprint(" (macOS not supported)")))
+			colorMuted.Sprint("<none>")+colorMuted.Sprint(" (macOS not supported)")))
 	} else {
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("OneAgent"),
-			colorMuted.Sprint("none")))
+			colorMuted.Sprint("<none>")))
 	}
 
 	if len(s.Services) > 0 {
@@ -264,7 +292,7 @@ func (s *SystemInfo) Summary() string {
 	} else {
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("Services"),
-			colorMuted.Sprint("none")))
+			colorMuted.Sprint("<none>")))
 	}
 
 	return strings.TrimRight(sb.String(), "\n")
@@ -356,6 +384,14 @@ func AnalyzeSystem() (*SystemInfo, error) {
 		az := detectAzure()
 		mu.Lock()
 		info.Azure = az
+		mu.Unlock()
+		return nil
+	})
+
+	run(func() error {
+		g := detectGCP()
+		mu.Lock()
+		info.GCP = g
 		mu.Unlock()
 		return nil
 	})

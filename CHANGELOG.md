@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-03-27
+
+### Added
+- GCP detection: detect project, account, and services (Compute VMs, GKE, Cloud Functions, Cloud Run, Cloud SQL, GCS Buckets) via `gcloud` CLI
+- Docker variant detection: identify Docker Desktop, Rancher Desktop, OrbStack, and Colima
+
+### Changed
+- ASCII banner now rendered in purple (bold magenta)
+- System analysis summary: `none` replaced with `<none>` for undetected components
+- System analysis summary: muted text uses `color.Faint` style
+- Simplified OTel Collector summary line (show binary path only, drop config path)
+- Kubernetes summary: show distribution name directly instead of `dist=` prefix
+
 ## [0.1.3] - 2026-03-26
 
 ### Added
@@ -52,7 +65,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/dynatrace-oss/dtwiz/compare/v0.1.3...v0.1.4
+[0.1.3]: https://github.com/dynatrace-oss/dtwiz/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/dynatrace-oss/dtwiz/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/dynatrace-oss/dtwiz/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/dynatrace-oss/dtwiz/releases/tag/v0.1.0

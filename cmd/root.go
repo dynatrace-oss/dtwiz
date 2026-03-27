@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
 
@@ -29,11 +30,12 @@ Then use dtwiz commands to analyze and instrument your system.`,
 }
 
 func printBanner() {
-	fmt.Printf("  ____   _______   __        __ ___  ____\n")
-	fmt.Printf(" |  _ \\ |__   __| \\ \\      / /|_ _||_  /\n")
-	fmt.Printf(" | | | |   | |     \\ \\ /\\ / /  | |  / / \n")
-	fmt.Printf(" | |_| |   | |      \\ V  V /   | | / /_ \n")
-	fmt.Printf(" |____/    |_|       \\_/\\_/   |___|/____| %s\n", Version)
+	purple := color.New(color.FgMagenta, color.Bold)
+	purple.Printf("  ____   _______   __        __ ___  ____\n")
+	purple.Printf(" |  _ \\ |__   __| \\ \\      / /|_ _||_  /\n")
+	purple.Printf(" | | | |   | |     \\ \\ /\\ / /  | |  / / \n")
+	purple.Printf(" | |_| |   | |      \\ V  V /   | | / /_ \n")
+	purple.Printf(" |____/    |_|       \\_/\\_/   |___|/____| %s\n", Version)
 	fmt.Printf("\n HASTA LA VISTA - BLIND SPOTS!\n\n")
 }
 
