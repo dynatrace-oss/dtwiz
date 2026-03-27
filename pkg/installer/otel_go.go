@@ -1,15 +1,11 @@
 package installer
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
-
-	"github.com/fatih/color"
 )
 
 // otelGoPackages are the go get commands needed for OTel SDK integration.
@@ -81,40 +77,35 @@ func DetectGoPlan(apiURL, token string) *GoInstrumentationPlan {
 		return nil
 	}
 
-	header := color.New(color.FgMagenta)
-	fmt.Println()
-	header.Println("  Go projects on this machine:")
-	fmt.Println("  " + strings.Repeat("─", 50))
-	for i, proj := range projects {
-		line := fmt.Sprintf("  [%d]  %s", i+1, proj.Path)
-		if proj.ModuleName != "" {
-			line += fmt.Sprintf("  (module: %s)", proj.ModuleName)
+	// Extract ScannedProject slice for shared selection UI.
+	scanned := make([]ScannedProject, len(projects))
+	for i := range projects {
+		scanned[i] = projects[i].ScannedProject
+	}
+
+	procs := detectProcesses("go", []string{"/bin/dtwiz"})
+	matchProcessesToProjects(scanned, procs)
+
+	sel := promptProjectSelection("Go", scanned)
+	if sel == nil {
+		return nil
+	}
+
+	// Find the matching GoProject to preserve the module name.
+	var goProj GoProject
+	for _, p := range projects {
+		if p.Path == sel.Path {
+			goProj = p
+			goProj.ScannedProject = *sel // pick up RunningPIDs
+			break
 		}
-		fmt.Println(line)
 	}
 
-	fmt.Println()
-	fmt.Printf("  Select a project to instrument [1-%d] or press Enter to skip: ", len(projects))
-
-	reader := bufio.NewReader(os.Stdin)
-	answer, _ := reader.ReadString('\n')
-	answer = strings.TrimSpace(answer)
-	if answer == "" {
-		return nil
-	}
-
-	num, err := strconv.Atoi(answer)
-	if err != nil || num < 1 || num > len(projects) {
-		fmt.Println("  Invalid selection, skipping instrumentation.")
-		return nil
-	}
-
-	proj := projects[num-1]
-	svcName := serviceNameFromPath(proj.Path)
+	svcName := serviceNameFromPath(sel.Path)
 	envVars := generateBaseOtelEnvVars(apiURL, token, svcName)
 
 	return &GoInstrumentationPlan{
-		Project: proj,
+		Project: goProj,
 		EnvVars: envVars,
 	}
 }
