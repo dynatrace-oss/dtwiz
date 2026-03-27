@@ -122,18 +122,22 @@ dtwiz uninstall oneagent
 ## Common Issues
 
 **Cloud/K8s not detected:**
+
 - Kubernetes → connect to a cluster with `kubectl` first
 - AWS → sign in with `aws configure`
 - Azure → sign in with `az login`
 - GCP → sign in with `gcloud auth login`
 
 **404 errors:**
+
 - Wrong URL family. Classic endpoints must not have `.apps.` in the URL. Platform endpoints must.
 
 **403 errors:**
+
 - Wrong auth header. DQL/Platform endpoints need `Bearer` auth, even for `dt0c01.*` tokens. Classic API endpoints need `Api-Token` auth.
 
 **Token prefix mismatch:**
+
 - `dt0c01.*` = API token (Classic API)
 - `dt0s16.*` = Platform token (new APIs)
 
