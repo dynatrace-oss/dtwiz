@@ -79,9 +79,7 @@ func detectAllProjects(runtimes []runtimeInfo) []detectedProject {
 		case "Java":
 			projects := detectJavaProjects()
 			procs := detectProcesses("java", []string{"/bin/dtwiz"})
-			for i := range projects {
-				projects[i].RunningPIDs = processMatchPIDs(projects[i].Path, procs)
-			}
+			matchProcessesToProjects(projects, procs)
 			for _, p := range projects {
 				all = append(all, detectedProject{ScannedProject: p, Runtime: "Java"})
 			}
@@ -158,6 +156,15 @@ func createRuntimePlan(proj detectedProject, apiURL, token string) Instrumentati
 	switch proj.Runtime {
 	case "Python":
 		entrypoints := detectPythonEntrypoints(proj.Path)
+		if len(entrypoints) == 0 {
+			fmt.Print("  No entrypoint detected. Enter the Python file to run (e.g. app.py): ")
+			reader := bufio.NewReader(os.Stdin)
+			input, _ := reader.ReadString('\n')
+			input = strings.TrimSpace(input)
+			if input != "" {
+				entrypoints = []string{input}
+			}
+		}
 		needsVenv := detectProjectPip(proj.Path) == nil
 		pyEnvVars := generateOtelPythonEnvVars(apiURL, token, svcName)
 		return &PythonInstrumentationPlan{
@@ -176,6 +183,15 @@ func createRuntimePlan(proj detectedProject, apiURL, token string) Instrumentati
 		var ep string
 		if len(entrypoints) > 0 {
 			ep = entrypoints[0]
+		} else {
+			fmt.Print("  No entrypoint detected. Enter the JS/TS file to run (e.g. app.js): ")
+			reader := bufio.NewReader(os.Stdin)
+			input, _ := reader.ReadString('\n')
+			input = strings.TrimSpace(input)
+			if input == "" {
+				return nil
+			}
+			ep = input
 		}
 		return &NodeInstrumentationPlan{
 			Project:    proj.ScannedProject,

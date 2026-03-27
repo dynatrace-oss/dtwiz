@@ -59,12 +59,11 @@ type GoInstrumentationPlan struct {
 	PlatformToken string
 }
 
-func (p *GoInstrumentationPlan) Runtime() string         { return "Go" }
+func (p *GoInstrumentationPlan) Runtime() string { return "Go" }
 func (p *GoInstrumentationPlan) SetTokens(envURL, platformToken string) {
 	p.EnvURL = envURL
 	p.PlatformToken = platformToken
 }
-
 
 // DetectGoPlan scans for Go projects, prompts the user, and returns a plan or nil.
 func DetectGoPlan(apiURL, token string) *GoInstrumentationPlan {
