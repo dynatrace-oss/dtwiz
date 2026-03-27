@@ -10,10 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.4] - 2026-03-27
 
 ### Added
+
 - GCP detection: detect project, account, and services (Compute VMs, GKE, Cloud Functions, Cloud Run, Cloud SQL, GCS Buckets) via `gcloud` CLI
 - Docker variant detection: identify Docker Desktop, Rancher Desktop, OrbStack, and Colima
 
 ### Changed
+
 - ASCII banner now rendered in purple (bold magenta)
 - System analysis summary: `none` replaced with `<none>` for undetected components
 - System analysis summary: muted text uses `color.Faint` style
@@ -23,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.3] - 2026-03-26
 
 ### Added
+
 - ASCII banner displayed on `dtwiz setup`, `dtwiz` (no command), and `dtwiz --help`
 - Banner includes version number and tagline "HASTA LA VISTA - BLIND SPOTS!"
 
