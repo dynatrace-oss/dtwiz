@@ -176,12 +176,7 @@ func TestScanProjectDirs_CWD(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	orig, _ := os.Getwd()
-	defer os.Chdir(orig) //nolint:errcheck
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-
+	withCWD(t, dir)
 	projects := scanProjectDirs([]string{"go.mod"}, nil)
 	found := false
 	for _, p := range projects {
@@ -209,12 +204,7 @@ func TestScanProjectDirs_SubDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	orig, _ := os.Getwd()
-	defer os.Chdir(orig) //nolint:errcheck
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-
+	withCWD(t, dir)
 	projects := scanProjectDirs([]string{"package.json"}, nil)
 	realSubDir, _ := filepath.EvalSymlinks(subDir)
 	found := false
@@ -239,12 +229,7 @@ func TestScanProjectDirs_ExcludeDirs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	orig, _ := os.Getwd()
-	defer os.Chdir(orig) //nolint:errcheck
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-
+	withCWD(t, dir)
 	projects := scanProjectDirs([]string{"package.json"}, []string{"node_modules"})
 	for _, p := range projects {
 		if strings.Contains(p.Path, "node_modules") {
@@ -264,12 +249,7 @@ func TestScanProjectDirs_MultipleMarkers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	orig, _ := os.Getwd()
-	defer os.Chdir(orig) //nolint:errcheck
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-
+	withCWD(t, dir)
 	projects := scanProjectDirs([]string{"pom.xml", "build.gradle"}, nil)
 	found := false
 	for _, p := range projects {
@@ -288,12 +268,7 @@ func TestScanProjectDirs_MultipleMarkers(t *testing.T) {
 func TestScanProjectDirs_NoMarkers(t *testing.T) {
 	dir := t.TempDir()
 
-	orig, _ := os.Getwd()
-	defer os.Chdir(orig) //nolint:errcheck
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-
+	withCWD(t, dir)
 	projects := scanProjectDirs([]string{"go.mod"}, nil)
 	realDir, _ := filepath.EvalSymlinks(dir)
 	for _, p := range projects {

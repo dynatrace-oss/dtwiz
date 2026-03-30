@@ -13,13 +13,7 @@ func TestDetectJavaProjects_Maven(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Override CWD for the scan by temporarily changing directory.
-	orig, _ := os.Getwd()
-	defer os.Chdir(orig) //nolint:errcheck
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-
+	withCWD(t, dir)
 	projects := detectJavaProjects()
 	if len(projects) == 0 {
 		t.Fatal("expected at least one Java project, got none")
@@ -45,12 +39,7 @@ func TestDetectJavaProjects_Gradle(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	orig, _ := os.Getwd()
-	defer os.Chdir(orig) //nolint:errcheck
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-
+	withCWD(t, dir)
 	projects := detectJavaProjects()
 	if len(projects) == 0 {
 		t.Fatal("expected at least one Java project, got none")
@@ -79,12 +68,7 @@ func TestDetectJavaProjects_None(t *testing.T) {
 	dir := t.TempDir()
 	realDir, _ := filepath.EvalSymlinks(dir)
 
-	orig, _ := os.Getwd()
-	defer os.Chdir(orig) //nolint:errcheck
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-
+	withCWD(t, dir)
 	projects := detectJavaProjects()
 	for _, p := range projects {
 		// The temp dir itself should not appear (no markers).
