@@ -14,12 +14,7 @@ func TestDetectGoProjects_Found(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	orig, _ := os.Getwd()
-	defer os.Chdir(orig) //nolint:errcheck
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-
+	withCWD(t, dir)
 	projects := detectGoProjects()
 	found := false
 	for _, p := range projects {
@@ -39,12 +34,7 @@ func TestDetectGoProjects_None(t *testing.T) {
 	dir := t.TempDir()
 	realDir, _ := filepath.EvalSymlinks(dir)
 
-	orig, _ := os.Getwd()
-	defer os.Chdir(orig) //nolint:errcheck
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-
+	withCWD(t, dir)
 	projects := detectGoProjects()
 	for _, p := range projects {
 		if p.Path == dir || p.Path == realDir {

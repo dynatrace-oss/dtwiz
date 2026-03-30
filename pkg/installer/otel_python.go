@@ -100,8 +100,6 @@ func detectPythonProjects() []ScannedProject {
 	return scanProjectDirs(pythonProjectMarkers, nil)
 }
 
-// printManualInstructions prints the manual setup instructions when no project
-// was selected for automatic instrumentation.
 func printManualInstructions(envVars map[string]string) {
 	fmt.Println()
 	fmt.Println("  To instrument a Python application manually:")
