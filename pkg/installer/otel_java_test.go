@@ -13,7 +13,7 @@ func TestDetectJavaProjects_Maven(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	withCWD(t, dir)
+	setTestWorkingDir(t, dir)
 	projects := detectJavaProjects()
 	if len(projects) == 0 {
 		t.Fatal("expected at least one Java project, got none")
@@ -39,7 +39,7 @@ func TestDetectJavaProjects_Gradle(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	withCWD(t, dir)
+	setTestWorkingDir(t, dir)
 	projects := detectJavaProjects()
 	if len(projects) == 0 {
 		t.Fatal("expected at least one Java project, got none")
@@ -68,7 +68,7 @@ func TestDetectJavaProjects_None(t *testing.T) {
 	dir := t.TempDir()
 	realDir, _ := filepath.EvalSymlinks(dir)
 
-	withCWD(t, dir)
+	setTestWorkingDir(t, dir)
 	projects := detectJavaProjects()
 	for _, p := range projects {
 		// The temp dir itself should not appear (no markers).
