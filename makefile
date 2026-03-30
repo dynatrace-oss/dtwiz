@@ -12,7 +12,8 @@ install:
 	$(GO) install .
 
 test:
-	$(GO) test ./...
+	$(GO) test ./... -coverprofile=coverage.out
+	$(GO) tool cover -func=coverage.out
 
 lint:
 	golangci-lint run ./...
