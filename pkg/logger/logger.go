@@ -7,13 +7,10 @@ import (
 
 var enabled bool
 
-// Init configures the default slog logger based on the debug flag.
-// When debug is true the log level is set to Debug; otherwise it is set
-// to Warn so that only warnings and errors are emitted.
-// Output is written to stderr to keep stdout clean for program output.
+// Init configures structured logging. Writes to stderr; all output is suppressed unless debug=true.
 func Init(debug bool) {
 	enabled = debug
-	level := slog.LevelWarn
+	level := slog.Level(100) // above Error — silences all output
 	if debug {
 		level = slog.LevelDebug
 	}
@@ -21,13 +18,11 @@ func Init(debug bool) {
 	slog.SetDefault(slog.New(handler))
 }
 
-// Enabled returns true when debug logging is active.
 func Enabled() bool {
 	return enabled
 }
 
-// Debug logs a message at debug level. Additional key-value pairs can be
-// passed as structured context (e.g. logger.Debug("loaded config", "path", p)).
+// Debug logs at debug level with optional key-value pairs (e.g. logger.Debug("loaded", "path", p)).
 func Debug(msg string, args ...any) {
 	slog.Debug(msg, args...)
 }
