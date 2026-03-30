@@ -1,0 +1,22 @@
+name: PR Checklist
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  checklist:
+    name: Checklist complete
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any checklist items are unchecked
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          section=$(echo "$BODY" | awk '/^## Checklist/,0')
+          if echo "$section" | grep -q '^- \[ \]'; then
+            echo "The following checklist items are not completed:"
+            echo "$section" | grep '^- \[ \]'
+            exit 1
+          fi
+          echo "All checklist items are checked."
