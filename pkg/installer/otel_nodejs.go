@@ -16,13 +16,10 @@ var otelNodePackages = []string{
 	"@opentelemetry/exporter-trace-otlp-http",
 }
 
-// detectNodeProjects scans common locations for Node.js project directories,
-// excluding node_modules directories.
 func detectNodeProjects() []ScannedProject {
 	return scanProjectDirs([]string{"package.json"}, []string{"node_modules"})
 }
 
-// detectNodeProcesses finds running node processes.
 func detectNodeProcesses() []DetectedProcess {
 	return detectProcesses("node", []string{"/bin/dtwiz", "npm "})
 }
@@ -77,20 +74,13 @@ func detectNodeEntrypoints(projectPath string) []string {
 	return nil
 }
 
-// NodeInstrumentationPlan captures a user's Node.js instrumentation choices.
 type NodeInstrumentationPlan struct {
-	Project       ScannedProject
-	Entrypoint    string
-	EnvVars       map[string]string
-	EnvURL        string
-	PlatformToken string
+	Project    ScannedProject
+	Entrypoint string
+	EnvVars    map[string]string
 }
 
 func (p *NodeInstrumentationPlan) Runtime() string { return "Node.js" }
-func (p *NodeInstrumentationPlan) SetTokens(envURL, platformToken string) {
-	p.EnvURL = envURL
-	p.PlatformToken = platformToken
-}
 
 // DetectNodePlan scans for Node.js projects, prompts the user, performs
 // entrypoint detection, and returns a plan or nil.
@@ -131,7 +121,6 @@ func DetectNodePlan(apiURL, token string) *NodeInstrumentationPlan {
 	}
 }
 
-// PrintPlanSteps prints the Node.js instrumentation steps for a combined plan preview.
 func (p *NodeInstrumentationPlan) PrintPlanSteps() {
 	fmt.Printf("     Project:    %s\n", p.Project.Path)
 	fmt.Printf("     npm install %s\n", strings.Join(otelNodePackages, " "))
@@ -140,7 +129,6 @@ func (p *NodeInstrumentationPlan) PrintPlanSteps() {
 	}
 }
 
-// Execute prints Node.js instrumentation instructions (manual steps).
 func (p *NodeInstrumentationPlan) Execute() {
 	fmt.Println()
 	fmt.Printf("  Install OTel packages:\n")

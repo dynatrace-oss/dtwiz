@@ -8,21 +8,17 @@ import (
 	"strings"
 )
 
-// otelGoPackages are the go get commands needed for OTel SDK integration.
 var otelGoPackages = []string{
 	"go.opentelemetry.io/otel",
 	"go.opentelemetry.io/otel/sdk",
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp",
 }
 
-// GoProject describes a detected Go project directory.
-// It embeds ScannedProject and adds the module name from go.mod.
 type GoProject struct {
 	ScannedProject
 	ModuleName string // module name extracted from go.mod
 }
 
-// extractGoModuleName reads the module name from a go.mod file.
 func extractGoModuleName(goModPath string) string {
 	data, err := os.ReadFile(goModPath)
 	if err != nil {
@@ -37,7 +33,6 @@ func extractGoModuleName(goModPath string) string {
 	return ""
 }
 
-// detectGoProjects scans common locations for Go project directories (go.mod).
 func detectGoProjects() []GoProject {
 	scanned := scanProjectDirs([]string{"go.mod"}, nil)
 	projects := make([]GoProject, 0, len(scanned))
@@ -51,19 +46,12 @@ func detectGoProjects() []GoProject {
 	return projects
 }
 
-// GoInstrumentationPlan captures a user's Go instrumentation choices.
 type GoInstrumentationPlan struct {
-	Project       GoProject
-	EnvVars       map[string]string
-	EnvURL        string
-	PlatformToken string
+	Project GoProject
+	EnvVars map[string]string
 }
 
 func (p *GoInstrumentationPlan) Runtime() string { return "Go" }
-func (p *GoInstrumentationPlan) SetTokens(envURL, platformToken string) {
-	p.EnvURL = envURL
-	p.PlatformToken = platformToken
-}
 
 // DetectGoPlan scans for Go projects, prompts the user, and returns a plan or nil.
 func DetectGoPlan(apiURL, token string) *GoInstrumentationPlan {
@@ -76,7 +64,6 @@ func DetectGoPlan(apiURL, token string) *GoInstrumentationPlan {
 		return nil
 	}
 
-	// Extract ScannedProject slice for shared selection UI.
 	scanned := make([]ScannedProject, len(projects))
 	for i := range projects {
 		scanned[i] = projects[i].ScannedProject
@@ -90,7 +77,6 @@ func DetectGoPlan(apiURL, token string) *GoInstrumentationPlan {
 		return nil
 	}
 
-	// Find the matching GoProject to preserve the module name.
 	var goProj GoProject
 	for _, p := range projects {
 		if p.Path == sel.Path {
@@ -122,7 +108,6 @@ func (p *GoInstrumentationPlan) PrintPlanSteps() {
 	}
 }
 
-// Execute prints Go OTel SDK integration guidance.
 func (p *GoInstrumentationPlan) Execute() {
 	fmt.Println()
 	fmt.Printf("  cd %s\n", p.Project.Path)

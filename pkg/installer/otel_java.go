@@ -18,9 +18,12 @@ var javaProjectMarkers = []string{
 	".mvn",
 }
 
-// detectJavaProjects scans common locations for Java project directories.
 func detectJavaProjects() []ScannedProject {
 	return scanProjectDirs(javaProjectMarkers, nil)
+}
+
+func detectJavaProcesses() []DetectedProcess {
+	return detectProcesses("java", []string{"/bin/dtwiz"})
 }
 
 // detectJava finds a usable Java runtime on the current PATH.
@@ -37,19 +40,12 @@ func detectJava() (string, error) {
 	return path, nil
 }
 
-// JavaInstrumentationPlan captures a user's Java instrumentation choices.
 type JavaInstrumentationPlan struct {
-	Project       ScannedProject
-	EnvVars       map[string]string
-	EnvURL        string
-	PlatformToken string
+	Project ScannedProject
+	EnvVars map[string]string
 }
 
 func (p *JavaInstrumentationPlan) Runtime() string { return "Java" }
-func (p *JavaInstrumentationPlan) SetTokens(envURL, platformToken string) {
-	p.EnvURL = envURL
-	p.PlatformToken = platformToken
-}
 
 // DetectJavaPlan scans for Java projects, prompts the user, and returns a plan or nil.
 func DetectJavaPlan(apiURL, token string) *JavaInstrumentationPlan {
@@ -79,14 +75,12 @@ func DetectJavaPlan(apiURL, token string) *JavaInstrumentationPlan {
 	}
 }
 
-// PrintPlanSteps prints the Java instrumentation steps for a combined plan preview.
 func (p *JavaInstrumentationPlan) PrintPlanSteps() {
 	fmt.Printf("     Project:    %s\n", p.Project.Path)
 	fmt.Printf("     Agent JAR:  %s\n", otelJavaAgentURL)
 	fmt.Println("     java -javaagent:opentelemetry-javaagent.jar -jar your_app.jar")
 }
 
-// Execute prints Java instrumentation instructions (manual steps).
 func (p *JavaInstrumentationPlan) Execute() {
 	fmt.Println()
 	fmt.Printf("  Download the OpenTelemetry Java agent:\n")
@@ -130,7 +124,6 @@ func InstallOtelJava(envURL, token, serviceName string, dryRun bool) error {
 		return nil
 	}
 
-	// 1. Detect Java.
 	if _, err := detectJava(); err != nil {
 		return err
 	}
@@ -139,7 +132,6 @@ func InstallOtelJava(envURL, token, serviceName string, dryRun bool) error {
 	fmt.Printf("  Agent JAR URL: %s\n", otelJavaAgentURL)
 	fmt.Println("  (automatic download coming soon — download manually for now)")
 
-	// 3. Print env var and JVM flag instructions.
 	fmt.Println()
 	fmt.Println("  Add the following to your environment:")
 	fmt.Println()
