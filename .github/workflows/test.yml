@@ -15,3 +15,8 @@ jobs:
           go-version-file: go.mod
       - name: Run tests
         run: make test
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
