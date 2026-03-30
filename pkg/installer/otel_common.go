@@ -44,7 +44,6 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 	seen := make(map[string]bool)
 
 	checkDir := func(dir string) {
-		// Skip excluded directory names.
 		if excludeSet[filepath.Base(dir)] {
 			return
 		}
@@ -70,7 +69,6 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 		}
 	}
 
-	// Check CWD and immediate subdirectories.
 	if cwd, err := os.Getwd(); err == nil {
 		checkDir(cwd)
 		entries, _ := os.ReadDir(cwd)
@@ -81,7 +79,6 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 		}
 	}
 
-	// Check common home-directory project locations (two levels deep).
 	if home, err := os.UserHomeDir(); err == nil {
 		for _, base := range []string{"Code", "code", "projects", "src", "dev"} {
 			dir := filepath.Join(home, base)
@@ -200,7 +197,6 @@ func generateBaseOtelEnvVars(apiURL, token, serviceName string) map[string]strin
 	}
 }
 
-// serviceNameFromPath derives an OTEL_SERVICE_NAME from a project directory path.
 func serviceNameFromPath(projectPath string) string {
 	base := filepath.Base(projectPath)
 	if base == "" || base == "." || base == "/" {
@@ -209,8 +205,6 @@ func serviceNameFromPath(projectPath string) string {
 	return base
 }
 
-// matchProcessesToProjects sets RunningPIDs on each project by finding PIDs
-// whose CWD or command line matches the project directory.
 func matchProcessesToProjects(projects []ScannedProject, procs []DetectedProcess) {
 	for i := range projects {
 		projects[i].RunningPIDs = processMatchPIDs(projects[i].Path, procs)
@@ -252,7 +246,6 @@ func promptProjectSelection(label string, projects []ScannedProject) *ScannedPro
 	return &projects[num-1]
 }
 
-// GenerateEnvExportScript returns a shell `export` script for the given env vars.
 func GenerateEnvExportScript(envVars map[string]string) string {
 	var sb strings.Builder
 	sb.WriteString("# Dynatrace OpenTelemetry auto-instrumentation environment variables\n")
@@ -328,7 +321,6 @@ func waitForServices(envURL, platformToken string, serviceNames []string) {
 	appsURL := AppsURL(envURL)
 	apiURL := appsURL + "/platform/storage/query/v1/query:execute"
 
-	// Build DQL query for all service names.
 	conditions := make([]string, len(serviceNames))
 	for i, name := range serviceNames {
 		conditions[i] = fmt.Sprintf("name == \"%s\"", name)

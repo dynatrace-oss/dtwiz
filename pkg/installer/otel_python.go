@@ -96,7 +96,6 @@ var pythonProjectMarkers = []string{
 	"manage.py",
 }
 
-// detectPythonProjects scans common locations for Python project directories.
 func detectPythonProjects() []ScannedProject {
 	return scanProjectDirs(pythonProjectMarkers, nil)
 }
@@ -129,10 +128,6 @@ type PythonInstrumentationPlan struct {
 }
 
 func (p *PythonInstrumentationPlan) Runtime() string { return "Python" }
-func (p *PythonInstrumentationPlan) SetTokens(envURL, platformToken string) {
-	p.EnvURL = envURL
-	p.PlatformToken = platformToken
-}
 
 // DetectPythonPlan scans for Python projects, shows them to the user, and
 // returns a plan if the user selects one. Returns nil if the user skips or
@@ -177,8 +172,6 @@ func DetectPythonPlan(apiURL, token string) *PythonInstrumentationPlan {
 	}
 }
 
-// PrintPlanSteps prints the Python instrumentation steps for inclusion in a
-// combined plan preview.
 func (p *PythonInstrumentationPlan) PrintPlanSteps() {
 	fmt.Printf("     Project: %s\n", p.Project.Path)
 	if len(p.Project.RunningPIDs) > 0 {

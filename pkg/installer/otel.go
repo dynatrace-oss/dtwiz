@@ -18,7 +18,6 @@ type InstrumentationPlan interface {
 	Runtime() string
 	PrintPlanSteps()
 	Execute()
-	SetTokens(envURL, platformToken string)
 }
 
 // runtimeInfo describes a supported runtime for the multi-runtime scanner.
@@ -71,7 +70,7 @@ func detectAllProjects(runtimes []runtimeInfo) []detectedProject {
 			}
 		case "Java":
 			projects := detectJavaProjects()
-			procs := detectProcesses("java", []string{"/bin/dtwiz"})
+			procs := detectJavaProcesses()
 			matchProcessesToProjects(projects, procs)
 			for _, p := range projects {
 				all = append(all, detectedProject{ScannedProject: p, Runtime: "Java"})
@@ -135,7 +134,7 @@ func selectProject(projects []detectedProject) (detectedProject, bool) {
 	return projects[num-1], true
 }
 
-func createRuntimePlan(proj detectedProject, apiURL, token string) InstrumentationPlan {
+func createRuntimePlan(proj detectedProject, apiURL, token, envURL, platformToken string) InstrumentationPlan {
 	svcName := serviceNameFromPath(proj.Path)
 	envVars := generateBaseOtelEnvVars(apiURL, token, svcName)
 
@@ -151,10 +150,12 @@ func createRuntimePlan(proj detectedProject, apiURL, token string) Instrumentati
 		needsVenv := detectProjectPip(proj.Path) == nil
 		pyEnvVars := generateOtelPythonEnvVars(apiURL, token, svcName)
 		return &PythonInstrumentationPlan{
-			Project:     proj.ScannedProject,
-			Entrypoints: entrypoints,
-			NeedsVenv:   needsVenv,
-			EnvVars:     pyEnvVars,
+			Project:       proj.ScannedProject,
+			Entrypoints:   entrypoints,
+			NeedsVenv:     needsVenv,
+			EnvVars:       pyEnvVars,
+			EnvURL:        envURL,
+			PlatformToken: platformToken,
 		}
 	case "Java":
 		return &JavaInstrumentationPlan{
@@ -163,12 +164,6 @@ func createRuntimePlan(proj detectedProject, apiURL, token string) Instrumentati
 		}
 	case "Node.js":
 		entrypoints := detectNodeEntrypoints(proj.Path)
-		if len(entrypoints) == 0 {
-			fmt.Printf("  Skipping %s — no Node.js entrypoint found.\n", proj.Path)
-			fmt.Println("    Looked for: package.json 'main' or 'scripts.start', or common files (index.js, app.js, server.js and .ts variants).")
-			fmt.Println("    Add one of these and re-run dtwiz.")
-			return nil
-		}
 		return &NodeInstrumentationPlan{
 			Project:    proj.ScannedProject,
 			Entrypoint: entrypoints[0],
@@ -214,7 +209,7 @@ func InstallOtelCollector(envURL, token, ingestToken, platformToken string, dryR
 		printProjectList(projects)
 
 		if selected, ok := selectProject(projects); ok {
-			plan = createRuntimePlan(selected, cp.apiURL, token)
+			plan = createRuntimePlan(selected, cp.apiURL, token, envURL, platformToken)
 		}
 	}
 	fmt.Println()
@@ -262,7 +257,6 @@ func InstallOtelCollector(envURL, token, ingestToken, platformToken string, dryR
 	}
 
 	if plan != nil {
-		plan.SetTokens(envURL, platformToken)
 		fmt.Printf("\n  ── %s auto-instrumentation ──\n\n", plan.Runtime())
 		plan.Execute()
 	}
