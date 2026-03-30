@@ -25,7 +25,7 @@ type InstrumentationPlan interface {
 type runtimeInfo struct {
 	name       string // display name (e.g. "Python", "Java", "Node.js", "Go")
 	binName    string // binary to check on PATH (e.g. "python3", "java", "node", "go")
-	comingSoon bool   // if true, this runtime is hidden unless DTWIZ_ALL_RUNTIMES is set
+	enabled bool // if false, this runtime is skipped unless DTWIZ_ALL_RUNTIMES is set
 }
 
 // detectedProject is a project found during the multi-runtime scan.
@@ -37,32 +37,25 @@ type detectedProject struct {
 	ModuleName string // only set for Go projects
 }
 
-// allRuntimesEnabled returns true when the DTWIZ_ALL_RUNTIMES feature flag
-// is set to "true" or "1".
 func allRuntimesEnabled() bool {
 	v := os.Getenv("DTWIZ_ALL_RUNTIMES")
 	return v == "true" || v == "1"
 }
 
-// detectAvailableRuntimes returns the list of supported runtimes with their
-// coming-soon status. Only Python is GA by default; others require
-// DTWIZ_ALL_RUNTIMES=true.
 func detectAvailableRuntimes() []runtimeInfo {
 	allEnabled := allRuntimesEnabled()
 	return []runtimeInfo{
-		{name: "Python", binName: "python3", comingSoon: false},
-		{name: "Java", binName: "java", comingSoon: !allEnabled},
-		{name: "Node.js", binName: "node", comingSoon: !allEnabled},
-		{name: "Go", binName: "go", comingSoon: !allEnabled},
+		{name: "Python", binName: "python3", enabled: true},
+		{name: "Java", binName: "java", enabled: allEnabled},
+		{name: "Node.js", binName: "node", enabled: allEnabled},
+		{name: "Go", binName: "go", enabled: allEnabled},
 	}
 }
 
-// detectAllProjects scans for projects across all available runtimes,
-// skipping coming-soon runtimes and runtimes whose binary is not on PATH.
 func detectAllProjects(runtimes []runtimeInfo) []detectedProject {
 	var all []detectedProject
 	for _, rt := range runtimes {
-		if rt.comingSoon {
+		if !rt.enabled {
 			continue
 		}
 		if _, err := exec.LookPath(rt.binName); err != nil {
@@ -104,8 +97,6 @@ func detectAllProjects(runtimes []runtimeInfo) []detectedProject {
 	return all
 }
 
-// printProjectList prints a numbered list of detected projects across all
-// runtimes, with a trailing "Skip" option.
 func printProjectList(projects []detectedProject) {
 	for i, p := range projects {
 		line := fmt.Sprintf("  [%d]  %s  %s  (%s)", i+1, p.Runtime, p.Path, strings.Join(p.Markers, ", "))
@@ -124,9 +115,6 @@ func printProjectList(projects []detectedProject) {
 	fmt.Printf("  [%d]  Skip\n", len(projects)+1)
 }
 
-// selectProject prompts the user to select a project from the unified list.
-// Returns the selected project and true, or zero-value and false if the user
-// skips.
 func selectProject(projects []detectedProject) (detectedProject, bool) {
 	fmt.Println()
 	fmt.Printf("  Select a project to instrument [1-%d]: ", len(projects)+1)
@@ -147,8 +135,6 @@ func selectProject(projects []detectedProject) (detectedProject, bool) {
 	return projects[num-1], true
 }
 
-// createRuntimePlan builds the appropriate InstrumentationPlan for the
-// selected project.
 func createRuntimePlan(proj detectedProject, apiURL, token string) InstrumentationPlan {
 	svcName := serviceNameFromPath(proj.Path)
 	envVars := generateBaseOtelEnvVars(apiURL, token, svcName)
@@ -201,8 +187,6 @@ func createRuntimePlan(proj detectedProject, apiURL, token string) Instrumentati
 	return nil
 }
 
-// InstallOtelCollector installs the Dynatrace OTel Collector and offers
-// runtime auto-instrumentation (Python, Java, …) in a single guided flow.
 func InstallOtelCollector(envURL, token, ingestToken, platformToken string, dryRun bool) error {
 	cyan := color.New(color.FgMagenta)
 
@@ -220,7 +204,6 @@ func InstallOtelCollector(envURL, token, ingestToken, platformToken string, dryR
 		return nil
 	}
 
-	// Detect all runtimes and let the user pick a project upfront.
 	runtimes := detectAvailableRuntimes()
 	projects := detectAllProjects(runtimes)
 
@@ -236,7 +219,6 @@ func InstallOtelCollector(envURL, token, ingestToken, platformToken string, dryR
 	}
 	fmt.Println()
 
-	// Show combined plan: collector + instrumentation.
 	if plan != nil {
 		cyan.Println("  This will install the OTel Collector and auto-instrument your application.")
 	}
