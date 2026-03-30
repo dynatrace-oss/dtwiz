@@ -217,7 +217,7 @@ func TestDetectPythonProjects_Found(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	withCWD(t, dir)
+	setTestWorkingDir(t, dir)
 	projects := detectPythonProjects()
 	found := false
 	for _, p := range projects {
@@ -240,7 +240,7 @@ func TestDetectPythonProjects_AllMarkers(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			withCWD(t, dir)
+			setTestWorkingDir(t, dir)
 			projects := detectPythonProjects()
 			found := false
 			for _, p := range projects {

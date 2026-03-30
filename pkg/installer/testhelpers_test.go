@@ -10,9 +10,9 @@ import (
 // os.Chdir mutates global process state; tests must hold this lock for the duration.
 var cwdMu sync.Mutex
 
-// withCWD changes CWD to dir for the duration of the test, then restores it.
+// setTestWorkingDir changes CWD to dir for the duration of the test, then restores it.
 // Acquires cwdMu to prevent concurrent CWD mutation if t.Parallel() is ever added.
-func withCWD(t *testing.T, dir string) {
+func setTestWorkingDir(t *testing.T, dir string) {
 	t.Helper()
 	cwdMu.Lock()
 	orig, _ := os.Getwd()

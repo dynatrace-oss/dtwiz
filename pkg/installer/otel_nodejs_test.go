@@ -13,7 +13,7 @@ func TestDetectNodeProjects_Found(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	withCWD(t, dir)
+	setTestWorkingDir(t, dir)
 	projects := detectNodeProjects()
 	found := false
 	for _, p := range projects {
@@ -41,7 +41,7 @@ func TestDetectNodeProjects_ExcludesNodeModules(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	withCWD(t, dir)
+	setTestWorkingDir(t, dir)
 	projects := detectNodeProjects()
 	for _, p := range projects {
 		if filepath.Base(filepath.Dir(p.Path)) == "node_modules" {
