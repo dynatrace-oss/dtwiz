@@ -59,12 +59,12 @@ Replace the runtime selection menu with a unified project list across all GA run
 **Files:** `pkg/installer/otel.go` (modify), `pkg/installer/otel_test.go` (modify)
 
 - [ ] 5.1 Add `allRuntimesEnabled()` checking `DTWIZ_ALL_RUNTIMES` env var (`"true"` or `"1"`)
-- [ ] 5.2 Update `detectAvailableRuntimes()` — Python `comingSoon: false`, Java/Node.js/Go `comingSoon: !unlockAll`
-- [ ] 5.3 Add `detectedProject` struct and `detectAllProjects(runtimes)` — scan all GA runtimes, skip coming-soon, return unified list
+- [ ] 5.2 Update `detectAvailableRuntimes()` — Python `enabled: true`, Java/Node.js/Go `enabled: allEnabled`
+- [ ] 5.3 Add `detectedProject` struct and `detectAllProjects(runtimes)` — scan all enabled runtimes, skip disabled, return unified list
 - [ ] 5.4 Add `printProjectList()` and `selectProject()` for unified project selection UX
 - [ ] 5.5 Add `createRuntimePlan()` to dispatch plan creation based on selected project's runtime
 - [ ] 5.6 Rewrite `InstallOtelCollector()` — scan projects, show unified list, create plan, show combined preview, execute after collector install
 - [ ] 5.7 Ensure `--dry-run` prints the project list and combined preview without installing
 - [ ] 5.8 Verify `InstallOtelCollectorOnly()` is not modified
-- [ ] 5.9 Add tests: `detectAvailableRuntimes` coming-soon defaults (Python GA), `DTWIZ_ALL_RUNTIMES=true` unlocks all, `printProjectList` formatting, `detectAllProjects` skips coming-soon / includes all when unlocked
+- [ ] 5.9 Add tests: `detectAvailableRuntimes` enabled defaults (Python enabled), `DTWIZ_ALL_RUNTIMES=true` enables all, `printProjectList` formatting, `detectAllProjects` skips disabled / includes all when unlocked
 - [ ] 5.10 Run `make test` and `make lint` to verify no regressions
