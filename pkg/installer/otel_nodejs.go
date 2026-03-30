@@ -1,7 +1,6 @@
 package installer
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -115,18 +114,11 @@ func DetectNodePlan(apiURL, token string) *NodeInstrumentationPlan {
 	proj := *sel
 
 	entrypoints := detectNodeEntrypoints(proj.Path)
-	var entrypoint string
-	if len(entrypoints) > 0 {
-		entrypoint = entrypoints[0]
-	} else {
-		fmt.Print("  No entrypoint detected. Enter the JS/TS file to run (e.g. app.js): ")
-		reader := bufio.NewReader(os.Stdin)
-		ep, _ := reader.ReadString('\n')
-		ep = strings.TrimSpace(ep)
-		if ep == "" {
-			return nil
-		}
-		entrypoint = ep
+	if len(entrypoints) == 0 {
+		fmt.Printf("  Skipping %s — no Node.js entrypoint found.\n", proj.Path)
+		fmt.Println("    Looked for: package.json 'main' or 'scripts.start', or common files (index.js, app.js, server.js and .ts variants).")
+		fmt.Println("    Add one of these and re-run dtwiz.")
+		return nil
 	}
 
 	svcName := serviceNameFromPath(proj.Path)
@@ -134,7 +126,7 @@ func DetectNodePlan(apiURL, token string) *NodeInstrumentationPlan {
 
 	return &NodeInstrumentationPlan{
 		Project:    proj,
-		Entrypoint: entrypoint,
+		Entrypoint: entrypoints[0],
 		EnvVars:    envVars,
 	}
 }

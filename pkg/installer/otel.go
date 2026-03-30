@@ -157,13 +157,10 @@ func createRuntimePlan(proj detectedProject, apiURL, token string) Instrumentati
 	case "Python":
 		entrypoints := detectPythonEntrypoints(proj.Path)
 		if len(entrypoints) == 0 {
-			fmt.Print("  No entrypoint detected. Enter the Python file to run (e.g. app.py): ")
-			reader := bufio.NewReader(os.Stdin)
-			input, _ := reader.ReadString('\n')
-			input = strings.TrimSpace(input)
-			if input != "" {
-				entrypoints = []string{input}
-			}
+			fmt.Printf("  Skipping %s — no Python entrypoint found.\n", proj.Path)
+			fmt.Println("    Looked for: pyproject.toml [project.scripts], or common files (main.py, app.py, run.py, server.py, manage.py, wsgi.py, asgi.py).")
+			fmt.Println("    Add one of these files and re-run dtwiz.")
+			return nil
 		}
 		needsVenv := detectProjectPip(proj.Path) == nil
 		pyEnvVars := generateOtelPythonEnvVars(apiURL, token, svcName)
@@ -180,22 +177,15 @@ func createRuntimePlan(proj detectedProject, apiURL, token string) Instrumentati
 		}
 	case "Node.js":
 		entrypoints := detectNodeEntrypoints(proj.Path)
-		var ep string
-		if len(entrypoints) > 0 {
-			ep = entrypoints[0]
-		} else {
-			fmt.Print("  No entrypoint detected. Enter the JS/TS file to run (e.g. app.js): ")
-			reader := bufio.NewReader(os.Stdin)
-			input, _ := reader.ReadString('\n')
-			input = strings.TrimSpace(input)
-			if input == "" {
-				return nil
-			}
-			ep = input
+		if len(entrypoints) == 0 {
+			fmt.Printf("  Skipping %s — no Node.js entrypoint found.\n", proj.Path)
+			fmt.Println("    Looked for: package.json 'main' or 'scripts.start', or common files (index.js, app.js, server.js and .ts variants).")
+			fmt.Println("    Add one of these and re-run dtwiz.")
+			return nil
 		}
 		return &NodeInstrumentationPlan{
 			Project:    proj.ScannedProject,
-			Entrypoint: ep,
+			Entrypoint: entrypoints[0],
 			EnvVars:    envVars,
 		}
 	case "Go":

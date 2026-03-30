@@ -1,7 +1,6 @@
 package installer
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -157,16 +156,12 @@ func DetectPythonPlan(apiURL, token string) *PythonInstrumentationPlan {
 	}
 	proj := *sel
 
-	reader := bufio.NewReader(os.Stdin)
 	entrypoints := detectPythonEntrypoints(proj.Path)
 	if len(entrypoints) == 0 {
-		fmt.Print("  No entrypoint detected. Enter the Python file to run (e.g. app.py): ")
-		ep, _ := reader.ReadString('\n')
-		ep = strings.TrimSpace(ep)
-		if ep == "" {
-			return nil
-		}
-		entrypoints = []string{ep}
+		fmt.Printf("  Skipping %s — no Python entrypoint found.\n", proj.Path)
+		fmt.Println("    Looked for: pyproject.toml [project.scripts], or common files (main.py, app.py, run.py, server.py, manage.py, wsgi.py, asgi.py).")
+		fmt.Println("    Add one of these files and re-run dtwiz.")
+		return nil
 	}
 
 	needsVenv := detectProjectPip(proj.Path) == nil
