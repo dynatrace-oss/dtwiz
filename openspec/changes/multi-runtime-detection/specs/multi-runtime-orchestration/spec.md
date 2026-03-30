@@ -1,0 +1,141 @@
+# Multi-Runtime Orchestration
+
+## ADDED Requirements
+
+### Requirement: Unified project listing
+
+The `InstallOtelCollector` function in `pkg/installer/otel.go` SHALL detect available runtimes via `exec.LookPath`, scan for projects across all GA runtimes, and present a single unified project list. Each entry shows the runtime name, project path, marker files, and any running PIDs. The list SHALL include a "Skip" option. The user selects exactly one project to instrument (or skips). There is no runtime selection menu — the user picks a project directly.
+
+#### Scenario: Multiple runtimes and projects detected
+
+- **GIVEN** an OTel Collector installation is in progress via `InstallOtelCollector`
+- **WHEN** `java` and `node` are on PATH and Java/Node.js projects exist
+- **THEN** the list shows e.g. `[1] Java     /home/user/projects/api  (pom.xml)`, `[2] Node.js  /home/user/projects/web  (package.json)`, `[3] Skip` and the user picks one
+
+#### Scenario: No projects detected
+
+- **GIVEN** an OTel Collector installation is in progress via `InstallOtelCollector`
+- **WHEN** no project directories are found for any GA runtime
+- **THEN** the system skips the project list and proceeds with collector-only installation
+
+### Requirement: Runtime plan creation from selected project
+
+After the user selects a project, the system SHALL create the appropriate instrumentation plan based on the project's runtime. For runtimes that require entrypoint detection (Python, Node.js), the system detects entrypoints automatically. If no entrypoint can be found for Python or Node.js, the system prints a skip message and returns nil — no extra prompt is shown.
+
+#### Scenario: User selects a Java project
+
+- **GIVEN** the unified project list is displayed
+- **WHEN** the user picks a Java project
+- **THEN** the system creates a `JavaInstrumentationPlan` for that project
+
+#### Scenario: User selects a Node.js project with detected entrypoint
+
+- **GIVEN** the unified project list is displayed
+- **WHEN** the user picks a Node.js project that has a `package.json` with a `main` field
+- **THEN** the system creates a `NodeInstrumentationPlan` with the detected entrypoint — no extra prompt
+
+#### Scenario: User selects a Python project with no entrypoint
+
+- **GIVEN** the unified project list is displayed
+- **WHEN** the user picks a Python project and no entrypoint is auto-detected
+- **THEN** the system prints a skip message (e.g. `Skipping /path — no Python entrypoint found.`) and returns nil — no runtime plan is created
+
+### Requirement: Confirmation preview
+
+After the user selects a project (or skips), the system SHALL show a confirmation preview. Step 1 is always the OTel Collector; if a runtime plan was created, it appears as step 2. This preview is followed by a single `Proceed with installation?` prompt.
+
+#### Scenario: User selected a Python project
+
+- **GIVEN** the user picked a Python project from the list and an entrypoint was determined
+- **WHEN** the confirmation preview is rendered
+- **THEN** it shows `1) OTel Collector` with directory/binary details, `2) Python auto-instrumentation` with plan steps, then `Proceed with installation? [Y/n]`
+
+#### Scenario: User skipped or no project found
+
+- **GIVEN** the user chose "Skip" or no projects were detected
+- **WHEN** the confirmation preview is rendered
+- **THEN** it shows only `1) OTel Collector` and proceeds to confirmation
+
+### Requirement: Single confirmation prompt
+
+The system SHALL show a single `Proceed with installation?` prompt that covers the collector and the selected runtime plan (if any). There SHALL NOT be separate confirmation prompts for collector and runtime.
+
+#### Scenario: User confirms
+
+- **GIVEN** the confirmation preview is displayed with collector and optional runtime plan
+- **WHEN** the user answers yes to the confirmation prompt
+- **THEN** the collector is installed first, followed by execution of the selected runtime plan (if any)
+
+#### Scenario: User cancels
+
+- **GIVEN** the confirmation preview is displayed
+- **WHEN** the user answers no
+- **THEN** no collector or instrumentation is installed
+
+### Requirement: Runtime plan execution
+
+After the collector is installed successfully, the system SHALL execute the selected runtime plan (if non-nil). The plan's execution block SHALL be preceded by a separator header identifying the runtime.
+
+#### Scenario: Plan executes after collector
+
+- **GIVEN** the user selected a Python project, confirmed, and the collector installed successfully
+- **WHEN** the runtime plan execution phase begins
+- **THEN** `pythonPlan.Execute()` runs with header `── Python auto-instrumentation ──`
+
+#### Scenario: Collector only
+
+- **GIVEN** no project was selected or the plan was nil
+- **WHEN** the collector installation completes
+- **THEN** no instrumentation execution occurs
+
+### Requirement: Header text mentions runtime presence
+
+When a runtime plan is selected, the introductory message SHALL state that the collector and application instrumentation will be installed. When no runtime is selected, the message SHALL only mention the collector.
+
+#### Scenario: Runtime selected
+
+- **GIVEN** the user selected a project and a plan was created
+- **WHEN** the intro message is printed
+- **THEN** it reads "This will install the OTel Collector and auto-instrument your application."
+
+#### Scenario: No runtime selected
+
+- **GIVEN** the user chose "Skip" or no plan was created
+- **WHEN** the intro message is printed
+- **THEN** the message is omitted — no intro line is printed for collector-only installation
+
+### Requirement: Coming-soon runtimes excluded from project scanning
+
+Only Python is considered GA for runtime instrumentation. All other runtimes (Java, Node.js, Go) are "coming soon" by default — their projects SHALL NOT be scanned or shown. The `comingSoon` flag is controlled by a package-level function that checks the `DTWIZ_ALL_RUNTIMES` environment variable. When `DTWIZ_ALL_RUNTIMES=true` is set, all runtimes are treated as GA, enabling end-to-end testing of unreleased runtimes.
+
+#### Scenario: Default behavior — only Python projects shown
+
+- **GIVEN** the `DTWIZ_ALL_RUNTIMES` env var is not set
+- **WHEN** `python3`, `java`, `node`, and `go` are on PATH
+- **THEN** only Python projects appear in the unified list (Java, Node.js, Go projects are not scanned)
+
+#### Scenario: All runtimes unlocked for testing
+
+- **GIVEN** `DTWIZ_ALL_RUNTIMES=true` is set in the environment
+- **WHEN** `python3`, `java`, `node`, and `go` are on PATH
+- **THEN** projects from all four runtimes appear in the unified list
+
+### Requirement: Dry-run support
+
+When `--dry-run` is set, `InstallOtelCollector` prints the collector dry-run plan and exits before project scanning begins. No project list or runtime plan is shown during dry-run.
+
+#### Scenario: Dry-run
+
+- **GIVEN** `--dry-run` is set on the `install otel` command
+- **WHEN** the command runs
+- **THEN** the system prints the collector-only dry-run plan (directory, binary, config) and exits without scanning for projects or installing anything
+
+### Requirement: InstallOtelCollectorOnly non-regression
+
+The existing `InstallOtelCollectorOnly()` function in `pkg/installer/otel.go` SHALL NOT be modified by this change. It SHALL continue to install the collector without runtime detection or selection.
+
+#### Scenario: InstallOtelCollectorOnly unchanged
+
+- **GIVEN** a user invokes the collector-only install path via `InstallOtelCollectorOnly()`
+- **WHEN** the function executes
+- **THEN** the behavior is identical to before this change — no project list, no selection prompt, no instrumentation
