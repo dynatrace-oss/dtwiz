@@ -23,7 +23,6 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/fatih/color"
 )
 
@@ -77,7 +76,6 @@ func otelLatestReleaseVersion(ctx context.Context) (string, error) {
 	if tag == "" || !strings.HasPrefix(tag, "v") {
 		return "", fmt.Errorf("unexpected redirect location: %s", loc)
 	}
-	logger.Debug("resolved OTel Collector version", "tag", tag)
 	return tag, nil
 }
 
@@ -142,7 +140,6 @@ func downloadOtelCollector(destDir string) (string, error) {
 	}
 
 	downloadURL := otelReleaseURL(version, assetName)
-	logger.Debug("downloading OTel Collector", "version", version, "asset", assetName, "url", downloadURL)
 	fmt.Printf("  Downloading Dynatrace OTel Collector %s from GitHub...\n", version)
 	fmt.Printf("  URL: %s\n", downloadURL)
 
@@ -205,7 +202,6 @@ func downloadOtelCollector(destDir string) (string, error) {
 		}
 	}
 
-	logger.Debug("OTel Collector binary ready", "path", destPath)
 	return destPath, nil
 }
 

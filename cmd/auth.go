@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
-	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 // environmentHint returns the Dynatrace environment URL from the --environment
@@ -74,13 +73,6 @@ func getDtEnvironment() (environmentURL, accessTok, platformTok string, err erro
 		)
 	}
 
-	logger.Debug("environment resolved",
-		"url", envURL,
-		"classic_api_url", installer.APIURL(envURL),
-		"tenant", installer.ExtractTenantID(envURL),
-		"access_token_prefix", tokenPrefix(aTok),
-		"platform_token_prefix", tokenPrefix(pTok),
-	)
 	return envURL, aTok, pTok, nil
 }
 
@@ -90,7 +82,6 @@ var credentialHTTPClient = &http.Client{Timeout: 5 * time.Second}
 // both the access token and platform token are valid. Both checks run in
 // parallel. Returns a combined error listing all failures.
 func validateCredentials(envURL, accessTok, platformTok string) error {
-	logger.Debug("validating credentials", "url", envURL)
 	var mu sync.Mutex
 	var errs []string
 
@@ -120,7 +111,6 @@ func validateCredentials(envURL, accessTok, platformTok string) error {
 	if len(errs) > 0 {
 		return fmt.Errorf("%s", strings.Join(errs, "\n"))
 	}
-	logger.Debug("credentials validated successfully")
 	return nil
 }
 
@@ -128,7 +118,6 @@ func validateCredentials(envURL, accessTok, platformTok string) error {
 func checkAccessToken(envURL, token string) error {
 	classicURL := strings.TrimRight(installer.APIURL(envURL), "/")
 	lookupURL := classicURL + "/api/v2/apiTokens/lookup"
-	logger.Debug("checking access token", "url", lookupURL, "token_prefix", tokenPrefix(token))
 
 	payload, _ := json.Marshal(map[string]string{"token": token})
 	req, err := http.NewRequest(http.MethodPost, lookupURL, bytes.NewReader(payload))
@@ -151,7 +140,6 @@ func checkAccessToken(envURL, token string) error {
 	if resp.StatusCode/100 != 2 {
 		return fmt.Errorf("✗ Access token: unexpected response %d from %s", resp.StatusCode, lookupURL)
 	}
-	logger.Debug("access token valid", "status", resp.StatusCode)
 	return nil
 }
 
@@ -159,7 +147,6 @@ func checkAccessToken(envURL, token string) error {
 func checkPlatformToken(envURL, token string) error {
 	appsURL := strings.TrimRight(installer.AppsURL(envURL), "/")
 	queryURL := appsURL + "/platform/storage/query/v1/query:execute"
-	logger.Debug("checking platform token", "url", queryURL, "token_prefix", tokenPrefix(token))
 
 	payload, _ := json.Marshal(map[string]interface{}{
 		"query":                      "fetch dt.system.events | limit 1",
@@ -186,16 +173,5 @@ func checkPlatformToken(envURL, token string) error {
 	if resp.StatusCode/100 != 2 {
 		return fmt.Errorf("✗ Platform token: unexpected response %d from %s", resp.StatusCode, queryURL)
 	}
-	logger.Debug("platform token valid", "status", resp.StatusCode)
 	return nil
-}
-
-// tokenPrefix returns the first 12 characters of a token followed by "..." for
-// use in debug log output — enough to confirm the right token is in use
-// without exposing the secret.
-func tokenPrefix(token string) string {
-	if len(token) <= 12 {
-		return "[set]"
-	}
-	return token[:12] + "..."
 }
