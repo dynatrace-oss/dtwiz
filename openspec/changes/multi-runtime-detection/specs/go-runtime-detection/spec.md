@@ -4,23 +4,23 @@
 
 ### Requirement: Go runtime detection
 
-The system SHALL detect Go installations by looking up `go` on PATH and verifying the version via `go version`.
+The system SHALL detect Go installations by looking up `go` on PATH.
 
 #### Scenario: Go is available
 
 - **GIVEN** the system is checking for available runtimes
-- **WHEN** `go` is found on PATH and `go version` succeeds
+- **WHEN** `go` is found on PATH
 - **THEN** the system reports the Go path and version and proceeds with project scanning
 
 #### Scenario: Go is not available
 
 - **GIVEN** the system is checking for available runtimes
 - **WHEN** `go` is not found on PATH
-- **THEN** the system silently skips Go detection and returns nil
+- **THEN** the system silently skips Go detection
 
 ### Requirement: Go project scanning
 
-The system SHALL scan the filesystem for Go project markers (`go.mod`) starting from the current directory and common project locations. SHALL use the shared `scanProjectDirs()` utility in `pkg/installer/otel_common.go` — NOT duplicate the scanning logic.
+The system SHALL scan the filesystem for Go project markers (`go.mod`) starting from the current directory and common project locations.
 
 #### Scenario: Go project detected
 
@@ -32,30 +32,20 @@ The system SHALL scan the filesystem for Go project markers (`go.mod`) starting 
 
 - **GIVEN** Go is available on the system
 - **WHEN** no directories contain `go.mod`
-- **THEN** `DetectGoPlan` returns nil without prompting the user
+- **THEN** the user is not prompted and Go instrumentation is skipped
 
 ### Requirement: Go instrumentation is SDK-based guidance
 
 The system SHALL communicate that Go requires compile-time SDK integration and cannot be auto-instrumented at runtime like Python or Java. The plan SHALL provide the necessary OTel environment variables and instructions for adding the OpenTelemetry Go SDK to the project.
 
-#### Scenario: PrintPlanSteps shows SDK guidance
+#### Scenario: Plan preview shows SDK guidance
 
-- **GIVEN** a `GoInstrumentationPlan` was created for a selected project
-- **WHEN** `PrintPlanSteps()` is called on a `GoInstrumentationPlan`
-- **THEN** it prints the project path, required `go get` packages, and environment variables — and labels the step as "SDK integration (manual)"
+- **GIVEN** the user selected a Go project
+- **WHEN** the combined installation plan preview is shown
+- **THEN** the Go section displays the project path, required `go get` packages, and is labeled "SDK integration (manual)"
 
-#### Scenario: Execute prints setup instructions
+#### Scenario: Post-install output guides SDK integration
 
 - **GIVEN** the user confirmed the combined installation plan
-- **WHEN** `Execute()` is called on a `GoInstrumentationPlan`
-- **THEN** it prints the `go get` commands for the OTel Go SDK, generates the environment variable export statements, and clearly states the user must add SDK initialization code to their application
-
-### Requirement: GoInstrumentationPlan struct
-
-The system SHALL define a `GoInstrumentationPlan` struct with fields for the selected project, module name, OTel environment variables, `EnvURL`, and `PlatformToken`. It SHALL implement `PrintPlanSteps()` and `Execute()` methods. Follows the pattern established by `PythonInstrumentationPlan` in `pkg/installer/otel_python.go`. OTel environment variables SHALL be generated via the shared `generateBaseOtelEnvVars()` in `pkg/installer/otel_common.go` to ensure consistent URL-encoded header values across all runtimes.
-
-#### Scenario: Struct fields populated
-
-- **GIVEN** the user selected a Go project and detection completed
-- **WHEN** `DetectGoPlan` returns a non-nil plan
-- **THEN** the plan contains the project path, module name from `go.mod`, and pre-generated OTel environment variables
+- **WHEN** the Go instrumentation step executes
+- **THEN** the output shows the `go get` commands for the OTel Go SDK, the environment variable export statements, and a clear note that the user must add SDK initialization code to their application

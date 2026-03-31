@@ -9,18 +9,18 @@ The system SHALL detect Java installations by looking up `java` on PATH and veri
 #### Scenario: Java is available
 
 - **GIVEN** the system is checking for available runtimes
-- **WHEN** `java` is found on PATH and `java -version` succeeds
-- **THEN** the system reports the Java path and version and proceeds with project scanning
+- **WHEN** `java` is found on PATH
+- **THEN** the system proceeds with project scanning
 
 #### Scenario: Java is not available
 
 - **GIVEN** the system is checking for available runtimes
 - **WHEN** `java` is not found on PATH
-- **THEN** the system silently skips Java detection and returns nil
+- **THEN** the system silently skips Java detection
 
 ### Requirement: Java project scanning
 
-The system SHALL scan the filesystem for Java project markers (`pom.xml`, `build.gradle`, `build.gradle.kts`) starting from the current directory and common project locations. SHALL use the shared `scanProjectDirs()` utility in `pkg/installer/otel_common.go` — NOT duplicate the scanning logic.
+The system SHALL scan the filesystem for Java project markers (`pom.xml`, `build.gradle`, `build.gradle.kts`) starting from the current directory and common project locations.
 
 #### Scenario: Maven project detected
 
@@ -38,11 +38,11 @@ The system SHALL scan the filesystem for Java project markers (`pom.xml`, `build
 
 - **GIVEN** Java is available on the system
 - **WHEN** no directories contain recognized Java project markers
-- **THEN** `DetectJavaPlan` returns nil without prompting the user
+- **THEN** the user is not prompted and Java instrumentation is skipped
 
 ### Requirement: Java process detection
 
-The system SHALL detect running `java` processes and attempt to match them to discovered projects by working directory. SHALL use the shared `detectProcesses()` and `processMatchPIDs()` utilities in `pkg/installer/otel_common.go`. On Unix, process detection uses `ps ax` and `lsof`. On Windows, it uses PowerShell `Get-CimInstance Win32_Process`. Both are best-effort — they may fail on processes owned by other users or on systems with restricted permissions.
+The system SHALL detect running `java` processes and attempt to match them to discovered projects by working directory. Detection is best-effort — it may fail on processes owned by other users or on systems with restricted permissions.
 
 #### Scenario: Running Java process matched to project
 
@@ -50,18 +50,18 @@ The system SHALL detect running `java` processes and attempt to match them to di
 - **WHEN** a running `java` process has a CWD matching a detected project directory
 - **THEN** the project listing shows the associated PIDs
 
-### Requirement: JavaInstrumentationPlan struct
+### Requirement: Java instrumentation output
 
-The system SHALL define a `JavaInstrumentationPlan` struct with fields for the selected project, OTel environment variables, `EnvURL`, and `PlatformToken`. It SHALL implement `PrintPlanSteps()` and `Execute()` methods. Follows the pattern established by `PythonInstrumentationPlan` in `pkg/installer/otel_python.go`. OTel environment variables SHALL be generated via the shared `generateBaseOtelEnvVars()` in `pkg/installer/otel_common.go` to ensure consistent URL-encoded header values across all runtimes.
+The system SHALL guide the user through attaching the OpenTelemetry Java agent to their application. It SHALL display the agent JAR download URL, the required environment variables, and the `-javaagent` JVM flag. The user should download the JAR and restart their application.
 
-#### Scenario: PrintPlanSteps displays plan
+#### Scenario: Plan preview shows project and agent info
 
-- **GIVEN** a `JavaInstrumentationPlan` was created for a selected project
-- **WHEN** `PrintPlanSteps()` is called
-- **THEN** it prints the project path, agent JAR download URL, and the `-javaagent` JVM flag
+- **GIVEN** the user selected a Java project
+- **WHEN** the combined installation plan preview is shown
+- **THEN** the Java section displays the project path, the agent JAR download URL, and the `-javaagent` JVM flag
 
-#### Scenario: Execute prints instrumentation instructions
+#### Scenario: Post-install output guides agent setup
 
 - **GIVEN** the user confirmed the combined installation plan
-- **WHEN** `Execute()` is called
-- **THEN** it prints the agent JAR download URL, the required environment variable export statements, and the `-javaagent` JVM flag — the user downloads the JAR manually
+- **WHEN** the Java instrumentation step executes
+- **THEN** the output shows the agent JAR download URL, the environment variable export statements, and the `-javaagent` JVM flag — with a clear note that the user downloads the JAR manually
