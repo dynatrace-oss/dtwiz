@@ -12,8 +12,8 @@ The `InstallOtelCollector` flow currently detects only Python projects during it
 - Create `otel_common.go` with shared utilities — `scanProjectDirs()`, `detectProcesses()`, `processMatchPIDs()`, `generateBaseOtelEnvVars()`, `getProcessCWD()` — eliminating duplication across runtime files.
 - Update `InstallOtelCollector` in `otel.go` to detect available runtimes, scan all GA runtimes for projects, and present a single unified project list. The user picks one project (or skips). Only one project is instrumented per invocation.
 - Only Python is GA by default. Java, Node.js, and Go are "coming soon" — their projects are excluded from scanning unless `DTWIZ_ALL_RUNTIMES=true` is set.
-- Process detection works cross-platform: Unix (`ps ax`, `lsof`) and Windows (PowerShell `Get-CimInstance`, `WMIC`).
-- `--dry-run` covers all new flows (project list, combined preview).
+- Process detection works cross-platform: Unix (`ps ax`, `lsof`) and Windows (PowerShell `Get-CimInstance`).
+- `--dry-run` prints the collector plan (directory, binary, config) and exits — project scanning and the combined preview do not run.
 - Existing `InstallOtelCollectorOnly()` flow remains unaffected (no regressions).
 
 ## Capabilities
@@ -41,6 +41,6 @@ All new code lives in isolated files (`pkg/installer/otel_nodejs.go`, `pkg/insta
 
 1. **Revert `pkg/installer/otel.go`** — remove the unified project list and selection logic from `InstallOtelCollector()`, restoring the previous Python-only path.
 2. **Delete new files** — remove `pkg/installer/otel_nodejs.go`, `pkg/installer/otel_go.go`, and `pkg/installer/otel_common.go`.
-3. **Revert `pkg/installer/otel_java.go`** — remove the `JavaInstrumentationPlan`, `DetectJavaPlan`, and related additions; keep existing `detectJava()` and `generateOtelJavaEnvVars()` unchanged.
+3. **Revert `pkg/installer/otel_java.go`** — remove the `JavaInstrumentationPlan`, `DetectJavaPlan`, and related additions, restoring the file to its original state.
 4. **Revert `pkg/installer/otel_python.go`** — restore duplicated scanning/process detection code that was refactored into `otel_common.go`.
 5. No database, config, or external service changes are involved — rollback is purely code deletion and revert.

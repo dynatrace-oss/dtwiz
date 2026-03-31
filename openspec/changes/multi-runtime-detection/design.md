@@ -35,9 +35,11 @@ PrintPlanSteps()           // render preview lines for the combined plan
 Execute()                  // run the actual instrumentation after collector install
 ```
 
-No formal Go interface is introduced — the orchestrator in `otel.go` calls the selected plan's methods directly via a nil-check, exactly as it does today for Python. Only one plan is active per invocation. This avoids unnecessary abstraction while keeping the pattern uniform.
+All plan structs hold pre-generated `EnvVars map[string]string` rather than raw `EnvURL` or `PlatformToken` — env vars are resolved at detection time via `generateBaseOtelEnvVars()` and stored ready to print. `GoInstrumentationPlan` additionally carries the module name extracted from `go.mod`.
 
-**Alternative considered:** A shared `InstrumentationPlan` interface. Rejected because it would require refactoring the existing Python code and the plans have different fields (virtualenv flags, JAR paths, etc.).
+A formal `InstrumentationPlan` interface (`Runtime()`, `PrintPlanSteps()`, `Execute()`) is defined in `otel.go`, allowing the orchestrator to work with any runtime uniformly. Only one plan is active per invocation.
+
+**Alternative considered:** No formal interface — call plan methods directly via nil-check on concrete types. Rejected because it requires the orchestrator to know each runtime's concrete type, coupling it to all runtime-specific structs.
 
 **Alternative considered:** Supporting multiple project selections in a single invocation. Rejected for now — adds complexity to the confirmation preview, execution ordering, and error handling. Users can re-run `dtwiz install otel` to instrument additional projects.
 
@@ -83,7 +85,7 @@ The user picks one project directly. This reduces interaction to a single prompt
 ### 5. Project detection strategy per runtime
 
 - **Python**: Scan for `pyproject.toml`, `setup.py`, `setup.cfg`, `requirements.txt`, `Pipfile`, `poetry.lock`, `manage.py`. Detect running `python` processes and match by CWD.
-- **Java**: Scan for `pom.xml`, `build.gradle`, `build.gradle.kts`. Detect running `java` processes and match by CWD.
+- **Java**: Scan for `pom.xml`, `build.gradle`, `build.gradle.kts`, `gradlew`, `.mvn`. Detect running `java` processes and match by CWD.
 - **Node.js**: Scan for `package.json` (excluding `node_modules`). Detect running `node` processes and match by CWD.
 - **Go**: Scan for `go.mod`. Note: Go compiles to static binaries, so "auto-instrumentation" means providing OTel SDK integration guidance and env vars rather than attaching an agent.
 
@@ -103,7 +105,7 @@ Only Python is GA. All other runtimes (Java, Node.js, Go) are "coming soon" by d
 
 ### 9. `--dry-run` coverage
 
-All new flows — project scanning, project list, combined preview — SHALL work under `--dry-run`. When `--dry-run` is set, the project list is printed, the combined plan is shown, but no collector or instrumentation is installed.
+When `--dry-run` is set, the collector plan is printed (directory, binary, config preview) and the command returns without scanning for projects or showing the project list. Runtime detection and the combined preview do not run under dry-run.
 
 ### 10. Non-regression: `InstallOtelCollectorOnly()`
 
