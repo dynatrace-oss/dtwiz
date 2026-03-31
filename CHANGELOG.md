@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `--verbose`/`-v` flag (count-based, like `dtctl`): `-v` emits a compact `METHOD URL → STATUS (time)` line per HTTP request; `-vv` adds full headers and bodies matching dtctl's `===> REQUEST <===` / `===> RESPONSE <===` format
+- `--verbose`/`-v` flag (count-based): `-v` emits a compact `METHOD URL → STATUS (time)` line per HTTP request; `-vv` adds full headers and bodies with `===> REQUEST <===` / `===> RESPONSE <===` format
 - `--debug` now promoted to full verbosity level 2 (equivalent to `-vv`) and installs the HTTP logging transport on startup; sensitive headers (`Authorization`, `x-api-key`, `cookie`) are always redacted as `[REDACTED]`
 - `logger.Verbosity() int` helper; `logger.NewLoggingTransport()` HTTP round-tripper wrapping any base transport
 

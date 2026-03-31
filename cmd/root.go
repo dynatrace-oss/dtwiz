@@ -32,7 +32,7 @@ Set your Dynatrace credentials via environment variables:
 
 Then use dtwiz commands to analyze and instrument your system.`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		debug := debugFlag || os.Getenv("DT_DEBUG") == "true"
+		debug := debugFlag
 		logger.Init(debug, verbosityFlag)
 		if logger.Verbosity() > 0 {
 			http.DefaultTransport = logger.NewLoggingTransport(http.DefaultTransport)
@@ -72,7 +72,7 @@ func init() {
 		cmd.Help()
 	}
 
-	rootCmd.PersistentFlags().BoolVar(&debugFlag, "debug", false, "enable full HTTP request/response debug logging (equivalent to -vv; also read from DT_DEBUG=true)")
+	rootCmd.PersistentFlags().BoolVar(&debugFlag, "debug", false, "enable full HTTP request/response debug logging (equivalent to -vv)")
 	rootCmd.PersistentFlags().CountVarP(&verbosityFlag, "verbose", "v", "verbose output (-v for request/response summary, -vv for full headers and bodies)")
 	rootCmd.PersistentFlags().StringVar(&environmentFlag, "environment", "", "Dynatrace environment URL (also read from DT_ENVIRONMENT)")
 	rootCmd.PersistentFlags().StringVar(&accessTokenFlag, "access-token", "", "Dynatrace API access token (also read from DT_ACCESS_TOKEN)")
