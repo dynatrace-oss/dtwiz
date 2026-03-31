@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `--verbose`/`-v` flag (count-based): enables verbose debug output
+- `--debug`/`-vv` enables debug logging
+
 ## [0.1.4] - 2026-03-27
 
 ### Added

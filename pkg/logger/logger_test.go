@@ -7,7 +7,7 @@ import (
 )
 
 func TestInitDebugEnabled(t *testing.T) {
-	Init(true)
+	Init(true, 0)
 	if !Enabled() {
 		t.Fatal("expected Enabled() to return true after Init(true)")
 	}
@@ -26,7 +26,7 @@ func TestInitDebugEnabled(t *testing.T) {
 }
 
 func TestInitDebugDisabled(t *testing.T) {
-	Init(false)
+	Init(false, 0)
 	if Enabled() {
 		t.Fatal("expected Enabled() to return false after Init(false)")
 	}
@@ -42,5 +42,16 @@ func TestInitDebugDisabled(t *testing.T) {
 
 	if buf.Len() != 0 {
 		t.Fatalf("expected no output when debug is disabled, got: %s", buf.String())
+	}
+}
+
+func TestVerbosityPromotedByDebug(t *testing.T) {
+	Init(true, 0)
+	if Verbosity() != 2 {
+		t.Fatalf("expected verbosity 2 when debug=true and verbosity=0, got %d", Verbosity())
+	}
+	Init(false, 1)
+	if Verbosity() != 1 {
+		t.Fatalf("expected verbosity 1 when debug=false and verbosity=1, got %d", Verbosity())
 	}
 }

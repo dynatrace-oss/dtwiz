@@ -13,6 +13,7 @@ import (
 var Version = "dev"
 
 var debugFlag bool
+var verbosityFlag int
 var environmentFlag string
 var accessTokenFlag string
 var platformTokenFlag string
@@ -30,9 +31,13 @@ Set your Dynatrace credentials via environment variables:
 
 Then use dtwiz commands to analyze and instrument your system.`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		debug := debugFlag || os.Getenv("DT_DEBUG") == "true"
-		logger.Init(debug)
-		logger.Debug("Debug mode enabled")
+		logger.Init(debugFlag, verbosityFlag)
+		switch logger.Verbosity() {
+		case 1:
+			logger.Debug("logging: verbose")
+		case 2:
+			logger.Debug("logging: debug")
+		}
 	},
 }
 
@@ -67,7 +72,8 @@ func init() {
 		cmd.Help()
 	}
 
-	rootCmd.PersistentFlags().BoolVar(&debugFlag, "debug", false, "enable debug logging (also read from DT_DEBUG=true)")
+	rootCmd.PersistentFlags().BoolVar(&debugFlag, "debug", false, "enable debug logging")
+	rootCmd.PersistentFlags().CountVarP(&verbosityFlag, "verbose", "v", "verbose output")
 	rootCmd.PersistentFlags().StringVar(&environmentFlag, "environment", "", "Dynatrace environment URL (also read from DT_ENVIRONMENT)")
 	rootCmd.PersistentFlags().StringVar(&accessTokenFlag, "access-token", "", "Dynatrace API access token (also read from DT_ACCESS_TOKEN)")
 	rootCmd.PersistentFlags().StringVar(&platformTokenFlag, "platform-token", "", "Dynatrace platform token (dt0s16.*) for AWS installer (also read from DT_PLATFORM_TOKEN)")
