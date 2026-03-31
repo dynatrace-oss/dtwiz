@@ -396,6 +396,73 @@ func DetectPythonPlan(apiURL, token string) *PythonInstrumentationPlan {
 	}
 }
 
+// installProjectDeps installs the project's own dependencies using the
+// appropriate file: requirements.txt, Pipfile, pyproject.toml, or setup.py.
+// Returns the description of what was installed (for logging), or "" if nothing found.
+func installProjectDeps(pip *pipCommand, projectPath string) (string, error) {
+	// requirements.txt — most common.
+	reqFile := filepath.Join(projectPath, "requirements.txt")
+	if _, err := os.Stat(reqFile); err == nil {
+		args := append(append([]string{}, pip.args...), "install", "-r", reqFile)
+		fmt.Printf("\n    %s %s\n", pip.name, strings.Join(args, " "))
+		cmd := exec.Command(pip.name, args...)
+		cmd.Dir = projectPath
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			os.Stdout.Write(out)
+			return "", fmt.Errorf("pip install -r requirements.txt failed: %w", err)
+		}
+		return "requirements.txt", nil
+	}
+
+	// pyproject.toml — pip install .
+	pyproject := filepath.Join(projectPath, "pyproject.toml")
+	if _, err := os.Stat(pyproject); err == nil {
+		args := append(append([]string{}, pip.args...), "install", ".")
+		fmt.Printf("\n    %s %s\n", pip.name, strings.Join(args, " "))
+		cmd := exec.Command(pip.name, args...)
+		cmd.Dir = projectPath
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			os.Stdout.Write(out)
+			return "", fmt.Errorf("pip install . (pyproject.toml) failed: %w", err)
+		}
+		return "pyproject.toml", nil
+	}
+
+	// setup.py — pip install .
+	setupPy := filepath.Join(projectPath, "setup.py")
+	if _, err := os.Stat(setupPy); err == nil {
+		args := append(append([]string{}, pip.args...), "install", ".")
+		fmt.Printf("\n    %s %s\n", pip.name, strings.Join(args, " "))
+		cmd := exec.Command(pip.name, args...)
+		cmd.Dir = projectPath
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			os.Stdout.Write(out)
+			return "", fmt.Errorf("pip install . (setup.py) failed: %w", err)
+		}
+		return "setup.py", nil
+	}
+
+	return "", nil
+}
+
+// projectDepsDescription returns a human-readable description of how project
+// dependencies would be installed, or "" if no supported file is found.
+func projectDepsDescription(projectPath string) string {
+	if _, err := os.Stat(filepath.Join(projectPath, "requirements.txt")); err == nil {
+		return "pip install -r requirements.txt"
+	}
+	if _, err := os.Stat(filepath.Join(projectPath, "pyproject.toml")); err == nil {
+		return "pip install . (pyproject.toml)"
+	}
+	if _, err := os.Stat(filepath.Join(projectPath, "setup.py")); err == nil {
+		return "pip install . (setup.py)"
+	}
+	return ""
+}
+
 // PrintPlanSteps prints the Python instrumentation steps for inclusion in a
 // combined plan preview.
 func (p *PythonInstrumentationPlan) PrintPlanSteps() {
@@ -409,6 +476,9 @@ func (p *PythonInstrumentationPlan) PrintPlanSteps() {
 	}
 	if p.NeedsVenv {
 		fmt.Println("     Create virtualenv (.venv)")
+	}
+	if desc := projectDepsDescription(p.Project.Path); desc != "" {
+		fmt.Printf("     %s\n", desc)
 	}
 	fmt.Printf("     pip install %s\n", strings.Join(otelPythonPackages, " "))
 	fmt.Println("     opentelemetry-bootstrap -a install")
@@ -461,11 +531,24 @@ func (p *PythonInstrumentationPlan) Execute() {
 			fmt.Println("    Could not find pip in new virtualenv.")
 			return
 		}
-		otelInstrument = resolveVenvBinary(proj.Path, "opentelemetry-instrument")
 		pythonBin = resolveVenvBinary(proj.Path, "python")
 		if pythonBin == "" {
 			pythonBin = "python3"
 		}
+	}
+
+	// Install project dependencies before OTel packages so bootstrap can detect them.
+	fmt.Print("  Installing project dependencies... ")
+	installed, err := installProjectDeps(venvPip, proj.Path)
+	if err != nil {
+		fmt.Println("failed.")
+		fmt.Printf("    %v\n", err)
+		return
+	}
+	if installed != "" {
+		fmt.Printf("done (%s).\n", installed)
+	} else {
+		fmt.Println("skipped (no requirements.txt, pyproject.toml, or setup.py found).")
 	}
 
 	fmt.Print("  Installing OTel packages... ")
@@ -475,6 +558,9 @@ func (p *PythonInstrumentationPlan) Execute() {
 		return
 	}
 	fmt.Println("done.")
+
+	// resolve now that the otel packages are installed
+	otelInstrument = resolveVenvBinary(proj.Path, "opentelemetry-instrument")
 
 	fmt.Print("  Running opentelemetry-bootstrap... ")
 	venvPython := resolveVenvBinary(proj.Path, "python")
