@@ -1,3 +1,5 @@
+# Tasks
+
 ## 1. Pre-flight Validation
 
 - [ ] 1.1 Add a `validatePythonPrerequisites()` function in `otel_python.go` that checks: `exec.LookPath("python3")` (or fall back to `"python"` + version check like existing `detectPython()`), `exec.LookPath("pip3")` or `exec.LookPath("pip")`, and `exec.Command(python, "-m", "venv", "--help").Run()` for venv module
