@@ -1,20 +1,44 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  Tech stack: Go, Cobra CLI framework, Go templates (text/template)
+  Build: `make build` (go build with ldflags), `make test`, `make lint` (golangci-lint)
+  Release: goreleaser, archives per OS/arch
+  Domain: Dynatrace observability CLI — analyzes systems and deploys the best monitoring method automatically
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  Project structure:
+    - main.go → cmd.Execute()
+    - cmd/ — Cobra commands (root, analyze, recommend, setup, install, update, uninstall, status, version, auth)
+    - pkg/analyzer/ — system detection (platform, Docker, K8s, OneAgent, OTel, AWS, Azure, services)
+    - pkg/recommender/ — priority-ranked ingestion recommendations
+    - pkg/installer/ — per-method installers + shared utilities + embedded Go templates
+    - scripts/ — curl|sh installer scripts
+
+  CLI conventions:
+    - Verb-noun command tree: top-level verbs (install, update, uninstall), methods as subcommands
+    - All leaf commands set Args: cobra.NoArgs; parent commands use cobra.MinimumNArgs(1)
+    - --dry-run as PersistentFlags().BoolVar() on parent, shared by subcommands
+    - Zero-config defaults: OneAgent full-stack, K8s cloudNativeFullStack, AWS all services + all regions
+
+  UX rules:
+    - Before executing, show compact preview of commands/actions, print generated config inline
+    - Single confirmation prompt: "Apply? [Y/n]" (default yes)
+    - Reduce to the max: every output line must earn its place
+
+  Auth:
+    - Two URL families: Classic (no .apps.) with Api-Token, Platform (with .apps.) with Bearer
+    - Token prefixes: dt0c01.* = API token, dt0s16.* = Platform token
+    - Credentials from flags → env vars (DT_ENVIRONMENT, DT_ACCESS_TOKEN, DT_PLATFORM_TOKEN)
+
+rules:
+  proposal:
+    - Include rollback plan for risky or architecture-level changes
+    - Reference relevant feature flag names when new behavior is gated
+  specs:
+    - Use Given/When/Then format for scenarios
+    - Reference existing patterns before introducing new ones
+    - Document feature flag dependencies directly in scenarios
+  tasks:
+    - Reference concrete file paths from the key paths above
+    - Always include relevant test layers
+    - Define test cases derived from the spec to ensure coverage of new behavior and edge cases
