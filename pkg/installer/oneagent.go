@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 // InstallMode controls which OneAgent components are installed.
@@ -61,6 +63,7 @@ func oneAgentInstallerFilename() string {
 // checkOneAgentConnectivity performs a quick connectivity check against the
 // Dynatrace API endpoint.
 func checkOneAgentConnectivity(apiURL, token string) error {
+	logger.Debug("checking OneAgent connectivity", "url", apiURL)
 	req, err := http.NewRequest(http.MethodGet, apiURL+"/api/v1/time", nil)
 	if err != nil {
 		return fmt.Errorf("building connectivity request: %w", err)
@@ -79,6 +82,7 @@ func checkOneAgentConnectivity(apiURL, token string) error {
 	if resp.StatusCode >= 300 {
 		return fmt.Errorf("connectivity check returned unexpected status %d", resp.StatusCode)
 	}
+	logger.Debug("connectivity check passed", "status", resp.StatusCode)
 	return nil
 }
 
@@ -95,6 +99,7 @@ func downloadOneAgentInstaller(apiURL, token string) (string, error) {
 		"%s/api/v1/deployment/installer/agent/%s/default/latest?arch=%s",
 		apiURL, iType, arch,
 	)
+	logger.Debug("downloading OneAgent installer", "url", downloadURL, "os", runtime.GOOS, "arch", arch)
 
 	req, err := http.NewRequest(http.MethodGet, downloadURL, nil)
 	if err != nil {
@@ -132,6 +137,7 @@ func downloadOneAgentInstaller(apiURL, token string) (string, error) {
 		}
 	}
 
+	logger.Debug("installer downloaded", "path", tmpFile.Name())
 	return tmpFile.Name(), nil
 }
 
@@ -145,6 +151,7 @@ func downloadOneAgentInstaller(apiURL, token string) (string, error) {
 //   - hostGroup: optional host group name (passed as --set-host-group)
 func InstallOneAgent(envURL, token string, dryRun, quiet bool, hostGroup string) error {
 	apiURL := APIURL(envURL)
+	logger.Debug("installing OneAgent", "env_url", envURL, "api_url", apiURL, "dry_run", dryRun, "quiet", quiet, "host_group", hostGroup)
 
 	if dryRun {
 		iType, arch, _ := oneAgentInstallerType()
@@ -175,6 +182,7 @@ func InstallOneAgent(envURL, token string, dryRun, quiet bool, hostGroup string)
 	defer os.Remove(installerPath)
 
 	args := buildOneAgentInstallerArgs(installerPath, apiURL, quiet, hostGroup)
+	logger.Debug("running installer", "cmd", args[0], "args", args[1:])
 
 	if quiet {
 		if err := RunCommandQuiet(args[0], args[1:]...); err != nil {

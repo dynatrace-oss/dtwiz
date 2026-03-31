@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/fatih/color"
 )
 
@@ -187,6 +188,7 @@ var defaultFeatureSets = []string{
 func findExistingMonitoringConfig(apiURL, token, accountID string) string {
 	base := classicAPIURL(apiURL)
 	listURL := base + "/api/v2/extensions/com.dynatrace.extension.da-aws/monitoringConfigurations"
+	logger.Debug("searching for existing AWS monitoring config", "account_id", accountID, "url", listURL)
 	for {
 		req, err := http.NewRequest(http.MethodGet, listURL, nil)
 		if err != nil {
@@ -277,6 +279,7 @@ func createDTMonitoringConfig(apiURL, token, accountID, region string) (string, 
 	}
 
 	url := classicAPIURL(apiURL) + "/api/v2/extensions/com.dynatrace.extension.da-aws/monitoringConfigurations"
+	logger.Debug("creating AWS monitoring config", "url", url, "account_id", accountID, "region", region)
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("building request: %w", err)
@@ -304,6 +307,7 @@ func createDTMonitoringConfig(apiURL, token, accountID, region string) (string, 
 	}
 	for _, item := range results {
 		if (item.Code == 200 || item.Code == 201) && item.ObjectID != "" {
+			logger.Debug("monitoring config created", "object_id", item.ObjectID)
 			return item.ObjectID, nil
 		}
 	}
