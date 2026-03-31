@@ -18,7 +18,6 @@ Current Python install flow: detect projects → user selects one → detect ent
 - Supporting multi-project instrumentation
 - Persistent configuration management (tracking what was installed where)
 
-
 ## Decisions
 
 **1. Pre-flight validation checks**
