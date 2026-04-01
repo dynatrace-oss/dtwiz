@@ -95,3 +95,56 @@ When the installer launches instrumented processes, the user SHALL receive expli
 - **GIVEN** a process is still alive after the settle period
 - **WHEN** a listening TCP port is detected for its PID
 - **THEN** the summary line SHALL show `→ http://localhost:<port>` and the log filename
+
+---
+
+### Requirement: Framework instrumentation verification after bootstrap
+
+`opentelemetry-bootstrap -a install` SHALL be verified after execution. If it exits 0 but installs no framework instrumentation packages, dtwiz SHALL install them directly.
+
+#### Scenario: Bootstrap exits 0 but installs nothing
+
+- **GIVEN** `opentelemetry-bootstrap -a install` exits with code 0
+- **WHEN** no `opentelemetry-instrumentation-<framework>` package is present in the venv
+- **THEN** dtwiz SHALL:
+  - Call bootstrap's internal detection API (`_find_installed_libraries`) via a Python snippet to get the list of needed packages, bypassing the broken CLI entry point
+  - If the API call fails (import error, API change), print a non-fatal warning with the manual `opentelemetry-bootstrap -a install` command and continue
+  - Install the missing packages directly via pip
+  - Print a message listing each package being installed
+- **AND** after installation, dtwiz SHALL verify again and report any packages that are still missing with the exact `pip install` command for manual resolution
+- **SO THAT** the user always knows what happened and can take action if automatic installation fails
+
+#### Scenario: Bootstrap's internal API is unavailable
+
+- **GIVEN** the `_find_installed_libraries` function cannot be imported (e.g. API changed in a future opentelemetry-instrumentation release)
+- **WHEN** boostrap verification runs the Python snippet
+- **THEN** the snippet SHALL exit with a non-zero code
+- **AND** dtwiz SHALL print a non-fatal warning with the manual `opentelemetry-bootstrap -a install` command so the user can install framework instrumentations themselves
+
+#### Scenario: Bootstrap installs framework instrumentations correctly
+
+- **GIVEN** `opentelemetry-bootstrap -a install` exits with code 0
+- **WHEN** at least one `opentelemetry-instrumentation-<framework>` package is present in the venv
+- **THEN** the verification step SHALL return without installing additional packages
+
+#### Scenario: Project uses Flask
+
+- **GIVEN** the project's venv has `flask` installed
+- **WHEN** bootstrap fails to install `opentelemetry-instrumentation-flask`
+- **THEN** the fallback SHALL install `opentelemetry-instrumentation-flask` directly
+- **AND** after restarting with `opentelemetry-instrument`, HTTP spans SHALL be generated for Flask routes
+- **AND** Dynatrace SHALL create a SERVICE entity for the application
+
+#### Scenario: Fallback installation partially fails
+
+- **GIVEN** dtwiz detected missing instrumentation packages and attempted to install them
+- **WHEN** some packages fail to install (network error, version conflict, etc.)
+- **THEN** dtwiz SHALL print a warning listing each package that is still missing
+- **AND** SHALL print the exact `pip install` command so the user can resolve it manually
+- **SO THAT** the user is never left without a clear path to a working setup
+
+#### Scenario: Package name normalization
+
+- **WHEN** comparing installed package names against the curated map
+- **THEN** names SHALL be PEP 503-normalized: lowercased, with underscores and dots replaced by hyphens
+- **SO THAT** `psycopg2-binary`, `psycopg2_binary`, and `Psycopg2-Binary` all match the same map entry
