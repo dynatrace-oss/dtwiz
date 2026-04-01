@@ -70,6 +70,42 @@ Sending signal 0 to a PID checks existence without delivering a real signal. Rej
 **Poll `/proc/<pid>/status` on Linux**
 Cheap on Linux but unavailable on macOS and Windows. The goroutine approach works identically on all platforms.
 
+**6. Always verify framework instrumentation packages after running bootstrap**
+
+`opentelemetry-bootstrap -a install` is unreliable: in some environments (observed with `opentelemetry-distro==0.61b0` on Python 3.14) it exits 0 but installs zero packages — no error, no output, no indication anything went wrong. The root cause is inside the third-party tool's CLI entry point; the internal detection API (`_find_installed_libraries()`) works correctly when called from Python.
+
+After bootstrap runs, dtwiz shall:
+1. Run `pip list --format=json` and check whether any framework instrumentation package was installed.
+2. If none were installed, call bootstrap's internal detection API directly via a Python snippet (`bootstrapRequirementsScript`). This bypasses the broken CLI entry point and uses bootstrap's own version-matching logic — no hardcoded map needed, automatically picks up new packages as the OTel ecosystem evolves.
+3. If the internal API call fails (e.g. API changed across versions), print a warning with the manual `opentelemetry-bootstrap -a install` command and continue non-fatally — services will start but may lack framework trace spans.
+4. pip-install the missing packages directly.
+5. After installation, verify again. If any packages are still missing, print a clear warning listing the packages and the exact `pip install` command so the user can install them manually.
+
+Package names are PEP 503-normalized (lowercase, underscores and dots replaced with hyphens) before comparison.
+
+This two-tier approach (bootstrap API → hardcoded fallback) is environment-agnostic and self-healing: it works regardless of Python version, OS, or venv tool, and it always tells the user what happened and how to fix it.
+
+## Alternatives Considered (Decision 6)
+
+**Use a hardcoded fallback map when the bootstrap API is unavailable**
+Would allow silent automatic recovery. Rejected because the map requires manual maintenance as new OTel instrumentation packages are released and cannot match version constraints the way bootstrap can. A non-fatal warning with the manual command is clearer and less likely to install wrong versions.
+
+**Skip bootstrap entirely and always install from the API**
+Would work, but bootstrap also installs non-framework instrumentations (asyncio, threading, logging, sqlite3) that improve observability. Worth giving it a chance to run.
+
+## File Layout
+
+`otel_python.go` grew to over 1,100 lines across three distinct concerns: pip/bootstrap package management, Python project and process detection, and installation orchestration. Following the same pattern used when `otel_process.go` was extracted, pip/bootstrap logic is separated into `otel_python_packages.go`.
+
+| File | Responsibility |
+|---|---|
+| `otel_python_packages.go` | `pipCommand`, `otelPythonPackages`, `installPackages`, `runOtelBootstrap`, `bootstrapRequirementsScript`, `normalizePipName`, `listInstalledPipPackages`, `queryBootstrapRequirements`, `ensureFrameworkInstrumentations` |
+| `otel_process.go` | `ManagedProcess`, `StartManagedProcess`, `PrintProcessSummary`, port detection |
+| `otel_python.go` | Project/process detection, venv management, env var generation, orchestration (`DetectPythonPlan`, `Execute`, `InstallOtelPython`) |
+
+All three files share the same `installer` package — no interface changes, no new public API.
+
 ## Risks / Trade-offs
 
+- When bootstrap's internal API is unavailable (e.g. upstream API change), dtwiz surfaces a non-fatal warning and prints the manual command — no framework instrumentations are auto-installed in that scenario.
 - None identified for the validation approach.
