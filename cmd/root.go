@@ -65,7 +65,7 @@ func init() {
 		defaultHelp(cmd, args)
 	})
 	rootCmd.Run = func(cmd *cobra.Command, args []string) {
-		cmd.Help()
+		_ = cmd.Help()
 	}
 
 	rootCmd.PersistentFlags().BoolVar(&debugFlag, "debug", false, "enable debug logging")

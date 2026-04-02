@@ -90,28 +90,6 @@ func promptLine(prompt, defaultVal string) (string, error) {
 	return defaultVal, nil
 }
 
-// promptLineSecret is like promptLine but masks the default value as "[set]"
-// to avoid printing sensitive values like tokens to the terminal.
-func promptLineSecret(prompt, defaultVal string) (string, error) {
-	if defaultVal != "" {
-		fmt.Printf("  %s [set]: ", prompt)
-	} else {
-		fmt.Printf("  %s: ", prompt)
-	}
-	scanner := bufio.NewScanner(os.Stdin)
-	if scanner.Scan() {
-		val := strings.TrimSpace(scanner.Text())
-		if val == "" {
-			return defaultVal, nil
-		}
-		return val, nil
-	}
-	if err := scanner.Err(); err != nil {
-		return "", err
-	}
-	return defaultVal, nil
-}
-
 // classicAPIURL strips the ".apps." segment from a Dynatrace apps URL so that
 // requests target the classic /api/v2 endpoint.
 //

@@ -132,7 +132,7 @@ func checkAccessToken(envURL, token string) error {
 		return fmt.Errorf("✗ Access token: environment not reachable (%s)", classicURL)
 	}
 	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body)
+	_, _ = io.Copy(io.Discard, resp.Body)
 
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
 		return fmt.Errorf("✗ Access token: authentication failed")
@@ -165,7 +165,7 @@ func checkPlatformToken(envURL, token string) error {
 		return fmt.Errorf("✗ Platform token: environment not reachable (%s)", appsURL)
 	}
 	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body)
+	_, _ = io.Copy(io.Discard, resp.Body)
 
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
 		return fmt.Errorf("✗ Platform token: authentication failed")
