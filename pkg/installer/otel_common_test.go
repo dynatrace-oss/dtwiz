@@ -277,3 +277,137 @@ func TestScanProjectDirs_NoMarkers(t *testing.T) {
 		}
 	}
 }
+
+func TestScanProjectDirs_NoiseDirs(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a subdirectory that is in the noiseDirs map.
+	noisy := filepath.Join(dir, "vendor")
+	if err := os.Mkdir(noisy, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(noisy, "go.mod"), []byte("module noise\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Also create a legitimate project next to it.
+	legit := filepath.Join(dir, "myapp")
+	if err := os.Mkdir(legit, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(legit, "go.mod"), []byte("module myapp\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	setTestWorkingDir(t, dir)
+	projects := scanProjectDirs([]string{"go.mod"}, nil)
+
+	for _, p := range projects {
+		if strings.Contains(p.Path, "vendor") {
+			t.Errorf("noiseDirs entry 'vendor' should be skipped, but found: %s", p.Path)
+		}
+	}
+	found := false
+	for _, p := range projects {
+		if strings.HasSuffix(p.Path, "myapp") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected legitimate project myapp in results, got %v", projects)
+	}
+}
+
+func TestScanProjectDirs_DotDirSkipped(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a hidden directory containing a marker file.
+	hidden := filepath.Join(dir, ".hidden")
+	if err := os.Mkdir(hidden, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hidden, "go.mod"), []byte("module hidden\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	setTestWorkingDir(t, dir)
+	projects := scanProjectDirs([]string{"go.mod"}, nil)
+	for _, p := range projects {
+		if strings.Contains(p.Path, ".hidden") {
+			t.Errorf("dot-prefixed directory should be skipped, but found: %s", p.Path)
+		}
+	}
+}
+
+func TestScanProjectDirs_MonorepoGrouping(t *testing.T) {
+	// Layout:
+	//   root/
+	//     group/           ← no markers itself (grouping dir)
+	//       service-a/
+	//         go.mod
+	//       service-b/
+	//         go.mod
+	root := t.TempDir()
+
+	group := filepath.Join(root, "group")
+	if err := os.Mkdir(group, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"service-a", "service-b"} {
+		sub := filepath.Join(group, name)
+		if err := os.Mkdir(sub, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(sub, "go.mod"), []byte("module "+name+"\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	setTestWorkingDir(t, root)
+	projects := scanProjectDirs([]string{"go.mod"}, nil)
+
+	paths := make(map[string]bool, len(projects))
+	for _, p := range projects {
+		paths[filepath.Base(p.Path)] = true
+	}
+	for _, want := range []string{"service-a", "service-b"} {
+		if !paths[want] {
+			t.Errorf("expected project %q to be found via monorepo grouping dir, got %v", want, projects)
+		}
+	}
+}
+
+func TestScanProjectDirs_AncestorWalk(t *testing.T) {
+	// Layout:
+	//   grandparent/
+	//     sibling/
+	//       go.mod         ← should be found by walking up from cwd
+	//     cwd/             ← working directory (no markers)
+	grandparent := t.TempDir()
+
+	sibling := filepath.Join(grandparent, "sibling")
+	if err := os.Mkdir(sibling, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sibling, "go.mod"), []byte("module sibling\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cwd := filepath.Join(grandparent, "cwd")
+	if err := os.Mkdir(cwd, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	setTestWorkingDir(t, cwd)
+	projects := scanProjectDirs([]string{"go.mod"}, nil)
+
+	found := false
+	for _, p := range projects {
+		if strings.HasSuffix(p.Path, "sibling") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected sibling project to be found via ancestor walk, got %v", projects)
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/fatih/color"
 )
@@ -52,7 +53,12 @@ func detectAvailableRuntimes() []runtimeInfo {
 }
 
 func detectAllProjects(runtimes []runtimeInfo) []detectedProject {
-	var all []detectedProject
+	type result struct {
+		index    int
+		projects []detectedProject
+	}
+
+	active := make([]runtimeInfo, 0, len(runtimes))
 	for _, rt := range runtimes {
 		if !rt.enabled {
 			continue
@@ -60,38 +66,56 @@ func detectAllProjects(runtimes []runtimeInfo) []detectedProject {
 		if _, err := exec.LookPath(rt.binName); err != nil {
 			continue
 		}
-		switch rt.name {
-		case "Python":
-			projects := detectPythonProjects()
-			procs := detectPythonProcesses()
-			matchProcessesToProjects(projects, procs)
-			for _, p := range projects {
-				all = append(all, detectedProject{ScannedProject: p, Runtime: "Python"})
+		active = append(active, rt)
+	}
+
+	results := make([]result, len(active))
+	var wg sync.WaitGroup
+	for i, rt := range active {
+		wg.Add(1)
+		go func(idx int, rt runtimeInfo) {
+			defer wg.Done()
+			var detected []detectedProject
+			switch rt.name {
+			case "Python":
+				projects := detectPythonProjects()
+				procs := detectPythonProcesses()
+				matchProcessesToProjects(projects, procs)
+				for _, p := range projects {
+					detected = append(detected, detectedProject{ScannedProject: p, Runtime: "Python"})
+				}
+			case "Java":
+				projects := detectJavaProjects()
+				procs := detectJavaProcesses()
+				matchProcessesToProjects(projects, procs)
+				for _, p := range projects {
+					detected = append(detected, detectedProject{ScannedProject: p, Runtime: "Java"})
+				}
+			case "Node.js":
+				projects := detectNodeProjects()
+				procs := detectNodeProcesses()
+				matchProcessesToProjects(projects, procs)
+				for _, p := range projects {
+					detected = append(detected, detectedProject{ScannedProject: p, Runtime: "Node.js"})
+				}
+			case "Go":
+				projects := detectGoProjects()
+				for _, p := range projects {
+					detected = append(detected, detectedProject{
+						ScannedProject: p.ScannedProject,
+						Runtime:        "Go",
+						ModuleName:     p.ModuleName,
+					})
+				}
 			}
-		case "Java":
-			projects := detectJavaProjects()
-			procs := detectJavaProcesses()
-			matchProcessesToProjects(projects, procs)
-			for _, p := range projects {
-				all = append(all, detectedProject{ScannedProject: p, Runtime: "Java"})
-			}
-		case "Node.js":
-			projects := detectNodeProjects()
-			procs := detectNodeProcesses()
-			matchProcessesToProjects(projects, procs)
-			for _, p := range projects {
-				all = append(all, detectedProject{ScannedProject: p, Runtime: "Node.js"})
-			}
-		case "Go":
-			projects := detectGoProjects()
-			for _, p := range projects {
-				all = append(all, detectedProject{
-					ScannedProject: p.ScannedProject,
-					Runtime:        "Go",
-					ModuleName:     p.ModuleName,
-				})
-			}
-		}
+			results[idx] = result{index: idx, projects: detected}
+		}(i, rt)
+	}
+	wg.Wait()
+
+	var all []detectedProject
+	for _, r := range results {
+		all = append(all, r.projects...)
 	}
 	return all
 }

@@ -40,7 +40,6 @@ func TestDetectAvailableRuntimes_UnlockAll(t *testing.T) {
 	}
 }
 
-// TestDetectAvailableRuntimes_UnlockAll_1 verifies that DTWIZ_ALL_RUNTIMES=1 also works.
 func TestDetectAvailableRuntimes_UnlockAll_1(t *testing.T) {
 	os.Setenv("DTWIZ_ALL_RUNTIMES", "1")
 	defer os.Unsetenv("DTWIZ_ALL_RUNTIMES")
