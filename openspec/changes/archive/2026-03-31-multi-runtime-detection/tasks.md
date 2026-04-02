@@ -6,7 +6,7 @@ Extract duplicated scanning, process detection, and env var generation from `ote
 
 **Files:** `pkg/installer/otel_common.go` (create), `pkg/installer/otel_python.go` (modify)
 
-- [x] 1.1 Create `otel_common.go` with `scanProjectDirs(markers, excludeNames)` — scans CWD + home-directory project locations for directories containing marker files
+- [x] 1.1 Create `otel_common.go` with `scanProjectDirs(markers, excludeNames, noiseDirs)` — scans CWD and walks up to 2 ancestor levels, scanning siblings at each level. Descends one extra level for monorepo grouping directories (e.g. a folder with no markers but project subdirs). Callers pass their own `noiseDirs` map of directory names to always skip.
 - [x] 1.2 Add `detectProcesses(filterTerm, excludeTerms)` — Unix: `ps ax`/`lsof`; Windows: PowerShell `Get-CimInstance Win32_Process`
 - [x] 1.3 Add `getProcessCWD(pid)` — Unix: `lsof`; Windows: `Get-CimInstance` executable path fallback
 - [x] 1.4 Add `processMatchPIDs(dirPath, procs)` — match processes to project directories by CWD or command line
@@ -60,11 +60,11 @@ Replace the runtime selection menu with a unified project list across all GA run
 
 - [x] 5.1 Add `allRuntimesEnabled()` checking `DTWIZ_ALL_RUNTIMES` env var (`"true"` or `"1"`)
 - [x] 5.2 Update `detectAvailableRuntimes()` — Python `enabled: true`, Java/Node.js/Go `enabled: allEnabled`
-- [x] 5.3 Add `detectedProject` struct and `detectAllProjects(runtimes)` — scan all enabled runtimes, skip disabled, return unified list
+- [x] 5.3 Add `detectedProject` struct and `detectAllProjects(runtimes)` — scan all enabled runtimes in parallel (goroutine per runtime, `sync.WaitGroup`), return unified list in input order
 - [x] 5.4 Add `printProjectList()` and `selectProject()` for unified project selection UX
 - [x] 5.5 Add `createRuntimePlan()` to dispatch plan creation based on selected project's runtime
 - [x] 5.6 Rewrite `InstallOtelCollector()` — scan projects, show unified list, create plan, show combined preview, execute after collector install
 - [x] 5.7 Ensure `--dry-run` prints the project list and combined preview without installing
 - [x] 5.8 Verify `InstallOtelCollectorOnly()` is not modified
-- [x] 5.9 Add tests: `detectAvailableRuntimes` enabled defaults (Python enabled), `DTWIZ_ALL_RUNTIMES=true` enables all, `printProjectList` formatting, `detectAllProjects` skips disabled / includes all when unlocked
+- [x] 5.9 Add tests: `detectAvailableRuntimes` enabled defaults (Python enabled, Java/Node.js/Go disabled), `DTWIZ_ALL_RUNTIMES=true` enables all, `printProjectList` formatting, `detectAllProjects` skips disabled / includes all when unlocked
 - [x] 5.10 Run `make test` and `make lint` to verify no regressions

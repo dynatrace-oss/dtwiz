@@ -31,21 +31,43 @@ type ScannedProject struct {
 	RunningPIDs []int    // PIDs of processes running from this project
 }
 
+// commonNoiseDirs is the shared set of directory names that are never useful
+// project roots: OS-managed macOS home folders, VCS metadata, build artifacts,
+// and language-specific cache/dependency trees.
+var commonNoiseDirs = map[string]bool{
+	// macOS home top-level folders
+	"Library": true, "Applications": true, "System": true,
+	"Movies": true, "Music": true, "Pictures": true, "Public": true,
+	// VCS
+	".git": true, ".svn": true,
+	// dependency trees / build artifacts
+	"node_modules": true, "vendor": true,
+	"venv": true, ".venv": true, "__pycache__": true,
+	"dist": true, "build": true, "target": true, "out": true,
+}
+
 // scanProjectDirs scans common locations for directories containing any of the
 // specified marker files. Directories whose name appears in excludeNames are
-// skipped. Searches CWD + immediate subdirectories and common home-directory
-// project locations (two levels deep under ~/Code, ~/code, ~/projects, ~/src, ~/dev).
+// skipped, as are all names in commonNoiseDirs.
+// Strategy:
+//  1. Check CWD and its immediate subdirectories.
+//  2. Walk up to 2 ancestor directories from CWD; for each level, scan all
+//     sibling directories. Stop early once projects are found at a given level.
 func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 	excludeSet := make(map[string]bool, len(excludeNames))
 	for _, name := range excludeNames {
 		excludeSet[name] = true
 	}
 
+	skipDir := func(name string) bool {
+		return strings.HasPrefix(name, ".") || excludeSet[name] || commonNoiseDirs[name]
+	}
+
 	var projects []ScannedProject
 	seen := make(map[string]bool)
 
 	checkDir := func(dir string) {
-		if excludeSet[filepath.Base(dir)] {
+		if skipDir(filepath.Base(dir)) {
 			return
 		}
 		// Resolve symlinks and normalize to lowercase for case-insensitive
@@ -69,45 +91,57 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 			logger.Debug("project dir matched", "path", dir, "markers", strings.Join(found, ","))
 			projects = append(projects, ScannedProject{Path: dir, Markers: found})
 		} else {
-			logger.Debug("project dir scanned, no markers", "path", dir)
+			logger.Debug("project dir scanned, no markers", "path", dir, "looking_for", strings.Join(markers, ","))
 		}
 	}
 
-	if cwd, err := os.Getwd(); err == nil {
-		checkDir(cwd)
-		entries, _ := os.ReadDir(cwd)
+	// scanSiblings scans all non-noise subdirectories of dir.
+	// If a subdirectory has no markers itself (e.g. a monorepo root like
+	// terra-sample-apps/), its children are also checked one level deeper.
+	// Returns the number of new projects found.
+	scanSiblings := func(dir string) int {
+		before := len(projects)
+		entries, _ := os.ReadDir(dir)
 		for _, e := range entries {
-			if e.IsDir() && !strings.HasPrefix(e.Name(), ".") && !excludeSet[e.Name()] {
-				checkDir(filepath.Join(cwd, e.Name()))
-			}
-		}
-	}
-
-	if home, err := os.UserHomeDir(); err == nil {
-		for _, base := range []string{"Code", "code", "projects", "src", "dev"} {
-			dir := filepath.Join(home, base)
-			entries, err := os.ReadDir(dir)
-			if err != nil {
+			if !e.IsDir() || skipDir(e.Name()) {
 				continue
 			}
-			for _, e := range entries {
-				if !e.IsDir() || excludeSet[e.Name()] {
-					continue
-				}
-				sub := filepath.Join(dir, e.Name())
-				checkDir(sub)
-				// Also check one level deeper.
-				subEntries, err := os.ReadDir(sub)
-				if err != nil {
-					continue
-				}
+			child := filepath.Join(dir, e.Name())
+			beforeChild := len(projects)
+			checkDir(child)
+			if len(projects) == beforeChild {
+				// No markers found — descend one level deeper
+				subEntries, _ := os.ReadDir(child)
 				for _, se := range subEntries {
-					if se.IsDir() && !strings.HasPrefix(se.Name(), ".") && !excludeSet[se.Name()] {
-						checkDir(filepath.Join(sub, se.Name()))
+					if se.IsDir() && !skipDir(se.Name()) {
+						checkDir(filepath.Join(child, se.Name()))
 					}
 				}
 			}
 		}
+		return len(projects) - before
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return projects
+	}
+
+	// Step 1: CWD itself and its immediate children.
+	checkDir(cwd)
+	scanSiblings(cwd)
+
+	// Steps 2–3: walk up to 2 ancestor levels; stop early if projects are found.
+	dir := cwd
+	for range 2 {
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break // filesystem root
+		}
+		if scanSiblings(parent) > 0 {
+			break
+		}
+		dir = parent
 	}
 
 	return projects
