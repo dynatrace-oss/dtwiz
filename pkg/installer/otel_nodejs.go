@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 // otelNodePackages are the npm packages needed for OTel auto-instrumentation.
@@ -42,12 +44,15 @@ func detectNodeEntrypoints(projectPath string) []string {
 	_ = json.Unmarshal(data, &pkg)
 
 	if pkg.Main != "" {
+		logger.Debug("node entrypoint: checking 'main' field", "main", pkg.Main)
 		if _, err := os.Stat(filepath.Join(projectPath, pkg.Main)); err == nil {
+			logger.Debug("node entrypoint found via 'main'", "file", pkg.Main)
 			return []string{pkg.Main}
 		}
 	}
 
 	if start, ok := pkg.Scripts["start"]; ok && start != "" {
+		logger.Debug("node entrypoint: checking 'scripts.start'", "start", start)
 		// Extract the filename from "node app.js" or "ts-node src/index.ts" etc.
 		parts := strings.Fields(start)
 		for _, part := range parts {
@@ -55,6 +60,7 @@ func detectNodeEntrypoints(projectPath string) []string {
 				strings.HasSuffix(part, ".mjs") || strings.HasSuffix(part, ".cjs") ||
 				strings.HasSuffix(part, ".mts") || strings.HasSuffix(part, ".cts") {
 				if _, err := os.Stat(filepath.Join(projectPath, part)); err == nil {
+					logger.Debug("node entrypoint found via 'scripts.start'", "file", part)
 					return []string{part}
 				}
 			}
@@ -66,6 +72,7 @@ func detectNodeEntrypoints(projectPath string) []string {
 		for _, ext := range []string{".js", ".ts", ".mjs", ".cjs", ".mts", ".cts"} {
 			name := base + ext
 			if _, err := os.Stat(filepath.Join(projectPath, name)); err == nil {
+				logger.Debug("node entrypoint found via fallback", "file", name)
 				return []string{name}
 			}
 		}

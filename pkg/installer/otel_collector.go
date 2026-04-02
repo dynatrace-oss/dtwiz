@@ -23,6 +23,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/fatih/color"
 )
 
@@ -76,6 +77,7 @@ func otelLatestReleaseVersion(ctx context.Context) (string, error) {
 	if tag == "" || !strings.HasPrefix(tag, "v") {
 		return "", fmt.Errorf("unexpected redirect location: %s", loc)
 	}
+	logger.Debug("resolved latest OTel Collector release", "location", loc, "tag", tag)
 	return tag, nil
 }
 
@@ -140,6 +142,7 @@ func downloadOtelCollector(destDir string) (string, error) {
 	}
 
 	downloadURL := otelReleaseURL(version, assetName)
+	logger.Debug("downloading OTel Collector", "version", version, "asset", assetName, "url", downloadURL)
 	fmt.Printf("  Downloading Dynatrace OTel Collector %s from GitHub...\n", version)
 	fmt.Printf("  URL: %s\n", downloadURL)
 
@@ -165,6 +168,7 @@ func downloadOtelCollector(destDir string) (string, error) {
 	}
 	tmpArchiveName := tmpArchive.Name()
 	defer os.Remove(tmpArchiveName)
+	logger.Debug("archive temp file created", "path", tmpArchiveName)
 
 	if _, err := io.Copy(tmpArchive, resp.Body); err != nil {
 		tmpArchive.Close()
@@ -422,6 +426,11 @@ func waitForLogInDynatrace(envURL, token, searchTerm string, timeout time.Durati
 			}
 		}
 
+		if lastErr != "" {
+			logger.Warn("DQL poll error", "lastErr", lastErr)
+		} else {
+			logger.Debug("DQL poll tick")
+		}
 		if time.Now().After(deadline) {
 			if lastErr != "" {
 				return fmt.Errorf("timed out waiting for log to appear in Dynatrace\n\n  Last error: %s", lastErr)
@@ -475,6 +484,7 @@ func waitForOtelCollectorReady(timeout time.Duration, crashed <-chan error) erro
 			conn.Close()
 			return nil
 		}
+		logger.Debug("waiting for collector port 4318", "err", err)
 		select {
 		case crashErr := <-crashed:
 			if crashErr != nil {
@@ -507,6 +517,7 @@ func verifyOtelInstall(envURL, platformToken, apiToken string, crashed <-chan er
 	hostname, _ := os.Hostname()
 	// Unique search token: hostname + unix seconds — short and searchable.
 	uniqueID := fmt.Sprintf("dtwiz-%s-%d", strings.ReplaceAll(hostname, ".", "-"), time.Now().Unix())
+	logger.Debug("verification ID generated", "uniqueID", uniqueID)
 
 	body := fmt.Sprintf(
 		"OpenTelemetry Collector Successfully installed with dtwiz [host: %s, os: %s/%s, id: %s]",

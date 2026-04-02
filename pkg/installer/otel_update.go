@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/fatih/color"
 	"gopkg.in/yaml.v3"
 )
@@ -187,8 +188,11 @@ func mergeDynatraceExporter(cfg map[string]interface{}, apiURL, token string) {
 			}
 		}
 		if !alreadyPresent {
+			logger.Debug("adding Dynatrace exporter to pipeline", "pipeline", pipelineName)
 			pipeline["exporters"] = append(existing, "otlp_http/dynatrace")
 			pipelines[pipelineName] = pipeline
+		} else {
+			logger.Debug("Dynatrace exporter already present in pipeline", "pipeline", pipelineName)
 		}
 	}
 }
@@ -214,6 +218,7 @@ func PatchConfigFile(configPath, apiURL, token string) (*UpdateResult, error) {
 	if err := os.WriteFile(backupPath, data, 0o600); err != nil {
 		return nil, fmt.Errorf("creating backup at %s: %w", backupPath, err)
 	}
+	logger.Debug("config backup created", "backup", backupPath, "originalBytes", len(data))
 
 	mergeDynatraceExporter(cfg, apiURL, token)
 
@@ -261,6 +266,10 @@ func UpdateOtelConfig(configPath, envURL, token, platformToken string, dryRun bo
 
 	// Discover running collectors now so we can include them in the preview.
 	runningProcs := findRunningOtelProcesses()
+	logger.Debug("running collectors found", "count", len(runningProcs))
+	for _, p := range runningProcs {
+		logger.Debug("running collector", "pid", p.pid, "binary", p.binaryPath)
+	}
 
 	// Build a preview of the updated config so we can diff it against the original.
 	origData, err := os.ReadFile(configPath)
