@@ -93,6 +93,7 @@ func (p *NodeInstrumentationPlan) Runtime() string { return "Node.js" }
 // entrypoint detection, and returns a plan or nil.
 func DetectNodePlan(apiURL, token string) *NodeInstrumentationPlan {
 	if _, err := exec.LookPath("node"); err != nil {
+		logger.Debug("node not found on PATH", "skipping Node.js instrumentation")
 		return nil
 	}
 
@@ -101,6 +102,7 @@ func DetectNodePlan(apiURL, token string) *NodeInstrumentationPlan {
 	matchProcessesToProjects(projects, procs)
 
 	if len(projects) == 0 {
+		logger.Debug("no Node.js projects detected", "skipping Node.js instrumentation")
 		return nil
 	}
 

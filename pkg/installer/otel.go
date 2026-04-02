@@ -61,9 +61,11 @@ func detectAllProjects(runtimes []runtimeInfo) []detectedProject {
 	active := make([]runtimeInfo, 0, len(runtimes))
 	for _, rt := range runtimes {
 		if !rt.enabled {
+			logger.Debug("skipping runtime (disabled)", "runtime", rt.name)
 			continue
 		}
 		if _, err := exec.LookPath(rt.binName); err != nil {
+			fmt.Printf("  Skipping %s instrumentation — '%s' not found on PATH.\n", rt.name, rt.binName)
 			continue
 		}
 		active = append(active, rt)
