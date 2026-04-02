@@ -32,12 +32,8 @@ Set your Dynatrace credentials via environment variables:
 Then use dtwiz commands to analyze and instrument your system.`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		logger.Init(debugFlag, verbosityFlag)
-		switch logger.Verbosity() {
-		case 1:
-			logger.Debug("logging: verbose")
-		case 2:
-			logger.Debug("logging: debug")
-		}
+		logger.Verbose("logging: verbose")
+		logger.Debug("logging: debug")
 	},
 }
 
