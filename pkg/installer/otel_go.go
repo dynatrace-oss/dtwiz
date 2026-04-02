@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 var otelGoPackages = []string{
@@ -22,12 +24,15 @@ type GoProject struct {
 func extractGoModuleName(goModPath string) string {
 	data, err := os.ReadFile(goModPath)
 	if err != nil {
+		logger.Warn("failed to read go.mod", "path", goModPath, "err", err)
 		return ""
 	}
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "module ") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "module "))
+			mod := strings.TrimSpace(strings.TrimPrefix(line, "module "))
+			logger.Debug("go module name extracted", "path", goModPath, "module", mod)
+			return mod
 		}
 	}
 	return ""
@@ -43,6 +48,7 @@ func detectGoProjects() []GoProject {
 			ModuleName:     moduleName,
 		})
 	}
+	logger.Debug("Go projects detected", "count", len(projects))
 	return projects
 }
 

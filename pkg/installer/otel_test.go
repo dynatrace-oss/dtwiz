@@ -1,7 +1,6 @@
 package installer
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -104,7 +103,7 @@ func TestDetectAllProjects_SkipsDisabled(t *testing.T) {
 func TestDetectAllProjects_IncludesWhenUnlocked(t *testing.T) {
 	dir := t.TempDir()
 	realDir, _ := filepath.EvalSymlinks(dir)
-	goMod := fmt.Sprintf("module github.com/test/app\n\ngo 1.21\n")
+	goMod := "module github.com/test/app\n\ngo 1.21\n"
 	if err := os.WriteFile(dir+"/go.mod", []byte(goMod), 0644); err != nil {
 		t.Fatal(err)
 	}

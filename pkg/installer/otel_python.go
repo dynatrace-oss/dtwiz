@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/fatih/color"
 )
 
@@ -18,16 +19,21 @@ func detectPython() (string, error) {
 	for _, name := range []string{"python3", "python"} {
 		path, err := exec.LookPath(name)
 		if err != nil {
+			logger.Debug("python candidate not found", "name", name)
 			continue
 		}
 		// Verify it's actually Python 3.
 		out, err := exec.Command(path, "--version").Output()
 		if err != nil {
+			logger.Warn("python version check failed", "path", path, "err", err)
 			continue
 		}
-		if strings.HasPrefix(strings.TrimSpace(string(out)), "Python 3") {
+		version := strings.TrimSpace(string(out))
+		if strings.HasPrefix(version, "Python 3") {
+			logger.Debug("python found", "path", path, "version", version)
 			return path, nil
 		}
+		logger.Debug("python candidate is not Python 3", "path", path, "version", version)
 	}
 	return "", fmt.Errorf("Python 3 not found — install Python 3 and ensure it is in PATH")
 }
@@ -50,6 +56,7 @@ var otelPythonPackages = []string{
 func installPackages(pip *pipCommand, packages []string) error {
 	args := append(append([]string{}, pip.args...), append([]string{"install"}, packages...)...)
 	cmd := exec.Command(pip.name, args...)
+	logger.Debug("running pip install", "cmd", pip.name, "args", strings.Join(args, " "))
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		os.Stdout.Write(out)
@@ -63,6 +70,7 @@ func installPackages(pip *pipCommand, packages []string) error {
 // Output is suppressed unless the command fails.
 func runOtelBootstrap(pythonPath string) error {
 	cmd := exec.Command(pythonPath, "-m", "opentelemetry.instrumentation.bootstrap", "-a", "install")
+	logger.Debug("running opentelemetry-bootstrap", "python", pythonPath)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		os.Stdout.Write(out)
@@ -373,6 +381,7 @@ func detectPythonEntrypoints(projectPath string) []string {
 	// Check common entrypoint filenames in the project root.
 	for _, name := range commonEntrypoints {
 		if _, err := os.Stat(filepath.Join(projectPath, name)); err == nil {
+			logger.Debug("python entrypoint found", "file", name)
 			entrypoints = append(entrypoints, name)
 		}
 	}

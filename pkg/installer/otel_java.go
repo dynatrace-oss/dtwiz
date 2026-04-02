@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 // otelJavaAgentURL is the download URL for the latest OpenTelemetry Java agent JAR.
@@ -30,13 +32,17 @@ func detectJavaProcesses() []DetectedProcess {
 func detectJava() (string, error) {
 	path, err := exec.LookPath("java")
 	if err != nil {
+		logger.Debug("java not found on PATH")
 		return "", fmt.Errorf("Java not found — install a JDK/JRE and ensure it is in PATH")
 	}
 	out, err := exec.Command(path, "-version").CombinedOutput()
 	if err != nil {
+		logger.Warn("java version check failed", "path", path, "err", err)
 		return "", fmt.Errorf("unable to determine Java version: %w", err)
 	}
-	fmt.Printf("  Java: %s (%s)\n", path, strings.Fields(strings.TrimSpace(string(out)))[0])
+	versionLine := strings.Fields(strings.TrimSpace(string(out)))[0]
+	logger.Debug("java found", "path", path, "version", versionLine)
+	fmt.Printf("  Java: %s (%s)\n", path, versionLine)
 	return path, nil
 }
 

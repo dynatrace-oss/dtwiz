@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/fatih/color"
 )
 
@@ -65,7 +66,10 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 			}
 		}
 		if len(found) > 0 {
+			logger.Debug("project dir matched", "path", dir, "markers", strings.Join(found, ","))
 			projects = append(projects, ScannedProject{Path: dir, Markers: found})
+		} else {
+			logger.Debug("project dir scanned, no markers", "path", dir)
 		}
 	}
 
@@ -115,8 +119,10 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 func detectProcesses(filterTerm string, excludeTerms []string) []DetectedProcess {
 	out, err := exec.Command("ps", "ax", "-o", "pid=,command=").Output()
 	if err != nil {
+		logger.Warn("ps command failed", "filter", filterTerm, "err", err)
 		return nil
 	}
+	logger.Debug("scanning processes", "filter", filterTerm)
 
 	var procs []DetectedProcess
 	myPID := os.Getpid()
@@ -149,6 +155,7 @@ func detectProcesses(filterTerm string, excludeTerms []string) []DetectedProcess
 		}
 		procs = append(procs, DetectedProcess{PID: pid, Command: cmd, CWD: getProcessCWD(pid)})
 	}
+	logger.Debug("process scan complete", "filter", filterTerm, "matched", len(procs))
 	return procs
 }
 
@@ -157,6 +164,7 @@ func detectProcesses(filterTerm string, excludeTerms []string) []DetectedProcess
 func getProcessCWD(pid int) string {
 	out, err := exec.Command("lsof", "-a", "-d", "cwd", "-p", strconv.Itoa(pid), "-Fn").Output()
 	if err != nil {
+		logger.Warn("lsof cwd lookup failed", "pid", pid, "err", err)
 		return ""
 	}
 	for _, line := range strings.Split(string(out), "\n") {
@@ -320,6 +328,7 @@ func waitForServices(envURL, platformToken string, serviceNames []string) {
 
 	appsURL := AppsURL(envURL)
 	apiURL := appsURL + "/platform/storage/query/v1/query:execute"
+	logger.Debug("waiting for services in Dynatrace", "services", strings.Join(serviceNames, ","), "url", apiURL)
 
 	conditions := make([]string, len(serviceNames))
 	for i, name := range serviceNames {
@@ -350,6 +359,7 @@ func waitForServices(envURL, platformToken string, serviceNames []string) {
 			}
 			return
 		case <-ticker.C:
+			logger.Debug("polling smartscape for services", "remaining", len(remaining))
 			found := querySmartscapeServices(apiURL, platformToken, dql)
 			for _, name := range found {
 				if remaining[name] {
@@ -387,10 +397,12 @@ func querySmartscapeServices(apiURL, platformToken, dql string) []string {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
+		logger.Warn("smartscape DQL request failed", "err", err)
 		return nil
 	}
 	defer resp.Body.Close()
 
+	logger.Debug("smartscape DQL response", "status", resp.StatusCode)
 	if resp.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, resp.Body)
 		return nil
@@ -407,5 +419,6 @@ func querySmartscapeServices(apiURL, platformToken, dql string) []string {
 			names = append(names, name)
 		}
 	}
+	logger.Debug("smartscape DQL found services", "count", len(names), "names", strings.Join(names, ","))
 	return names
 }
