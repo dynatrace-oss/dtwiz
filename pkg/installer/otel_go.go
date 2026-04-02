@@ -62,11 +62,13 @@ func (p *GoInstrumentationPlan) Runtime() string { return "Go" }
 // DetectGoPlan scans for Go projects, prompts the user, and returns a plan or nil.
 func DetectGoPlan(apiURL, token string) *GoInstrumentationPlan {
 	if _, err := exec.LookPath("go"); err != nil {
+		logger.Debug("go not found on PATH", "skipping Go instrumentation")
 		return nil
 	}
 
 	projects := detectGoProjects()
 	if len(projects) == 0 {
+		logger.Debug("no Go projects detected", "skipping Go instrumentation")
 		return nil
 	}
 

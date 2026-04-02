@@ -140,6 +140,7 @@ func (p *PythonInstrumentationPlan) Runtime() string { return "Python" }
 // no projects are found.
 func DetectPythonPlan(apiURL, token string) *PythonInstrumentationPlan {
 	if _, err := detectPython(); err != nil {
+		logger.Debug("python not found on PATH", "skipping Python instrumentation")
 		return nil
 	}
 
@@ -148,6 +149,7 @@ func DetectPythonPlan(apiURL, token string) *PythonInstrumentationPlan {
 	matchProcessesToProjects(projects, procs)
 
 	if len(projects) == 0 {
+		logger.Debug("no Python projects detected", "skipping Python instrumentation")
 		return nil
 	}
 

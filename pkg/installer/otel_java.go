@@ -56,6 +56,7 @@ func (p *JavaInstrumentationPlan) Runtime() string { return "Java" }
 // DetectJavaPlan scans for Java projects, prompts the user, and returns a plan or nil.
 func DetectJavaPlan(apiURL, token string) *JavaInstrumentationPlan {
 	if _, err := exec.LookPath("java"); err != nil {
+		logger.Debug("java not found on PATH", "skipping Java instrumentation")
 		return nil
 	}
 
@@ -64,6 +65,7 @@ func DetectJavaPlan(apiURL, token string) *JavaInstrumentationPlan {
 	matchProcessesToProjects(projects, procs)
 
 	if len(projects) == 0 {
+		logger.Debug("no Java projects detected", "skipping Java instrumentation")
 		return nil
 	}
 
