@@ -35,9 +35,11 @@ PrintPlanSteps()           // render preview lines for the combined plan
 Execute()                  // run the actual instrumentation after collector install
 ```
 
-No formal Go interface is introduced — the orchestrator in `otel.go` calls the selected plan's methods directly via a nil-check, exactly as it does today for Python. Only one plan is active per invocation. This avoids unnecessary abstraction while keeping the pattern uniform.
+All plan structs hold pre-generated `EnvVars map[string]string` rather than raw `EnvURL` or `PlatformToken` — env vars are resolved at detection time via `generateBaseOtelEnvVars()` and stored ready to print. `GoInstrumentationPlan` additionally carries the module name extracted from `go.mod`.
 
-**Alternative considered:** A shared `InstrumentationPlan` interface. Rejected because it would require refactoring the existing Python code and the plans have different fields (virtualenv flags, JAR paths, etc.).
+A formal `InstrumentationPlan` interface (`Runtime()`, `PrintPlanSteps()`, `Execute()`) is defined in `otel.go`, allowing the orchestrator to work with any runtime uniformly. Only one plan is active per invocation.
+
+**Alternative considered:** No formal interface — call plan methods directly via nil-check on concrete types. Rejected because it requires the orchestrator to know each runtime's concrete type, coupling it to all runtime-specific structs.
 
 **Alternative considered:** Supporting multiple project selections in a single invocation. Rejected for now — adds complexity to the confirmation preview, execution ordering, and error handling. Users can re-run `dtwiz install otel` to instrument additional projects.
 
@@ -45,7 +47,7 @@ No formal Go interface is introduced — the orchestrator in `otel.go` calls the
 
 Common logic extracted into `otel_common.go` to eliminate duplication across runtime-specific files:
 
-- `scanProjectDirs(markers, excludeNames)` — scans CWD + home-directory project locations for directories containing marker files.
+- `scanProjectDirs(markers, excludeNames, noiseDirs)` — scans for directories containing marker files. Strategy: (1) check CWD and its immediate subdirectories; (2) walk up to 2 ancestor levels from CWD, scanning all siblings at each level and stopping early once projects are found. When a directory has no markers (e.g. a monorepo root like `terra-sample-apps/`), its children are also checked one level deeper. The `noiseDirs` parameter is a caller-supplied set of directory names that are always skipped (e.g. `node_modules`, `.git`, OS-level dirs like `Library`). Each call site passes its own noise map, so callers can customize the skip list without altering global state.
 - `detectProcesses(filterTerm, excludeTerms)` — finds running processes. On Unix uses `ps ax` and `lsof`; on Windows uses PowerShell `Get-CimInstance Win32_Process`.
 - `processMatchPIDs(dirPath, procs)` — matches processes to project directories by CWD or command line.
 - `generateBaseOtelEnvVars(apiURL, token, serviceName)` — returns the common OTEL_* environment variables shared by all runtimes.
@@ -83,9 +85,13 @@ The user picks one project directly. This reduces interaction to a single prompt
 ### 5. Project detection strategy per runtime
 
 - **Python**: Scan for `pyproject.toml`, `setup.py`, `setup.cfg`, `requirements.txt`, `Pipfile`, `poetry.lock`, `manage.py`. Detect running `python` processes and match by CWD.
-- **Java**: Scan for `pom.xml`, `build.gradle`, `build.gradle.kts`. Detect running `java` processes and match by CWD.
+- **Java**: Scan for `pom.xml`, `build.gradle`, `build.gradle.kts`, `gradlew`, `.mvn`. Detect running `java` processes and match by CWD.
 - **Node.js**: Scan for `package.json` (excluding `node_modules`). Detect running `node` processes and match by CWD.
 - **Go**: Scan for `go.mod`. Note: Go compiles to static binaries, so "auto-instrumentation" means providing OTel SDK integration guidance and env vars rather than attaching an agent.
+
+### 5a. Parallel project detection
+
+`detectAllProjects` scans all enabled runtimes concurrently using a goroutine per runtime and a `sync.WaitGroup`. Results are collected into a pre-allocated `[]result` slice (indexed by position) to avoid map allocation and lock contention. The final slice is assembled in input order after `wg.Wait()`.
 
 ### 6. Confirmation preview layout
 
@@ -99,11 +105,11 @@ After collector installation completes, the single selected plan (if any) execut
 
 Only Python is GA. All other runtimes (Java, Node.js, Go) are "coming soon" by default — their projects are not scanned or shown. The `DTWIZ_ALL_RUNTIMES` environment variable (set to `"true"` or `"1"`) unlocks all runtimes for testing.
 
-**Alternative considered:** Showing coming-soon runtimes in a menu with labels. Rejected — the unified project list shows projects, not runtimes, so there's nothing to label. Coming-soon runtimes are simply excluded from scanning.
+**Alternative considered:** Making all runtimes GA immediately. Rejected — Java, Node.js, and Go instrumentation is still maturing; shipping them as default-on before they are fully validated could degrade user experience. `DTWIZ_ALL_RUNTIMES=true` provides a stable opt-in for testing without exposing incomplete flows to all users.
 
 ### 9. `--dry-run` coverage
 
-All new flows — project scanning, project list, combined preview — SHALL work under `--dry-run`. When `--dry-run` is set, the project list is printed, the combined plan is shown, but no collector or instrumentation is installed.
+When `--dry-run` is set, the collector plan is printed (directory, binary, config preview) and the command returns without scanning for projects or showing the project list. Runtime detection and the combined preview do not run under dry-run.
 
 ### 10. Non-regression: `InstallOtelCollectorOnly()`
 

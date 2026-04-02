@@ -4,17 +4,17 @@
 
 ### Requirement: Unified project listing
 
-The `InstallOtelCollector` function in `pkg/installer/otel.go` SHALL detect available runtimes via `exec.LookPath`, scan for projects across all GA runtimes, and present a single unified project list. Each entry shows the runtime name, project path, marker files, and any running PIDs. The list SHALL include a "Skip — collector only" option. The user selects exactly one project to instrument (or skips). There is no runtime selection menu — the user picks a project directly.
+During OTel Collector installation, the system SHALL detect available runtimes, scan for projects across all GA runtimes, and present a single unified project list. Each entry shows the runtime name, project path, marker files, and any running PIDs. The list SHALL include a "Skip — collector only" option. The user selects exactly one project to instrument (or skips). There is no runtime selection menu — the user picks a project directly.
 
 #### Scenario: Multiple runtimes and projects detected
 
-- **GIVEN** an OTel Collector installation is in progress via `InstallOtelCollector`
+- **GIVEN** an OTel Collector installation is in progress
 - **WHEN** `java` and `node` are on PATH and Java/Node.js projects exist
 - **THEN** the list shows e.g. `[1] Java     /home/user/projects/api  (pom.xml)`, `[2] Node.js  /home/user/projects/web  (package.json)`, `[3] Skip — collector only` and the user picks one
 
 #### Scenario: No projects detected
 
-- **GIVEN** an OTel Collector installation is in progress via `InstallOtelCollector`
+- **GIVEN** an OTel Collector installation is in progress
 - **WHEN** no project directories are found for any GA runtime
 - **THEN** the system skips the project list and proceeds with collector-only installation
 
@@ -26,13 +26,13 @@ After the user selects a project, the system SHALL create the appropriate instru
 
 - **GIVEN** the unified project list is displayed
 - **WHEN** the user picks a Java project
-- **THEN** the system creates a `JavaInstrumentationPlan` for that project
+- **THEN** the system creates an instrumentation plan for that project and shows it in the confirmation preview
 
 #### Scenario: User selects a Node.js project with detected entrypoint
 
 - **GIVEN** the unified project list is displayed
 - **WHEN** the user picks a Node.js project that has a `package.json` with a `main` field
-- **THEN** the system creates a `NodeInstrumentationPlan` with the detected entrypoint — no extra prompt
+- **THEN** the system creates an instrumentation plan with the detected entrypoint — no extra prompt
 
 #### Scenario: User selects a Python project with no entrypoint
 
@@ -80,7 +80,7 @@ After the collector is installed successfully, the system SHALL execute the sele
 
 - **GIVEN** the user selected a Python project, confirmed, and the collector installed successfully
 - **WHEN** the runtime plan execution phase begins
-- **THEN** `pythonPlan.Execute()` runs with header `── Python auto-instrumentation ──`
+- **THEN** the Python instrumentation step runs under a `── Python auto-instrumentation ──` header
 
 #### Scenario: Collector only
 
@@ -108,4 +108,4 @@ When a runtime plan is selected, the introductory message SHALL state that the c
 
 - **GIVEN** no plan was created because no projects were found for any GA runtime
 - **WHEN** the intro message is printed
-- **THEN** the message states collector-only installation
+- **THEN** the message is omitted
