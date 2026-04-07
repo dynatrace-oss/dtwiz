@@ -90,7 +90,7 @@ func generateOtelPythonEnvVars(apiURL, token, serviceName string) map[string]str
 // detectPythonProcesses finds running Python processes (excluding the current
 // process and common system Python processes).
 func detectPythonProcesses() []DetectedProcess {
-	return detectProcesses("python", []string{"pip ", "setup.py", "/bin/dtwiz"})
+	return detectProcesses("python", []string{"pip ", "setup.py"})
 }
 
 // pythonProjectMarkers are the files that indicate a Python project root.
@@ -135,6 +135,29 @@ type PythonInstrumentationPlan struct {
 
 func (p *PythonInstrumentationPlan) Runtime() string { return "Python" }
 
+func buildPythonInstrumentationPlan(proj ScannedProject, apiURL, token, envURL, platformToken string) *PythonInstrumentationPlan {
+	entrypoints := detectPythonEntrypoints(proj.Path)
+	if len(entrypoints) == 0 {
+		fmt.Printf("  Skipping %s — no Python entrypoint found.\n", proj.Path)
+		fmt.Println("    Looked for: pyproject.toml [project.scripts], or common files (main.py, app.py, run.py, server.py, manage.py, wsgi.py, asgi.py).")
+		fmt.Println("    Add one of these files and re-run dtwiz.")
+		return nil
+	}
+
+	needsVenv := detectProjectPip(proj.Path) == nil
+	svcName := serviceNameFromPath(proj.Path)
+	envVars := generateOtelPythonEnvVars(apiURL, token, svcName)
+
+	return &PythonInstrumentationPlan{
+		Project:       proj,
+		Entrypoints:   entrypoints,
+		NeedsVenv:     needsVenv,
+		EnvVars:       envVars,
+		EnvURL:        envURL,
+		PlatformToken: platformToken,
+	}
+}
+
 // DetectPythonPlan scans for Python projects, shows them to the user, and
 // returns a plan if the user selects one. Returns nil if the user skips or
 // no projects are found.
@@ -157,27 +180,8 @@ func DetectPythonPlan(apiURL, token string) *PythonInstrumentationPlan {
 	if sel == nil {
 		return nil
 	}
-	proj := *sel
 
-	entrypoints := detectPythonEntrypoints(proj.Path)
-	if len(entrypoints) == 0 {
-		fmt.Printf("  Skipping %s — no Python entrypoint found.\n", proj.Path)
-		fmt.Println("    Looked for: pyproject.toml [project.scripts], or common files (main.py, app.py, run.py, server.py, manage.py, wsgi.py, asgi.py).")
-		fmt.Println("    Add one of these files and re-run dtwiz.")
-		return nil
-	}
-
-	needsVenv := detectProjectPip(proj.Path) == nil
-
-	svcName := serviceNameFromPath(proj.Path)
-	envVars := generateOtelPythonEnvVars(apiURL, token, svcName)
-
-	return &PythonInstrumentationPlan{
-		Project:     proj,
-		Entrypoints: entrypoints,
-		NeedsVenv:   needsVenv,
-		EnvVars:     envVars,
-	}
+	return buildPythonInstrumentationPlan(*sel, apiURL, token, "", "")
 }
 
 func (p *PythonInstrumentationPlan) PrintPlanSteps() {

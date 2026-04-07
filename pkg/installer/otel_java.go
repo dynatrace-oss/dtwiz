@@ -25,7 +25,7 @@ func detectJavaProjects() []ScannedProject {
 }
 
 func detectJavaProcesses() []DetectedProcess {
-	return detectProcesses("java", []string{"/bin/dtwiz"})
+	return detectProcesses("java", nil)
 }
 
 // detectJava finds a usable Java runtime on the current PATH.
@@ -61,7 +61,7 @@ func DetectJavaPlan(apiURL, token string) *JavaInstrumentationPlan {
 	}
 
 	projects := detectJavaProjects()
-	procs := detectProcesses("java", []string{"/bin/dtwiz"})
+	procs := detectJavaProcesses()
 	matchProcessesToProjects(projects, procs)
 
 	if len(projects) == 0 {

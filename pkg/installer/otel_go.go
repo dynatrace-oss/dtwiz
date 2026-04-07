@@ -77,7 +77,7 @@ func DetectGoPlan(apiURL, token string) *GoInstrumentationPlan {
 		scanned[i] = projects[i].ScannedProject
 	}
 
-	procs := detectProcesses("go", []string{"/bin/dtwiz"})
+	procs := detectProcesses("go", nil)
 	matchProcessesToProjects(scanned, procs)
 
 	sel := promptProjectSelection("Go", scanned)

@@ -23,7 +23,7 @@ func detectNodeProjects() []ScannedProject {
 }
 
 func detectNodeProcesses() []DetectedProcess {
-	return detectProcesses("node", []string{"/bin/dtwiz", "npm "})
+	return detectProcesses("node", []string{"npm "})
 }
 
 // packageJSON is the minimal structure we read from package.json.
@@ -89,6 +89,25 @@ type NodeInstrumentationPlan struct {
 
 func (p *NodeInstrumentationPlan) Runtime() string { return "Node.js" }
 
+func buildNodeInstrumentationPlan(proj ScannedProject, apiURL, token string) *NodeInstrumentationPlan {
+	entrypoints := detectNodeEntrypoints(proj.Path)
+	if len(entrypoints) == 0 {
+		fmt.Printf("  Skipping %s — no Node.js entrypoint found.\n", proj.Path)
+		fmt.Println("    Looked for: package.json 'main' or 'scripts.start', or common files (index.js, app.js, server.js and .ts variants).")
+		fmt.Println("    Add one of these and re-run dtwiz.")
+		return nil
+	}
+
+	svcName := serviceNameFromPath(proj.Path)
+	envVars := generateBaseOtelEnvVars(apiURL, token, svcName)
+
+	return &NodeInstrumentationPlan{
+		Project:    proj,
+		Entrypoint: entrypoints[0],
+		EnvVars:    envVars,
+	}
+}
+
 // DetectNodePlan scans for Node.js projects, prompts the user, performs
 // entrypoint detection, and returns a plan or nil.
 func DetectNodePlan(apiURL, token string) *NodeInstrumentationPlan {
@@ -110,24 +129,8 @@ func DetectNodePlan(apiURL, token string) *NodeInstrumentationPlan {
 	if sel == nil {
 		return nil
 	}
-	proj := *sel
 
-	entrypoints := detectNodeEntrypoints(proj.Path)
-	if len(entrypoints) == 0 {
-		fmt.Printf("  Skipping %s — no Node.js entrypoint found.\n", proj.Path)
-		fmt.Println("    Looked for: package.json 'main' or 'scripts.start', or common files (index.js, app.js, server.js and .ts variants).")
-		fmt.Println("    Add one of these and re-run dtwiz.")
-		return nil
-	}
-
-	svcName := serviceNameFromPath(proj.Path)
-	envVars := generateBaseOtelEnvVars(apiURL, token, svcName)
-
-	return &NodeInstrumentationPlan{
-		Project:    proj,
-		Entrypoint: entrypoints[0],
-		EnvVars:    envVars,
-	}
+	return buildNodeInstrumentationPlan(*sel, apiURL, token)
 }
 
 func (p *NodeInstrumentationPlan) PrintPlanSteps() {

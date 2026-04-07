@@ -26,7 +26,8 @@ type InstrumentationPlan interface {
 type runtimeInfo struct {
 	name       string // display name (e.g. "Python", "Java", "Node.js", "Go")
 	binName    string // binary to check on PATH (e.g. "python3", "java", "node", "go")
-	enabled bool // if false, this runtime is skipped unless DTWIZ_ALL_RUNTIMES is set
+	enabled    bool   // if false, this runtime is skipped unless DTWIZ_ALL_RUNTIMES is set
+	detect     func() []detectedProject
 }
 
 // detectedProject is a project found during the multi-runtime scan.
@@ -46,16 +47,55 @@ func allRuntimesEnabled() bool {
 func detectAvailableRuntimes() []runtimeInfo {
 	allEnabled := allRuntimesEnabled()
 	return []runtimeInfo{
-		{name: "Python", binName: "python3", enabled: true},
-		{name: "Java", binName: "java", enabled: allEnabled},
-		{name: "Node.js", binName: "node", enabled: allEnabled},
-		{name: "Go", binName: "go", enabled: allEnabled},
+		{name: "Python", binName: "python3", enabled: true, detect: detectPythonRuntimeProjects},
+		{name: "Java", binName: "java", enabled: allEnabled, detect: detectJavaRuntimeProjects},
+		{name: "Node.js", binName: "node", enabled: allEnabled, detect: detectNodeRuntimeProjects},
+		{name: "Go", binName: "go", enabled: allEnabled, detect: detectGoRuntimeProjects},
 	}
+}
+
+func detectedProjectsFromScan(runtime string, projects []ScannedProject) []detectedProject {
+	detected := make([]detectedProject, 0, len(projects))
+	for _, project := range projects {
+		detected = append(detected, detectedProject{ScannedProject: project, Runtime: runtime})
+	}
+	return detected
+}
+
+func detectMatchedProjects(runtime string, projectFn func() []ScannedProject, processFn func() []DetectedProcess) []detectedProject {
+	projects := projectFn()
+	procs := processFn()
+	matchProcessesToProjects(projects, procs)
+	return detectedProjectsFromScan(runtime, projects)
+}
+
+func detectPythonRuntimeProjects() []detectedProject {
+	return detectMatchedProjects("Python", detectPythonProjects, detectPythonProcesses)
+}
+
+func detectJavaRuntimeProjects() []detectedProject {
+	return detectMatchedProjects("Java", detectJavaProjects, detectJavaProcesses)
+}
+
+func detectNodeRuntimeProjects() []detectedProject {
+	return detectMatchedProjects("Node.js", detectNodeProjects, detectNodeProcesses)
+}
+
+func detectGoRuntimeProjects() []detectedProject {
+	projects := detectGoProjects()
+	detected := make([]detectedProject, 0, len(projects))
+	for _, project := range projects {
+		detected = append(detected, detectedProject{
+			ScannedProject: project.ScannedProject,
+			Runtime:        "Go",
+			ModuleName:     project.ModuleName,
+		})
+	}
+	return detected
 }
 
 func detectAllProjects(runtimes []runtimeInfo) []detectedProject {
 	type result struct {
-		index    int
 		projects []detectedProject
 	}
 
@@ -78,40 +118,7 @@ func detectAllProjects(runtimes []runtimeInfo) []detectedProject {
 		wg.Add(1)
 		go func(idx int, rt runtimeInfo) {
 			defer wg.Done()
-			var detected []detectedProject
-			switch rt.name {
-			case "Python":
-				projects := detectPythonProjects()
-				procs := detectPythonProcesses()
-				matchProcessesToProjects(projects, procs)
-				for _, p := range projects {
-					detected = append(detected, detectedProject{ScannedProject: p, Runtime: "Python"})
-				}
-			case "Java":
-				projects := detectJavaProjects()
-				procs := detectJavaProcesses()
-				matchProcessesToProjects(projects, procs)
-				for _, p := range projects {
-					detected = append(detected, detectedProject{ScannedProject: p, Runtime: "Java"})
-				}
-			case "Node.js":
-				projects := detectNodeProjects()
-				procs := detectNodeProcesses()
-				matchProcessesToProjects(projects, procs)
-				for _, p := range projects {
-					detected = append(detected, detectedProject{ScannedProject: p, Runtime: "Node.js"})
-				}
-			case "Go":
-				projects := detectGoProjects()
-				for _, p := range projects {
-					detected = append(detected, detectedProject{
-						ScannedProject: p.ScannedProject,
-						Runtime:        "Go",
-						ModuleName:     p.ModuleName,
-					})
-				}
-			}
-			results[idx] = result{index: idx, projects: detected}
+			results[idx] = result{projects: rt.detect()}
 		}(i, rt)
 	}
 	wg.Wait()
@@ -167,35 +174,22 @@ func createRuntimePlan(proj detectedProject, apiURL, token, envURL, platformToke
 
 	switch proj.Runtime {
 	case "Python":
-		entrypoints := detectPythonEntrypoints(proj.Path)
-		if len(entrypoints) == 0 {
-			fmt.Printf("  Skipping %s — no Python entrypoint found.\n", proj.Path)
-			fmt.Println("    Looked for: pyproject.toml [project.scripts], or common files (main.py, app.py, run.py, server.py, manage.py, wsgi.py, asgi.py).")
-			fmt.Println("    Add one of these files and re-run dtwiz.")
+		plan := buildPythonInstrumentationPlan(proj.ScannedProject, apiURL, token, envURL, platformToken)
+		if plan == nil {
 			return nil
 		}
-		needsVenv := detectProjectPip(proj.Path) == nil
-		pyEnvVars := generateOtelPythonEnvVars(apiURL, token, svcName)
-		return &PythonInstrumentationPlan{
-			Project:       proj.ScannedProject,
-			Entrypoints:   entrypoints,
-			NeedsVenv:     needsVenv,
-			EnvVars:       pyEnvVars,
-			EnvURL:        envURL,
-			PlatformToken: platformToken,
-		}
+		return plan
 	case "Java":
 		return &JavaInstrumentationPlan{
 			Project: proj.ScannedProject,
 			EnvVars: envVars,
 		}
 	case "Node.js":
-		entrypoints := detectNodeEntrypoints(proj.Path)
-		return &NodeInstrumentationPlan{
-			Project:    proj.ScannedProject,
-			Entrypoint: entrypoints[0],
-			EnvVars:    envVars,
+		plan := buildNodeInstrumentationPlan(proj.ScannedProject, apiURL, token)
+		if plan == nil {
+			return nil
 		}
+		return plan
 	case "Go":
 		goProj := GoProject{
 			ScannedProject: proj.ScannedProject,

@@ -2,6 +2,7 @@ package installer
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -354,5 +355,141 @@ func TestDetectProjectPip_ChecksAllVenvNames(t *testing.T) {
 				t.Errorf("venv=%q: pip.name = %q, want %q", venvName, pip.name, pipPath)
 			}
 		})
+	}
+}
+
+func TestDetectPython_NotFound(t *testing.T) {
+	t.Setenv("PATH", "")
+
+	_, err := detectPython()
+	if err == nil {
+		t.Fatal("expected error when python is not on PATH")
+	}
+}
+
+func TestBuildPythonInstrumentationPlan(t *testing.T) {
+	apiURL := "https://tenant.live.dynatrace.com"
+	token := "token"
+	envURL := "https://tenant.apps.dynatrace.com"
+	platformToken := "platform-token"
+
+	t.Run("returns plan when entrypoint exists", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "main.py"), []byte("print('ok')\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		plan := buildPythonInstrumentationPlan(ScannedProject{Path: dir}, apiURL, token, envURL, platformToken)
+		if plan == nil {
+			t.Fatal("expected non-nil plan")
+		}
+		if len(plan.Entrypoints) != 1 || plan.Entrypoints[0] != "main.py" {
+			t.Fatalf("unexpected entrypoints: %v", plan.Entrypoints)
+		}
+		if plan.EnvURL != envURL || plan.PlatformToken != platformToken {
+			t.Fatalf("unexpected env metadata: %+v", plan)
+		}
+	})
+
+	t.Run("returns nil when entrypoint is missing", func(t *testing.T) {
+		plan := buildPythonInstrumentationPlan(ScannedProject{Path: t.TempDir()}, apiURL, token, envURL, platformToken)
+		if plan != nil {
+			t.Fatalf("expected nil plan, got %#v", plan)
+		}
+	})
+}
+
+func TestDetectPythonPlan_NoPythonOnPath(t *testing.T) {
+	t.Setenv("PATH", "")
+
+	plan := DetectPythonPlan("https://tenant.live.dynatrace.com", "token")
+	if plan != nil {
+		t.Fatalf("expected nil plan, got %#v", plan)
+	}
+}
+
+func TestDetectPythonPlan_FindsProject(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		if _, err := exec.LookPath("python"); err != nil {
+			t.Skip("python not installed on PATH")
+		}
+	}
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "requirements.txt"), []byte("flask\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "main.py"), []byte("print('ok')\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	setTestWorkingDir(t, dir)
+	setTestStdin(t, "1\n")
+
+	plan := DetectPythonPlan("https://tenant.live.dynatrace.com", "token")
+	if plan == nil {
+		t.Fatal("expected Python plan")
+	}
+	if len(plan.Entrypoints) != 1 || plan.Entrypoints[0] != "main.py" {
+		t.Fatalf("unexpected entrypoints: %v", plan.Entrypoints)
+	}
+}
+
+func TestPrintManualInstructions(t *testing.T) {
+	output := captureStdout(t, func() {
+		printManualInstructions(map[string]string{"OTEL_SERVICE_NAME": "py-svc"})
+	})
+
+	checks := []string{"pip install opentelemetry-distro opentelemetry-exporter-otlp", "opentelemetry-bootstrap -a install", "export OTEL_SERVICE_NAME=\"py-svc\"", "opentelemetry-instrument python your_app.py"}
+	for _, check := range checks {
+		if !strings.Contains(output, check) {
+			t.Fatalf("expected output to contain %q, got:\n%s", check, output)
+		}
+	}
+}
+
+func TestPythonInstrumentationPlan_Runtime(t *testing.T) {
+	plan := &PythonInstrumentationPlan{}
+	if got := plan.Runtime(); got != "Python" {
+		t.Fatalf("Runtime() = %q, want %q", got, "Python")
+	}
+}
+
+func TestPythonInstrumentationPlan_PrintPlanSteps(t *testing.T) {
+	plan := &PythonInstrumentationPlan{
+		Project:     ScannedProject{Path: "/tmp/orderschnitzel", RunningPIDs: []int{111, 222}},
+		Entrypoints: []string{"main.py", filepath.Join("api", "app.py")},
+		NeedsVenv:   true,
+	}
+
+	output := captureStdout(t, func() {
+		plan.PrintPlanSteps()
+	})
+
+	checks := []string{"Project: /tmp/orderschnitzel", "Stop running processes (PIDs: 111, 222)", "Create virtualenv (.venv)", "pip install opentelemetry-distro opentelemetry-exporter-otlp", "opentelemetry-instrument python main.py", "service: orderschnitzel-api"}
+	for _, check := range checks {
+		if !strings.Contains(output, check) {
+			t.Fatalf("expected output to contain %q, got:\n%s", check, output)
+		}
+	}
+}
+
+func TestPythonInstrumentationPlan_ExecuteFailsWithoutPythonForVenvCreation(t *testing.T) {
+	t.Setenv("PATH", "")
+	plan := &PythonInstrumentationPlan{
+		Project:   ScannedProject{Path: t.TempDir()},
+		NeedsVenv: true,
+		EnvVars:   map[string]string{"OTEL_SERVICE_NAME": "py-svc"},
+	}
+
+	output := captureStdout(t, func() {
+		plan.Execute()
+	})
+
+	checks := []string{"Creating virtualenv... failed.", "Python 3 not found"}
+	for _, check := range checks {
+		if !strings.Contains(output, check) {
+			t.Fatalf("expected output to contain %q, got:\n%s", check, output)
+		}
 	}
 }
