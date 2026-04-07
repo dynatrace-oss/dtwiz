@@ -73,11 +73,12 @@ Sending signal 0 to a PID checks existence without delivering a real signal. Rej
 **Poll `/proc/<pid>/status` on Linux**
 Cheap on Linux but unavailable on macOS and Windows. The goroutine approach works identically on all platforms.
 
-**6. Always verify framework instrumentation packages after running bootstrap**
+### 6. Always verify framework instrumentation packages after running bootstrap
 
 `opentelemetry-bootstrap -a install` is unreliable: in some environments (observed with `opentelemetry-distro==0.61b0` on Python 3.14) it exits 0 but installs zero packages — no error, no output, no indication anything went wrong. The root cause is inside the third-party tool's CLI entry point; the internal detection API (`_find_installed_libraries()`) works correctly when called from Python.
 
 After bootstrap runs, dtwiz shall:
+
 1. Run `pip list --format=json` and check whether any framework instrumentation package was installed.
 2. If none were installed, call bootstrap's internal detection API directly via a Python snippet (`bootstrapRequirementsScript`). This bypasses the broken CLI entry point and uses bootstrap's own version-matching logic — no hardcoded map needed, automatically picks up new packages as the OTel ecosystem evolves.
 3. If the internal API call fails (e.g. API changed across versions), print a warning with the manual `opentelemetry-bootstrap -a install` command and continue non-fatally — services will start but may lack framework trace spans.

@@ -178,7 +178,7 @@ func (p *PythonInstrumentationPlan) Execute() {
 	envVars := p.EnvVars
 
 	venvPip := detectProjectPip(proj.Path)
-	otelInstrument := resolveVenvBinary(proj.Path, "opentelemetry-instrument")
+	var otelInstrument string
 	pythonBin := resolveVenvBinary(proj.Path, "python")
 	if pythonBin == "" {
 		pythonBin = "python3"
@@ -340,7 +340,7 @@ func waitForServices(envURL, platformToken string, serviceNames []string) {
 	for i, name := range serviceNames {
 		conditions[i] = fmt.Sprintf("name == \"%s\"", name)
 	}
-	dql := fmt.Sprintf("smartscapeNodes SERVICE, from: now()-1m | filter %s", strings.Join(conditions, " or "))
+	dql := fmt.Sprintf("smartscapeNodes SERVICE, from: now()-10m | filter %s", strings.Join(conditions, " or "))
 	fmt.Printf("  Querying Dynatrace for services with:\n    %s\n", dql)
 
 	remaining := make(map[string]bool, len(serviceNames))
@@ -370,7 +370,7 @@ func waitForServices(envURL, platformToken string, serviceNames []string) {
 			for _, name := range found {
 				if remaining[name] {
 					delete(remaining, name)
-					fmt.Printf("  ✓ \"%s\" appeared in Dynatrace → %s\n", name, appsURL+"/ui/apps/my.getting.started.dieter/")
+					fmt.Printf("  ✓ \"%s\" appeared in Dynatrace → %s\n", name, appsURL+"/ui/apps/dynatrace.quickstart/")
 				}
 			}
 			if len(remaining) == 0 {
