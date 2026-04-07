@@ -2,7 +2,7 @@
 
 ## Why
 
-The OTel Python installer lacks a platform-validation section at entry — it was validated only on macOS, so install-time checks should verify prerequisites and surface clear errors on unsupported configurations.
+The OTel Python installer checks should verify prerequisites and surface clear errors on unsupported configurations.
 
 ## What Changes
 
@@ -24,7 +24,8 @@ The OTel Python installer lacks a platform-validation section at entry — it wa
 
 ## Impact
 
-- `pkg/installer/otel_python.go` — add validation section at top of `InstallOtelPython()`
+- `pkg/installer/otel_python.go` — add validation section at top of `InstallOtelPython()`; env var generation, plan prompting, `DetectPythonPlan`, `Execute`, DQL service polling
+- `pkg/installer/otel_python_venv.go` — new file; Python interpreter detection, venv health checks, pip resolution, stale venv removal (`detectPython`, `validatePythonPrerequisites`, `detectProjectPip`, `isVenvHealthy`, `removeStaleVirtualenv`, `resolveVenvBinary`, `detectProjectVenvDir`)
+- `pkg/installer/otel_python_project.go` — new file; project and process detection, entrypoint discovery, service naming (`PythonProcess`, `PythonProject`, `detectPythonProjects`, `detectPythonProcesses`, `matchProcessesToProjects`, `detectPythonEntrypoints`, `serviceNameFromEntrypoint`, `parseEntrypointFromPyproject`, `getProcessCWD`)
+- `pkg/installer/otel_python_packages.go` — new file; pip/bootstrap package management and project dep installation (`pipCommand`, `otelPythonPackages`, `installPackages`, `runOtelBootstrap`, `bootstrapRequirementsScript`, `normalizePipName`, `listInstalledPipPackages`, `queryBootstrapRequirements`, `ensureFrameworkInstrumentations`, `installProjectDeps`, `projectDepsDescription`)
 - `pkg/installer/otel_process.go` — new file; reusable process lifecycle tracking for any runtime installer
-- `pkg/installer/otel_python_packages.go` — new file; pip/bootstrap package management extracted from `otel_python.go` (`pipCommand`, `otelPythonPackages`, `installPackages`, `runOtelBootstrap`, `bootstrapRequirementsScript`, `normalizePipName`, `listInstalledPipPackages`, `queryBootstrapRequirements`, `ensureFrameworkInstrumentations`)
-- `pkg/installer/otel_python.go` — add `ensureFrameworkInstrumentations()` post-bootstrap verification and direct fallback install

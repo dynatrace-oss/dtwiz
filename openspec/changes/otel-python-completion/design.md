@@ -2,7 +2,7 @@
 
 ## Context
 
-OTel Python instrumentation (`dtwiz install otel-python`) is fully implemented with project detection, entrypoint detection, virtualenv management, package installation, process launch, and Dynatrace verification. However, there is no `dtwiz uninstall otel-python` command, and the installer lacks pre-flight validation checks. The install flow was validated on macOS only.
+OTel Python instrumentation (`dtwiz install otel-python`) is fully implemented with project detection, entrypoint detection, virtualenv management, package installation, process launch, and Dynatrace verification. However, there is no `dtwiz uninstall otel-python` command, and the installer lacks pre-flight validation checks.
 
 Current Python install flow: detect projects → user selects one → detect entrypoints → stop running processes → create venv → install packages → launch with `opentelemetry-instrument` → verify in Dynatrace.
 
@@ -98,15 +98,17 @@ Would work, but bootstrap also installs non-framework instrumentations (asyncio,
 
 ## File Layout
 
-`otel_python.go` grew to over 1,100 lines across three distinct concerns: pip/bootstrap package management, Python project and process detection, and installation orchestration. Following the same pattern used when `otel_process.go` was extracted, pip/bootstrap logic is separated into `otel_python_packages.go`.
+`otel_python.go` grew to over 1,100 lines across four distinct concerns. It has since been split into focused files following the same pattern used when `otel_process.go` was extracted.
 
 | File | Responsibility |
 |---|---|
-| `otel_python_packages.go` | `pipCommand`, `otelPythonPackages`, `installPackages`, `runOtelBootstrap`, `bootstrapRequirementsScript`, `normalizePipName`, `listInstalledPipPackages`, `queryBootstrapRequirements`, `ensureFrameworkInstrumentations` |
+| `otel_python.go` | Env var generation, plan prompting, `DetectPythonPlan`, `Execute`, `InstallOtelPython`, DQL service polling |
+| `otel_python_venv.go` | `detectPython`, `validatePythonPrerequisites`, `resolveVenvBinary`, `detectProjectVenvDir`, `detectProjectPip`, `isVenvHealthy`, `removeStaleVirtualenv` |
+| `otel_python_project.go` | `PythonProcess`, `PythonProject`, `detectPythonProjects`, `detectPythonProcesses`, `matchProcessesToProjects`, `stopProcesses`, `detectPythonEntrypoints`, `serviceNameFromEntrypoint`, `parseEntrypointFromPyproject`, `getProcessCWD` |
+| `otel_python_packages.go` | `pipCommand`, `otelPythonPackages`, `installPackages`, `runOtelBootstrap`, `bootstrapRequirementsScript`, `normalizePipName`, `listInstalledPipPackages`, `queryBootstrapRequirements`, `ensureFrameworkInstrumentations`, `installProjectDeps`, `projectDepsDescription` |
 | `otel_process.go` | `ManagedProcess`, `StartManagedProcess`, `PrintProcessSummary`, port detection |
-| `otel_python.go` | Project/process detection, venv management, env var generation, orchestration (`DetectPythonPlan`, `Execute`, `InstallOtelPython`) |
 
-All three files share the same `installer` package — no interface changes, no new public API.
+All five files share the same `installer` package — no interface changes, no new public API.
 
 ## Risks / Trade-offs
 

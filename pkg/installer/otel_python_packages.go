@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -186,4 +187,57 @@ func ensureFrameworkInstrumentations(pythonBin string, pip *pipCommand) error {
 	}
 
 	return nil
+}
+
+// installProjectDeps installs the project's own dependencies using the
+// appropriate file: requirements.txt, Pipfile, pyproject.toml, or setup.py.
+// Returns the description of what was installed, or "" if nothing found.
+func installProjectDeps(pip *pipCommand, projectPath string) (string, error) {
+	type depSource struct {
+		file    string
+		pipArgs []string
+		label   string
+	}
+	sources := []depSource{
+		{"requirements.txt", []string{"install", "-r"}, "requirements.txt"},
+		{"pyproject.toml", []string{"install", "."}, "pyproject.toml"},
+		{"setup.py", []string{"install", "."}, "setup.py"},
+	}
+
+	for _, src := range sources {
+		srcPath := filepath.Join(projectPath, src.file)
+		if _, err := os.Stat(srcPath); err != nil {
+			continue
+		}
+		args := append(append([]string{}, pip.args...), src.pipArgs...)
+		if src.file == "requirements.txt" {
+			args = append(args, srcPath)
+		}
+		full := pip.name + " " + strings.Join(args, " ")
+		fmt.Printf("\n    %s\n", full)
+		cmd := exec.Command(pip.name, args...)
+		cmd.Dir = projectPath
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			os.Stdout.Write(out)
+			return "", fmt.Errorf("pip install failed (%s): %w\n    command: %s", src.label, err, full)
+		}
+		return src.label, nil
+	}
+	return "", nil
+}
+
+// projectDepsDescription returns a human-readable description of how project
+// dependencies would be installed, or "" if no supported file is found.
+func projectDepsDescription(projectPath string) string {
+	if _, err := os.Stat(filepath.Join(projectPath, "requirements.txt")); err == nil {
+		return "pip install -r requirements.txt"
+	}
+	if _, err := os.Stat(filepath.Join(projectPath, "pyproject.toml")); err == nil {
+		return "pip install . (pyproject.toml)"
+	}
+	if _, err := os.Stat(filepath.Join(projectPath, "setup.py")); err == nil {
+		return "pip install . (setup.py)"
+	}
+	return ""
 }

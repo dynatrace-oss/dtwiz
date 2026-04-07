@@ -13,130 +13,28 @@ import (
 	"github.com/fatih/color"
 )
 
-// detectPython finds a usable Python 3 executable on the current PATH,
-// preferring python3 over python.
-// PythonProcess describes a detected running Python process.
-type PythonProcess struct {
-	PID     int
-	Command string // full command line
-	CWD     string // working directory of the process
-}
-
-// detectPython finds a usable Python 3 interpreter on the current PATH,
-// preferring python3 over python when both are available.
-func detectPython() (string, error) {
-	for _, name := range []string{"python3", "python"} {
-		logger.Debug("checking python interpreter on PATH", "candidate", name)
-		path, err := exec.LookPath(name)
-		if err != nil {
-			logger.Debug("python candidate not found", "name", name)
-			logger.Debug("python interpreter not found on PATH", "candidate", name, "error", err)
-			continue
-		}
-		// Verify it's actually Python 3.
-		out, err := exec.Command(path, "--version").Output()
-		if err != nil {
-			logger.Warn("python version check failed", "path", path, "err", err)
-			continue
-		}
-		version := strings.TrimSpace(string(out))
-		if strings.HasPrefix(version, "Python 3") {
-			logger.Debug("python found", "path", path, "version", version)
-			logger.Debug("python interpreter version probe failed", "candidate", name, "path", path, "error", err)
-			continue
-		}
-		version := strings.TrimSpace(string(out))
-		logger.Debug("python interpreter version probe succeeded", "candidate", name, "path", path, "version", version)
-		if strings.HasPrefix(version, "Python 3") {
-			logger.Debug("selected python interpreter", "candidate", name, "path", path)
-			return path, nil
-		}
-		logger.Debug("python candidate is not Python 3", "path", path, "version", version)
-	}
-	logger.Debug("no usable python 3 interpreter found on PATH")
-	return "", fmt.Errorf("Python 3 interpreter not found — install Python 3 and ensure either `python3` or `python` is in PATH")
-}
-
-// pipCommand holds the resolved pip executable and arguments.
-type pipCommand struct {
-	name string
-	args []string
-}
-
-// otelPythonPackages is the list of OpenTelemetry packages to install for
-// auto-instrumentation, following the Dynatrace documentation.
-var otelPythonPackages = []string{
-	"opentelemetry-distro",
-	"opentelemetry-exporter-otlp",
-}
-
-// installPackages installs the given pip packages using the resolved pip command.
-// Output is suppressed unless the command fails.
-func installPackages(pip *pipCommand, packages []string) error {
-	args := append(append([]string{}, pip.args...), append([]string{"install"}, packages...)...)
-	cmd := exec.Command(pip.name, args...)
-	logger.Debug("running pip install", "cmd", pip.name, "args", strings.Join(args, " "))
-	out, err := cmd.CombinedOutput()
-// validatePythonPrerequisites checks that a Python 3 interpreter, pip, and venv are available.
-func validatePythonPrerequisites() error {
-	pythonBin, err := detectPython()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// runOtelBootstrap runs `opentelemetry-bootstrap -a install` to automatically
-// install instrumentation libraries for all packages found in the environment.
-// Output is suppressed unless the command fails.
-func runOtelBootstrap(pythonPath string) error {
-	cmd := exec.Command(pythonPath, "-m", "opentelemetry.instrumentation.bootstrap", "-a", "install")
-	logger.Debug("running opentelemetry-bootstrap", "python", pythonPath)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		os.Stdout.Write(out)
-		return fmt.Errorf("opentelemetry-bootstrap failed: %w", err)
-	logger.Debug("validating python prerequisites", "python", pythonBin)
-	if out, err := exec.Command(pythonBin, "-m", "pip", "--version").CombinedOutput(); err != nil {
-		logger.Debug("python pip check failed", "python", pythonBin, "output", strings.TrimSpace(string(out)), "error", err)
-		return fmt.Errorf("pip is not available for the detected Python 3 interpreter (%s): %w\n    %s", pythonBin, err, strings.TrimSpace(string(out)))
-	}
-	logger.Debug("python pip check succeeded", "python", pythonBin)
-	if out, err := exec.Command(pythonBin, "-m", "venv", "--help").CombinedOutput(); err != nil {
-		logger.Debug("python venv check failed", "python", pythonBin, "output", strings.TrimSpace(string(out)), "error", err)
-		return fmt.Errorf("venv module is not available for the detected Python 3 interpreter (%s) — on Debian/Ubuntu run: apt install python3-venv: %w\n    %s", pythonBin, err, strings.TrimSpace(string(out)))
-	}
-	logger.Debug("python venv check succeeded", "python", pythonBin)
-	return nil
-}
-
-// generateOtelPythonEnvVars returns the OTEL_* environment variables required
-// for auto-instrumentation to export to Dynatrace.
 func generateOtelPythonEnvVars(apiURL, token, serviceName string) map[string]string {
-	envVars := generateBaseOtelEnvVars(apiURL, token, serviceName)
-	envVars["OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED"] = "true"
-	return envVars
+	return map[string]string{
+		"OTEL_SERVICE_NAME":                                 serviceName,
+		"OTEL_EXPORTER_OTLP_ENDPOINT":                      strings.TrimRight(apiURL, "/") + "/api/v2/otlp",
+		"OTEL_EXPORTER_OTLP_HEADERS":                       "Authorization=Api-Token%20" + token,
+		"OTEL_EXPORTER_OTLP_PROTOCOL":                      "http/protobuf",
+		"OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE": "delta",
+		"OTEL_TRACES_EXPORTER":                             "otlp",
+		"OTEL_METRICS_EXPORTER":                            "otlp",
+		"OTEL_LOGS_EXPORTER":                               "otlp",
+		"OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED":  "true",
+	}
 }
 
-// detectPythonProcesses finds running Python processes (excluding the current
-// process and common system Python processes).
-func detectPythonProcesses() []DetectedProcess {
-	return detectProcesses("python", []string{"pip ", "setup.py"})
-}
-
-// pythonProjectMarkers are the files that indicate a Python project root.
-var pythonProjectMarkers = []string{
-	"pyproject.toml",
-	"setup.py",
-	"setup.cfg",
-	"requirements.txt",
-	"Pipfile",
-	"poetry.lock",
-	"manage.py",
-}
-
-func detectPythonProjects() []ScannedProject {
-	return scanProjectDirs(pythonProjectMarkers, nil)
+// GenerateEnvExportScript returns a shell export script for the given env vars.
+func GenerateEnvExportScript(envVars map[string]string) string {
+	var sb strings.Builder
+	sb.WriteString("# Dynatrace OpenTelemetry auto-instrumentation environment variables\n")
+	for k, v := range envVars {
+		sb.WriteString(fmt.Sprintf("export %s=%q\n", k, v))
+	}
+	return sb.String()
 }
 
 func printManualInstructions(envVars map[string]string) {
@@ -152,11 +50,18 @@ func printManualInstructions(envVars map[string]string) {
 	fmt.Println("    opentelemetry-instrument python your_app.py")
 }
 
-// PythonInstrumentationPlan captures all the user's choices for Python
-// auto-instrumentation so that detection/prompting and execution can happen
-// at different times (e.g. choices upfront, execution after collector install).
+func envVarsToSlice(envVars map[string]string) []string {
+	out := make([]string, 0, len(envVars))
+	for k, v := range envVars {
+		out = append(out, k+"="+v)
+	}
+	return out
+}
+
+// PythonInstrumentationPlan captures user choices for Python auto-instrumentation
+// so that detection/prompting and execution can happen at different times.
 type PythonInstrumentationPlan struct {
-	Project       ScannedProject
+	Project       PythonProject
 	Entrypoints   []string
 	NeedsVenv     bool
 	EnvVars       map[string]string
@@ -164,7 +69,12 @@ type PythonInstrumentationPlan struct {
 	PlatformToken string
 }
 
-func (p *PythonInstrumentationPlan) Runtime() string { return "Python" }
+// DetectPythonPlan scans for Python projects, prompts the user to pick one,
+// and returns a plan. Returns nil if the user skips or no projects are found.
+func DetectPythonPlan(apiURL, token string) *PythonInstrumentationPlan {
+	if _, err := detectPython(); err != nil {
+		return nil
+	}
 
 	projects := detectPythonProjects()
 	procs := detectPythonProcesses()
@@ -222,7 +132,6 @@ func (p *PythonInstrumentationPlan) Runtime() string { return "Python" }
 	needsVenv := !isVenvHealthy(proj.Path)
 	logger.Debug("python project venv evaluation complete", "project", proj.Path, "needs_venv", needsVenv, "entrypoints", entrypoints)
 
-	// Generate env vars using the API URL derived from what the caller provides.
 	envVars := generateOtelPythonEnvVars(apiURL, token, "my-service")
 
 	return &PythonInstrumentationPlan{
@@ -235,100 +144,7 @@ func (p *PythonInstrumentationPlan) Runtime() string { return "Python" }
 	}
 }
 
-func DetectPythonPlan(apiURL, token string) *PythonInstrumentationPlan {
-	if _, err := detectPython(); err != nil {
-		logger.Debug("python not found on PATH", "skipping Python instrumentation")
-		return nil
-	}
-
-	projects, processes := runInParallel(detectPythonProjects, detectPythonProcesses)
-	matchProcessesToProjects(projects, processes)
-
-	if len(projects) == 0 {
-		logger.Debug("no Python projects detected", "skipping Python instrumentation")
-		return nil
-	}
-
-	sel := promptProjectSelection("Python", projects)
-	if sel == nil {
-		return nil
-	}
-
-	return buildPythonInstrumentationPlan(*sel, apiURL, token, "", "")
-}
-
-// installProjectDeps installs the project's own dependencies using the
-// appropriate file: requirements.txt, Pipfile, pyproject.toml, or setup.py.
-// Returns the description of what was installed (for logging), or "" if nothing found.
-func installProjectDeps(pip *pipCommand, projectPath string) (string, error) {
-	// requirements.txt — most common.
-	reqFile := filepath.Join(projectPath, "requirements.txt")
-	if _, err := os.Stat(reqFile); err == nil {
-		args := append(append([]string{}, pip.args...), "install", "-r", reqFile)
-		full := pip.name + " " + strings.Join(args, " ")
-		fmt.Printf("\n    %s\n", full)
-		cmd := exec.Command(pip.name, args...)
-		cmd.Dir = projectPath
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			os.Stdout.Write(out)
-			return "", fmt.Errorf("pip install -r requirements.txt failed: %w\n    command: %s", err, full)
-		}
-		return "requirements.txt", nil
-	}
-
-	// pyproject.toml — pip install .
-	pyproject := filepath.Join(projectPath, "pyproject.toml")
-	if _, err := os.Stat(pyproject); err == nil {
-		args := append(append([]string{}, pip.args...), "install", ".")
-		full := pip.name + " " + strings.Join(args, " ")
-		fmt.Printf("\n    %s\n", full)
-		cmd := exec.Command(pip.name, args...)
-		cmd.Dir = projectPath
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			os.Stdout.Write(out)
-			return "", fmt.Errorf("pip install . (pyproject.toml) failed: %w\n    command: %s", err, full)
-		}
-		return "pyproject.toml", nil
-	}
-
-	// setup.py — pip install .
-	setupPy := filepath.Join(projectPath, "setup.py")
-	if _, err := os.Stat(setupPy); err == nil {
-		args := append(append([]string{}, pip.args...), "install", ".")
-		full := pip.name + " " + strings.Join(args, " ")
-		fmt.Printf("\n    %s\n", full)
-		cmd := exec.Command(pip.name, args...)
-		cmd.Dir = projectPath
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			os.Stdout.Write(out)
-			return "", fmt.Errorf("pip install . (setup.py) failed: %w\n    command: %s", err, full)
-		}
-		return "setup.py", nil
-	}
-
-	return "", nil
-}
-
-// projectDepsDescription returns a human-readable description of how project
-// dependencies would be installed, or "" if no supported file is found.
-func projectDepsDescription(projectPath string) string {
-	if _, err := os.Stat(filepath.Join(projectPath, "requirements.txt")); err == nil {
-		return "pip install -r requirements.txt"
-	}
-	if _, err := os.Stat(filepath.Join(projectPath, "pyproject.toml")); err == nil {
-		return "pip install . (pyproject.toml)"
-	}
-	if _, err := os.Stat(filepath.Join(projectPath, "setup.py")); err == nil {
-		return "pip install . (setup.py)"
-	}
-	return ""
-}
-
-// PrintPlanSteps prints the Python instrumentation steps for inclusion in a
-// combined plan preview.
+// PrintPlanSteps prints the Python instrumentation steps for a combined plan preview.
 func (p *PythonInstrumentationPlan) PrintPlanSteps() {
 	fmt.Printf("     Project: %s\n", p.Project.Path)
 	if len(p.Project.RunningProcessIDs) > 0 {
@@ -356,29 +172,7 @@ func (p *PythonInstrumentationPlan) PrintPlanSteps() {
 	}
 }
 
-func confirmRecreateVirtualenv(venvDir string) (bool, error) {
-	prompt := fmt.Sprintf(
-		"  Existing virtualenv at %s is not usable.\n  A working virtualenv is required to install Python dependencies, add instrumentation packages, and start OTLP ingest reliably.\n  Remove it and recreate it?",
-		venvDir,
-	)
-	return confirmProceed(prompt)
-}
-
-func removeStaleVirtualenv(venvDir string) (bool, error) {
-	confirmed, err := confirmRecreateVirtualenv(venvDir)
-	if err != nil {
-		return false, err
-	}
-	if !confirmed {
-		return false, nil
-	}
-	if err := os.RemoveAll(venvDir); err != nil {
-		return false, fmt.Errorf("remove stale virtualenv %s: %w", venvDir, err)
-	}
-	return true, nil
-}
-
-// Execute runs the Python instrumentation plan (no prompts — assumes already confirmed).
+// Execute runs the Python instrumentation plan (assumes already confirmed).
 func (p *PythonInstrumentationPlan) Execute() {
 	proj := p.Project
 	envVars := p.EnvVars
@@ -390,14 +184,12 @@ func (p *PythonInstrumentationPlan) Execute() {
 		pythonBin = "python3"
 	}
 
-	if len(proj.RunningProcessIDs) > 0 {
+	if len(proj.RunningPIDs) > 0 {
 		fmt.Print("  Stopping running processes... ")
 		stopProcesses(proj.RunningProcessIDs)
 		fmt.Println("done.")
 	}
 
-	// Create venv if needed (no venv exists, or the existing one is unhealthy
-	// because it was created on a different machine / with a removed Python).
 	if p.NeedsVenv {
 		if venvDir := detectProjectVenvDir(proj.Path); venvDir != "" {
 			removed, err := removeStaleVirtualenv(venvDir)
@@ -439,7 +231,6 @@ func (p *PythonInstrumentationPlan) Execute() {
 		}
 	}
 
-	// Install project dependencies before OTel packages so bootstrap can detect them.
 	fmt.Print("  Installing project dependencies... ")
 	installed, err := installProjectDeps(venvPip, proj.Path)
 	if err != nil {
@@ -461,7 +252,6 @@ func (p *PythonInstrumentationPlan) Execute() {
 	}
 	fmt.Println("done.")
 
-	// resolve now that the otel packages are installed
 	otelInstrument = resolveVenvBinary(proj.Path, "opentelemetry-instrument")
 
 	fmt.Print("  Running opentelemetry-bootstrap... ")
@@ -484,7 +274,6 @@ func (p *PythonInstrumentationPlan) Execute() {
 	}
 	fmt.Println("done.")
 
-	// Launch each entrypoint.
 	fmt.Println()
 	var procs []*ManagedProcess
 	for _, ep := range p.Entrypoints {
@@ -520,20 +309,7 @@ func (p *PythonInstrumentationPlan) Execute() {
 		procs = append(procs, mp)
 	}
 
-	if len(startedPIDs) > 0 {
-		time.Sleep(2 * time.Second)
-		fmt.Println()
-		for i, pid := range startedPIDs {
-			port := detectProcessListeningPort(pid)
-			line := fmt.Sprintf("  %s (PID %d)", startedServices[i], pid)
-			if port != "" {
-				line += fmt.Sprintf(" → http://localhost:%s", port)
-			}
-			line += fmt.Sprintf("  [log: %s]", startedLogs[i])
-			fmt.Println(line)
-		}
-	startedServices, startedPIDs := PrintProcessSummary(procs, 2*time.Second)
-	_ = startedPIDs
+	startedServices, _ := PrintProcessSummary(procs, 2*time.Second)
 
 	if len(startedServices) == 0 {
 		fmt.Println()
@@ -546,15 +322,12 @@ func (p *PythonInstrumentationPlan) Execute() {
 	waitForServices(p.EnvURL, p.PlatformToken, startedServices, false)
 }
 
-// dqlResponse is the minimal structure for a Dynatrace DQL query response.
 type dqlResponse struct {
 	Result struct {
 		Records []map[string]interface{} `json:"records"`
 	} `json:"result"`
 }
 
-// waitForServices polls Dynatrace via DQL to check if the started services
-// appear as smartscape SERVICE entities. Prints a link when found.
 func waitForServices(envURL, platformToken string, serviceNames []string) {
 	if len(serviceNames) == 0 || platformToken == "" {
 		return
@@ -563,7 +336,6 @@ func waitForServices(envURL, platformToken string, serviceNames []string) {
 	appsURL := AppsURL(envURL)
 	apiURL := appsURL + "/platform/storage/query/v1/query:execute"
 
-	// Build DQL query for all service names.
 	conditions := make([]string, len(serviceNames))
 	for i, name := range serviceNames {
 		conditions[i] = fmt.Sprintf("name == \"%s\"", name)
@@ -610,12 +382,11 @@ func waitForServices(envURL, platformToken string, serviceNames []string) {
 	}
 }
 
-// querySmartscapeServices executes a DQL query and returns the entity names found.
 func querySmartscapeServices(apiURL, platformToken, dql string) []string {
 	payload := map[string]interface{}{
-		"query":                       dql,
-		"requestTimeoutMilliseconds":  10000,
-		"maxResultRecords":            100,
+		"query":                      dql,
+		"requestTimeoutMilliseconds": 10000,
+		"maxResultRecords":           100,
 	}
 	bodyBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -654,217 +425,13 @@ func querySmartscapeServices(apiURL, platformToken, dql string) []string {
 	return names
 }
 
-// commonEntrypoints are filenames commonly used as Python project entrypoints,
-// checked in priority order.
-var commonEntrypoints = []string{
-	"main.py",
-	"app.py",
-	"run.py",
-	"server.py",
-	"manage.py",
-	"wsgi.py",
-	"asgi.py",
-}
-
-// serviceNameFromEntrypoint derives a human-readable OTEL_SERVICE_NAME from an
-// entrypoint path relative to the project root.
-//
-// Examples:
-//
-//	"app.py"                in project "orderschnitzel" → "orderschnitzel"
-//	"s-frontend/app.py"     in project "orderschnitzel" → "orderschnitzel-s-frontend"
-//	"services/api/main.py"  in project "myapp"          → "myapp-api"
-func serviceNameFromEntrypoint(projectPath, entrypoint string) string {
-	projectName := filepath.Base(projectPath)
-
-	dir := filepath.Dir(entrypoint)
-	if dir == "." || dir == "" {
-		// Entrypoint is in the project root — use project name directly.
-		return projectName
-	}
-
-	// Use the immediate parent folder of the entrypoint as the service qualifier.
-	// e.g. "s-frontend/app.py" → "s-frontend", "services/api/main.py" → "api"
-	servicePart := filepath.Base(dir)
-	return projectName + "-" + servicePart
-}
-
-// detectPythonEntrypoints finds Python entrypoint files in a project.
-// Checks pyproject.toml scripts, common filenames in the project root, and
-// common filenames in immediate subdirectories (for multi-service projects).
-// Returns paths relative to the project root.
-func detectPythonEntrypoints(projectPath string) []string {
-	var entrypoints []string
-
-	// Try pyproject.toml [project.scripts] or [tool.poetry.scripts].
-	pyproject := filepath.Join(projectPath, "pyproject.toml")
-	if data, err := os.ReadFile(pyproject); err == nil {
-		if ep := parseEntrypointFromPyproject(string(data)); ep != "" {
-			entrypoints = append(entrypoints, ep)
-		}
-	}
-	if len(entrypoints) > 0 {
-		return entrypoints
-	}
-
-	// Check common entrypoint filenames in the project root.
-	for _, name := range commonEntrypoints {
-		if _, err := os.Stat(filepath.Join(projectPath, name)); err == nil {
-			logger.Debug("python entrypoint found", "file", name)
-			entrypoints = append(entrypoints, name)
-		}
-	}
-	if len(entrypoints) > 0 {
-		return entrypoints
-	}
-
-	// Check immediate subdirectories (e.g. s-frontend/app.py, s-order/app.py).
-	entries, err := os.ReadDir(projectPath)
-	if err != nil {
-		return nil
-	}
-	for _, e := range entries {
-		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") || e.Name() == "__pycache__" ||
-			e.Name() == "node_modules" {
-			continue
-		}
-		subDir := filepath.Join(projectPath, e.Name())
-		for _, name := range commonEntrypoints {
-			if _, err := os.Stat(filepath.Join(subDir, name)); err == nil {
-				entrypoints = append(entrypoints, filepath.Join(e.Name(), name))
-			}
-		}
-	}
-	return entrypoints
-}
-
-// parseEntrypointFromPyproject extracts a script entrypoint from pyproject.toml content.
-// Looks for patterns like `module:func` under [project.scripts] and converts to module path.
-func parseEntrypointFromPyproject(content string) string {
-	// Simple line-based scan for `name = "module:func"` or `name = "module.submod:func"`.
-	inScripts := false
-	for _, line := range strings.Split(content, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "[") {
-			inScripts = trimmed == "[project.scripts]" || trimmed == "[tool.poetry.scripts]"
-			continue
-		}
-		if !inScripts {
-			continue
-		}
-		// Parse `name = "module:func"`.
-		parts := strings.SplitN(trimmed, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		val := strings.Trim(strings.TrimSpace(parts[1]), "\"'")
-		if colonIdx := strings.Index(val, ":"); colonIdx > 0 {
-			// Convert module path to file: "myapp.main:run" → "myapp/main.py"
-			modPath := val[:colonIdx]
-			return strings.ReplaceAll(modPath, ".", "/") + ".py"
-		}
-	}
-	return ""
-}
-
-// resolveVenvBinary finds a binary in the project's virtualenv bin directory.
-// Returns the absolute path if found, otherwise returns the name for PATH lookup.
-func resolveVenvBinary(projectPath, name string) string {
-	for _, venvName := range []string{".venv", "venv", "env", ".env"} {
-		binPath := filepath.Join(projectPath, venvName, "bin", name)
-		if _, err := os.Stat(binPath); err == nil {
-			return binPath
-		}
-		// Windows.
-		binPath = filepath.Join(projectPath, venvName, "Scripts", name+".exe")
-		if _, err := os.Stat(binPath); err == nil {
-			return binPath
-		}
-	}
-	return name
-}
-
-// detectProjectVenvDir returns the first supported virtualenv directory found
-// in the project, or "" if none exists.
-func detectProjectVenvDir(projectPath string) string {
-	for _, venvName := range []string{".venv", "venv", "env", ".env"} {
-		venvDir := filepath.Join(projectPath, venvName)
-		info, err := os.Stat(venvDir)
-		if err == nil && info.IsDir() {
-			logger.Debug("found project virtualenv directory", "project", projectPath, "venv_dir", venvDir)
-			return venvDir
-		}
-	}
-	logger.Debug("no project virtualenv directory found", "project", projectPath)
-	return ""
-}
-
-// detectProjectPip returns a pipCommand that invokes pip via `python -m pip`
-// using the virtualenv's own Python binary. This avoids executing pip scripts
-// directly, which can fail with ENOENT when a venv's pip shebang points to a
-// Python interpreter that no longer exists at that path (common on macOS with
-// Homebrew or after Python upgrades).
-func detectProjectPip(projectPath string) *pipCommand {
-	for _, venvName := range []string{".venv", "venv", "env", ".env"} {
-		// Unix: prefer python, fall back to python3.
-		for _, pyName := range []string{"python", "python3"} {
-			pyPath := filepath.Join(projectPath, venvName, "bin", pyName)
-			if _, err := os.Stat(pyPath); err == nil {
-				logger.Debug("resolved project pip command", "project", projectPath, "python", pyPath, "venv", venvName)
-				return &pipCommand{name: pyPath, args: []string{"-m", "pip"}}
-			}
-		}
-		// Windows: prefer python.exe, fall back to python3.exe.
-		for _, pyName := range []string{"python.exe", "python3.exe"} {
-			pyPath := filepath.Join(projectPath, venvName, "Scripts", pyName)
-			if _, err := os.Stat(pyPath); err == nil {
-				logger.Debug("resolved project pip command", "project", projectPath, "python", pyPath, "venv", venvName)
-				return &pipCommand{name: pyPath, args: []string{"-m", "pip"}}
-			}
-		}
-	}
-	logger.Debug("could not resolve project pip command", "project", projectPath)
-	return nil
-}
-
-// isVenvHealthy returns true if the project has a virtualenv whose Python
-// binary is actually executable. A venv can exist on disk but be unhealthy when
-// it was created on a different machine or with a Python version that has since
-// been removed (the venv Python is typically a symlink to the system Python
-// that created it — if that binary is gone the whole venv is broken).
-func isVenvHealthy(projectPath string) bool {
-	pip := detectProjectPip(projectPath)
-	if pip == nil {
-		logger.Debug("project virtualenv is not healthy", "project", projectPath, "reason", "no_python_binary_found")
-		return false
-	}
-	// Run `python --version` — the lightest possible smoke-test.
-	out, err := exec.Command(pip.name, "--version").CombinedOutput()
-	if err != nil {
-		logger.Debug("project virtualenv health check failed", "project", projectPath, "python", pip.name, "output", strings.TrimSpace(string(out)), "error", err)
-		return false
-	}
-	logger.Debug("project virtualenv health check succeeded", "project", projectPath, "python", pip.name, "output", strings.TrimSpace(string(out)))
-	return true
-}
-
-// InstallOtelPython sets up OpenTelemetry auto-instrumentation for Python
-// applications. It detects Python projects on the machine and installs
-// packages into the selected project's virtualenv.
-//
-// Parameters:
-//   - envURL:        Dynatrace environment URL
-//   - token:          API token (Ingest scope)
-//   - platformToken:  Platform token (dt0s16.*) for DQL queries (optional)
-//   - serviceName:    OTEL_SERVICE_NAME value (defaults to "my-service" if empty)
-//   - dryRun:         when true, only print what would be done
+// InstallOtelPython sets up OpenTelemetry auto-instrumentation for Python applications.
 func InstallOtelPython(envURL, token, platformToken, serviceName string, dryRun bool) error {
 	if err := validatePythonPrerequisites(); err != nil {
 		return err
 	}
 
 	apiURL := APIURL(envURL)
-
 	if serviceName == "" {
 		serviceName = "my-service"
 	}
@@ -899,7 +466,6 @@ func InstallOtelPython(envURL, token, platformToken, serviceName string, dryRun 
 		return nil
 	}
 
-	// Show the plan.
 	fmt.Println()
 	cyan.Println("  Steps:")
 	plan.PrintPlanSteps()

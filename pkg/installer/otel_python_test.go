@@ -559,128 +559,38 @@ func TestRunOtelBootstrap_ErrorIncludesCommand(t *testing.T) {
 	}
 }
 
-func TestInstallProjectDeps_ErrorIncludesCommand(t *testing.T) {
-	projectDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(projectDir, "requirements.txt"), []byte("flask\n"), 0o644); err != nil {
-		t.Fatalf("write requirements.txt: %v", err)
+func TestGenerateOtelPythonEnvVars(t *testing.T) {
+	vars := generateOtelPythonEnvVars("https://abc123.live.dynatrace.com", "dt0c01.test", "my-svc")
+	if vars["OTEL_SERVICE_NAME"] != "my-svc" {
+		t.Fatalf("OTEL_SERVICE_NAME = %q, want %q", vars["OTEL_SERVICE_NAME"], "my-svc")
 	}
-	pip := &pipCommand{
-		name: filepath.Join(t.TempDir(), "missing-python"),
-		args: []string{"-m", "pip"},
+	if !strings.Contains(vars["OTEL_EXPORTER_OTLP_ENDPOINT"], "/api/v2/otlp") {
+		t.Fatalf("OTEL_EXPORTER_OTLP_ENDPOINT = %q, want to contain /api/v2/otlp", vars["OTEL_EXPORTER_OTLP_ENDPOINT"])
 	}
-
-	_, err := installProjectDeps(pip, projectDir)
-	if err == nil || !strings.Contains(err.Error(), "command:") {
-		t.Fatalf("expected command in error, got %v", err)
+	if vars["OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE"] != "delta" {
+		t.Fatalf("temporality = %q, want delta", vars["OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE"])
 	}
 }
 
-func TestDetectProjectPip_ReturnsPythonMPip(t *testing.T) {
-	projectDir := t.TempDir()
-	pythonPath := createStubVenvPython(t, projectDir, ".venv", "python", true)
-
-	pip := detectProjectPip(projectDir)
-	if pip == nil {
-		t.Fatal("expected pip command, got nil")
-	}
-	if pip.name != pythonPath {
-		t.Fatalf("pip.name = %q, want %q", pip.name, pythonPath)
-	}
-	if len(pip.args) < 2 || pip.args[0] != "-m" || pip.args[1] != "pip" {
-		t.Fatalf("pip.args = %v, want prefix [-m pip]", pip.args)
+func TestGenerateEnvExportScript(t *testing.T) {
+	script := GenerateEnvExportScript(map[string]string{"FOO": "bar"})
+	if !strings.Contains(script, "export FOO=") {
+		t.Fatalf("script = %q, want to contain export FOO=", script)
 	}
 }
 
-func TestDetectProjectPip_NoPipScriptFallback(t *testing.T) {
-	projectDir := t.TempDir()
-	pythonPath := createStubVenvPython(t, projectDir, ".venv", "python3", true)
-	createStubFile(t, filepath.Join(projectDir, ".venv", "bin", "pip3"), "#!/bin/sh\nexit 0\n", 0o755)
-
-	pip := detectProjectPip(projectDir)
-	if pip == nil {
-		t.Fatal("expected pip command, got nil")
+func TestEnvVarsToSlice(t *testing.T) {
+	slice := envVarsToSlice(map[string]string{"A": "1", "B": "2"})
+	if len(slice) != 2 {
+		t.Fatalf("len = %d, want 2", len(slice))
 	}
-	if pip.name != pythonPath {
-		t.Fatalf("pip.name = %q, want %q", pip.name, pythonPath)
-	}
-	if strings.HasSuffix(pip.name, "pip3") {
-		t.Fatalf("detectProjectPip returned pip script instead of python binary: %q", pip.name)
-	}
-	if len(pip.args) < 2 || pip.args[0] != "-m" || pip.args[1] != "pip" {
-		t.Fatalf("pip.args = %v, want prefix [-m pip]", pip.args)
+	joined := strings.Join(slice, ",")
+	if !strings.Contains(joined, "A=1") || !strings.Contains(joined, "B=2") {
+		t.Fatalf("slice = %v, want A=1 and B=2", slice)
 	}
 }
 
-func TestIsVenvHealthy_NoVenv(t *testing.T) {
-	if isVenvHealthy(t.TempDir()) {
-		t.Fatal("expected no venv to be unhealthy")
-	}
-}
-
-func TestIsVenvHealthy_BrokenPython(t *testing.T) {
-	projectDir := t.TempDir()
-	createStubVenvPython(t, projectDir, ".venv", "python", false)
-
-	if isVenvHealthy(projectDir) {
-		t.Fatal("expected broken venv python to be unhealthy")
-	}
-}
-
-func TestIsVenvHealthy_WorkingPython(t *testing.T) {
-	projectDir := t.TempDir()
-	createStubVenvPython(t, projectDir, ".venv", "python", true)
-
-	if !isVenvHealthy(projectDir) {
-		t.Fatal("expected working venv python to be healthy")
-	}
-}
-
-func TestRemoveStaleVirtualenv_UserDeclines(t *testing.T) {
-	venvDir := filepath.Join(t.TempDir(), ".venv")
-	if err := os.MkdirAll(venvDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll() error = %v", err)
-	}
-
-	output := captureStdout(t, func() {
-		withStdinText(t, "n\n", func() {
-			removed, err := removeStaleVirtualenv(venvDir)
-			if err != nil {
-				t.Fatalf("removeStaleVirtualenv() error = %v", err)
-			}
-			if removed {
-				t.Fatal("expected stale venv deletion to be cancelled")
-			}
-		})
-	})
-
-	if _, err := os.Stat(venvDir); err != nil {
-		t.Fatalf("expected venv directory to remain, got %v", err)
-	}
-	if !strings.Contains(output, "working virtualenv is required") || !strings.Contains(output, "OTLP ingest") {
-		t.Fatalf("expected confirmation prompt to explain why recreation is needed, got %q", output)
-	}
-}
-
-func TestRemoveStaleVirtualenv_UserConfirms(t *testing.T) {
-	venvDir := filepath.Join(t.TempDir(), ".venv")
-	if err := os.MkdirAll(venvDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll() error = %v", err)
-	}
-
-	withStdinText(t, "y\n", func() {
-		removed, err := removeStaleVirtualenv(venvDir)
-		if err != nil {
-			t.Fatalf("removeStaleVirtualenv() error = %v", err)
-		}
-		if !removed {
-			t.Fatal("expected stale venv deletion to be confirmed")
-		}
-	})
-
-	if _, err := os.Stat(venvDir); !os.IsNotExist(err) {
-		t.Fatalf("expected venv directory to be removed, got %v", err)
-	}
-}
+// --- Shared test helpers (used across otel_python_*_test.go files) ---
 
 func requireFakePython3(t *testing.T) string {
 	t.Helper()
