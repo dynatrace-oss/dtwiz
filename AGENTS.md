@@ -95,12 +95,21 @@ Before running any block of commands or applying changes, always show the user a
 make build          # go build with ldflags version
 make test           # go test ./...
 make lint           # golangci-lint
-
-# Release:
-git tag v0.x.y && git push origin v0.x.y
-GITHUB_TOKEN=$(gh auth token) goreleaser release --clean
 ```
 
 Archives: `dtwiz_{version}_{os}_{arch}.tar.gz` (Linux/macOS), `.zip` (Windows).
 
-**Changelog:** Every release must update `CHANGELOG.md`. Move items from `[Unreleased]` into a new `[x.y.z] - YYYY-MM-DD` section. Follow [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format with `Added`, `Changed`, `Fixed`, `Removed` subsections as needed.
+### Release checklist
+
+1. **Verify clean state:** `git status` — no uncommitted changes should remain after the release commit.
+2. **Run tests:** `make test` — all must pass.
+3. **Run lint:** `make lint` — check for new issues (pre-existing warnings are acceptable).
+4. **Update `CHANGELOG.md`:**
+   - Move items from `[Unreleased]` into a new `[x.y.z] - YYYY-MM-DD` section.
+   - Follow [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format with `Added`, `Changed`, `Fixed`, `Removed` subsections as needed.
+   - Update footer links: add `[x.y.z]` compare link, update `[Unreleased]` to compare against the new tag.
+5. **Commit:** `git add -A && git commit -m "chore: release vx.y.z"`
+6. **Tag:** `git tag vx.y.z`
+7. **Push:** `git push origin main --tags`
+8. **Release:** `GITHUB_TOKEN=$(gh auth token) goreleaser release --clean`
+9. **Verify:** `gh release list --limit 3` — confirm the new release appears.
