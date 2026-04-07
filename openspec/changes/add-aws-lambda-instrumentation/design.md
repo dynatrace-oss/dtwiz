@@ -34,8 +34,8 @@ All Lambda instrumentation code lives in `pkg/installer/aws_lambda.go`. This fol
 
 The correct layer ARN is resolved dynamically by calling:
 
-```
-GET /api/v1/deployment/lambda/layer?arch={arm|x86}&techtype={runtime}&region={region}&withCollector=included
+```text
+GET /api/v1/deployment/lambda/layer?arch={arm|x86}&techtype={runtime}&region={region}&withCollector=excluded
 ```
 
 This endpoint requires the `InstallerDownload` token scope and returns:
@@ -119,7 +119,7 @@ Each function's update is independent — a failure on one function logs an erro
 
 `InstallAWS()` spawns `InstallAWSLambda()` in a goroutine at the start of its flow. Both run concurrently:
 
-```
+```text
 InstallAWS()
 ├─ go InstallAWSLambda(...)    ← concurrent
 ├─ Create DT monitoring config  ← existing flow
