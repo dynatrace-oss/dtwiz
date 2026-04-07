@@ -7,10 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-04-07
+
 ### Added
 
+- `dtwiz install aws-lambda` — instrument all Lambda functions in the current AWS region with the Dynatrace Lambda Layer (auto-detect runtime, fetch layer ARN from DT API, set connection env vars)
+- `dtwiz uninstall aws-lambda` — remove Dynatrace Lambda Layer and DT_* env vars from all instrumented functions
+- `dtwiz install aws` now runs Lambda instrumentation in parallel alongside CloudFormation deployment (non-fatal, skipped in dry-run)
+- Skip Dynatrace-internal Lambda functions (`DynatraceApiClientFunction`) during install and uninstall
+- Skip container image Lambda functions (layers not supported)
 - `--verbose`/`-v` flag (count-based): enables verbose debug output
 - `--debug`/`-vv` enables debug logging
+- Active DT environment URL shown after banner in `dtwiz setup`
+- Access token and platform token validation before every command
+- CLI login hints when cloud/k8s tools are not detected during analysis
+- OpenSpec workflow for planning changes (`openspec/` directory)
+- GitHub Actions: run tests on PRs
 
 ## [0.1.4] - 2026-03-27
 
@@ -74,7 +86,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/dynatrace-oss/dtwiz/compare/v0.1.4...v0.2.0
 [0.1.4]: https://github.com/dynatrace-oss/dtwiz/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/dynatrace-oss/dtwiz/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/dynatrace-oss/dtwiz/compare/v0.1.1...v0.1.2
