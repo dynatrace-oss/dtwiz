@@ -11,7 +11,6 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
-// otelNodePackages are the npm packages needed for OTel auto-instrumentation.
 var otelNodePackages = []string{
 	"@opentelemetry/sdk-node",
 	"@opentelemetry/auto-instrumentations-node",
@@ -26,14 +25,11 @@ func detectNodeProcesses() []DetectedProcess {
 	return detectProcesses("node", []string{"npm "})
 }
 
-// packageJSON is the minimal structure we read from package.json.
 type packageJSON struct {
 	Main    string            `json:"main"`
 	Scripts map[string]string `json:"scripts"`
 }
 
-// detectNodeEntrypoints infers entry point files for a Node.js project from
-// package.json fields (main, scripts.start) or convention fallbacks.
 func detectNodeEntrypoints(projectPath string) []string {
 	data, err := os.ReadFile(filepath.Join(projectPath, "package.json"))
 	if err != nil {
@@ -53,7 +49,6 @@ func detectNodeEntrypoints(projectPath string) []string {
 
 	if start, ok := pkg.Scripts["start"]; ok && start != "" {
 		logger.Debug("node entrypoint: checking 'scripts.start'", "start", start)
-		// Extract the filename from "node app.js" or "ts-node src/index.ts" etc.
 		parts := strings.Fields(start)
 		for _, part := range parts {
 			if strings.HasSuffix(part, ".js") || strings.HasSuffix(part, ".ts") ||
@@ -67,7 +62,6 @@ func detectNodeEntrypoints(projectPath string) []string {
 		}
 	}
 
-	// Convention fallbacks: check both .js and .ts variants.
 	for _, base := range []string{"index", "app", "server"} {
 		for _, ext := range []string{".js", ".ts", ".mjs", ".cjs", ".mts", ".cts"} {
 			name := base + ext
@@ -98,7 +92,7 @@ func buildNodeInstrumentationPlan(proj ScannedProject, apiURL, token string) *No
 		return nil
 	}
 
-	svcName := serviceNameFromPath(proj.Path)
+	svcName := projectServiceName(proj.Path)
 	envVars := generateBaseOtelEnvVars(apiURL, token, svcName)
 
 	return &NodeInstrumentationPlan{
@@ -108,17 +102,14 @@ func buildNodeInstrumentationPlan(proj ScannedProject, apiURL, token string) *No
 	}
 }
 
-// DetectNodePlan scans for Node.js projects, prompts the user, performs
-// entrypoint detection, and returns a plan or nil.
 func DetectNodePlan(apiURL, token string) *NodeInstrumentationPlan {
 	if _, err := exec.LookPath("node"); err != nil {
 		logger.Debug("node not found on PATH", "skipping Node.js instrumentation")
 		return nil
 	}
 
-	projects := detectNodeProjects()
-	procs := detectNodeProcesses()
-	matchProcessesToProjects(projects, procs)
+	projects, processes := runInParallel(detectNodeProjects, detectNodeProcesses)
+	matchProcessesToProjects(projects, processes)
 
 	if len(projects) == 0 {
 		logger.Debug("no Node.js projects detected", "skipping Node.js instrumentation")
@@ -149,8 +140,8 @@ func (p *NodeInstrumentationPlan) Execute() {
 	fmt.Println()
 	fmt.Println("  Set the following environment variables:")
 	fmt.Println()
-	for k, v := range p.EnvVars {
-		fmt.Printf("    export %s=%q\n", k, v)
+	for _, line := range formatEnvExportLines(p.EnvVars) {
+		fmt.Printf("    %s\n", line)
 	}
 	fmt.Println()
 	if p.Entrypoint != "" {

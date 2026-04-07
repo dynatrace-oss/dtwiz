@@ -457,7 +457,7 @@ func TestPythonInstrumentationPlan_Runtime(t *testing.T) {
 
 func TestPythonInstrumentationPlan_PrintPlanSteps(t *testing.T) {
 	plan := &PythonInstrumentationPlan{
-		Project:     ScannedProject{Path: "/tmp/orderschnitzel", RunningPIDs: []int{111, 222}},
+		Project:     ScannedProject{Path: "/tmp/orderschnitzel", RunningProcessIDs: []int{111, 222}},
 		Entrypoints: []string{"main.py", filepath.Join("api", "app.py")},
 		NeedsVenv:   true,
 	}

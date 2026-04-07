@@ -8,10 +8,8 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
-// otelJavaAgentURL is the download URL for the latest OpenTelemetry Java agent JAR.
 const otelJavaAgentURL = "https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar"
 
-// javaProjectMarkers are the files that indicate a Java project root.
 var javaProjectMarkers = []string{
 	"pom.xml",
 	"build.gradle",
@@ -28,7 +26,6 @@ func detectJavaProcesses() []DetectedProcess {
 	return detectProcesses("java", nil)
 }
 
-// detectJava finds a usable Java runtime on the current PATH.
 func detectJava() (string, error) {
 	path, err := exec.LookPath("java")
 	if err != nil {
@@ -53,16 +50,14 @@ type JavaInstrumentationPlan struct {
 
 func (p *JavaInstrumentationPlan) Runtime() string { return "Java" }
 
-// DetectJavaPlan scans for Java projects, prompts the user, and returns a plan or nil.
 func DetectJavaPlan(apiURL, token string) *JavaInstrumentationPlan {
 	if _, err := exec.LookPath("java"); err != nil {
 		logger.Debug("java not found on PATH", "skipping Java instrumentation")
 		return nil
 	}
 
-	projects := detectJavaProjects()
-	procs := detectJavaProcesses()
-	matchProcessesToProjects(projects, procs)
+	projects, processes := runInParallel(detectJavaProjects, detectJavaProcesses)
+	matchProcessesToProjects(projects, processes)
 
 	if len(projects) == 0 {
 		logger.Debug("no Java projects detected", "skipping Java instrumentation")
@@ -74,7 +69,7 @@ func DetectJavaPlan(apiURL, token string) *JavaInstrumentationPlan {
 		return nil
 	}
 	proj := *sel
-	svcName := serviceNameFromPath(proj.Path)
+	svcName := projectServiceName(proj.Path)
 	envVars := generateBaseOtelEnvVars(apiURL, token, svcName)
 
 	return &JavaInstrumentationPlan{
@@ -96,19 +91,14 @@ func (p *JavaInstrumentationPlan) Execute() {
 	fmt.Println()
 	fmt.Println("  Set the following environment variables:")
 	fmt.Println()
-	for k, v := range p.EnvVars {
-		fmt.Printf("    export %s=%q\n", k, v)
+	for _, line := range formatEnvExportLines(p.EnvVars) {
+		fmt.Printf("    %s\n", line)
 	}
 	fmt.Println()
 	fmt.Println("  Start your Java application with:")
 	fmt.Println("    java -javaagent:opentelemetry-javaagent.jar -jar your_app.jar")
 }
 
-// InstallOtelJava sets up OpenTelemetry auto-instrumentation for Java
-// applications. Downloads the Java agent JAR and prints the required JVM flags
-// and environment variables.
-//
-// TODO: Download the agent JAR, detect running Java processes, offer restart.
 func InstallOtelJava(envURL, token, serviceName string, dryRun bool) error {
 	apiURL := APIURL(envURL)
 
@@ -125,8 +115,8 @@ func InstallOtelJava(envURL, token, serviceName string, dryRun bool) error {
 		fmt.Printf("  Agent JAR:    %s\n", otelJavaAgentURL)
 		fmt.Println()
 		fmt.Println("  Environment variables to set:")
-		for k, v := range envVars {
-			fmt.Printf("    %s=%s\n", k, v)
+		for _, line := range formatPrintableEnvVars(envVars) {
+			fmt.Printf("    %s\n", line)
 		}
 		fmt.Printf("  JVM flag:     -javaagent:opentelemetry-javaagent.jar\n")
 		return nil
@@ -136,7 +126,6 @@ func InstallOtelJava(envURL, token, serviceName string, dryRun bool) error {
 		return err
 	}
 
-	// 2. TODO: Download the OpenTelemetry Java agent JAR.
 	fmt.Printf("  Agent JAR URL: %s\n", otelJavaAgentURL)
 	fmt.Println("  (automatic download coming soon — download manually for now)")
 

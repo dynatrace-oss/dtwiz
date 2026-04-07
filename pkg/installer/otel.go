@@ -13,30 +13,23 @@ import (
 	"github.com/fatih/color"
 )
 
-// InstrumentationPlan is the interface that all runtime instrumentation plans
-// must implement. It allows the orchestrator to work with any runtime
-// uniformly.
 type InstrumentationPlan interface {
 	Runtime() string
 	PrintPlanSteps()
 	Execute()
 }
 
-// runtimeInfo describes a supported runtime for the multi-runtime scanner.
 type runtimeInfo struct {
-	name       string // display name (e.g. "Python", "Java", "Node.js", "Go")
-	binName    string // binary to check on PATH (e.g. "python3", "java", "node", "go")
-	enabled    bool   // if false, this runtime is skipped unless DTWIZ_ALL_RUNTIMES is set
-	detect     func() []detectedProject
+	name    string
+	binName string
+	enabled bool
+	detect  func() []detectedProject
 }
 
-// detectedProject is a project found during the multi-runtime scan.
-// It embeds ScannedProject and adds the runtime name and optional extra
-// metadata (e.g. Go module name).
 type detectedProject struct {
 	ScannedProject
 	Runtime    string
-	ModuleName string // only set for Go projects
+	ModuleName string
 }
 
 func allRuntimesEnabled() bool {
@@ -63,9 +56,8 @@ func detectedProjectsFromScan(runtime string, projects []ScannedProject) []detec
 }
 
 func detectMatchedProjects(runtime string, projectFn func() []ScannedProject, processFn func() []DetectedProcess) []detectedProject {
-	projects := projectFn()
-	procs := processFn()
-	matchProcessesToProjects(projects, procs)
+	projects, processes := runInParallel(projectFn, processFn)
+	matchProcessesToProjects(projects, processes)
 	return detectedProjectsFromScan(runtime, projects)
 }
 
@@ -133,9 +125,9 @@ func detectAllProjects(runtimes []runtimeInfo) []detectedProject {
 func printProjectList(projects []detectedProject) {
 	for i, p := range projects {
 		line := fmt.Sprintf("  [%d]  %s  %s  (%s)", i+1, p.Runtime, p.Path, strings.Join(p.Markers, ", "))
-		if len(p.RunningPIDs) > 0 {
-			pidStrs := make([]string, len(p.RunningPIDs))
-			for j, pid := range p.RunningPIDs {
+		if len(p.RunningProcessIDs) > 0 {
+			pidStrs := make([]string, len(p.RunningProcessIDs))
+			for j, pid := range p.RunningProcessIDs {
 				pidStrs[j] = strconv.Itoa(pid)
 			}
 			line += fmt.Sprintf("  ← PIDs: %s", strings.Join(pidStrs, ", "))
@@ -169,7 +161,7 @@ func selectProject(projects []detectedProject) (detectedProject, bool) {
 }
 
 func createRuntimePlan(proj detectedProject, apiURL, token, envURL, platformToken string) InstrumentationPlan {
-	svcName := serviceNameFromPath(proj.Path)
+	svcName := projectServiceName(proj.Path)
 	envVars := generateBaseOtelEnvVars(apiURL, token, svcName)
 
 	switch proj.Runtime {

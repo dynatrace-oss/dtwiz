@@ -92,7 +92,7 @@ func TestDetectMatchedProjects_AttachesProcessMatches(t *testing.T) {
 	}
 	processFn := func() []DetectedProcess {
 		return []DetectedProcess{
-			{PID: 101, CWD: "/tmp/api"},
+			{PID: 101, WorkingDirectory: "/tmp/api"},
 			{PID: 202, Command: "python /tmp/worker/main.py"},
 		}
 	}
@@ -102,10 +102,10 @@ func TestDetectMatchedProjects_AttachesProcessMatches(t *testing.T) {
 	if len(detected) != 2 {
 		t.Fatalf("expected 2 detected projects, got %d", len(detected))
 	}
-	if got := detected[0].RunningPIDs; len(got) != 1 || got[0] != 101 {
+	if got := detected[0].RunningProcessIDs; len(got) != 1 || got[0] != 101 {
 		t.Fatalf("unexpected running PIDs for first project: %v", got)
 	}
-	if got := detected[1].RunningPIDs; len(got) != 1 || got[0] != 202 {
+	if got := detected[1].RunningProcessIDs; len(got) != 1 || got[0] != 202 {
 		t.Fatalf("unexpected running PIDs for second project: %v", got)
 	}
 }
@@ -113,7 +113,7 @@ func TestDetectMatchedProjects_AttachesProcessMatches(t *testing.T) {
 // TestPrintProjectList_Formatting verifies the project list output format.
 func TestPrintProjectList_Formatting(t *testing.T) {
 	projects := []detectedProject{
-		{ScannedProject: ScannedProject{Path: "/home/user/api", Markers: []string{"requirements.txt"}, RunningPIDs: []int{1234}}, Runtime: "Python"},
+		{ScannedProject: ScannedProject{Path: "/home/user/api", Markers: []string{"requirements.txt"}, RunningProcessIDs: []int{1234}}, Runtime: "Python"},
 		{ScannedProject: ScannedProject{Path: "/home/user/svc", Markers: []string{"pom.xml"}}, Runtime: "Java"},
 		{ScannedProject: ScannedProject{Path: "/home/user/go-svc", Markers: []string{"go.mod"}}, Runtime: "Go", ModuleName: "github.com/example/go-svc"},
 	}

@@ -145,7 +145,7 @@ func buildPythonInstrumentationPlan(proj ScannedProject, apiURL, token, envURL, 
 	}
 
 	needsVenv := detectProjectPip(proj.Path) == nil
-	svcName := serviceNameFromPath(proj.Path)
+	svcName := projectServiceName(proj.Path)
 	envVars := generateOtelPythonEnvVars(apiURL, token, svcName)
 
 	return &PythonInstrumentationPlan{
@@ -158,18 +158,14 @@ func buildPythonInstrumentationPlan(proj ScannedProject, apiURL, token, envURL, 
 	}
 }
 
-// DetectPythonPlan scans for Python projects, shows them to the user, and
-// returns a plan if the user selects one. Returns nil if the user skips or
-// no projects are found.
 func DetectPythonPlan(apiURL, token string) *PythonInstrumentationPlan {
 	if _, err := detectPython(); err != nil {
 		logger.Debug("python not found on PATH", "skipping Python instrumentation")
 		return nil
 	}
 
-	projects := detectPythonProjects()
-	procs := detectPythonProcesses()
-	matchProcessesToProjects(projects, procs)
+	projects, processes := runInParallel(detectPythonProjects, detectPythonProcesses)
+	matchProcessesToProjects(projects, processes)
 
 	if len(projects) == 0 {
 		logger.Debug("no Python projects detected", "skipping Python instrumentation")
@@ -186,9 +182,9 @@ func DetectPythonPlan(apiURL, token string) *PythonInstrumentationPlan {
 
 func (p *PythonInstrumentationPlan) PrintPlanSteps() {
 	fmt.Printf("     Project: %s\n", p.Project.Path)
-	if len(p.Project.RunningPIDs) > 0 {
-		pidStrs := make([]string, len(p.Project.RunningPIDs))
-		for i, pid := range p.Project.RunningPIDs {
+	if len(p.Project.RunningProcessIDs) > 0 {
+		pidStrs := make([]string, len(p.Project.RunningProcessIDs))
+		for i, pid := range p.Project.RunningProcessIDs {
 			pidStrs[i] = strconv.Itoa(pid)
 		}
 		fmt.Printf("     Stop running processes (PIDs: %s)\n", strings.Join(pidStrs, ", "))
@@ -204,7 +200,6 @@ func (p *PythonInstrumentationPlan) PrintPlanSteps() {
 	}
 }
 
-// Execute runs the Python instrumentation plan (no prompts — assumes already confirmed).
 func (p *PythonInstrumentationPlan) Execute() {
 	proj := p.Project
 	envVars := p.EnvVars
@@ -216,14 +211,12 @@ func (p *PythonInstrumentationPlan) Execute() {
 		pythonBin = "python3"
 	}
 
-	// Stop running processes.
-	if len(proj.RunningPIDs) > 0 {
+	if len(proj.RunningProcessIDs) > 0 {
 		fmt.Print("  Stopping running processes... ")
-		stopProcesses(proj.RunningPIDs)
+		stopProcesses(proj.RunningProcessIDs)
 		fmt.Println("done.")
 	}
 
-	// Create venv if needed.
 	if p.NeedsVenv {
 		fmt.Print("  Creating virtualenv... ")
 		pythonPath, err := detectPython()
@@ -274,7 +267,6 @@ func (p *PythonInstrumentationPlan) Execute() {
 	}
 	fmt.Println("done.")
 
-	// Launch each entrypoint.
 	fmt.Println()
 	var startedServices []string
 	var startedPIDs []int
@@ -297,7 +289,7 @@ func (p *PythonInstrumentationPlan) Execute() {
 
 		cmd := exec.Command(otelInstrument, pythonBin, ep)
 		cmd.Dir = proj.Path
-		cmd.Env = append(os.Environ(), envVarsToSlice(epEnvVars)...)
+		cmd.Env = append(os.Environ(), formatEnvVars(epEnvVars)...)
 		cmd.Stdout = logFile
 		cmd.Stderr = logFile
 		if err := cmd.Start(); err != nil {
@@ -310,12 +302,11 @@ func (p *PythonInstrumentationPlan) Execute() {
 		startedLogs = append(startedLogs, logName)
 	}
 
-	// Wait for ports then print a combined summary.
 	if len(startedPIDs) > 0 {
 		time.Sleep(2 * time.Second)
 		fmt.Println()
 		for i, pid := range startedPIDs {
-			port := detectListeningPort(pid)
+			port := detectProcessListeningPort(pid)
 			line := fmt.Sprintf("  %s (PID %d)", startedServices[i], pid)
 			if port != "" {
 				line += fmt.Sprintf(" → http://localhost:%s", port)
@@ -325,7 +316,6 @@ func (p *PythonInstrumentationPlan) Execute() {
 		}
 	}
 
-	// Poll Dynatrace for the services to appear.
 	fmt.Println()
 	fmt.Println("  Waiting for traffic — send requests to your services to generate traces and metrics.")
 	waitForServices(p.EnvURL, p.PlatformToken, startedServices)
@@ -506,8 +496,8 @@ func InstallOtelPython(envURL, token, platformToken, serviceName string, dryRun 
 		fmt.Println("    opentelemetry-bootstrap -a install")
 		fmt.Println()
 		fmt.Println("  Environment variables:")
-		for k, v := range envVars {
-			fmt.Printf("    %s=%s\n", k, v)
+		for _, line := range formatPrintableEnvVars(envVars) {
+			fmt.Printf("    %s\n", line)
 		}
 		return nil
 	}

@@ -18,7 +18,7 @@ var otelGoPackages = []string{
 
 type GoProject struct {
 	ScannedProject
-	ModuleName string // module name extracted from go.mod
+	ModuleName string
 }
 
 func extractGoModuleName(goModPath string) string {
@@ -59,14 +59,15 @@ type GoInstrumentationPlan struct {
 
 func (p *GoInstrumentationPlan) Runtime() string { return "Go" }
 
-// DetectGoPlan scans for Go projects, prompts the user, and returns a plan or nil.
 func DetectGoPlan(apiURL, token string) *GoInstrumentationPlan {
 	if _, err := exec.LookPath("go"); err != nil {
 		logger.Debug("go not found on PATH", "skipping Go instrumentation")
 		return nil
 	}
 
-	projects := detectGoProjects()
+	projects, processes := runInParallel(detectGoProjects, func() []DetectedProcess {
+		return detectProcesses("go", nil)
+	})
 	if len(projects) == 0 {
 		logger.Debug("no Go projects detected", "skipping Go instrumentation")
 		return nil
@@ -77,8 +78,7 @@ func DetectGoPlan(apiURL, token string) *GoInstrumentationPlan {
 		scanned[i] = projects[i].ScannedProject
 	}
 
-	procs := detectProcesses("go", nil)
-	matchProcessesToProjects(scanned, procs)
+	matchProcessesToProjects(scanned, processes)
 
 	sel := promptProjectSelection("Go", scanned)
 	if sel == nil {
@@ -89,12 +89,12 @@ func DetectGoPlan(apiURL, token string) *GoInstrumentationPlan {
 	for _, p := range projects {
 		if p.Path == sel.Path {
 			goProj = p
-			goProj.ScannedProject = *sel // pick up RunningPIDs
+			goProj.ScannedProject = *sel
 			break
 		}
 	}
 
-	svcName := serviceNameFromPath(sel.Path)
+	svcName := projectServiceName(sel.Path)
 	envVars := generateBaseOtelEnvVars(apiURL, token, svcName)
 
 	return &GoInstrumentationPlan{
@@ -103,8 +103,6 @@ func DetectGoPlan(apiURL, token string) *GoInstrumentationPlan {
 	}
 }
 
-// PrintPlanSteps prints the Go SDK integration steps for a combined plan preview.
-// Labeled as "SDK integration (manual)" since Go requires compile-time changes.
 func (p *GoInstrumentationPlan) PrintPlanSteps() {
 	fmt.Printf("     Project:    %s\n", p.Project.Path)
 	if p.Project.ModuleName != "" {
@@ -127,8 +125,8 @@ func (p *GoInstrumentationPlan) Execute() {
 	fmt.Println()
 	fmt.Println("  Set the following environment variables:")
 	fmt.Println()
-	for k, v := range p.EnvVars {
-		fmt.Printf("    export %s=%q\n", k, v)
+	for _, line := range formatEnvExportLines(p.EnvVars) {
+		fmt.Printf("    %s\n", line)
 	}
 	fmt.Println()
 	fmt.Println("  Initialize the OTel SDK in your main() function.")
