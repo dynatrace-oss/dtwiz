@@ -31,6 +31,13 @@ var setupCmd = &cobra.Command{
 		setupPrompt := color.New(color.FgMagenta)
 		setupBadge := color.New(color.FgMagenta, color.Bold)
 
+		if env := environmentHint(); env != "" {
+			setupMuted.Printf(" Environment: %s\n\n", env)
+		} else {
+			setupMuted.Println(" Environment: (not configured)")
+			fmt.Println()
+		}
+
 		setupHeader.Println("  Analyzing system...")
 		setupMuted.Println("  " + strings.Repeat("─", 42))
 		info, err := analyzer.AnalyzeSystem()
@@ -57,7 +64,7 @@ var setupCmd = &cobra.Command{
 		}
 
 		for i, r := range actionable {
-		fmt.Printf("  %s  %s\n", setupBadge.Sprintf("[%d]", i+1), r.Title)
+			fmt.Printf("  %s  %s\n", setupBadge.Sprintf("[%d]", i+1), r.Title)
 		}
 		fmt.Printf("  %s  %s\n", setupMuted.Sprint("[0]"), setupMuted.Sprint("Cancel"))
 		fmt.Println()
