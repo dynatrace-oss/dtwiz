@@ -145,6 +145,22 @@ var installAWSCmd = &cobra.Command{
 	},
 }
 
+var installAWSLambdaCmd = &cobra.Command{
+	Use:   "aws-lambda",
+	Short: "Install Dynatrace Lambda Layer on all functions",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		envURL, accessTok, platformTok, err := getDtEnvironment()
+		if err != nil {
+			return err
+		}
+		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+			return err
+		}
+		return installer.InstallAWSLambda(envURL, accessTok, platformTok, installDryRun, true)
+	},
+}
+
 var installAzureCmd = &cobra.Command{
 	Use:   "azure",
 	Short: "Set up Dynatrace Azure Monitor integration",
@@ -179,6 +195,7 @@ func init() {
 	installCmd.AddCommand(installOtelPythonCmd)
 	installCmd.AddCommand(installOtelJavaCmd)
 	installCmd.AddCommand(installAWSCmd)
+	installCmd.AddCommand(installAWSLambdaCmd)
 	installCmd.AddCommand(installAzureCmd)
 	installCmd.AddCommand(installGCPCmd)
 }
