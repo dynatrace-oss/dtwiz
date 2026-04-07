@@ -9,21 +9,16 @@ import (
 	"strings"
 )
 
-// pipCommand holds the resolved pip executable and arguments.
 type pipCommand struct {
 	name string
 	args []string
 }
 
-// otelPythonPackages is the list of OpenTelemetry packages to install for
-// auto-instrumentation, following the Dynatrace documentation.
 var otelPythonPackages = []string{
 	"opentelemetry-distro",
 	"opentelemetry-exporter-otlp",
 }
 
-// installPackages installs the given pip packages using the resolved pip command.
-// Output is suppressed unless the command fails.
 func installPackages(pip *pipCommand, packages []string) error {
 	args := append(append([]string{}, pip.args...), append([]string{"install"}, packages...)...)
 	cmd := exec.Command(pip.name, args...)
@@ -36,9 +31,6 @@ func installPackages(pip *pipCommand, packages []string) error {
 	return nil
 }
 
-// runOtelBootstrap runs `opentelemetry-bootstrap -a install` to automatically
-// install instrumentation libraries for all packages found in the environment.
-// Output is suppressed unless the command fails.
 func runOtelBootstrap(pythonPath string) error {
 	args := []string{"-m", "opentelemetry.instrumentation.bootstrap", "-a", "install"}
 	cmd := exec.Command(pythonPath, args...)
@@ -51,9 +43,8 @@ func runOtelBootstrap(pythonPath string) error {
 	return nil
 }
 
-// bootstrapRequirementsScript is a Python snippet that calls bootstrap's
-// internal detection API directly (bypassing the broken CLI entry point) and
-// prints the packages that need installing, one per line.
+// bootstrapRequirementsScript calls bootstrap's internal detection API directly,
+// bypassing the CLI entry point, and prints packages that need installing one per line.
 const bootstrapRequirementsScript = `
 import json
 try:
@@ -67,8 +58,6 @@ except Exception as e:
     sys.exit(1)
 `
 
-// normalizePipName applies PEP 503 normalization: lowercase, replace
-// underscores and dots with hyphens.
 func normalizePipName(name string) string {
 	n := strings.ToLower(name)
 	n = strings.ReplaceAll(n, "_", "-")
@@ -76,8 +65,6 @@ func normalizePipName(name string) string {
 	return n
 }
 
-// listInstalledPipPackages returns the set of normalized package names
-// installed in the Python environment.
 func listInstalledPipPackages(pythonBin string) (map[string]bool, error) {
 	out, err := exec.Command(pythonBin, "-m", "pip", "list", "--format=json").Output()
 	if err != nil {
@@ -96,9 +83,8 @@ func listInstalledPipPackages(pythonBin string) (map[string]bool, error) {
 	return set, nil
 }
 
-// queryBootstrapRequirements calls bootstrap's internal detection API via a
-// Python snippet and returns the list of packages that need installing.
-// Returns an error if the API is unavailable (e.g. API change across versions).
+// queryBootstrapRequirements calls bootstrap's internal detection API and returns
+// packages that need installing. Returns an error if the API is unavailable.
 func queryBootstrapRequirements(pythonBin string, installed map[string]bool) ([]string, error) {
 	cmd := exec.Command(pythonBin, "-c", bootstrapRequirementsScript)
 	out, err := cmd.Output()
@@ -119,11 +105,6 @@ func queryBootstrapRequirements(pythonBin string, installed map[string]bool) ([]
 	return pkgs, nil
 }
 
-// ensureFrameworkInstrumentations verifies that opentelemetry-bootstrap
-// actually installed framework-specific instrumentation packages. If it
-// didn't, uses bootstrap's internal detection API to find the needed packages
-// and installs them directly. Prints clear diagnostics so the user knows
-// exactly what happened.
 func ensureFrameworkInstrumentations(pythonBin string, pip *pipCommand) error {
 	installed, err := listInstalledPipPackages(pythonBin)
 	if err != nil {
@@ -189,9 +170,6 @@ func ensureFrameworkInstrumentations(pythonBin string, pip *pipCommand) error {
 	return nil
 }
 
-// installProjectDeps installs the project's own dependencies using the
-// appropriate file: requirements.txt, Pipfile, pyproject.toml, or setup.py.
-// Returns the description of what was installed, or "" if nothing found.
 func installProjectDeps(pip *pipCommand, projectPath string) (string, error) {
 	type depSource struct {
 		file    string
@@ -227,8 +205,6 @@ func installProjectDeps(pip *pipCommand, projectPath string) (string, error) {
 	return "", nil
 }
 
-// projectDepsDescription returns a human-readable description of how project
-// dependencies would be installed, or "" if no supported file is found.
 func projectDepsDescription(projectPath string) string {
 	if _, err := os.Stat(filepath.Join(projectPath, "requirements.txt")); err == nil {
 		return "pip install -r requirements.txt"

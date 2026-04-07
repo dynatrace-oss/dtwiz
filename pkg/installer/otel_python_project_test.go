@@ -211,3 +211,84 @@ func searchString(s, sub string) bool {
 	}
 	return false
 }
+
+func TestDetectPythonProjects_FindsCWD(t *testing.T) {
+	dir := t.TempDir()
+	createStubFile(t, filepath.Join(dir, "requirements.txt"), "flask\n", 0o644)
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("Chdir() error = %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+
+	// EvalSymlinks resolves macOS /var → /private/var; match against the canonical path.
+	expected, _ := filepath.EvalSymlinks(dir)
+	projects := detectPythonProjects()
+	found := false
+	for _, p := range projects {
+		if p.Path == expected {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("detectPythonProjects() did not find project at %q, got %v", expected, projects)
+	}
+}
+
+func TestDetectPythonProjects_FindsSubDir(t *testing.T) {
+	root := t.TempDir()
+	subDir := filepath.Join(root, "myservice")
+	createStubFile(t, filepath.Join(subDir, "pyproject.toml"), "[project]\nname=\"svc\"\n", 0o644)
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("Chdir() error = %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+
+	expectedSub, _ := filepath.EvalSymlinks(subDir)
+	projects := detectPythonProjects()
+	found := false
+	for _, p := range projects {
+		if p.Path == expectedSub {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("detectPythonProjects() did not find subdir project at %q, got %v", expectedSub, projects)
+	}
+}
+
+func TestMatchProcessesToProjects_CommandPathMatch(t *testing.T) {
+	projects := []PythonProject{
+		{Path: "/home/user/myapp"},
+	}
+	procs := []PythonProcess{
+		// process has a different CWD but its command references the project path
+		{PID: 300, Command: "python /home/user/myapp/server.py", CWD: "/tmp"},
+	}
+	matchProcessesToProjects(projects, procs)
+	if len(projects[0].RunningPIDs) != 1 || projects[0].RunningPIDs[0] != 300 {
+		t.Fatalf("RunningPIDs = %v, want [300]", projects[0].RunningPIDs)
+	}
+}
+
+func TestMatchProcessesToProjects_UnrelatedProcess(t *testing.T) {
+	projects := []PythonProject{
+		{Path: "/home/user/myapp"},
+	}
+	procs := []PythonProcess{
+		{PID: 500, Command: "python /other/project/app.py", CWD: "/other/project"},
+	}
+	matchProcessesToProjects(projects, procs)
+	if len(projects[0].RunningPIDs) != 0 {
+		t.Fatalf("RunningPIDs = %v, want empty", projects[0].RunningPIDs)
+	}
+}

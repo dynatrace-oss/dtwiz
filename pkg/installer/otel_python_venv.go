@@ -10,7 +10,6 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
-// detectPython finds a usable Python 3 interpreter on PATH, preferring python3 over python.
 func detectPython() (string, error) {
 	for _, name := range []string{"python3", "python"} {
 		logger.Debug("checking python interpreter on PATH", "candidate", name)
@@ -35,7 +34,6 @@ func detectPython() (string, error) {
 	return "", fmt.Errorf("Python 3 interpreter not found — install Python 3 and ensure either `python3` or `python` is in PATH")
 }
 
-// validatePythonPrerequisites checks that a Python 3 interpreter, pip, and venv are available.
 func validatePythonPrerequisites() error {
 	pythonBin, err := detectPython()
 	if err != nil {
@@ -55,8 +53,6 @@ func validatePythonPrerequisites() error {
 	return nil
 }
 
-// resolveVenvBinary finds a binary in the project's virtualenv bin directory.
-// Returns the absolute path if found, otherwise returns the name for PATH lookup.
 func resolveVenvBinary(projectPath, name string) string {
 	for _, venvName := range []string{".venv", "venv", "env", ".env"} {
 		binPath := filepath.Join(projectPath, venvName, "bin", name)
@@ -71,8 +67,6 @@ func resolveVenvBinary(projectPath, name string) string {
 	return name
 }
 
-// detectProjectVenvDir returns the first supported virtualenv directory found
-// in the project, or "" if none exists.
 func detectProjectVenvDir(projectPath string) string {
 	for _, venvName := range []string{".venv", "venv", "env", ".env"} {
 		venvDir := filepath.Join(projectPath, venvName)
@@ -86,10 +80,8 @@ func detectProjectVenvDir(projectPath string) string {
 	return ""
 }
 
-// detectProjectPip returns a pipCommand that invokes pip via `python -m pip`
-// using the virtualenv's own Python binary. This avoids executing pip scripts
-// directly, which can fail with ENOENT when a venv's pip shebang points to a
-// Python interpreter that no longer exists.
+// detectProjectPip invokes pip via `python -m pip` using the venv's own Python binary
+// to avoid shebang breakage when the venv was created with a Python that no longer exists.
 func detectProjectPip(projectPath string) *pipCommand {
 	for _, venvName := range []string{".venv", "venv", "env", ".env"} {
 		for _, pyName := range []string{"python", "python3"} {
@@ -111,9 +103,8 @@ func detectProjectPip(projectPath string) *pipCommand {
 	return nil
 }
 
-// isVenvHealthy returns true if the project has a virtualenv whose Python
-// binary is actually executable (a venv can exist but be broken if it was
-// created with a Python version that has since been removed).
+// isVenvHealthy returns true if the venv's Python binary is actually executable.
+// A venv can exist but be broken if created with a Python version since removed.
 func isVenvHealthy(projectPath string) bool {
 	pip := detectProjectPip(projectPath)
 	if pip == nil {

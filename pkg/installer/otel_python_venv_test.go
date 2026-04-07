@@ -223,3 +223,84 @@ func TestDetectPython_PrefersPython3(t *testing.T) {
 		t.Fatalf("detectPython() = %q, want python3", got)
 	}
 }
+
+func TestDetectPython_NoPython3Available(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell stubs only work on Unix")
+	}
+	dir := t.TempDir()
+	// only a Python 2 interpreter available
+	createStubFile(t, filepath.Join(dir, "python"), "#!/bin/sh\necho Python 2.7.18\n", 0o755)
+	t.Setenv("PATH", dir)
+
+	_, err := detectPython()
+	if err == nil || !strings.Contains(err.Error(), "Python 3") {
+		t.Fatalf("detectPython() error = %v, want Python 3 not found error", err)
+	}
+}
+
+func TestDetectPython_FallbackToPython(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell stubs only work on Unix")
+	}
+	dir := t.TempDir()
+	// No python3, only python which happens to be Python 3
+	createStubFile(t, filepath.Join(dir, "python"), "#!/bin/sh\necho Python 3.10.0\n", 0o755)
+	t.Setenv("PATH", dir)
+
+	got, err := detectPython()
+	if err != nil {
+		t.Fatalf("detectPython() error = %v", err)
+	}
+	if !strings.HasSuffix(got, "python") {
+		t.Fatalf("detectPython() = %q, want path ending in python", got)
+	}
+}
+
+func TestDetectProjectVenvDir_AlternativeVenvNames(t *testing.T) {
+	for _, venvName := range []string{"venv", "env", ".env"} {
+		t.Run(venvName, func(t *testing.T) {
+			dir := t.TempDir()
+			venvDir := filepath.Join(dir, venvName)
+			if err := os.MkdirAll(venvDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			got := detectProjectVenvDir(dir)
+			if got != venvDir {
+				t.Fatalf("detectProjectVenvDir() = %q, want %q", got, venvDir)
+			}
+		})
+	}
+}
+
+func TestDetectProjectVenvDir_PrefersFirst(t *testing.T) {
+	dir := t.TempDir()
+	// Both .venv and venv exist — .venv is checked first and should win.
+	for _, name := range []string{".venv", "venv"} {
+		if err := os.MkdirAll(filepath.Join(dir, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := detectProjectVenvDir(dir)
+	expected := filepath.Join(dir, ".venv")
+	if got != expected {
+		t.Fatalf("detectProjectVenvDir() = %q, want %q (should prefer .venv)", got, expected)
+	}
+}
+
+func TestResolveVenvBinary_AlternativeVenvNames(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix-only bin/ layout test")
+	}
+	for _, venvName := range []string{"venv", "env", ".env"} {
+		t.Run(venvName, func(t *testing.T) {
+			dir := t.TempDir()
+			binPath := filepath.Join(dir, venvName, "bin", "mybin")
+			createStubFile(t, binPath, "#!/bin/sh\n", 0o755)
+			got := resolveVenvBinary(dir, "mybin")
+			if got != binPath {
+				t.Fatalf("resolveVenvBinary() = %q, want %q", got, binPath)
+			}
+		})
+	}
+}

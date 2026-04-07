@@ -9,14 +9,12 @@ import (
 	"strings"
 )
 
-// PythonProcess describes a detected running Python process.
 type PythonProcess struct {
 	PID     int
 	Command string
 	CWD     string
 }
 
-// PythonProject describes a detected Python project directory.
 type PythonProject struct {
 	Path        string
 	Markers     []string
@@ -33,12 +31,7 @@ var pythonProjectMarkers = []string{
 	"manage.py",
 }
 
-// detectPythonProjects scans common locations for Python project directories.
-// Looks in CWD (+ one level of subdirectories) and common project locations under $HOME.
-//
-// TODO(post-rebase): Replace this implementation with the version from the upstream branch
-// that properly handles Python project detection. This is a placeholder until the rebase
-// on top of the proper handling lands.
+// TODO(post-rebase): Replace with upstream branch version that properly handles Python project detection.
 func detectPythonProjects() []PythonProject {
 	var projects []PythonProject
 	seen := make(map[string]bool)
@@ -103,8 +96,6 @@ func detectPythonProjects() []PythonProject {
 	return projects
 }
 
-// matchProcessesToProjects associates detected Python processes with their
-// project directories by checking CWD and command line.
 func matchProcessesToProjects(projects []PythonProject, procs []PythonProcess) {
 	for i := range projects {
 		projLower := strings.ToLower(projects[i].Path)
@@ -118,7 +109,6 @@ func matchProcessesToProjects(projects []PythonProject, procs []PythonProcess) {
 	}
 }
 
-// stopProcesses sends SIGINT to the given PIDs and waits for them to exit.
 func stopProcesses(pids []int) {
 	for _, pid := range pids {
 		proc, err := os.FindProcess(pid)
@@ -144,8 +134,7 @@ var commonEntrypoints = []string{
 	"asgi.py",
 }
 
-// serviceNameFromEntrypoint derives OTEL_SERVICE_NAME from a project path and entrypoint.
-//
+// serviceNameFromEntrypoint derives OTEL_SERVICE_NAME from project path and entrypoint.
 // Examples:
 //
 //	"app.py"                in "orderschnitzel" → "orderschnitzel"
@@ -161,9 +150,6 @@ func serviceNameFromEntrypoint(projectPath, entrypoint string) string {
 	return projectName + "-" + servicePart
 }
 
-// detectPythonEntrypoints finds Python entrypoint files in a project.
-// Checks pyproject.toml scripts, common filenames in the project root, and
-// common filenames in immediate subdirectories (for multi-service projects).
 func detectPythonEntrypoints(projectPath string) []string {
 	var entrypoints []string
 
@@ -205,8 +191,6 @@ func detectPythonEntrypoints(projectPath string) []string {
 	return entrypoints
 }
 
-// parseEntrypointFromPyproject extracts a script entrypoint from pyproject.toml content.
-// Converts `module:func` under [project.scripts] to a file path.
 func parseEntrypointFromPyproject(content string) string {
 	inScripts := false
 	for _, line := range strings.Split(content, "\n") {
@@ -231,7 +215,6 @@ func parseEntrypointFromPyproject(content string) string {
 	return ""
 }
 
-// detectPythonProcesses finds running Python processes (excluding current process and system processes).
 func detectPythonProcesses() []PythonProcess {
 	out, err := exec.Command("ps", "ax", "-o", "pid=,command=").Output()
 	if err != nil {
@@ -266,7 +249,6 @@ func detectPythonProcesses() []PythonProcess {
 	return procs
 }
 
-// getProcessCWD returns the current working directory of a process using lsof.
 func getProcessCWD(pid int) string {
 	out, err := exec.Command("lsof", "-a", "-d", "cwd", "-p", strconv.Itoa(pid), "-Fn").Output()
 	if err != nil {

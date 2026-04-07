@@ -190,3 +190,55 @@ func captureStdout(t *testing.T, fn func()) string {
 	}
 	return string(out)
 }
+
+func TestStartManagedProcess_CleanExit(t *testing.T) {
+	cmd := managedProcessHelperCommand(t, "exit0")
+	logFile := createManagedProcessLogFile(t)
+	mp, err := StartManagedProcess("svc", filepath.Base(logFile.Name()), cmd, logFile)
+	if err != nil {
+		t.Fatalf("StartManagedProcess() error = %v", err)
+	}
+
+	exited, waitErr := waitForManagedProcessExit(t, mp)
+	if !exited || waitErr != nil {
+		t.Fatalf("WaitResult() = (%v, %v), want (true, nil)", exited, waitErr)
+	}
+}
+
+func TestPrintSummaryLine_Crashed_IncludesLabel(t *testing.T) {
+	p := crashedManagedProcess("my-svc", errors.New("exit status 1"))
+	out := captureStdout(t, func() { p.PrintSummaryLine() })
+	if !strings.Contains(out, "[crashed:") {
+		t.Fatalf("expected [crashed: in output, got %q", out)
+	}
+	if !strings.Contains(out, "my-svc") {
+		t.Fatalf("expected service name in output, got %q", out)
+	}
+}
+
+func TestPrintSummaryLine_CleanExit_IncludesLabel(t *testing.T) {
+	p := cleanExitedManagedProcess("my-svc")
+	out := captureStdout(t, func() { p.PrintSummaryLine() })
+	if !strings.Contains(out, "[exited cleanly]") {
+		t.Fatalf("expected [exited cleanly] in output, got %q", out)
+	}
+}
+
+// TestPrintSummaryLine_Running verifies that a still-running process prints
+// either "[running, port not detected]" (no open port for the fake PID) or
+// a localhost URL if lsof happens to find one — both are valid "running" states.
+func TestPrintSummaryLine_Running_IncludesRunningStatus(t *testing.T) {
+	p := runningManagedProcess("my-svc")
+	out := captureStdout(t, func() { p.PrintSummaryLine() })
+	if !strings.Contains(out, "running") && !strings.Contains(out, "localhost") {
+		t.Fatalf("expected running status in output, got %q", out)
+	}
+}
+
+func TestPrintSummaryLine_LogNameIncluded(t *testing.T) {
+	p := cleanExitedManagedProcess("my-svc") // LogName is "my-svc.log"
+	out := captureStdout(t, func() { p.PrintSummaryLine() })
+	if !strings.Contains(out, "my-svc.log") {
+		t.Fatalf("expected log name in output, got %q", out)
+	}
+}

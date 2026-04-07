@@ -590,6 +590,117 @@ func TestEnvVarsToSlice(t *testing.T) {
 	}
 }
 
+func TestGenerateOtelPythonEnvVars_AllKeys(t *testing.T) {
+	vars := generateOtelPythonEnvVars("https://abc123.live.dynatrace.com", "dt0c01.test", "my-svc")
+	required := []string{
+		"OTEL_SERVICE_NAME",
+		"OTEL_EXPORTER_OTLP_ENDPOINT",
+		"OTEL_EXPORTER_OTLP_HEADERS",
+		"OTEL_EXPORTER_OTLP_PROTOCOL",
+		"OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE",
+		"OTEL_TRACES_EXPORTER",
+		"OTEL_METRICS_EXPORTER",
+		"OTEL_LOGS_EXPORTER",
+		"OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED",
+	}
+	for _, key := range required {
+		if _, ok := vars[key]; !ok {
+			t.Fatalf("missing env var %q", key)
+		}
+	}
+}
+
+func TestGenerateOtelPythonEnvVars_AuthHeaderFormat(t *testing.T) {
+	vars := generateOtelPythonEnvVars("https://abc123.live.dynatrace.com", "dt0c01.TOKEN123", "svc")
+	headers := vars["OTEL_EXPORTER_OTLP_HEADERS"]
+	if !strings.HasPrefix(headers, "Authorization=Api-Token%20") {
+		t.Fatalf("OTEL_EXPORTER_OTLP_HEADERS = %q, want prefix Authorization=Api-Token%%20", headers)
+	}
+	if !strings.Contains(headers, "dt0c01.TOKEN123") {
+		t.Fatalf("OTEL_EXPORTER_OTLP_HEADERS = %q, want to contain token", headers)
+	}
+}
+
+func TestGenerateOtelPythonEnvVars_TrimsTrailingSlash(t *testing.T) {
+	vars := generateOtelPythonEnvVars("https://abc123.live.dynatrace.com/", "dt0c01.test", "svc")
+	ep := vars["OTEL_EXPORTER_OTLP_ENDPOINT"]
+	if strings.Contains(ep, "//api") {
+		t.Fatalf("OTEL_EXPORTER_OTLP_ENDPOINT has double slash: %q", ep)
+	}
+}
+
+func TestGenerateEnvExportScript_AllKeysPresent(t *testing.T) {
+	vars := generateOtelPythonEnvVars("https://abc123.live.dynatrace.com", "dt0c01.test", "my-svc")
+	script := GenerateEnvExportScript(vars)
+	for k := range vars {
+		if !strings.Contains(script, k) {
+			t.Fatalf("script missing key %q, got:\n%s", k, script)
+		}
+	}
+}
+
+func TestEnvVarsToSlice_EmptyMap(t *testing.T) {
+	slice := envVarsToSlice(map[string]string{})
+	if len(slice) != 0 {
+		t.Fatalf("envVarsToSlice(empty) = %v, want empty", slice)
+	}
+}
+
+func TestListInstalledPipPackages_NormalizesNames(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell stubs only work on Unix")
+	}
+	dir := t.TempDir()
+	stub := filepath.Join(dir, "python3")
+	createStubFile(t, stub, "#!/bin/sh\necho '[{\"name\": \"Flask\", \"version\": \"3.0.0\"}, {\"name\": \"my_module\", \"version\": \"1.0\"}]'\n", 0o755)
+
+	packages, err := listInstalledPipPackages(stub)
+	if err != nil {
+		t.Fatalf("listInstalledPipPackages() error = %v", err)
+	}
+	if !packages["flask"] {
+		t.Fatalf("expected normalized flask in packages, got %v", packages)
+	}
+	if !packages["my-module"] {
+		t.Fatalf("expected normalized my-module in packages, got %v", packages)
+	}
+}
+
+func TestQueryBootstrapRequirements_ParsesPackageNames(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell stubs only work on Unix")
+	}
+	dir := t.TempDir()
+	stub := filepath.Join(dir, "python3")
+	createStubFile(t, stub, "#!/bin/sh\necho 'opentelemetry-instrumentation-flask'\necho 'opentelemetry-instrumentation-requests'\n", 0o755)
+
+	pkgs, err := queryBootstrapRequirements(stub, map[string]bool{})
+	if err != nil {
+		t.Fatalf("queryBootstrapRequirements() error = %v", err)
+	}
+	if !strings.Contains(strings.Join(pkgs, ","), "opentelemetry-instrumentation-flask") {
+		t.Fatalf("queryBootstrapRequirements() = %v, want flask", pkgs)
+	}
+}
+
+func TestQueryBootstrapRequirements_SkipsAlreadyInstalled(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell stubs only work on Unix")
+	}
+	dir := t.TempDir()
+	stub := filepath.Join(dir, "python3")
+	createStubFile(t, stub, "#!/bin/sh\necho 'opentelemetry-instrumentation-flask'\n", 0o755)
+
+	installed := map[string]bool{"opentelemetry-instrumentation-flask": true}
+	pkgs, err := queryBootstrapRequirements(stub, installed)
+	if err != nil {
+		t.Fatalf("queryBootstrapRequirements() error = %v", err)
+	}
+	if len(pkgs) != 0 {
+		t.Fatalf("queryBootstrapRequirements() = %v, want empty (already installed)", pkgs)
+	}
+}
+
 // --- Shared test helpers (used across otel_python_*_test.go files) ---
 
 func requireFakePython3(t *testing.T) string {

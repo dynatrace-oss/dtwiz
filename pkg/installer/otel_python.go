@@ -16,18 +16,17 @@ import (
 func generateOtelPythonEnvVars(apiURL, token, serviceName string) map[string]string {
 	return map[string]string{
 		"OTEL_SERVICE_NAME":                                 serviceName,
-		"OTEL_EXPORTER_OTLP_ENDPOINT":                      strings.TrimRight(apiURL, "/") + "/api/v2/otlp",
-		"OTEL_EXPORTER_OTLP_HEADERS":                       "Authorization=Api-Token%20" + token,
-		"OTEL_EXPORTER_OTLP_PROTOCOL":                      "http/protobuf",
+		"OTEL_EXPORTER_OTLP_ENDPOINT":                       strings.TrimRight(apiURL, "/") + "/api/v2/otlp",
+		"OTEL_EXPORTER_OTLP_HEADERS":                        "Authorization=Api-Token%20" + token,
+		"OTEL_EXPORTER_OTLP_PROTOCOL":                       "http/protobuf",
 		"OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE": "delta",
-		"OTEL_TRACES_EXPORTER":                             "otlp",
-		"OTEL_METRICS_EXPORTER":                            "otlp",
-		"OTEL_LOGS_EXPORTER":                               "otlp",
+		"OTEL_TRACES_EXPORTER":                              "otlp",
+		"OTEL_METRICS_EXPORTER":                             "otlp",
+		"OTEL_LOGS_EXPORTER":                                "otlp",
 		"OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED":  "true",
 	}
 }
 
-// GenerateEnvExportScript returns a shell export script for the given env vars.
 func GenerateEnvExportScript(envVars map[string]string) string {
 	var sb strings.Builder
 	sb.WriteString("# Dynatrace OpenTelemetry auto-instrumentation environment variables\n")
@@ -58,8 +57,6 @@ func envVarsToSlice(envVars map[string]string) []string {
 	return out
 }
 
-// PythonInstrumentationPlan captures user choices for Python auto-instrumentation
-// so that detection/prompting and execution can happen at different times.
 type PythonInstrumentationPlan struct {
 	Project       PythonProject
 	Entrypoints   []string
@@ -69,8 +66,6 @@ type PythonInstrumentationPlan struct {
 	PlatformToken string
 }
 
-// DetectPythonPlan scans for Python projects, prompts the user to pick one,
-// and returns a plan. Returns nil if the user skips or no projects are found.
 func DetectPythonPlan(apiURL, token string) *PythonInstrumentationPlan {
 	if _, err := detectPython(); err != nil {
 		return nil
@@ -144,7 +139,6 @@ func DetectPythonPlan(apiURL, token string) *PythonInstrumentationPlan {
 	}
 }
 
-// PrintPlanSteps prints the Python instrumentation steps for a combined plan preview.
 func (p *PythonInstrumentationPlan) PrintPlanSteps() {
 	fmt.Printf("     Project: %s\n", p.Project.Path)
 	if len(p.Project.RunningProcessIDs) > 0 {
@@ -172,7 +166,6 @@ func (p *PythonInstrumentationPlan) PrintPlanSteps() {
 	}
 }
 
-// Execute runs the Python instrumentation plan (assumes already confirmed).
 func (p *PythonInstrumentationPlan) Execute() {
 	proj := p.Project
 	envVars := p.EnvVars
@@ -425,7 +418,6 @@ func querySmartscapeServices(apiURL, platformToken, dql string) []string {
 	return names
 }
 
-// InstallOtelPython sets up OpenTelemetry auto-instrumentation for Python applications.
 func InstallOtelPython(envURL, token, platformToken, serviceName string, dryRun bool) error {
 	if err := validatePythonPrerequisites(); err != nil {
 		return err

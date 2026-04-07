@@ -9,7 +9,6 @@ import (
 	"time"
 )
 
-// ManagedProcess tracks a launched service process and the cached result of cmd.Wait().
 type ManagedProcess struct {
 	Name           string
 	PID            int
@@ -20,7 +19,6 @@ type ManagedProcess struct {
 	resultConsumed bool
 }
 
-// StartManagedProcess starts cmd in the background and writes stdout/stderr to logFile.
 func StartManagedProcess(name, logName string, cmd *exec.Cmd, logFile *os.File) (*ManagedProcess, error) {
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
@@ -43,9 +41,7 @@ func StartManagedProcess(name, logName string, cmd *exec.Cmd, logFile *os.File) 
 	}, nil
 }
 
-// WaitResult performs a non-blocking check of the process exit channel.
-// Returns (exited=true, err) if the process has already exited, or
-// (exited=false, nil) if it is still running.
+// WaitResult is a non-blocking check of the process exit channel.
 // The first received cmd.Wait result is cached and returned on later calls.
 func (p *ManagedProcess) WaitResult() (exited bool, err error) {
 	if p.resultConsumed {
@@ -62,13 +58,6 @@ func (p *ManagedProcess) WaitResult() (exited bool, err error) {
 	}
 }
 
-// PrintSummaryLine prints a one-line status for the process:
-//   - crashed with exit error → [crashed: <err> — check log for details]
-//   - exited cleanly          → [exited cleanly]
-//   - running with known port → → http://localhost:<port>
-//   - running, no port found  → [running, port not detected]
-//
-// The log filename is always appended so the user knows where to look.
 func (p *ManagedProcess) PrintSummaryLine() {
 	listeningPort := detectListeningPort(p.PID)
 	hasExited, waitErr := p.WaitResult()
@@ -89,8 +78,6 @@ func (p *ManagedProcess) PrintSummaryLine() {
 	fmt.Println(statusLine)
 }
 
-// PrintProcessSummary waits for startup to settle, prints one summary line per process,
-// and returns the processes that are still running.
 func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) (aliveNames []string, alivePIDs []int) {
 	if len(procs) == 0 {
 		return
@@ -108,8 +95,6 @@ func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) 
 	return
 }
 
-// detectListeningPort uses lsof to find the TCP port a process is listening on.
-// Returns the port string or "" if none found.
 func detectListeningPort(pid int) string {
 	out, err := exec.Command("lsof", "-a", "-i", "TCP", "-sTCP:LISTEN", "-p", strconv.Itoa(pid), "-Fn", "-P").Output()
 	if err != nil {
