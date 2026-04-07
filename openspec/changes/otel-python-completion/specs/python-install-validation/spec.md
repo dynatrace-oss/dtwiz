@@ -27,8 +27,9 @@ The `InstallOtelPython()` function SHALL validate prerequisites before proceedin
 
 - **WHEN** a `.venv` (or `venv`, `env`, `.env`) directory exists in the project but its Python binary fails to execute (e.g. the symlink target or the concrete interpreter path from the original machine no longer exists on the current machine)
 - **THEN** `isVenvHealthy()` SHALL return false by running `venvPython --version` as a smoke-test
-- **AND** the plan SHALL set `NeedsVenv = true`, causing `Execute()` to delete the stale venv directory and recreate it using the current machine's `python3`
+- **AND** the plan SHALL set `NeedsVenv = true`, causing `Execute()` to prompt the user before deleting the stale venv directory and recreating it using the current machine's Python 3 interpreter
 - **AND** the plan preview SHALL inform the user: *"Recreate virtualenv (.venv) — existing venv is from a different environment"*
+- **AND** the confirmation prompt SHALL explain that a working virtualenv is required so Python dependencies, instrumentation packages, and OTLP export can be installed and started reliably
 - **SO THAT** the setup flow is fully environment-agnostic and works regardless of where the venv was originally created
 
 #### Scenario: venv module not available

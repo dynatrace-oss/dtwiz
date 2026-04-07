@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -492,4 +493,281 @@ func TestPythonInstrumentationPlan_ExecuteFailsWithoutPythonForVenvCreation(t *t
 			t.Fatalf("expected output to contain %q, got:\n%s", check, output)
 		}
 	}
+}
+func TestValidatePythonPrerequisites_PythonNotFound(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+
+	err := validatePythonPrerequisites()
+	if err == nil || !strings.Contains(err.Error(), "Python 3") {
+		t.Fatalf("expected Python 3 error, got %v", err)
+	}
+}
+
+func TestValidatePythonPrerequisites_PipNotFound(t *testing.T) {
+	pythonDir := requireFakePython3(t)
+	t.Setenv("PATH", pythonDir)
+	t.Setenv("DTWIZ_TEST_FAIL_PIP", "1")
+
+	err := validatePythonPrerequisites()
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "pip") {
+		t.Fatalf("expected pip error, got %v", err)
+	}
+}
+
+func TestValidatePythonPrerequisites_VenvNotFound(t *testing.T) {
+	pythonDir := requireFakePython3(t)
+	t.Setenv("PATH", pythonDir)
+	t.Setenv("DTWIZ_TEST_FAIL_VENV", "1")
+
+	err := validatePythonPrerequisites()
+	if err == nil {
+		t.Fatal("expected venv error, got nil")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "venv") {
+		t.Fatalf("expected venv error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "apt install python3-venv") {
+		t.Fatalf("expected install suggestion, got %v", err)
+	}
+}
+
+func TestValidatePythonPrerequisites_AllPresent(t *testing.T) {
+	pythonDir := requireFakePython3(t)
+	t.Setenv("PATH", pythonDir)
+
+	if err := validatePythonPrerequisites(); err != nil {
+		t.Fatalf("validatePythonPrerequisites() error = %v", err)
+	}
+}
+
+func TestInstallPackages_ErrorIncludesCommand(t *testing.T) {
+	pip := &pipCommand{
+		name: filepath.Join(t.TempDir(), "missing-python"),
+		args: []string{"-m", "pip"},
+	}
+
+	err := installPackages(pip, []string{"opentelemetry-distro"})
+	if err == nil || !strings.Contains(err.Error(), "command:") {
+		t.Fatalf("expected command in error, got %v", err)
+	}
+}
+
+func TestRunOtelBootstrap_ErrorIncludesCommand(t *testing.T) {
+	err := runOtelBootstrap(filepath.Join(t.TempDir(), "missing-python"))
+	if err == nil || !strings.Contains(err.Error(), "command:") {
+		t.Fatalf("expected command in error, got %v", err)
+	}
+}
+
+func TestInstallProjectDeps_ErrorIncludesCommand(t *testing.T) {
+	projectDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(projectDir, "requirements.txt"), []byte("flask\n"), 0o644); err != nil {
+		t.Fatalf("write requirements.txt: %v", err)
+	}
+	pip := &pipCommand{
+		name: filepath.Join(t.TempDir(), "missing-python"),
+		args: []string{"-m", "pip"},
+	}
+
+	_, err := installProjectDeps(pip, projectDir)
+	if err == nil || !strings.Contains(err.Error(), "command:") {
+		t.Fatalf("expected command in error, got %v", err)
+	}
+}
+
+func TestDetectProjectPip_ReturnsPythonMPip(t *testing.T) {
+	projectDir := t.TempDir()
+	pythonPath := createStubVenvPython(t, projectDir, ".venv", "python", true)
+
+	pip := detectProjectPip(projectDir)
+	if pip == nil {
+		t.Fatal("expected pip command, got nil")
+	}
+	if pip.name != pythonPath {
+		t.Fatalf("pip.name = %q, want %q", pip.name, pythonPath)
+	}
+	if len(pip.args) < 2 || pip.args[0] != "-m" || pip.args[1] != "pip" {
+		t.Fatalf("pip.args = %v, want prefix [-m pip]", pip.args)
+	}
+}
+
+func TestDetectProjectPip_NoPipScriptFallback(t *testing.T) {
+	projectDir := t.TempDir()
+	pythonPath := createStubVenvPython(t, projectDir, ".venv", "python3", true)
+	createStubFile(t, filepath.Join(projectDir, ".venv", "bin", "pip3"), "#!/bin/sh\nexit 0\n", 0o755)
+
+	pip := detectProjectPip(projectDir)
+	if pip == nil {
+		t.Fatal("expected pip command, got nil")
+	}
+	if pip.name != pythonPath {
+		t.Fatalf("pip.name = %q, want %q", pip.name, pythonPath)
+	}
+	if strings.HasSuffix(pip.name, "pip3") {
+		t.Fatalf("detectProjectPip returned pip script instead of python binary: %q", pip.name)
+	}
+	if len(pip.args) < 2 || pip.args[0] != "-m" || pip.args[1] != "pip" {
+		t.Fatalf("pip.args = %v, want prefix [-m pip]", pip.args)
+	}
+}
+
+func TestIsVenvHealthy_NoVenv(t *testing.T) {
+	if isVenvHealthy(t.TempDir()) {
+		t.Fatal("expected no venv to be unhealthy")
+	}
+}
+
+func TestIsVenvHealthy_BrokenPython(t *testing.T) {
+	projectDir := t.TempDir()
+	createStubVenvPython(t, projectDir, ".venv", "python", false)
+
+	if isVenvHealthy(projectDir) {
+		t.Fatal("expected broken venv python to be unhealthy")
+	}
+}
+
+func TestIsVenvHealthy_WorkingPython(t *testing.T) {
+	projectDir := t.TempDir()
+	createStubVenvPython(t, projectDir, ".venv", "python", true)
+
+	if !isVenvHealthy(projectDir) {
+		t.Fatal("expected working venv python to be healthy")
+	}
+}
+
+func TestRemoveStaleVirtualenv_UserDeclines(t *testing.T) {
+	venvDir := filepath.Join(t.TempDir(), ".venv")
+	if err := os.MkdirAll(venvDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	output := captureStdout(t, func() {
+		withStdinText(t, "n\n", func() {
+			removed, err := removeStaleVirtualenv(venvDir)
+			if err != nil {
+				t.Fatalf("removeStaleVirtualenv() error = %v", err)
+			}
+			if removed {
+				t.Fatal("expected stale venv deletion to be cancelled")
+			}
+		})
+	})
+
+	if _, err := os.Stat(venvDir); err != nil {
+		t.Fatalf("expected venv directory to remain, got %v", err)
+	}
+	if !strings.Contains(output, "working virtualenv is required") || !strings.Contains(output, "OTLP ingest") {
+		t.Fatalf("expected confirmation prompt to explain why recreation is needed, got %q", output)
+	}
+}
+
+func TestRemoveStaleVirtualenv_UserConfirms(t *testing.T) {
+	venvDir := filepath.Join(t.TempDir(), ".venv")
+	if err := os.MkdirAll(venvDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	withStdinText(t, "y\n", func() {
+		removed, err := removeStaleVirtualenv(venvDir)
+		if err != nil {
+			t.Fatalf("removeStaleVirtualenv() error = %v", err)
+		}
+		if !removed {
+			t.Fatal("expected stale venv deletion to be confirmed")
+		}
+	})
+
+	if _, err := os.Stat(venvDir); !os.IsNotExist(err) {
+		t.Fatalf("expected venv directory to be removed, got %v", err)
+	}
+}
+
+func requireFakePython3(t *testing.T) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("shell helper for python prerequisite tests is only used on Unix-like platforms")
+	}
+	dir := t.TempDir()
+	createStubFile(t, filepath.Join(dir, "python3"), `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "Python 3.12.0"
+  exit 0
+fi
+if [ "$1" = "-m" ] && [ "$2" = "pip" ] && [ "$3" = "--version" ]; then
+  if [ "${DTWIZ_TEST_FAIL_PIP:-0}" = "1" ]; then
+    echo "pip unavailable" >&2
+    exit 1
+  fi
+  echo "pip 24.0 from /tmp/site-packages/pip"
+  exit 0
+fi
+if [ "$1" = "-m" ] && [ "$2" = "venv" ] && [ "$3" = "--help" ]; then
+  if [ "${DTWIZ_TEST_FAIL_VENV:-0}" = "1" ]; then
+    echo "venv unavailable" >&2
+    exit 1
+  fi
+  echo "usage: venv"
+  exit 0
+fi
+echo "unexpected args: $@" >&2
+exit 1
+`, 0o755)
+	return dir
+}
+
+func createStubVenvPython(t *testing.T, projectDir, venvName, pythonName string, executable bool) string {
+	t.Helper()
+	binDir := filepath.Join(projectDir, venvName, "bin")
+	if runtime.GOOS == "windows" {
+		binDir = filepath.Join(projectDir, venvName, "Scripts")
+		if !strings.HasSuffix(pythonName, ".exe") {
+			pythonName += ".exe"
+		}
+	}
+	mode := os.FileMode(0o644)
+	content := "stub"
+	if executable {
+		mode = 0o755
+		if runtime.GOOS == "windows" {
+			content = "MZ"
+		} else {
+			content = "#!/bin/sh\necho Python 3.12.0\n"
+		}
+	}
+	path := filepath.Join(binDir, pythonName)
+	createStubFile(t, path, content, mode)
+	return path
+}
+
+func createStubFile(t *testing.T, path, content string, mode os.FileMode) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, []byte(content), mode); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func withStdinText(t *testing.T, input string, fn func()) {
+	t.Helper()
+	stdinFile, err := os.CreateTemp(t.TempDir(), "stdin-*.txt")
+	if err != nil {
+		t.Fatalf("CreateTemp() error = %v", err)
+	}
+	if _, err := stdinFile.WriteString(input); err != nil {
+		t.Fatalf("WriteString() error = %v", err)
+	}
+	if _, err := stdinFile.Seek(0, 0); err != nil {
+		t.Fatalf("Seek() error = %v", err)
+	}
+
+	originalStdin := os.Stdin
+	os.Stdin = stdinFile
+	defer func() {
+		os.Stdin = originalStdin
+		_ = stdinFile.Close()
+	}()
+
+	fn()
 }

@@ -36,7 +36,7 @@ The fix is to never exec these scripts directly. Instead, pass them as arguments
 **3. Use a venv health check rather than always recreating**
 A stale venv must be detected and replaced before any installation work. The simplest signal is whether the venv's own Python binary actually executes. Running a trivial version probe is cheap, cross-platform, and catches all failure modes: broken symlink, removed interpreter, relocated venv directory.
 
-If the probe fails, the stale venv is removed and recreated using the current machine's Python. The plan preview distinguishes "create" from "recreate" so the user understands what happened.
+If the probe fails, the stale venv is scheduled for recreation using the current machine's Python. The plan preview distinguishes "create" from "recreate" so the user understands what happened, and `Execute()` asks for confirmation before deleting the existing venv directory. The confirmation explains that a working virtualenv is required so Python auto-instrumentation can install packages and export data reliably.
 
 **4. Include the executed command in error messages**
 When a subprocess fails, the OS error alone is not enough to diagnose the problem — the binary path matters. All pip and bootstrap errors include the full command that was run so the user can reproduce the failure directly without re-running dtwiz.
@@ -54,6 +54,9 @@ This logic is extracted into `pkg/installer/otel_process.go` (`ManagedProcess`, 
 
 **Always recreate the venv instead of health-checking it**
 Simpler code path — no `isVenvHealthy()` needed. Rejected because it discards the user's installed packages and adds significant install time on every run, even when the venv is perfectly healthy.
+
+**Automatically delete a stale venv without a second confirmation**
+Simpler execution flow once the plan is confirmed. Rejected because removing a virtualenv is still destructive local state change, and directories such as `env` or `.env` are user-visible enough that the installer should make the delete step explicit at the moment it happens.
 
 **`python -m venv --upgrade` to repair a stale venv**
 The `--upgrade` flag re-links the venv to a new Python. Rejected because it requires the *original* Python version to still be present (or a compatible one), which is exactly the scenario we are recovering from. A clean recreate is more reliable.
