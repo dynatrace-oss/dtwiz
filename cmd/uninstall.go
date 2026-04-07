@@ -47,6 +47,15 @@ var uninstallAWSCmd = &cobra.Command{
 	},
 }
 
+var uninstallAWSLambdaCmd = &cobra.Command{
+	Use:   "aws-lambda",
+	Short: "Remove Dynatrace Lambda Layer from all functions",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return installer.UninstallAWSLambda(uninstallDryRun)
+	},
+}
+
 var uninstallOtelCmd = &cobra.Command{
 	Use:   "otel",
 	Short: "Kill running OTel Collector processes and remove installation files",
@@ -74,6 +83,7 @@ func init() {
 	uninstallCmd.AddCommand(uninstallKubernetesCmd)
 	uninstallCmd.AddCommand(uninstallOneAgentCmd)
 	uninstallCmd.AddCommand(uninstallAWSCmd)
+	uninstallCmd.AddCommand(uninstallAWSLambdaCmd)
 	uninstallCmd.AddCommand(uninstallOtelCmd)
 	uninstallCmd.AddCommand(uninstallSelfCmd)
 }

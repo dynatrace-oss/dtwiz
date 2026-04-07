@@ -10,14 +10,13 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 
 	"github.com/fatih/color"
 )
 
 // awsTemplateURL is the pinned Dynatrace CloudFormation template.
 const awsTemplateURL = "https://dynatrace-data-acquisition.s3.amazonaws.com/aws/deployment/cfn/v1.0.0/da-aws-activation.yaml"
-
-
 
 // awsStackConfig holds all values required to render aws.tmpl and drive the
 // CloudFormation deployment.
@@ -232,18 +231,18 @@ func createDTMonitoringConfig(apiURL, token, accountID, region string) (string, 
 							"accountId":    accountID,
 						},
 					},
-					"regionFiltering": []string{region},
-					"tagFiltering":    []interface{}{},
-					"tagEnrichment":   []interface{}{},
-					"smartscapeConfiguration":        map[string]interface{}{"enabled": true},
-					"metricsConfiguration":           map[string]interface{}{"enabled": true, "regions": []string{region}},
-					"cloudWatchLogsConfiguration":    map[string]interface{}{"enabled": false, "regions": []string{region}},
-					"namespaces":                     []interface{}{},
-					"configurationMode":              "QUICK_START",
-					"deploymentMode":                 "AUTOMATED",
-					"deploymentScope":                "SINGLE_ACCOUNT",
-					"manualDeploymentStatus":         "NA",
-					"automatedDeploymentStatus":      "NA",
+					"regionFiltering":             []string{region},
+					"tagFiltering":                []interface{}{},
+					"tagEnrichment":               []interface{}{},
+					"smartscapeConfiguration":     map[string]interface{}{"enabled": true},
+					"metricsConfiguration":        map[string]interface{}{"enabled": true, "regions": []string{region}},
+					"cloudWatchLogsConfiguration": map[string]interface{}{"enabled": false, "regions": []string{region}},
+					"namespaces":                  []interface{}{},
+					"configurationMode":           "QUICK_START",
+					"deploymentMode":              "AUTOMATED",
+					"deploymentScope":             "SINGLE_ACCOUNT",
+					"manualDeploymentStatus":      "NA",
+					"automatedDeploymentStatus":   "NA",
 				},
 			},
 		},
@@ -524,9 +523,22 @@ func InstallAWS(envURL, token, platformToken string, dryRun bool) error {
 
 	// ── Deploy ────────────────────────────────────────────────────────────────
 
+	// Start Lambda instrumentation concurrently. Only when actually deploying
+	// — dry-run skips this to avoid interleaved output and unnecessary API calls.
+	var wg sync.WaitGroup
+	var lambdaErr error
+	if !dryRun {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			lambdaErr = InstallAWSLambda(envURL, token, platformToken, false, false)
+		}()
+	}
+
 	fmt.Printf("  Downloading CloudFormation template...\n")
 	tmplFile, err := downloadAWSTemplate()
 	if err != nil {
+		wg.Wait()
 		return err
 	}
 	defer os.Remove(tmplFile)
@@ -538,11 +550,19 @@ func InstallAWS(envURL, token, platformToken string, dryRun bool) error {
 	fmt.Println()
 
 	if err := RunCommand("aws", realArgs...); err != nil {
+		wg.Wait()
 		return fmt.Errorf("CloudFormation deployment failed: %w", err)
 	}
 
 	fmt.Println()
 	fmt.Printf("  Stack %q deployed successfully.\n", cfg.StackName)
 	fmt.Printf("  View in the AWS Console: https://console.aws.amazon.com/cloudformation/home#/stacks\n")
+
+	// Wait for Lambda instrumentation to finish.
+	wg.Wait()
+	if lambdaErr != nil {
+		fmt.Printf("\n  Warning: Lambda instrumentation encountered an error: %s\n", lambdaErr)
+		fmt.Println("  You can retry with: dtwiz install aws-lambda")
+	}
 	return nil
 }
