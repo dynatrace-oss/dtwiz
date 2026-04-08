@@ -20,6 +20,8 @@ const (
 	MethodOtelCollector    IngestMethod = "otel"
 	MethodOtelUpdate       IngestMethod = "otel-update"
 	MethodAWS              IngestMethod = "aws"
+	MethodAzure            IngestMethod = "azure"
+	MethodGCP              IngestMethod = "gcp"
 	MethodAlreadyInstalled IngestMethod = "already-installed"
 	MethodNotSupported     IngestMethod = "not-supported"
 )
@@ -33,6 +35,7 @@ type Recommendation struct {
 	Prerequisites []string     `json:"prerequisites,omitempty"`
 	Steps         []string     `json:"steps,omitempty"`
 	Done          bool         `json:"done,omitempty"`
+	ComingSoon    bool         `json:"coming_soon,omitempty"`
 	// ConfigPath carries the detected config file path for methods that need
 	// it (e.g. MethodOtelUpdate).  Empty when not relevant.
 	ConfigPath string `json:"config_path,omitempty"`
@@ -65,7 +68,7 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 		recs = append(recs, Recommendation{
 			Method:   MethodOtelUpdate,
 			Priority: 0,
-			Title:    "Configure existing OpenTelemetry Collector",
+			Title:    "This machine's services (patch existing OpenTelemetry Collector)",
 			Description: fmt.Sprintf(
 				"An OpenTelemetry Collector is running%s. Add the Dynatrace OTLP exporter to send telemetry to Dynatrace.",
 				configHint,
@@ -81,10 +84,10 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 	// 3. Always offer installing a new OTel Collector (even if one is already
 	//    running — the user may want a separate Dynatrace-managed collector).
 	recs = append(recs, Recommendation{
-		Method:   MethodOtelCollector,
-		Priority: 0,
-		Title:    "Install new OpenTelemetry Collector and instrument apps",
-		Description: "Deploy the Dynatrace OpenTelemetry Collector to ingest traces, metrics, and logs via OTLP.",
+		Method:        MethodOtelCollector,
+		Priority:      0,
+		Title:         "This machine's services (via OpenTelemetry)",
+		Description:   "Deploy the Dynatrace OpenTelemetry Collector to ingest traces, metrics, and logs via OTLP.",
 		Prerequisites: []string{"Dynatrace API token with ingest scopes"},
 		Steps: []string{
 			"dtwiz install otel",
@@ -96,7 +99,7 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 		recs = append(recs, Recommendation{
 			Method:   MethodKubernetes,
 			Priority: 10,
-			Title:    "Deploy Dynatrace Operator on Kubernetes",
+			Title:    "Kubernetes cluster",
 			Description: fmt.Sprintf(
 				"A Kubernetes cluster (%s) is detected. The Dynatrace Operator provides full-stack observability for all workloads.",
 				system.Kubernetes.Distribution,
@@ -112,10 +115,10 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 	if system.ContainerRuntime == analyzer.ContainerRuntimeDocker &&
 		system.Orchestrator != analyzer.OrchestratorKubernetes {
 		recs = append(recs, Recommendation{
-			Method:      MethodDocker,
-			Priority:    20,
-			Title:       "Install Dynatrace OneAgent for Docker",
-			Description: "Docker is running without Kubernetes orchestration. Deploy OneAgent as a container for host + container monitoring.",
+			Method:        MethodDocker,
+			Priority:      20,
+			Title:         "Docker host + containers (via OneAgent)",
+			Description:   "Docker is running without Kubernetes orchestration. Deploy OneAgent as a container for host + container monitoring.",
 			Prerequisites: []string{"Docker daemon access", "Dynatrace API token"},
 			Steps: []string{
 				"dtwiz install docker",
@@ -128,10 +131,10 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 		system.Orchestrator == analyzer.OrchestratorNone &&
 		(system.Platform == analyzer.PlatformLinux || system.Platform == analyzer.PlatformWindows) {
 		recs = append(recs, Recommendation{
-			Method:      MethodOneAgent,
-			Priority:    40,
-			Title:       "Install Dynatrace OneAgent on this host",
-			Description: "No container runtime detected. Install OneAgent directly for full-stack host monitoring.",
+			Method:        MethodOneAgent,
+			Priority:      40,
+			Title:         "This machine's services (via OneAgent)",
+			Description:   "No container runtime detected. Install OneAgent directly for full-stack host monitoring.",
 			Prerequisites: []string{"Root/Administrator privileges", "Dynatrace API token"},
 			Steps: []string{
 				"dtwiz install oneagent",
@@ -142,14 +145,36 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 	// 7. AWS detected → CloudFormation integration.
 	if system.AWS != nil && system.AWS.Available {
 		recs = append(recs, Recommendation{
-			Method:      MethodAWS,
-			Priority:    50,
-			Title:       "Set up Dynatrace AWS CloudFormation integration",
-			Description: fmt.Sprintf("AWS credentials detected (account: %s). Deploy the Dynatrace ActiveGate via CloudFormation for cloud-level monitoring.", system.AWS.AccountID),
+			Method:        MethodAWS,
+			Priority:      50,
+			Title:         "AWS cloud services",
+			Description:   fmt.Sprintf("AWS credentials detected (account: %s). Deploy the Dynatrace ActiveGate via CloudFormation for cloud-level monitoring.", system.AWS.AccountID),
 			Prerequisites: []string{"AWS CLI with sufficient permissions", "Dynatrace API token"},
 			Steps: []string{
 				"dtwiz install aws",
 			},
+		})
+	}
+
+	// 8. Azure detected — coming soon.
+	if system.Azure != nil && system.Azure.Available {
+		recs = append(recs, Recommendation{
+			Method:      MethodAzure,
+			Priority:    50,
+			Title:       "Azure cloud services (coming soon)",
+			Description: fmt.Sprintf("Azure subscription detected (%s).", system.Azure.SubscriptionID),
+			ComingSoon:  true,
+		})
+	}
+
+	// 9. GCP detected — coming soon.
+	if system.GCP != nil && system.GCP.Available {
+		recs = append(recs, Recommendation{
+			Method:      MethodGCP,
+			Priority:    50,
+			Title:       "GCP cloud services (coming soon)",
+			Description: fmt.Sprintf("GCP project detected (%s).", system.GCP.ProjectID),
+			ComingSoon:  true,
 		})
 	}
 
@@ -174,10 +199,11 @@ func FormatRecommendations(recs []Recommendation) string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(recHeader.Sprint("  Recommendations") + "\n")
+	sb.WriteString(recHeader.Sprint("  Recommendations — What do you want to monitor?") + "\n")
 	sb.WriteString(recMuted.Sprint("  "+strings.Repeat("─", 42)) + "\n\n")
 
-	for i, r := range recs {
+	n := 0
+	for _, r := range recs {
 		if r.Done {
 			badge := recBadgeDone.Sprint(" ✓ ")
 			title := recTitleDone.Sprint(r.Title)
@@ -186,11 +212,16 @@ func FormatRecommendations(recs []Recommendation) string {
 			badge := recBadgeWarn.Sprint(" ! ")
 			title := recTitleWarn.Sprint(r.Title)
 			sb.WriteString(fmt.Sprintf("  %s  %s\n", badge, title))
+		} else if r.ComingSoon {
+			// Coming-soon items are shown muted without a number.
+			bullet := recMuted.Sprint(" · ")
+			title := recMuted.Sprint(r.Title)
+			sb.WriteString(fmt.Sprintf("  %s  %s\n", bullet, title))
 		} else {
-			badge := recBadgeNum.Sprintf(" %d ", i+1)
+			n++
+			badge := recBadgeNum.Sprintf(" %d ", n)
 			title := recTitleActive.Sprint(r.Title)
-			install := recMuted.Sprintf("dtwiz install %s", r.Method)
-			sb.WriteString(fmt.Sprintf("  %s  %s  →  %s\n", badge, title, install))
+			sb.WriteString(fmt.Sprintf("  %s  %s\n", badge, title))
 		}
 	}
 	return strings.TrimRight(sb.String(), "\n")

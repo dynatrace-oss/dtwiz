@@ -167,6 +167,56 @@ func TestGenerateRecommendations_OtelCollectorRunning(t *testing.T) {
 	}
 }
 
+func TestGenerateRecommendations_Azure(t *testing.T) {
+	system := &analyzer.SystemInfo{
+		Platform:         analyzer.PlatformLinux,
+		ContainerRuntime: analyzer.ContainerRuntimeNone,
+		Orchestrator:     analyzer.OrchestratorNone,
+		Azure: &analyzer.AzureInfo{
+			Available:      true,
+			SubscriptionID: "sub-123",
+		},
+	}
+	recs := recommender.GenerateRecommendations(system)
+	found := false
+	for _, r := range recs {
+		if r.Method == recommender.MethodAzure {
+			found = true
+			if !r.ComingSoon {
+				t.Error("expected ComingSoon=true for Azure recommendation")
+			}
+		}
+	}
+	if !found {
+		t.Error("expected azure recommendation when Azure is available")
+	}
+}
+
+func TestGenerateRecommendations_GCP(t *testing.T) {
+	system := &analyzer.SystemInfo{
+		Platform:         analyzer.PlatformLinux,
+		ContainerRuntime: analyzer.ContainerRuntimeNone,
+		Orchestrator:     analyzer.OrchestratorNone,
+		GCP: &analyzer.GCPInfo{
+			Available: true,
+			ProjectID: "my-project",
+		},
+	}
+	recs := recommender.GenerateRecommendations(system)
+	found := false
+	for _, r := range recs {
+		if r.Method == recommender.MethodGCP {
+			found = true
+			if !r.ComingSoon {
+				t.Error("expected ComingSoon=true for GCP recommendation")
+			}
+		}
+	}
+	if !found {
+		t.Error("expected gcp recommendation when GCP is available")
+	}
+}
+
 func TestGenerateRecommendations_macOSGetsOtel(t *testing.T) {
 	system := &analyzer.SystemInfo{
 		Platform:         analyzer.PlatformDarwin,

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-04-08
+
+### Added
+
+- Azure and GCP cloud services now appear in recommendations when detected (shown as "coming soon", not selectable)
+- `MethodAzure` and `MethodGCP` ingestion method constants
+- `ComingSoon` field on `Recommendation` struct for items that are detected but not yet installable
+
+### Changed
+
+- Recommendation titles rewritten to focus on what gets monitored rather than method names (e.g. "This machine's services (via OneAgent)" instead of "Install Dynatrace OneAgent on this host")
+- Recommendation header changed to "What do you want to monitor?"
+- Removed `→ dtwiz install <method>` command hints from recommendation display
+
 ## [0.2.0] - 2026-04-07
 
 ### Added
@@ -86,7 +100,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/dynatrace-oss/dtwiz/compare/v0.1.4...v0.2.0
 [0.1.4]: https://github.com/dynatrace-oss/dtwiz/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/dynatrace-oss/dtwiz/compare/v0.1.2...v0.1.3

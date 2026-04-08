@@ -47,14 +47,14 @@ var setupCmd = &cobra.Command{
 		fmt.Println(info.Summary())
 
 		fmt.Println()
-		setupHeader.Println("  Recommendations — select an installation method:")
+		setupHeader.Println("  Recommendations — What do you want to monitor?")
 		setupMuted.Println("  " + strings.Repeat("─", 42))
 		recs := recommender.GenerateRecommendations(info)
 
-		// Collect actionable (non-done, non-not-supported) recommendations.
+		// Collect actionable (non-done, non-not-supported, non-coming-soon) recommendations.
 		var actionable []recommender.Recommendation
 		for _, r := range recs {
-			if !r.Done && r.Method != recommender.MethodNotSupported {
+			if !r.Done && r.Method != recommender.MethodNotSupported && !r.ComingSoon {
 				actionable = append(actionable, r)
 			}
 		}
@@ -65,6 +65,12 @@ var setupCmd = &cobra.Command{
 
 		for i, r := range actionable {
 			fmt.Printf("  %s  %s\n", setupBadge.Sprintf("[%d]", i+1), r.Title)
+		}
+		// Show coming-soon items (informational only, not selectable).
+		for _, r := range recs {
+			if r.ComingSoon {
+				fmt.Printf("  %s  %s\n", setupMuted.Sprint(" · "), setupMuted.Sprint(r.Title))
+			}
 		}
 		fmt.Printf("  %s  %s\n", setupMuted.Sprint("[0]"), setupMuted.Sprint("Cancel"))
 		fmt.Println()
