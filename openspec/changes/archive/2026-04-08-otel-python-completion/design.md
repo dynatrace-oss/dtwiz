@@ -2,7 +2,7 @@
 
 ## Context
 
-OTel Python instrumentation (`dtwiz install otel-python`) is fully implemented with project detection, entrypoint detection, virtualenv management, package installation, process launch, and Dynatrace verification. However, there is no `dtwiz uninstall otel-python` command, and the installer lacks pre-flight validation checks.
+OTel Python instrumentation (`dtwiz install otel-python`) is fully implemented with project detection, entrypoint detection, virtualenv management, package installation, process launch, and Dynatrace verification.
 
 Current Python install flow: detect projects → user selects one → detect entrypoints → stop running processes → create venv → install packages → launch with `opentelemetry-instrument` → verify in Dynatrace.
 
@@ -11,10 +11,14 @@ Current Python install flow: detect projects → user selects one → detect ent
 **Goals:**
 
 - Add pre-flight validation at the start of `InstallOtelPython()`
+- Make pip and OTel script invocations shebang-safe using the venv Python binary instead of executing console-scripts directly
+- Detect and handle stale virtualenvs (created on a different machine or Python version)
+- Include the executed command in subprocess error messages
+- Track instrumented process lifecycle and surface crashes at startup
+- Verify framework instrumentation packages after bootstrap and install any that are missing
 
 **Non-Goals:**
 
-- Changing the existing install flow logic
 - Supporting multi-project instrumentation
 - Persistent configuration management (tracking what was installed where)
 
@@ -50,6 +54,21 @@ The Dynatrace traffic-waiting step (polling for service entities) is only meanin
 
 This logic is extracted into `pkg/installer/otel_process.go` (`ManagedProcess`, `StartManagedProcess`, `PrintProcessSummary`) rather than living inline in the Python installer, so future runtime installers (Java, Node.js) can reuse it without duplication. The `syscall` package is intentionally avoided — `cmd.Wait()` returns a platform-neutral `*exec.ExitError` that works on all OS targets.
 
+**6. Always verify framework instrumentation packages after running bootstrap**
+`opentelemetry-bootstrap -a install` is unreliable: in some environments (observed with `opentelemetry-distro==0.61b0` on Python 3.14) it exits 0 but installs zero packages — no error, no output, no indication anything went wrong. The root cause is inside the third-party tool's CLI entry point; the internal detection API (`_find_installed_libraries()`) works correctly when called from Python.
+
+After bootstrap runs, dtwiz shall:
+
+1. Run `pip list --format=json` and check whether any framework instrumentation package was installed.
+2. If none were installed, call bootstrap's internal detection API directly via a Python snippet (`bootstrapRequirementsScript`). This bypasses the broken CLI entry point and uses bootstrap's own version-matching logic — no hardcoded map needed, automatically picks up new packages as the OTel ecosystem evolves.
+3. If the internal API call fails (e.g. API changed across versions), print a warning with the manual `opentelemetry-bootstrap -a install` command and continue non-fatally — services will start but may lack framework trace spans.
+4. pip-install the missing packages directly.
+5. After installation, verify again. If any packages are still missing, print a clear warning listing the packages and the exact `pip install` command so the user can install them manually.
+
+Package names are PEP 503-normalized (lowercase, underscores and dots replaced with hyphens) before comparison.
+
+This two-tier approach (bootstrap CLI → bootstrap internal API) is environment-agnostic and self-healing: it works regardless of Python version, OS, or venv tool, and it always tells the user what happened and how to fix it.
+
 ## Alternatives Considered
 
 **Always recreate the venv instead of health-checking it**
@@ -72,24 +91,6 @@ Sending signal 0 to a PID checks existence without delivering a real signal. Rej
 
 **Poll `/proc/<pid>/status` on Linux**
 Cheap on Linux but unavailable on macOS and Windows. The goroutine approach works identically on all platforms.
-
-### 6. Always verify framework instrumentation packages after running bootstrap
-
-`opentelemetry-bootstrap -a install` is unreliable: in some environments (observed with `opentelemetry-distro==0.61b0` on Python 3.14) it exits 0 but installs zero packages — no error, no output, no indication anything went wrong. The root cause is inside the third-party tool's CLI entry point; the internal detection API (`_find_installed_libraries()`) works correctly when called from Python.
-
-After bootstrap runs, dtwiz shall:
-
-1. Run `pip list --format=json` and check whether any framework instrumentation package was installed.
-2. If none were installed, call bootstrap's internal detection API directly via a Python snippet (`bootstrapRequirementsScript`). This bypasses the broken CLI entry point and uses bootstrap's own version-matching logic — no hardcoded map needed, automatically picks up new packages as the OTel ecosystem evolves.
-3. If the internal API call fails (e.g. API changed across versions), print a warning with the manual `opentelemetry-bootstrap -a install` command and continue non-fatally — services will start but may lack framework trace spans.
-4. pip-install the missing packages directly.
-5. After installation, verify again. If any packages are still missing, print a clear warning listing the packages and the exact `pip install` command so the user can install them manually.
-
-Package names are PEP 503-normalized (lowercase, underscores and dots replaced with hyphens) before comparison.
-
-This two-tier approach (bootstrap API → hardcoded fallback) is environment-agnostic and self-healing: it works regardless of Python version, OS, or venv tool, and it always tells the user what happened and how to fix it.
-
-## Alternatives Considered (Decision 6)
 
 **Use a hardcoded fallback map when the bootstrap API is unavailable**
 Would allow silent automatic recovery. Rejected because the map requires manual maintenance as new OTel instrumentation packages are released and cannot match version constraints the way bootstrap can. A non-fatal warning with the manual command is clearer and less likely to install wrong versions.
