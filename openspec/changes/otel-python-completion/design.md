@@ -23,9 +23,9 @@ Current Python install flow: detect projects → user selects one → detect ent
 **1. Pre-flight validation checks**
 At the start of `InstallOtelPython()`, validate:
 
-- `python3` in PATH
-- pip available as a Python module (`python3 -m pip --version`) — PATH lookup of `pip`/`pip3` is irrelevant and can produce false negatives
-- `venv` module available (`python3 -m venv --help`)
+- A Python 3 interpreter in PATH — `python3` is tried first; `python` is accepted if it reports Python 3.x
+- pip available as a Python module (`<detected-python> -m pip --version`) — PATH lookup of `pip`/`pip3` is irrelevant and can produce false negatives
+- `venv` module available (`<detected-python> -m venv --help`)
 - Fail with clear error message if any check fails
 
 **2. Never exec virtualenv console-scripts directly; always invoke via the venv Python binary**

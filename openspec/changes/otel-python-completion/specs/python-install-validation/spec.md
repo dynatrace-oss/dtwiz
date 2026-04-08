@@ -8,40 +8,36 @@ The `InstallOtelPython()` function SHALL validate prerequisites before proceedin
 
 #### Scenario: Python 3 not in PATH
 
-- **WHEN** `python3` is not found in PATH
+- **WHEN** neither `python3` nor `python` is found in PATH (or both resolve to Python 2)
 - **THEN** the installer SHALL exit with a clear error message indicating Python 3 is required
+- **NOTE** `python3` is tried first; if absent, `python` is accepted provided it reports a Python 3.x version
 
 #### Scenario: pip not available
 
-- **WHEN** `python3` is found but the `pip` module is unavailable (`python3 -m pip` fails)
+- **WHEN** a Python 3 interpreter is found but the `pip` module is unavailable (`<python> -m pip` fails)
 - **THEN** the installer SHALL exit with a clear error message indicating pip is required
 
 #### Scenario: pip script has a broken shebang
 
 - **WHEN** a virtualenv exists and `bin/pip` is present but its shebang points to a Python interpreter that no longer exists at that path (common after Python upgrades or on macOS with Homebrew)
-- **THEN** executing `bin/pip` fails at the OS level with `fork/exec … pip: no such file or directory`
-- **THEREFORE** `detectProjectPip()` SHALL invoke pip via the virtualenv's Python binary (`python -m pip`) rather than executing the pip script directly, making the shebang irrelevant
-- **AND** `detectProjectPip()` SHALL locate the virtualenv's Python binary (`bin/python` or `bin/python3` on Unix; `Scripts/python.exe` or `Scripts/python3.exe` on Windows) and return a `pipCommand{name: pythonPath, args: ["-m", "pip"]}`
+- **THEN** the installer SHALL invoke pip via the virtualenv's Python binary (`python -m pip`) rather than executing the pip script directly, so a broken shebang never causes a failure
 
 #### Scenario: virtualenv was created on a different machine or environment
 
-- **WHEN** a `.venv` (or `venv`, `env`, `.env`) directory exists in the project but its Python binary fails to execute (e.g. the symlink target or the concrete interpreter path from the original machine no longer exists on the current machine)
-- **THEN** `isVenvHealthy()` SHALL return false by running `venvPython --version` as a smoke-test
-- **AND** the plan SHALL set `NeedsVenv = true`, causing `Execute()` to prompt the user before deleting the stale venv directory and recreating it using the current machine's Python 3 interpreter
-- **AND** the plan preview SHALL inform the user: *"Recreate virtualenv (.venv) — existing venv is from a different environment"*
-- **AND** the confirmation prompt SHALL explain that a working virtualenv is required so Python dependencies, instrumentation packages, and OTLP export can be installed and started reliably
-- **SO THAT** the setup flow is fully environment-agnostic and works regardless of where the venv was originally created
+- **WHEN** a virtualenv exists in the project but its Python binary fails to execute (e.g. the interpreter path from the original machine no longer exists on the current machine)
+- **THEN** the installer SHALL detect the stale venv and prompt the user before deleting and recreating it using the current machine's Python 3 interpreter
+- **AND** the plan preview SHALL distinguish a recreate from a fresh create so the user understands what happened
+- **SO THAT** the setup flow works regardless of where the venv was originally created
 
 #### Scenario: venv module not available
 
-- **WHEN** `python3 -m venv` is not functional (e.g., missing `python3-venv` package on Debian/Ubuntu)
+- **WHEN** `<detected-python> -m venv` is not functional (e.g., missing `python3-venv` package on Debian/Ubuntu)
 - **THEN** the installer SHALL exit with a clear error message and suggest installing the `python3-venv` package
 
 #### Scenario: opentelemetry-instrument script has a broken shebang
 
 - **WHEN** `opentelemetry-instrument` is present in the virtualenv's `bin/` directory but its shebang points to a Python interpreter that no longer exists at that path
-- **THEN** launching it directly fails with `fork/exec … opentelemetry-instrument: no such file or directory`
-- **THEREFORE** the installer SHALL invoke it as `venvPython /path/to/opentelemetry-instrument pythonBin entrypoint` — passing the script as a positional argument to Python — so Python interprets it directly and the shebang is treated as a comment
+- **THEN** the installer SHALL invoke it via the virtualenv's Python binary rather than executing the script directly, so a broken shebang never causes a failure
 
 #### Scenario: pip/bootstrap command fails
 
@@ -54,7 +50,7 @@ The `InstallOtelPython()` function SHALL validate prerequisites before proceedin
 
 #### Scenario: All prerequisites met
 
-- **WHEN** `python3`, `pip`, and `venv` are all available
+- **WHEN** a Python 3 interpreter (`python3` or `python`), `pip`, and `venv` are all available
 - **THEN** the installer SHALL proceed with the normal installation flow
 
 ---
@@ -146,6 +142,6 @@ When the installer launches instrumented processes, the user SHALL receive expli
 
 #### Scenario: Package name normalization
 
-- **WHEN** comparing installed package names against the curated map
+- **WHEN** comparing installed package names against bootstrap's detected requirements
 - **THEN** names SHALL be PEP 503-normalized: lowercased, with underscores and dots replaced by hyphens
-- **SO THAT** `psycopg2-binary`, `psycopg2_binary`, and `Psycopg2-Binary` all match the same map entry
+- **SO THAT** `psycopg2-binary`, `psycopg2_binary`, and `Psycopg2-Binary` are all treated as the same package
