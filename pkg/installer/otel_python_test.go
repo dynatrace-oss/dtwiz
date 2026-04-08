@@ -57,37 +57,6 @@ func TestServiceNameFromEntrypoint(t *testing.T) {
 
 // ── parseEntrypointFromPyproject ──────────────────────────────────────────────
 
-func TestParseEntrypointFromPyproject_ProjectScripts(t *testing.T) {
-	content := `
-[build-system]
-requires = ["setuptools"]
-
-[project]
-name = "myapp"
-
-[project.scripts]
-myapp = "myapp.main:run"
-`
-	got := parseEntrypointFromPyproject(content)
-	if got != "myapp/main.py" {
-		t.Errorf("got %q, want %q", got, "myapp/main.py")
-	}
-}
-
-func TestParseEntrypointFromPyproject_PoetryScripts(t *testing.T) {
-	content := `
-[tool.poetry]
-name = "svc"
-
-[tool.poetry.scripts]
-svc = "svc.server:main"
-`
-	got := parseEntrypointFromPyproject(content)
-	if got != "svc/server.py" {
-		t.Errorf("got %q, want %q", got, "svc/server.py")
-	}
-}
-
 func TestParseEntrypointFromPyproject_SingleModuleScript(t *testing.T) {
 	content := `
 [project.scripts]
@@ -99,18 +68,6 @@ app = "app:main"
 	}
 }
 
-func TestParseEntrypointFromPyproject_NoScripts(t *testing.T) {
-	content := `
-[project]
-name = "notool"
-version = "0.1.0"
-`
-	got := parseEntrypointFromPyproject(content)
-	if got != "" {
-		t.Errorf("expected empty, got %q", got)
-	}
-}
-
 func TestParseEntrypointFromPyproject_EmptyContent(t *testing.T) {
 	got := parseEntrypointFromPyproject("")
 	if got != "" {
@@ -119,18 +76,6 @@ func TestParseEntrypointFromPyproject_EmptyContent(t *testing.T) {
 }
 
 // ── detectPythonEntrypoints ───────────────────────────────────────────────────
-
-func TestDetectPythonEntrypoints_CommonFile(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "app.py"), []byte(""), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	eps := detectPythonEntrypoints(dir)
-	if len(eps) == 0 || eps[0] != "app.py" {
-		t.Errorf("expected [app.py], got %v", eps)
-	}
-}
 
 func TestDetectPythonEntrypoints_PriorityOrder(t *testing.T) {
 	// main.py should win over app.py when both exist.
@@ -199,14 +144,6 @@ func TestDetectPythonEntrypoints_SkipsHiddenAndPycache(t *testing.T) {
 		if strings.Contains(ep, ".hidden") || strings.Contains(ep, "__pycache__") || strings.Contains(ep, "node_modules") {
 			t.Errorf("entrypoint from excluded dir found: %s", ep)
 		}
-	}
-}
-
-func TestDetectPythonEntrypoints_None(t *testing.T) {
-	dir := t.TempDir()
-	eps := detectPythonEntrypoints(dir)
-	if len(eps) != 0 {
-		t.Errorf("expected no entrypoints, got %v", eps)
 	}
 }
 
@@ -300,60 +237,6 @@ func TestResolveVenvBinary_ChecksAllVenvNames(t *testing.T) {
 			got := resolveVenvBinary(dir, "pip")
 			if got != binPath {
 				t.Errorf("venv=%q: resolveVenvBinary = %q, want %q", venvName, got, binPath)
-			}
-		})
-	}
-}
-
-// ── detectProjectPip ─────────────────────────────────────────────────────────
-
-func TestDetectProjectPip_Found(t *testing.T) {
-	dir := t.TempDir()
-	binDir := filepath.Join(dir, ".venv", "bin")
-	if err := os.MkdirAll(binDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	pipPath := filepath.Join(binDir, "pip")
-	if err := os.WriteFile(pipPath, []byte(""), 0700); err != nil {
-		t.Fatal(err)
-	}
-
-	pip := detectProjectPip(dir)
-	if pip == nil {
-		t.Fatal("expected pip to be found, got nil")
-	}
-	if pip.name != pipPath {
-		t.Errorf("pip.name = %q, want %q", pip.name, pipPath)
-	}
-}
-
-func TestDetectProjectPip_NotFound(t *testing.T) {
-	dir := t.TempDir()
-	pip := detectProjectPip(dir)
-	if pip != nil {
-		t.Errorf("expected nil when no venv exists, got %+v", pip)
-	}
-}
-
-func TestDetectProjectPip_ChecksAllVenvNames(t *testing.T) {
-	for _, venvName := range []string{".venv", "venv", "env", ".env"} {
-		t.Run(venvName, func(t *testing.T) {
-			dir := t.TempDir()
-			binDir := filepath.Join(dir, venvName, "bin")
-			if err := os.MkdirAll(binDir, 0755); err != nil {
-				t.Fatal(err)
-			}
-			pipPath := filepath.Join(binDir, "pip")
-			if err := os.WriteFile(pipPath, []byte(""), 0700); err != nil {
-				t.Fatal(err)
-			}
-
-			pip := detectProjectPip(dir)
-			if pip == nil {
-				t.Fatalf("venv=%q: expected pip to be found, got nil", venvName)
-			}
-			if pip.name != pipPath {
-				t.Errorf("venv=%q: pip.name = %q, want %q", venvName, pip.name, pipPath)
 			}
 		})
 	}
@@ -487,56 +370,11 @@ func TestPythonInstrumentationPlan_ExecuteFailsWithoutPythonForVenvCreation(t *t
 		plan.Execute()
 	})
 
-	checks := []string{"Creating virtualenv... failed.", "Python 3 not found"}
+	checks := []string{"Creating virtualenv... failed.", "Python 3 interpreter not found"}
 	for _, check := range checks {
 		if !strings.Contains(output, check) {
 			t.Fatalf("expected output to contain %q, got:\n%s", check, output)
 		}
-	}
-}
-func TestValidatePythonPrerequisites_PythonNotFound(t *testing.T) {
-	t.Setenv("PATH", t.TempDir())
-
-	err := validatePythonPrerequisites()
-	if err == nil || !strings.Contains(err.Error(), "Python 3") {
-		t.Fatalf("expected Python 3 error, got %v", err)
-	}
-}
-
-func TestValidatePythonPrerequisites_PipNotFound(t *testing.T) {
-	pythonDir := requireFakePython3(t)
-	t.Setenv("PATH", pythonDir)
-	t.Setenv("DTWIZ_TEST_FAIL_PIP", "1")
-
-	err := validatePythonPrerequisites()
-	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "pip") {
-		t.Fatalf("expected pip error, got %v", err)
-	}
-}
-
-func TestValidatePythonPrerequisites_VenvNotFound(t *testing.T) {
-	pythonDir := requireFakePython3(t)
-	t.Setenv("PATH", pythonDir)
-	t.Setenv("DTWIZ_TEST_FAIL_VENV", "1")
-
-	err := validatePythonPrerequisites()
-	if err == nil {
-		t.Fatal("expected venv error, got nil")
-	}
-	if !strings.Contains(strings.ToLower(err.Error()), "venv") {
-		t.Fatalf("expected venv error, got %v", err)
-	}
-	if !strings.Contains(err.Error(), "apt install python3-venv") {
-		t.Fatalf("expected install suggestion, got %v", err)
-	}
-}
-
-func TestValidatePythonPrerequisites_AllPresent(t *testing.T) {
-	pythonDir := requireFakePython3(t)
-	t.Setenv("PATH", pythonDir)
-
-	if err := validatePythonPrerequisites(); err != nil {
-		t.Fatalf("validatePythonPrerequisites() error = %v", err)
 	}
 }
 
@@ -569,24 +407,6 @@ func TestGenerateOtelPythonEnvVars(t *testing.T) {
 	}
 	if vars["OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE"] != "delta" {
 		t.Fatalf("temporality = %q, want delta", vars["OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE"])
-	}
-}
-
-func TestGenerateEnvExportScript(t *testing.T) {
-	script := GenerateEnvExportScript(map[string]string{"FOO": "bar"})
-	if !strings.Contains(script, "export FOO=") {
-		t.Fatalf("script = %q, want to contain export FOO=", script)
-	}
-}
-
-func TestEnvVarsToSlice(t *testing.T) {
-	slice := envVarsToSlice(map[string]string{"A": "1", "B": "2"})
-	if len(slice) != 2 {
-		t.Fatalf("len = %d, want 2", len(slice))
-	}
-	joined := strings.Join(slice, ",")
-	if !strings.Contains(joined, "A=1") || !strings.Contains(joined, "B=2") {
-		t.Fatalf("slice = %v, want A=1 and B=2", slice)
 	}
 }
 
@@ -636,13 +456,6 @@ func TestGenerateEnvExportScript_AllKeysPresent(t *testing.T) {
 		if !strings.Contains(script, k) {
 			t.Fatalf("script missing key %q, got:\n%s", k, script)
 		}
-	}
-}
-
-func TestEnvVarsToSlice_EmptyMap(t *testing.T) {
-	slice := envVarsToSlice(map[string]string{})
-	if len(slice) != 0 {
-		t.Fatalf("envVarsToSlice(empty) = %v, want empty", slice)
 	}
 }
 

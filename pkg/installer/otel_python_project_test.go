@@ -101,19 +101,19 @@ name = "myapp"
 	}
 }
 
-func TestMatchProcessesToProjects(t *testing.T) {
-	projects := []PythonProject{
+func TestMatchProcessesToProjects_PythonCWDMatch(t *testing.T) {
+	projects := []ScannedProject{
 		{Path: "/home/user/myapp"},
 	}
-	procs := []PythonProcess{
-		{PID: 100, Command: "python /home/user/myapp/app.py", CWD: "/home/user/myapp"},
-		{PID: 200, Command: "python /other/app.py", CWD: "/other"},
+	procs := []DetectedProcess{
+		{PID: 100, Command: "python /home/user/myapp/app.py", WorkingDirectory: "/home/user/myapp"},
+		{PID: 200, Command: "python /other/app.py", WorkingDirectory: "/other"},
 	}
 
 	matchProcessesToProjects(projects, procs)
 
-	if len(projects[0].RunningPIDs) != 1 || projects[0].RunningPIDs[0] != 100 {
-		t.Fatalf("RunningPIDs = %v, want [100]", projects[0].RunningPIDs)
+	if len(projects[0].RunningProcessIDs) != 1 || projects[0].RunningProcessIDs[0] != 100 {
+		t.Fatalf("RunningProcessIDs = %v, want [100]", projects[0].RunningProcessIDs)
 	}
 }
 
@@ -267,28 +267,28 @@ func TestDetectPythonProjects_FindsSubDir(t *testing.T) {
 }
 
 func TestMatchProcessesToProjects_CommandPathMatch(t *testing.T) {
-	projects := []PythonProject{
+	projects := []ScannedProject{
 		{Path: "/home/user/myapp"},
 	}
-	procs := []PythonProcess{
+	procs := []DetectedProcess{
 		// process has a different CWD but its command references the project path
-		{PID: 300, Command: "python /home/user/myapp/server.py", CWD: "/tmp"},
+		{PID: 300, Command: "python /home/user/myapp/server.py", WorkingDirectory: "/tmp"},
 	}
 	matchProcessesToProjects(projects, procs)
-	if len(projects[0].RunningPIDs) != 1 || projects[0].RunningPIDs[0] != 300 {
-		t.Fatalf("RunningPIDs = %v, want [300]", projects[0].RunningPIDs)
+	if len(projects[0].RunningProcessIDs) != 1 || projects[0].RunningProcessIDs[0] != 300 {
+		t.Fatalf("RunningProcessIDs = %v, want [300]", projects[0].RunningProcessIDs)
 	}
 }
 
 func TestMatchProcessesToProjects_UnrelatedProcess(t *testing.T) {
-	projects := []PythonProject{
+	projects := []ScannedProject{
 		{Path: "/home/user/myapp"},
 	}
-	procs := []PythonProcess{
-		{PID: 500, Command: "python /other/project/app.py", CWD: "/other/project"},
+	procs := []DetectedProcess{
+		{PID: 500, Command: "python /other/project/app.py", WorkingDirectory: "/other/project"},
 	}
 	matchProcessesToProjects(projects, procs)
-	if len(projects[0].RunningPIDs) != 0 {
-		t.Fatalf("RunningPIDs = %v, want empty", projects[0].RunningPIDs)
+	if len(projects[0].RunningProcessIDs) != 0 {
+		t.Fatalf("RunningProcessIDs = %v, want empty", projects[0].RunningProcessIDs)
 	}
 }

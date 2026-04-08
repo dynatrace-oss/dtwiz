@@ -1,25 +1,10 @@
 package installer
 
 import (
-	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
-
-type PythonProcess struct {
-	PID     int
-	Command string
-	CWD     string
-}
-
-type PythonProject struct {
-	Path        string
-	Markers     []string
-	RunningPIDs []int
-}
 
 var pythonProjectMarkers = []string{
 	"pyproject.toml",
@@ -31,97 +16,12 @@ var pythonProjectMarkers = []string{
 	"manage.py",
 }
 
-// TODO(post-rebase): Replace with upstream branch version that properly handles Python project detection.
-func detectPythonProjects() []PythonProject {
-	var projects []PythonProject
-	seen := make(map[string]bool)
-
-	checkDir := func(dir string) {
-		resolved, err := filepath.EvalSymlinks(dir)
-		if err != nil {
-			resolved = dir
-		}
-		key := strings.ToLower(resolved)
-		if seen[key] {
-			return
-		}
-		seen[key] = true
-		var markers []string
-		for _, marker := range pythonProjectMarkers {
-			if _, err := os.Stat(filepath.Join(dir, marker)); err == nil {
-				markers = append(markers, marker)
-			}
-		}
-		if len(markers) > 0 {
-			projects = append(projects, PythonProject{Path: dir, Markers: markers})
-		}
-	}
-
-	if cwd, err := os.Getwd(); err == nil {
-		checkDir(cwd)
-		entries, _ := os.ReadDir(cwd)
-		for _, e := range entries {
-			if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
-				checkDir(filepath.Join(cwd, e.Name()))
-			}
-		}
-	}
-
-	if home, err := os.UserHomeDir(); err == nil {
-		for _, base := range []string{"Code", "code", "projects", "src", "dev"} {
-			dir := filepath.Join(home, base)
-			entries, err := os.ReadDir(dir)
-			if err != nil {
-				continue
-			}
-			for _, e := range entries {
-				if !e.IsDir() {
-					continue
-				}
-				sub := filepath.Join(dir, e.Name())
-				checkDir(sub)
-				subEntries, err := os.ReadDir(sub)
-				if err != nil {
-					continue
-				}
-				for _, se := range subEntries {
-					if se.IsDir() && !strings.HasPrefix(se.Name(), ".") {
-						checkDir(filepath.Join(sub, se.Name()))
-					}
-				}
-			}
-		}
-	}
-
-	return projects
+func detectPythonProjects() []ScannedProject {
+	return scanProjectDirs(pythonProjectMarkers, nil)
 }
 
-func matchProcessesToProjects(projects []PythonProject, procs []PythonProcess) {
-	for i := range projects {
-		projLower := strings.ToLower(projects[i].Path)
-		for _, p := range procs {
-			cwdLower := strings.ToLower(p.CWD)
-			cmdLower := strings.ToLower(p.Command)
-			if strings.HasPrefix(cwdLower, projLower) || strings.Contains(cmdLower, projLower) {
-				projects[i].RunningPIDs = append(projects[i].RunningPIDs, p.PID)
-			}
-		}
-	}
-}
-
-func stopProcesses(pids []int) {
-	for _, pid := range pids {
-		proc, err := os.FindProcess(pid)
-		if err != nil {
-			continue
-		}
-		if err := proc.Signal(os.Interrupt); err != nil {
-			fmt.Printf("    Warning: could not stop PID %d: %v\n", pid, err)
-			continue
-		}
-		_, _ = proc.Wait()
-		fmt.Printf("    Stopped PID %d\n", pid)
-	}
+func detectPythonProcesses() []DetectedProcess {
+	return detectProcesses("python", []string{"pip ", "setup.py", "/bin/dtwiz"})
 }
 
 var commonEntrypoints = []string{
@@ -215,49 +115,4 @@ func parseEntrypointFromPyproject(content string) string {
 	return ""
 }
 
-func detectPythonProcesses() []PythonProcess {
-	out, err := exec.Command("ps", "ax", "-o", "pid=,command=").Output()
-	if err != nil {
-		return nil
-	}
 
-	var procs []PythonProcess
-	myPID := os.Getpid()
-	for _, line := range strings.Split(string(out), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		parts := strings.SplitN(line, " ", 2)
-		if len(parts) < 2 {
-			continue
-		}
-		pid, err := strconv.Atoi(strings.TrimSpace(parts[0]))
-		if err != nil || pid == myPID {
-			continue
-		}
-		cmd := strings.TrimSpace(parts[1])
-		if !strings.Contains(cmd, "python") {
-			continue
-		}
-		if strings.Contains(cmd, "pip ") || strings.Contains(cmd, "setup.py") ||
-			strings.Contains(cmd, "/bin/dtwiz") {
-			continue
-		}
-		procs = append(procs, PythonProcess{PID: pid, Command: cmd, CWD: getProcessCWD(pid)})
-	}
-	return procs
-}
-
-func getProcessCWD(pid int) string {
-	out, err := exec.Command("lsof", "-a", "-d", "cwd", "-p", strconv.Itoa(pid), "-Fn").Output()
-	if err != nil {
-		return ""
-	}
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.HasPrefix(line, "n") {
-			return line[1:]
-		}
-	}
-	return ""
-}

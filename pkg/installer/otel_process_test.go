@@ -3,7 +3,6 @@ package installer
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -165,30 +164,6 @@ func cleanExitedManagedProcess(name string) *ManagedProcess {
 
 func runningManagedProcess(name string) *ManagedProcess {
 	return &ManagedProcess{Name: name, PID: 999999, LogName: name + ".log", exitResultCh: make(chan error, 1)}
-}
-
-func captureStdout(t *testing.T, fn func()) string {
-	t.Helper()
-	originalStdout := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe() error = %v", err)
-	}
-	os.Stdout = w
-	defer func() {
-		os.Stdout = originalStdout
-	}()
-
-	fn()
-
-	if err := w.Close(); err != nil {
-		t.Fatalf("Close() error = %v", err)
-	}
-	out, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("ReadAll() error = %v", err)
-	}
-	return string(out)
 }
 
 func TestStartManagedProcess_CleanExit(t *testing.T) {

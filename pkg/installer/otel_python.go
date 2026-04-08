@@ -14,26 +14,9 @@ import (
 )
 
 func generateOtelPythonEnvVars(apiURL, token, serviceName string) map[string]string {
-	return map[string]string{
-		"OTEL_SERVICE_NAME":                                 serviceName,
-		"OTEL_EXPORTER_OTLP_ENDPOINT":                       strings.TrimRight(apiURL, "/") + "/api/v2/otlp",
-		"OTEL_EXPORTER_OTLP_HEADERS":                        "Authorization=Api-Token%20" + token,
-		"OTEL_EXPORTER_OTLP_PROTOCOL":                       "http/protobuf",
-		"OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE": "delta",
-		"OTEL_TRACES_EXPORTER":                              "otlp",
-		"OTEL_METRICS_EXPORTER":                             "otlp",
-		"OTEL_LOGS_EXPORTER":                                "otlp",
-		"OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED":  "true",
-	}
-}
-
-func GenerateEnvExportScript(envVars map[string]string) string {
-	var sb strings.Builder
-	sb.WriteString("# Dynatrace OpenTelemetry auto-instrumentation environment variables\n")
-	for k, v := range envVars {
-		sb.WriteString(fmt.Sprintf("export %s=%q\n", k, v))
-	}
-	return sb.String()
+	envVars := generateBaseOtelEnvVars(apiURL, token, serviceName)
+	envVars["OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED"] = "true"
+	return envVars
 }
 
 func printManualInstructions(envVars map[string]string) {
@@ -49,16 +32,8 @@ func printManualInstructions(envVars map[string]string) {
 	fmt.Println("    opentelemetry-instrument python your_app.py")
 }
 
-func envVarsToSlice(envVars map[string]string) []string {
-	out := make([]string, 0, len(envVars))
-	for k, v := range envVars {
-		out = append(out, k+"="+v)
-	}
-	return out
-}
-
 type PythonInstrumentationPlan struct {
-	Project       PythonProject
+	Project       ScannedProject
 	Entrypoints   []string
 	NeedsVenv     bool
 	EnvVars       map[string]string
@@ -66,56 +41,9 @@ type PythonInstrumentationPlan struct {
 	PlatformToken string
 }
 
-func DetectPythonPlan(apiURL, token string) *PythonInstrumentationPlan {
-	if _, err := detectPython(); err != nil {
-		return nil
-	}
+func (p *PythonInstrumentationPlan) Runtime() string { return "Python" }
 
-	projects := detectPythonProjects()
-	procs := detectPythonProcesses()
-	matchProcessesToProjects(projects, procs)
-
-	if len(projects) == 0 {
-		return nil
-	}
-
-	otelHeader := color.New(color.FgMagenta)
-	otelMuted := color.New()
-
-	fmt.Println()
-	otelHeader.Println("  Python projects on this machine:")
-	otelMuted.Println("  " + strings.Repeat("─", 50))
-	for i, proj := range projects {
-		line := fmt.Sprintf("  [%d]  %s  (%s)", i+1, proj.Path, strings.Join(proj.Markers, ", "))
-		if len(proj.RunningPIDs) > 0 {
-			pidStrs := make([]string, len(proj.RunningPIDs))
-			for j, pid := range proj.RunningPIDs {
-				pidStrs[j] = strconv.Itoa(pid)
-			}
-			line += fmt.Sprintf("  ← PIDs: %s", strings.Join(pidStrs, ", "))
-		}
-		fmt.Println(line)
-	}
-
-	fmt.Println()
-	fmt.Printf("  Select a project to instrument [1-%d] or press Enter to skip: ", len(projects))
-
-	reader := bufio.NewReader(os.Stdin)
-	answer, _ := reader.ReadString('\n')
-	answer = strings.TrimSpace(answer)
-
-	if answer == "" {
-		return nil
-	}
-
-	num, err := strconv.Atoi(answer)
-	if err != nil || num < 1 || num > len(projects) {
-		fmt.Println("  Invalid selection, skipping instrumentation.")
-		return nil
-	}
-
-	proj := projects[num-1]
-	logger.Debug("selected python project for instrumentation", "project", proj.Path)
+func buildPythonInstrumentationPlan(proj ScannedProject, apiURL, token, envURL, platformToken string) *PythonInstrumentationPlan {
 	entrypoints := detectPythonEntrypoints(proj.Path)
 	if len(entrypoints) == 0 {
 		fmt.Printf("  Skipping %s — no Python entrypoint found.\n", proj.Path)
@@ -127,7 +55,8 @@ func DetectPythonPlan(apiURL, token string) *PythonInstrumentationPlan {
 	needsVenv := !isVenvHealthy(proj.Path)
 	logger.Debug("python project venv evaluation complete", "project", proj.Path, "needs_venv", needsVenv, "entrypoints", entrypoints)
 
-	envVars := generateOtelPythonEnvVars(apiURL, token, "my-service")
+	svcName := projectServiceName(proj.Path)
+	envVars := generateOtelPythonEnvVars(apiURL, token, svcName)
 
 	return &PythonInstrumentationPlan{
 		Project:       proj,
@@ -137,6 +66,26 @@ func DetectPythonPlan(apiURL, token string) *PythonInstrumentationPlan {
 		EnvURL:        envURL,
 		PlatformToken: platformToken,
 	}
+}
+
+func DetectPythonPlan(apiURL, token string) *PythonInstrumentationPlan {
+	if _, err := detectPython(); err != nil {
+		return nil
+	}
+
+	projects, processes := runInParallel(detectPythonProjects, detectPythonProcesses)
+	matchProcessesToProjects(projects, processes)
+
+	if len(projects) == 0 {
+		return nil
+	}
+
+	sel := promptProjectSelection("Python", projects)
+	if sel == nil {
+		return nil
+	}
+
+	return buildPythonInstrumentationPlan(*sel, apiURL, token, "", "")
 }
 
 func (p *PythonInstrumentationPlan) PrintPlanSteps() {
@@ -177,7 +126,7 @@ func (p *PythonInstrumentationPlan) Execute() {
 		pythonBin = "python3"
 	}
 
-	if len(proj.RunningPIDs) > 0 {
+	if len(proj.RunningProcessIDs) > 0 {
 		fmt.Print("  Stopping running processes... ")
 		stopProcesses(proj.RunningProcessIDs)
 		fmt.Println("done.")
@@ -288,11 +237,6 @@ func (p *PythonInstrumentationPlan) Execute() {
 		cmd := exec.Command(venvPython, otelInstrument, pythonBin, ep)
 		cmd.Dir = proj.Path
 		cmd.Env = append(os.Environ(), formatEnvVars(epEnvVars)...)
-		cmd.Stdout = logFile
-		cmd.Stderr = logFile
-		if err := cmd.Start(); err != nil {
-			logFile.Close()
-		cmd.Env = append(os.Environ(), envVarsToSlice(epEnvVars)...)
 
 		mp, err := StartManagedProcess(svcName, logName, cmd, logFile)
 		if err != nil {
@@ -313,109 +257,6 @@ func (p *PythonInstrumentationPlan) Execute() {
 	fmt.Println()
 	fmt.Println("  Waiting for traffic — send requests to your services to generate traces and metrics.")
 	waitForServices(p.EnvURL, p.PlatformToken, startedServices, false)
-}
-
-type dqlResponse struct {
-	Result struct {
-		Records []map[string]interface{} `json:"records"`
-	} `json:"result"`
-}
-
-func waitForServices(envURL, platformToken string, serviceNames []string) {
-	if len(serviceNames) == 0 || platformToken == "" {
-		return
-	}
-
-	appsURL := AppsURL(envURL)
-	apiURL := appsURL + "/platform/storage/query/v1/query:execute"
-
-	conditions := make([]string, len(serviceNames))
-	for i, name := range serviceNames {
-		conditions[i] = fmt.Sprintf("name == \"%s\"", name)
-	}
-	dql := fmt.Sprintf("smartscapeNodes SERVICE, from: now()-10m | filter %s", strings.Join(conditions, " or "))
-	fmt.Printf("  Querying Dynatrace for services with:\n    %s\n", dql)
-
-	remaining := make(map[string]bool, len(serviceNames))
-	for _, name := range serviceNames {
-		remaining[name] = true
-	}
-
-	timeout := time.After(120 * time.Second)
-	ticker := time.NewTicker(3 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-timeout:
-			fmt.Println()
-			if len(remaining) > 0 {
-				names := make([]string, 0, len(remaining))
-				for n := range remaining {
-					names = append(names, n)
-				}
-				fmt.Printf("  Timed out waiting for: %s\n", strings.Join(names, ", "))
-				fmt.Println("  Services may take a few more minutes to appear in Dynatrace.")
-			}
-			return
-		case <-ticker.C:
-			found := querySmartscapeServices(apiURL, platformToken, dql)
-			for _, name := range found {
-				if remaining[name] {
-					delete(remaining, name)
-					fmt.Printf("  ✓ \"%s\" appeared in Dynatrace → %s\n", name, appsURL+"/ui/apps/dynatrace.quickstart/")
-				}
-			}
-			if len(remaining) == 0 {
-				fmt.Println()
-				fmt.Println("  All services are reporting to Dynatrace.")
-				return
-			}
-		}
-	}
-}
-
-func querySmartscapeServices(apiURL, platformToken, dql string) []string {
-	payload := map[string]interface{}{
-		"query":                      dql,
-		"requestTimeoutMilliseconds": 10000,
-		"maxResultRecords":           100,
-	}
-	bodyBytes, err := json.Marshal(payload)
-	if err != nil {
-		return nil
-	}
-
-	req, err := http.NewRequest(http.MethodPost, apiURL, strings.NewReader(string(bodyBytes)))
-	if err != nil {
-		return nil
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+platformToken)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		_, _ = io.Copy(io.Discard, resp.Body)
-		return nil
-	}
-
-	var result dqlResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil
-	}
-
-	var names []string
-	for _, rec := range result.Result.Records {
-		if name, ok := rec["name"].(string); ok {
-			names = append(names, name)
-		}
-	}
-	return names
 }
 
 func InstallOtelPython(envURL, token, platformToken, serviceName string, dryRun bool) error {
