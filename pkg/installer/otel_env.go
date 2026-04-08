@@ -146,7 +146,7 @@ func waitForServices(envURL, platformToken string, serviceNames []string) {
 			for _, name := range foundServices {
 				if remainingServices[name] {
 					delete(remainingServices, name)
-					fmt.Printf("  ✓ \"%s\" appeared in Dynatrace → %s\n", name, appsURL+"/ui/apps/my.getting.started.dieter/")
+					fmt.Printf("  ✓ \"%s\" appeared in Dynatrace → %s\n", name, appsURL+"/ui/apps/dynatrace.quickstart/")
 				}
 			}
 			if len(remainingServices) == 0 {

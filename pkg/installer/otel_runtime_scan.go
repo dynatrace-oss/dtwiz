@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -161,73 +160,6 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 	return discoveredProjects
 }
 
-func detectProcesses(filterTerm string, excludeTerms []string) []DetectedProcess {
-	output, err := exec.Command("ps", "ax", "-o", "pid=,command=").Output()
-	if err != nil {
-		logger.Warn("ps command failed", "filter", filterTerm, "err", err)
-		return nil
-	}
-	logger.Debug("scanning processes", "filter", filterTerm)
-
-	processes := make([]DetectedProcess, 0)
-	currentPID := os.Getpid()
-	for _, line := range strings.Split(string(output), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-
-		parts := strings.SplitN(line, " ", 2)
-		if len(parts) < 2 {
-			continue
-		}
-
-		pid, err := strconv.Atoi(strings.TrimSpace(parts[0]))
-		if err != nil || pid == currentPID {
-			continue
-		}
-
-		command := strings.TrimSpace(parts[1])
-		if !strings.Contains(command, filterTerm) {
-			continue
-		}
-
-		excluded := false
-		for _, excludeTerm := range excludeTerms {
-			if strings.Contains(command, excludeTerm) {
-				excluded = true
-				break
-			}
-		}
-		if excluded {
-			continue
-		}
-
-		processes = append(processes, DetectedProcess{
-			PID:              pid,
-			Command:          command,
-			WorkingDirectory: lookupProcessWorkingDirectory(pid),
-		})
-	}
-	logger.Debug("process scan complete", "filter", filterTerm, "matched", len(processes))
-	return processes
-}
-
-func lookupProcessWorkingDirectory(pid int) string {
-	output, err := exec.Command("lsof", "-a", "-d", "cwd", "-p", strconv.Itoa(pid), "-Fn").Output()
-	if err != nil {
-		logger.Warn("lsof cwd lookup failed", "pid", pid, "err", err)
-		return ""
-	}
-
-	for _, line := range strings.Split(string(output), "\n") {
-		if strings.HasPrefix(line, "n") {
-			return line[1:]
-		}
-	}
-	return ""
-}
-
 func matchingProcessIDs(dirPath string, processes []DetectedProcess) []int {
 	normalizedPath := strings.ToLower(dirPath)
 	matchedPIDs := make([]int, 0)
@@ -295,24 +227,4 @@ func stopProcesses(pids []int) {
 	}
 }
 
-func detectProcessListeningPort(pid int) string {
-	output, err := exec.Command("lsof", "-a", "-i", "TCP", "-sTCP:LISTEN", "-p", strconv.Itoa(pid), "-Fn", "-P").Output()
-	if err != nil {
-		return ""
-	}
 
-	for _, line := range strings.Split(string(output), "\n") {
-		if !strings.HasPrefix(line, "n") {
-			continue
-		}
-		separator := strings.LastIndex(line, ":")
-		if separator < 0 {
-			continue
-		}
-		port := line[separator+1:]
-		if port != "4317" && port != "4318" {
-			return port
-		}
-	}
-	return ""
-}
