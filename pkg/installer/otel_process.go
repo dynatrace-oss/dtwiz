@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strconv"
-	"strings"
 	"time"
 )
 
@@ -59,7 +57,7 @@ func (p *ManagedProcess) WaitResult() (exited bool, err error) {
 }
 
 func (p *ManagedProcess) PrintSummaryLine() {
-	listeningPort := detectListeningPort(p.PID)
+	listeningPort := detectProcessListeningPort(p.PID)
 	hasExited, waitErr := p.WaitResult()
 
 	statusLine := fmt.Sprintf("  %s (PID %d)", p.Name, p.PID)
@@ -95,21 +93,3 @@ func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) 
 	return
 }
 
-func detectListeningPort(pid int) string {
-	out, err := exec.Command("lsof", "-a", "-i", "TCP", "-sTCP:LISTEN", "-p", strconv.Itoa(pid), "-Fn", "-P").Output()
-	if err != nil {
-		return ""
-	}
-	for _, line := range strings.Split(string(out), "\n") {
-		if !strings.HasPrefix(line, "n") {
-			continue
-		}
-		if idx := strings.LastIndex(line, ":"); idx >= 0 {
-			port := line[idx+1:]
-			if port != "4317" && port != "4318" {
-				return port
-			}
-		}
-	}
-	return ""
-}
