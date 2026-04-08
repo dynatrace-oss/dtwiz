@@ -9,18 +9,18 @@ The system SHALL detect Node.js installations by looking up `node` on PATH and v
 #### Scenario: Node.js is available
 
 - **GIVEN** the system is checking for available runtimes
-- **WHEN** `node` is found on PATH and `node --version` succeeds
-- **THEN** the system reports the Node.js path and version and proceeds with project scanning
+- **WHEN** `node` is found on PATH
+- **THEN** the system proceeds with project scanning
 
 #### Scenario: Node.js is not available
 
 - **GIVEN** the system is checking for available runtimes
 - **WHEN** `node` is not found on PATH
-- **THEN** the system silently skips Node.js detection and returns nil
+- **THEN** the system silently skips Node.js detection
 
 ### Requirement: Node.js project scanning
 
-The system SHALL scan the filesystem for Node.js project markers (`package.json`) starting from the current directory and common project locations, excluding `node_modules` directories. SHALL use the shared `scanProjectDirs()` utility in `pkg/installer/otel_common.go` with `excludeNames: ["node_modules"]` — NOT duplicate the scanning logic.
+The system SHALL scan the filesystem for Node.js project markers (`package.json`) starting from the current directory and common project locations, excluding `node_modules` directories.
 
 #### Scenario: Node.js project detected
 
@@ -32,11 +32,11 @@ The system SHALL scan the filesystem for Node.js project markers (`package.json`
 
 - **GIVEN** Node.js is available on the system
 - **WHEN** no directories contain `package.json` outside of `node_modules`
-- **THEN** `DetectNodePlan` returns nil without prompting the user
+- **THEN** the user is not prompted and Node.js instrumentation is skipped
 
 ### Requirement: Node.js process detection
 
-The system SHALL detect running `node` processes and attempt to match them to discovered projects by working directory. SHALL use the shared `detectProcesses()` and `processMatchPIDs()` utilities in `pkg/installer/otel_common.go`. On Unix, process detection uses `ps ax` and `lsof`. On Windows, it uses PowerShell `Get-CimInstance Win32_Process`. Both are best-effort — they may fail on processes owned by other users or on systems with restricted permissions.
+The system SHALL detect running `node` processes and attempt to match them to discovered projects by working directory. Detection is best-effort — it may fail on processes owned by other users or on systems with restricted permissions.
 
 #### Scenario: Running Node process matched to project
 
@@ -64,20 +64,20 @@ The system SHALL infer entrypoints from `package.json` fields (`main`, `scripts.
 
 - **GIVEN** the user selected a Node.js project
 - **WHEN** no entrypoint can be inferred from `package.json` or conventional filenames
-- **THEN** the system prompts the user to enter the entrypoint file manually
+- **THEN** the system skips the project with a message explaining what was looked for and instructs the user to add an entrypoint and re-run
 
-### Requirement: NodeInstrumentationPlan struct
+### Requirement: Node.js instrumentation output
 
-The system SHALL define a `NodeInstrumentationPlan` struct with fields for the selected project, entrypoints, OTel environment variables, `EnvURL`, and `PlatformToken`. It SHALL implement `PrintPlanSteps()` and `Execute()` methods. Follows the pattern established by `PythonInstrumentationPlan` in `pkg/installer/otel_python.go`. OTel environment variables SHALL be generated via the shared `generateBaseOtelEnvVars()` in `pkg/installer/otel_common.go` to ensure consistent URL-encoded header values across all runtimes.
+The system SHALL guide the user through adding OTel auto-instrumentation to their Node.js application. It SHALL display the npm packages to install, the required environment variables, and the instrumented run command using `--require`. The user is responsible for running these commands.
 
-#### Scenario: PrintPlanSteps displays plan
+#### Scenario: Plan preview shows project and run command
 
-- **GIVEN** a `NodeInstrumentationPlan` was created for a selected project
-- **WHEN** `PrintPlanSteps()` is called
-- **THEN** it prints the project path, npm packages to install, and the instrumented run command
+- **GIVEN** the user selected a Node.js project
+- **WHEN** the combined installation plan preview is shown
+- **THEN** the Node.js section displays the project path, the npm packages to install, and the instrumented run command
 
-#### Scenario: Execute performs instrumentation
+#### Scenario: Post-install output guides SDK setup
 
 - **GIVEN** the user confirmed the combined installation plan
-- **WHEN** `Execute()` is called
-- **THEN** it prints the `npm install` command for `@opentelemetry/auto-instrumentations-node` and related packages, the required environment variable export statements, and the instrumented run command with `--require @opentelemetry/auto-instrumentations-node/register` — the user runs these commands manually
+- **WHEN** the Node.js instrumentation step executes
+- **THEN** the output shows the `npm install` command, the environment variable export statements, and the run command with `--require @opentelemetry/auto-instrumentations-node/register`

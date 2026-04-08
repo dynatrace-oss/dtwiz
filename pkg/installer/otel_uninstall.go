@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/fatih/color"
 )
 
@@ -33,6 +34,7 @@ func findRunningOtelProcesses() []otelProcessInfo {
 		if binPath != "" {
 			installDir = filepath.Dir(binPath)
 		}
+		logger.Debug("running OTel Collector process", "pid", rc.pid, "binary", binPath, "installDir", installDir)
 		infos = append(infos, otelProcessInfo{
 			pid:        rc.pid,
 			binaryPath: binPath,
@@ -86,8 +88,11 @@ func candidateOtelDirs(infos []otelProcessInfo) []string {
 		}
 		// Only include directories that actually exist on disk.
 		if _, err := os.Stat(d); err == nil {
+			logger.Debug("candidate OTel install dir found", "dir", d)
 			seen[d] = true
 			dirs = append(dirs, d)
+		} else {
+			logger.Debug("candidate OTel install dir not present", "dir", d)
 		}
 	}
 

@@ -20,19 +20,13 @@ Only Python is considered GA for runtime instrumentation. All other runtimes (Ja
 
 ### Requirement: Dry-run support
 
-When `--dry-run` is set, the unified project list and combined preview SHALL be printed but no collector or instrumentation SHALL be installed.
+When `--dry-run` is set, the collector dry-run plan SHALL be printed and the command SHALL return without scanning for projects, showing a project list, or performing any installation.
 
-#### Scenario: Dry-run with projects detected
-
-- **GIVEN** `--dry-run` is set on the `install otel` command
-- **WHEN** projects are detected across GA runtimes
-- **THEN** the system prints the unified project list, shows the collector dry-run plan, and exits without installing anything
-
-#### Scenario: Dry-run without projects
+#### Scenario: Dry-run exits before project scanning
 
 - **GIVEN** `--dry-run` is set on the `install otel` command
-- **WHEN** no projects are detected
-- **THEN** the system prints the collector-only dry-run plan as before
+- **WHEN** the command runs
+- **THEN** the collector plan is printed and the command exits; no project discovery or runtime detection occurs
 
 ### Requirement: Collector-only path unaffected by runtime detection
 

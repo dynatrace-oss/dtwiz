@@ -1,15 +1,200 @@
 package installer
 
 import (
+	"bufio"
 	"fmt"
+	"os"
 	"os/exec"
+	"strconv"
 	"strings"
+	"sync"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/fatih/color"
 )
 
-// InstallOtelCollector installs the Dynatrace OTel Collector and offers
-// runtime auto-instrumentation (Python, Java, …) in a single guided flow.
+type InstrumentationPlan interface {
+	Runtime() string
+	PrintPlanSteps()
+	Execute()
+}
+
+type runtimeInfo struct {
+	name    string
+	binName string
+	enabled bool
+	detect  func() []detectedProject
+}
+
+type detectedProject struct {
+	ScannedProject
+	Runtime    string
+	ModuleName string
+}
+
+func allRuntimesEnabled() bool {
+	v := os.Getenv("DTWIZ_ALL_RUNTIMES")
+	return v == "true" || v == "1"
+}
+
+func detectAvailableRuntimes() []runtimeInfo {
+	allEnabled := allRuntimesEnabled()
+	return []runtimeInfo{
+		{name: "Python", binName: "python3", enabled: true, detect: detectPythonRuntimeProjects},
+		{name: "Java", binName: "java", enabled: allEnabled, detect: detectJavaRuntimeProjects},
+		{name: "Node.js", binName: "node", enabled: allEnabled, detect: detectNodeRuntimeProjects},
+		{name: "Go", binName: "go", enabled: allEnabled, detect: detectGoRuntimeProjects},
+	}
+}
+
+func detectedProjectsFromScan(runtime string, projects []ScannedProject) []detectedProject {
+	detected := make([]detectedProject, 0, len(projects))
+	for _, project := range projects {
+		detected = append(detected, detectedProject{ScannedProject: project, Runtime: runtime})
+	}
+	return detected
+}
+
+func detectMatchedProjects(runtime string, projectFn func() []ScannedProject, processFn func() []DetectedProcess) []detectedProject {
+	projects, processes := runInParallel(projectFn, processFn)
+	matchProcessesToProjects(projects, processes)
+	return detectedProjectsFromScan(runtime, projects)
+}
+
+func detectPythonRuntimeProjects() []detectedProject {
+	return detectMatchedProjects("Python", detectPythonProjects, detectPythonProcesses)
+}
+
+func detectJavaRuntimeProjects() []detectedProject {
+	return detectMatchedProjects("Java", detectJavaProjects, detectJavaProcesses)
+}
+
+func detectNodeRuntimeProjects() []detectedProject {
+	return detectMatchedProjects("Node.js", detectNodeProjects, detectNodeProcesses)
+}
+
+func detectGoRuntimeProjects() []detectedProject {
+	projects := detectGoProjects()
+	detected := make([]detectedProject, 0, len(projects))
+	for _, project := range projects {
+		detected = append(detected, detectedProject{
+			ScannedProject: project.ScannedProject,
+			Runtime:        "Go",
+			ModuleName:     project.ModuleName,
+		})
+	}
+	return detected
+}
+
+func detectAllProjects(runtimes []runtimeInfo) []detectedProject {
+	type result struct {
+		projects []detectedProject
+	}
+
+	active := make([]runtimeInfo, 0, len(runtimes))
+	for _, rt := range runtimes {
+		if !rt.enabled {
+			logger.Debug("skipping runtime (disabled)", "runtime", rt.name)
+			continue
+		}
+		if _, err := exec.LookPath(rt.binName); err != nil {
+			fmt.Printf("  Skipping %s instrumentation — '%s' not found on PATH.\n", rt.name, rt.binName)
+			continue
+		}
+		active = append(active, rt)
+	}
+
+	results := make([]result, len(active))
+	var wg sync.WaitGroup
+	for i, rt := range active {
+		wg.Add(1)
+		go func(idx int, rt runtimeInfo) {
+			defer wg.Done()
+			results[idx] = result{projects: rt.detect()}
+		}(i, rt)
+	}
+	wg.Wait()
+
+	var all []detectedProject
+	for _, r := range results {
+		all = append(all, r.projects...)
+	}
+	return all
+}
+
+func printProjectList(projects []detectedProject) {
+	for i, p := range projects {
+		line := fmt.Sprintf("  [%d]  %s  %s  (%s)", i+1, p.Runtime, p.Path, strings.Join(p.Markers, ", "))
+		if len(p.RunningProcessIDs) > 0 {
+			pidStrs := make([]string, len(p.RunningProcessIDs))
+			for j, pid := range p.RunningProcessIDs {
+				pidStrs[j] = strconv.Itoa(pid)
+			}
+			line += fmt.Sprintf("  ← PIDs: %s", strings.Join(pidStrs, ", "))
+		}
+		if p.ModuleName != "" {
+			line += fmt.Sprintf("  (module: %s)", p.ModuleName)
+		}
+		fmt.Println(line)
+	}
+	fmt.Printf("  [%d]  Skip\n", len(projects)+1)
+}
+
+func selectProject(projects []detectedProject) (detectedProject, bool) {
+	fmt.Println()
+	fmt.Printf("  Select a project to instrument [1-%d]: ", len(projects)+1)
+	reader := bufio.NewReader(os.Stdin)
+	answer, _ := reader.ReadString('\n')
+	answer = strings.TrimSpace(answer)
+	if answer == "" {
+		return detectedProject{}, false
+	}
+	num, err := strconv.Atoi(answer)
+	if err != nil || num < 1 || num > len(projects)+1 {
+		fmt.Println("  Invalid selection, skipping instrumentation.")
+		return detectedProject{}, false
+	}
+	if num == len(projects)+1 {
+		return detectedProject{}, false
+	}
+	return projects[num-1], true
+}
+
+func createRuntimePlan(proj detectedProject, apiURL, token, envURL, platformToken string) InstrumentationPlan {
+	svcName := projectServiceName(proj.Path)
+	envVars := generateBaseOtelEnvVars(apiURL, token, svcName)
+
+	switch proj.Runtime {
+	case "Python":
+		plan := buildPythonInstrumentationPlan(proj.ScannedProject, apiURL, token, envURL, platformToken)
+		if plan == nil {
+			return nil
+		}
+		return plan
+	case "Java":
+		return &JavaInstrumentationPlan{
+			Project: proj.ScannedProject,
+			EnvVars: envVars,
+		}
+	case "Node.js":
+		plan := buildNodeInstrumentationPlan(proj.ScannedProject, apiURL, token)
+		if plan == nil {
+			return nil
+		}
+		return plan
+	case "Go":
+		goProj := GoProject{
+			ScannedProject: proj.ScannedProject,
+			ModuleName:     proj.ModuleName,
+		}
+		return &GoInstrumentationPlan{
+			Project: goProj,
+			EnvVars: envVars,
+		}
+	}
+	return nil
+}
+
 func InstallOtelCollector(envURL, token, ingestToken, platformToken string, dryRun bool) error {
 	cyan := color.New(color.FgMagenta)
 
@@ -27,18 +212,22 @@ func InstallOtelCollector(envURL, token, ingestToken, platformToken string, dryR
 		return nil
 	}
 
-	// Detect runtimes and let the user pick a project upfront, before
-	// showing the combined plan and installing anything.
-	var pythonPlan *PythonInstrumentationPlan
-	if _, err := exec.LookPath("python3"); err == nil {
-		pythonPlan = DetectPythonPlan(cp.apiURL, token)
+	runtimes := detectAvailableRuntimes()
+	projects := detectAllProjects(runtimes)
+
+	var plan InstrumentationPlan
+	if len(projects) > 0 {
+		cyan.Println("  Detected projects:")
+		fmt.Println("  " + strings.Repeat("─", 50))
+		printProjectList(projects)
+
+		if selected, ok := selectProject(projects); ok {
+			plan = createRuntimePlan(selected, cp.apiURL, token, envURL, platformToken)
+		}
 	}
 	fmt.Println()
 
-	// Show combined plan: collector + instrumentation.
-	sep := strings.Repeat("─", 60)
-
-	if pythonPlan != nil {
+	if plan != nil {
 		cyan.Println("  This will install the OTel Collector and auto-instrument your application.")
 	}
 	fmt.Println()
@@ -56,12 +245,13 @@ func InstallOtelCollector(envURL, token, ingestToken, platformToken string, dryR
 		}
 	}
 
+	sep := strings.Repeat("─", 60)
 	cp.printConfigPreview(cyan, sep)
 
-	if pythonPlan != nil {
+	if plan != nil {
 		fmt.Println()
-		cyan.Println("  2) Python auto-instrumentation")
-		pythonPlan.PrintPlanSteps()
+		cyan.Printf("  2) %s auto-instrumentation\n", plan.Runtime())
+		plan.PrintPlanSteps()
 	}
 
 	fmt.Println()
@@ -75,18 +265,13 @@ func InstallOtelCollector(envURL, token, ingestToken, platformToken string, dryR
 	}
 	fmt.Println()
 
-	if err := cp.execute(envURL, platformToken, pythonPlan != nil); err != nil {
+	if err := cp.execute(envURL, platformToken, plan != nil); err != nil {
 		return err
 	}
 
-	// Execute the Python instrumentation plan if one was chosen.
-	if pythonPlan != nil {
-		pythonPlan.EnvURL = envURL
-		pythonPlan.PlatformToken = platformToken
-		pythonPlan.EnvVars = generateOtelPythonEnvVars(cp.apiURL, cp.collectorToken, "my-service")
-
-		fmt.Printf("\n  ── Python auto-instrumentation ──\n\n")
-		pythonPlan.Execute()
+	if plan != nil {
+		fmt.Printf("\n  ── %s auto-instrumentation ──\n\n", plan.Runtime())
+		plan.Execute()
 	}
 
 	return nil
