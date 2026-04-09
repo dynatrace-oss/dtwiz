@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 type pipCommand struct {
@@ -129,6 +131,7 @@ func ensureFrameworkInstrumentations(pythonBin string, pip *pipCommand) error {
 		return nil // non-fatal: services will start but may lack trace spans
 	}
 	if len(missing) == 0 {
+		logger.Debug("no framework instrumentations needed — no instrumented frameworks detected in project")
 		return nil
 	}
 
@@ -149,7 +152,8 @@ func ensureFrameworkInstrumentations(pythonBin string, pip *pipCommand) error {
 	// Final verification — report any remaining gaps.
 	updatedInstalled, err := listInstalledPipPackages(pythonBin)
 	if err != nil {
-		return nil // install succeeded, just can't verify
+		logger.Debug("install succeeded but post-install verification skipped — pip list failed", "error", err)
+		return nil
 	}
 	var stillMissing []string
 	for _, pkg := range missing {

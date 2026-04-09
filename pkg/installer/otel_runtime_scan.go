@@ -46,6 +46,10 @@ var ignoredProjectDirNames = map[string]bool{
 	"out":          true,
 }
 
+func isIgnoredDir(name string) bool {
+	return strings.HasPrefix(name, ".") || ignoredProjectDirNames[name]
+}
+
 func runInParallel[A any, B any](left func() A, right func() B) (A, B) {
 	var leftResult A
 	var rightResult B

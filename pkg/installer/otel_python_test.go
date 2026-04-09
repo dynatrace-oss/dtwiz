@@ -129,7 +129,7 @@ func TestDetectPythonEntrypoints_SubDirectory(t *testing.T) {
 
 func TestDetectPythonEntrypoints_SkipsHiddenAndPycache(t *testing.T) {
 	dir := t.TempDir()
-	for _, sub := range []string{".hidden", "__pycache__", "node_modules"} {
+	for _, sub := range []string{".hidden", "__pycache__", "node_modules", "target"} {
 		subDir := filepath.Join(dir, sub)
 		if err := os.Mkdir(subDir, 0755); err != nil {
 			t.Fatal(err)
@@ -141,7 +141,8 @@ func TestDetectPythonEntrypoints_SkipsHiddenAndPycache(t *testing.T) {
 
 	eps := detectPythonEntrypoints(dir)
 	for _, ep := range eps {
-		if strings.Contains(ep, ".hidden") || strings.Contains(ep, "__pycache__") || strings.Contains(ep, "node_modules") {
+		if strings.Contains(ep, ".hidden") || strings.Contains(ep, "__pycache__") ||
+			strings.Contains(ep, "node_modules") || strings.Contains(ep, "target") {
 			t.Errorf("entrypoint from excluded dir found: %s", ep)
 		}
 	}

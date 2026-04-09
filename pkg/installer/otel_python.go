@@ -77,6 +77,7 @@ func DetectPythonPlan(apiURL, token string) *PythonInstrumentationPlan {
 	matchProcessesToProjects(projects, processes)
 
 	if len(projects) == 0 {
+		logger.Debug("no Python projects detected — no Python source files or running processes found")
 		return nil
 	}
 

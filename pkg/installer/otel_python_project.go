@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 var pythonProjectMarkers = []string{
@@ -74,11 +76,11 @@ func detectPythonEntrypoints(projectPath string) []string {
 
 	entries, err := os.ReadDir(projectPath)
 	if err != nil {
+		logger.Debug("could not read project directory while scanning for entrypoints", "path", projectPath, "error", err)
 		return nil
 	}
 	for _, e := range entries {
-		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") || e.Name() == "__pycache__" ||
-			e.Name() == "node_modules" {
+		if !e.IsDir() || isIgnoredDir(e.Name()) {
 			continue
 		}
 		subDir := filepath.Join(projectPath, e.Name())
