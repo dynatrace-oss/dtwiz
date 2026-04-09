@@ -214,6 +214,14 @@ func (p *PythonInstrumentationPlan) Execute() {
 	}
 	fmt.Println("done.")
 
+	// Resolve the opentelemetry-instrument binary from the venv.
+	// On Linux/macOS it is a Python script (invoked via its shebang); on Windows
+	// pip creates a PE wrapper (.exe) that can be called directly.  Either way,
+	// exec.Command with the binary as the first argument works on every platform
+	// — unlike passing the path as a script argument to venvPython, which fails
+	// on Windows because python.exe cannot execute a PE binary as a script.
+	otelInstrument := resolveVenvBinary(proj.Path, "opentelemetry-instrument")
+
 	fmt.Println()
 	var procs []*ManagedProcess
 	for _, ep := range p.Entrypoints {
@@ -232,7 +240,7 @@ func (p *PythonInstrumentationPlan) Execute() {
 			continue
 		}
 
-		cmd := exec.Command(venvPython, "-m", "opentelemetry.instrumentation.auto_instrumentation", pythonBin, ep)
+		cmd := exec.Command(otelInstrument, pythonBin, ep)
 		cmd.Dir = proj.Path
 		cmd.Env = append(os.Environ(), formatEnvVars(epEnvVars)...)
 
