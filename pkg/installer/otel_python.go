@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -214,12 +215,6 @@ func (p *PythonInstrumentationPlan) Execute() {
 	}
 	fmt.Println("done.")
 
-	// Resolve the opentelemetry-instrument binary from the venv.
-	// On Linux/macOS it is a Python script (invoked via its shebang); on Windows
-	// pip creates a PE wrapper (.exe) that can be called directly.  Either way,
-	// exec.Command with the binary as the first argument works on every platform
-	// — unlike passing the path as a script argument to venvPython, which fails
-	// on Windows because python.exe cannot execute a PE binary as a script.
 	otelInstrument := resolveVenvBinary(proj.Path, "opentelemetry-instrument")
 
 	fmt.Println()
@@ -240,7 +235,17 @@ func (p *PythonInstrumentationPlan) Execute() {
 			continue
 		}
 
-		cmd := exec.Command(otelInstrument, pythonBin, ep)
+		// On Unix/macOS, otelInstrument is a Python script whose shebang may point
+		// to a stale path after venv recreation. Invoke it via venvPython so Python
+		// reads the script content directly, bypassing the shebang entirely.
+		// On Windows, pip installs a Portable Executable .exe wrapper that must be called directly.
+		// When not found in the venv (bare name), call directly and rely on PATH.
+		var cmd *exec.Cmd
+		if runtime.GOOS == "windows" || !filepath.IsAbs(otelInstrument) {
+			cmd = exec.Command(otelInstrument, pythonBin, ep)
+		} else {
+			cmd = exec.Command(venvPython, otelInstrument, pythonBin, ep)
+		}
 		cmd.Dir = proj.Path
 		cmd.Env = append(os.Environ(), formatEnvVars(epEnvVars)...)
 
