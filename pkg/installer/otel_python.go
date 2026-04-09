@@ -121,7 +121,6 @@ func (p *PythonInstrumentationPlan) Execute() {
 	envVars := p.EnvVars
 
 	venvPip := detectProjectPip(proj.Path)
-	var otelInstrument string
 	pythonBin := resolveVenvBinary(proj.Path, "python")
 	if pythonBin == "" {
 		pythonBin = "python3"
@@ -195,8 +194,6 @@ func (p *PythonInstrumentationPlan) Execute() {
 	}
 	fmt.Println("done.")
 
-	otelInstrument = resolveVenvBinary(proj.Path, "opentelemetry-instrument")
-
 	fmt.Print("  Running opentelemetry-bootstrap... ")
 	venvPython := resolveVenvBinary(proj.Path, "python")
 	if venvPython == "python" {
@@ -235,7 +232,7 @@ func (p *PythonInstrumentationPlan) Execute() {
 			continue
 		}
 
-		cmd := exec.Command(venvPython, otelInstrument, pythonBin, ep)
+		cmd := exec.Command(venvPython, "-m", "opentelemetry.instrumentation.auto_instrumentation", pythonBin, ep)
 		cmd.Dir = proj.Path
 		cmd.Env = append(os.Environ(), formatEnvVars(epEnvVars)...)
 
