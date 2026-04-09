@@ -68,9 +68,10 @@ func normalizePipName(name string) string {
 }
 
 func listInstalledPipPackages(pythonBin string) (map[string]bool, error) {
-	out, err := exec.Command(pythonBin, "-m", "pip", "list", "--format=json").Output()
+	args := []string{"-m", "pip", "list", "--format=json"}
+	out, err := exec.Command(pythonBin, args...).CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("pip list failed: %w", err)
+		return nil, fmt.Errorf("pip list failed: %w\n    command: %s %s\n    %s", err, pythonBin, strings.Join(args, " "), strings.TrimSpace(string(out)))
 	}
 	var packages []struct {
 		Name string `json:"name"`

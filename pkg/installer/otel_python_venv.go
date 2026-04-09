@@ -18,7 +18,7 @@ func detectPython() (string, error) {
 			logger.Debug("python interpreter not found on PATH", "candidate", name, "error", err)
 			continue
 		}
-		out, err := exec.Command(path, "--version").Output()
+		out, err := exec.Command(path, "--version").CombinedOutput()
 		if err != nil {
 			logger.Debug("python interpreter version probe failed", "candidate", name, "path", path, "error", err)
 			continue
