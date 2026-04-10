@@ -69,15 +69,20 @@ func normalizePipName(name string) string {
 
 func listInstalledPipPackages(pythonBin string) (map[string]bool, error) {
 	args := []string{"-m", "pip", "list", "--format=json"}
-	out, err := exec.Command(pythonBin, args...).CombinedOutput()
+	cmd := exec.Command(pythonBin, args...)
+	out, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("pip list failed: %w\n    command: %s %s\n    %s", err, pythonBin, strings.Join(args, " "), strings.TrimSpace(string(out)))
+		stderr := ""
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			stderr = strings.TrimSpace(string(exitErr.Stderr))
+		}
+		return nil, fmt.Errorf("pip list failed: %w\n    command: %s %s\n    %s", err, pythonBin, strings.Join(args, " "), stderr)
 	}
 	var packages []struct {
 		Name string `json:"name"`
 	}
 	if err := json.Unmarshal(out, &packages); err != nil {
-		return nil, fmt.Errorf("parsing pip list output: %w", err)
+		return nil, fmt.Errorf("parsing pip list output: %w\n    pip may have printed warnings that corrupted the output — run: %s -m pip list --format=json", err, pythonBin)
 	}
 	set := make(map[string]bool, len(packages))
 	for _, p := range packages {
