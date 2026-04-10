@@ -31,7 +31,8 @@ func generateBaseOtelEnvVars(apiURL, token, serviceName string) map[string]strin
 
 func projectServiceName(projectPath string) string {
 	baseName := filepath.Base(projectPath)
-	if baseName == "" || baseName == "." || baseName == "/" {
+	// filepath.Base("/") returns "/" on Unix and "\\" on Windows; treat either as root.
+	if baseName == "" || baseName == "." || strings.Trim(baseName, `/\`) == "" {
 		return "my-service"
 	}
 	return baseName

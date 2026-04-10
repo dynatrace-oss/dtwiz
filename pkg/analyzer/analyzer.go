@@ -23,16 +23,20 @@ func runCmd(cmd string, args ...string) (bool, string) {
 	c.Stderr = &buf
 
 	// Use a timeout so a slow/hanging command doesn't block the whole analysis.
+	// Start the process first so c.Process is safely set before we read it.
+	if err := c.Start(); err != nil {
+		return false, ""
+	}
+
 	done := make(chan error, 1)
-	go func() { done <- c.Run() }()
+	go func() { done <- c.Wait() }()
 
 	select {
 	case err := <-done:
 		return err == nil, strings.TrimSpace(buf.String())
 	case <-time.After(20 * time.Second):
-		if c.Process != nil {
-			_ = c.Process.Kill()
-		}
+		_ = c.Process.Kill()
+		<-done // wait for the goroutine to finish
 		return false, ""
 	}
 }
