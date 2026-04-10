@@ -1,4 +1,4 @@
-.PHONY: build install test lint cleanmarkdownlint markdownlint-fix
+.PHONY: build install test test-coverage lint clean markdownlint markdownlint-fix
 
 BINARY := dtwiz
 GO     := go
@@ -11,9 +11,28 @@ build:
 install:
 	$(GO) install .
 
+COVERAGE_THRESHOLD ?= 20
+
 test:
 	$(GO) test ./... -coverprofile=coverage.out
 	$(GO) tool cover -func=coverage.out
+
+# Run tests and enforce coverage threshold
+test-coverage:
+	@echo "Running tests with coverage..."
+	@$(GO) test -race -coverprofile=coverage.out -covermode=atomic ./...
+	@echo ""
+	@echo "=== Package Coverage ==="
+	@$(GO) tool cover -func=coverage.out | grep -E "^(total|.*\t)" | tail -30
+	@echo ""
+	@COVERAGE=$$($(GO) tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
+	COVERAGE_INT=$${COVERAGE%.*}; \
+	echo "Total coverage: $${COVERAGE}% (threshold: $(COVERAGE_THRESHOLD)%)"; \
+	if [ "$$COVERAGE_INT" -lt "$(COVERAGE_THRESHOLD)" ]; then \
+		echo "FAIL: Coverage $${COVERAGE}% is below the $(COVERAGE_THRESHOLD)% threshold"; \
+		exit 1; \
+	fi; \
+	echo "OK: Coverage meets threshold"
 
 lint:
 	golangci-lint run ./...

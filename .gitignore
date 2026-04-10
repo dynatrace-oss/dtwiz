@@ -37,6 +37,9 @@ Thumbs.db
 # Config files (might contain tokens)
 config.yaml
 
+# Local secrets notepad (never commit)
+.env
+
 # Build artifacts
 *.log
 .integrationtests.env
