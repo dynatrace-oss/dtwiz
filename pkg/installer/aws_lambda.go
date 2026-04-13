@@ -38,6 +38,7 @@ var dtEnvVarKeys = []string{
 	"DT_CLUSTER",
 	"DT_CONNECTION_BASE_URL",
 	"DT_CONNECTION_AUTH_TOKEN",
+	"DT_ENABLE_ESM_LOADERS",
 }
 
 // ── Runtime mapping ──────────────────────────────────────────────────────────
@@ -482,7 +483,7 @@ func skipReason(fn lambdaFunction) string {
 
 // mergeDTEnvVars adds the Dynatrace env vars to the function's existing env
 // vars, preserving all non-DT values.
-func mergeDTEnvVars(existing map[string]string, conn *dtConnectionInfo) map[string]string {
+func mergeDTEnvVars(existing map[string]string, conn *dtConnectionInfo, runtime string) map[string]string {
 	merged := make(map[string]string, len(existing)+5)
 	for k, v := range existing {
 		merged[k] = v
@@ -492,6 +493,9 @@ func mergeDTEnvVars(existing map[string]string, conn *dtConnectionInfo) map[stri
 	merged["DT_CLUSTER"] = conn.ClusterID
 	merged["DT_CONNECTION_BASE_URL"] = conn.BaseURL
 	merged["DT_CONNECTION_AUTH_TOKEN"] = conn.Token
+	if strings.HasPrefix(runtime, "nodejs") {
+		merged["DT_ENABLE_ESM_LOADERS"] = "true"
+	}
 	return merged
 }
 
@@ -553,7 +557,7 @@ func instrumentFunction(fn lambdaFunction, layerARN string, conn *dtConnectionIn
 	}
 
 	// Merge env vars and layers.
-	mergedEnv := mergeDTEnvVars(currentEnv, conn)
+	mergedEnv := mergeDTEnvVars(currentEnv, conn, fn.Runtime)
 	mergedLayers := updateLayers(currentLayers, layerARN)
 
 	return updateFunctionConfig(fn.Name, mergedEnv, mergedLayers)
@@ -754,6 +758,7 @@ func InstallAWSLambda(envURL, token, platformToken string, dryRun, confirm bool)
 
 	succeeded := 0
 	failed := 0
+	var succeededNames []string
 
 	for i, fn := range functions {
 		if actions[i] == "skip" {
@@ -768,6 +773,7 @@ func InstallAWSLambda(envURL, token, platformToken string, dryRun, confirm bool)
 		}
 		fmt.Printf(" done\n")
 		succeeded++
+		succeededNames = append(succeededNames, fn.Name)
 	}
 
 	// ── Summary ──────────────────────────────────────────────────────────────
@@ -777,6 +783,14 @@ func InstallAWSLambda(envURL, token, platformToken string, dryRun, confirm bool)
 		fmt.Printf("  %d succeeded, %d failed\n", succeeded, failed)
 	} else {
 		fmt.Printf("  %d functions instrumented successfully\n", succeeded)
+	}
+
+	// ── Wait for services ────────────────────────────────────────────────────
+
+	if succeeded > 0 {
+		fmt.Println()
+		fmt.Println("  Waiting for traffic — invoke your Lambda functions to generate traces.")
+		waitForServices(envURL, platformToken, succeededNames, true)
 	}
 	return nil
 }

@@ -106,7 +106,12 @@ type dqlResponse struct {
 	} `json:"result"`
 }
 
-func waitForServices(envURL, platformToken string, serviceNames []string) {
+// waitForServices polls Dynatrace Smartscape until every service in serviceNames
+// appears. When containsMatch is true, a service is considered found when its
+// Dynatrace name contains the input name as a substring (useful for Lambda
+// functions whose names are suffixed with the region, e.g. "fn in us-east-1").
+// When containsMatch is false, an exact name match is required.
+func waitForServices(envURL, platformToken string, serviceNames []string, containsMatch bool) {
 	if len(serviceNames) == 0 || platformToken == "" {
 		return
 	}
@@ -117,7 +122,11 @@ func waitForServices(envURL, platformToken string, serviceNames []string) {
 
 	conditions := make([]string, len(serviceNames))
 	for i, name := range serviceNames {
-		conditions[i] = fmt.Sprintf("name == \"%s\"", name)
+		if containsMatch {
+			conditions[i] = fmt.Sprintf("contains(name, \"%s\")", name)
+		} else {
+			conditions[i] = fmt.Sprintf("name == \"%s\"", name)
+		}
 	}
 	dql := fmt.Sprintf("smartscapeNodes SERVICE | filter %s", strings.Join(conditions, " or "))
 
@@ -146,10 +155,15 @@ func waitForServices(envURL, platformToken string, serviceNames []string) {
 		case <-ticker.C:
 			logger.Debug("polling smartscape for services", "remaining", len(remainingServices))
 			foundServices := fetchSmartscapeServiceNames(queryURL, platformToken, dql)
-			for _, name := range foundServices {
-				if remainingServices[name] {
-					delete(remainingServices, name)
-					fmt.Printf("  ✓ \"%s\" appeared in Dynatrace → %s\n", name, appsURL+"/ui/apps/my.getting.started.dieter/")
+			for _, fullName := range foundServices {
+				for inputName := range remainingServices {
+					matched := (!containsMatch && fullName == inputName) ||
+						(containsMatch && strings.Contains(fullName, inputName))
+					if matched {
+						delete(remainingServices, inputName)
+						fmt.Printf("  ✓ \"%s\" appeared in Dynatrace → %s\n", fullName, appsURL+"/ui/apps/my.getting.started.dieter/")
+						break
+					}
 				}
 			}
 			if len(remainingServices) == 0 {

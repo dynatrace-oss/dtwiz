@@ -182,7 +182,7 @@ func TestMergeDTEnvVars(t *testing.T) {
 			"DATABASE_URL": "postgres://localhost:5432/db",
 		}
 
-		merged := mergeDTEnvVars(existing, conn)
+		merged := mergeDTEnvVars(existing, conn, "python3.12")
 
 		// All original vars must be preserved.
 		for k, v := range existing {
@@ -207,10 +207,21 @@ func TestMergeDTEnvVars(t *testing.T) {
 		if merged["DT_CONNECTION_AUTH_TOKEN"] != "dt0c01.mytoken" {
 			t.Errorf("DT_CONNECTION_AUTH_TOKEN = %q", merged["DT_CONNECTION_AUTH_TOKEN"])
 		}
+		// Non-node runtime must NOT set DT_ENABLE_ESM_LOADERS.
+		if _, ok := merged["DT_ENABLE_ESM_LOADERS"]; ok {
+			t.Errorf("DT_ENABLE_ESM_LOADERS must not be set for non-node runtime")
+		}
+	})
+
+	t.Run("nodejs sets DT_ENABLE_ESM_LOADERS", func(t *testing.T) {
+		merged := mergeDTEnvVars(map[string]string{}, conn, "nodejs20.x")
+		if merged["DT_ENABLE_ESM_LOADERS"] != "true" {
+			t.Errorf("DT_ENABLE_ESM_LOADERS = %q, want true", merged["DT_ENABLE_ESM_LOADERS"])
+		}
 	})
 
 	t.Run("empty existing", func(t *testing.T) {
-		merged := mergeDTEnvVars(map[string]string{}, conn)
+		merged := mergeDTEnvVars(map[string]string{}, conn, "python3.12")
 		if len(merged) != 5 {
 			t.Errorf("expected 5 env vars, got %d", len(merged))
 		}

@@ -318,7 +318,7 @@ func (p *PythonInstrumentationPlan) Execute() {
 
 	fmt.Println()
 	fmt.Println("  Waiting for traffic — send requests to your services to generate traces and metrics.")
-	waitForServices(p.EnvURL, p.PlatformToken, startedServices)
+	waitForServices(p.EnvURL, p.PlatformToken, startedServices, false)
 }
 
 // commonEntrypoints are filenames commonly used as Python project entrypoints,

@@ -162,12 +162,40 @@ func TestWaitForServices_LinkContainsDieter(t *testing.T) {
 	defer server.Close()
 
 	output := captureStdout(t, func() {
-		waitForServices(server.URL, "dt0s16.token", []string{"my-svc"})
+		waitForServices(server.URL, "dt0s16.token", []string{"my-svc"}, false)
 	})
 
 	const wantSubstr = "my.getting.started.dieter"
 	if !strings.Contains(output, wantSubstr) {
 		t.Errorf("output does not contain %q:\n%s", wantSubstr, output)
+	}
+}
+
+func TestWaitForServices_ContainsMatch(t *testing.T) {
+	// Simulate Lambda: Dynatrace returns "helloWorldNode2 in us-east-1" but
+	// the input name is just "helloWorldNode2".
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(dqlResponse{
+			Result: struct {
+				Records []map[string]interface{} `json:"records"`
+			}{
+				Records: []map[string]interface{}{
+					{"name": "helloWorldNode2 in us-east-1"},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	output := captureStdout(t, func() {
+		waitForServices(server.URL, "dt0s16.token", []string{"helloWorldNode2"}, true)
+	})
+
+	if !strings.Contains(output, "helloWorldNode2 in us-east-1") {
+		t.Errorf("output should show full Dynatrace name, got:\n%s", output)
+	}
+	if !strings.Contains(output, "my.getting.started.dieter") {
+		t.Errorf("output should contain getting started link, got:\n%s", output)
 	}
 }
 
