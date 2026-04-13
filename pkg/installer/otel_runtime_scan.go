@@ -80,7 +80,7 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 	discoveredProjects := make([]ScannedProject, 0)
 	visitedDirs := make(map[string]bool) // present=visited, value=matched
 
-	inspectDir := func(dir string) bool {
+	dirMatches := func(dir string) bool {
 		if shouldSkipDir(filepath.Base(dir)) {
 			logger.Debug("skipping ignored dir", "path", dir)
 			return false
@@ -124,7 +124,7 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 				continue
 			}
 			childDir := filepath.Join(dir, entry.Name())
-			if !inspectDir(childDir) {
+			if !dirMatches(childDir) {
 				scanChildDirs(childDir)
 			}
 		}
@@ -136,7 +136,7 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 		return discoveredProjects
 	}
 
-	if !inspectDir(workingDir) {
+	if !dirMatches(workingDir) {
 		scanChildDirs(workingDir)
 	}
 
