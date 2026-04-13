@@ -124,7 +124,7 @@ func waitForServices(envURL, platformToken string, serviceNames []string) {
 		remainingServices[name] = true
 	}
 
-	timeout := time.After(120 * time.Second)
+	timeout := time.After(240 * time.Second)
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 
