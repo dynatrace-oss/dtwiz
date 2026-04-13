@@ -303,6 +303,69 @@ func TestScanProjectDirs_MonorepoGrouping(t *testing.T) {
 	}
 }
 
+func TestScanProjectDirs_DeepNesting(t *testing.T) {
+	root := t.TempDir()
+
+	// depth: root/a/b/c/d — four levels below cwd
+	deep := filepath.Join(root, "a", "b", "c", "d")
+	if err := os.MkdirAll(deep, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(deep, "go.mod"), []byte("module deep\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	setTestWorkingDir(t, root)
+	projects := scanProjectDirs([]string{"go.mod"}, nil)
+
+	want := filepath.Join("a", "b", "c", "d")
+	found := false
+	for _, p := range projects {
+		if strings.HasSuffix(filepath.ToSlash(p.Path), filepath.ToSlash(filepath.Join(root, want))) ||
+			strings.HasSuffix(p.Path, want) {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected project at depth 4 to be found, got %v", projects)
+	}
+}
+
+func TestScanProjectDirs_SubtreePruning(t *testing.T) {
+	root := t.TempDir()
+
+	// parent project
+	parent := filepath.Join(root, "myapp")
+	if err := os.MkdirAll(parent, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(parent, "go.mod"), []byte("module myapp\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// nested marker inside the same project — should not produce a second result
+	nested := filepath.Join(parent, "internal", "sub")
+	if err := os.MkdirAll(nested, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, "go.mod"), []byte("module sub\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	setTestWorkingDir(t, root)
+	projects := scanProjectDirs([]string{"go.mod"}, nil)
+
+	count := 0
+	for _, p := range projects {
+		if strings.Contains(p.Path, "myapp") {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("expected 1 project under myapp (subtree pruned), got %d: %v", count, projects)
+	}
+}
+
 func TestScanProjectDirs_AncestorWalk(t *testing.T) {
 	grandparent := t.TempDir()
 

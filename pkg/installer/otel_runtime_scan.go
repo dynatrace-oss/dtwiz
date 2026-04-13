@@ -78,11 +78,12 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 	}
 
 	discoveredProjects := make([]ScannedProject, 0)
-	visitedDirs := make(map[string]bool)
+	visitedDirs := make(map[string]bool) // present=visited, value=matched
 
-	inspectDir := func(dir string) {
+	dirMatches := func(dir string) bool {
 		if shouldSkipDir(filepath.Base(dir)) {
-			return
+			logger.Debug("skipping ignored dir", "path", dir)
+			return false
 		}
 
 		resolvedDir, err := filepath.EvalSymlinks(dir)
@@ -91,10 +92,9 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 		}
 
 		normalizedDir := strings.ToLower(resolvedDir)
-		if visitedDirs[normalizedDir] {
-			return
+		if matched, seen := visitedDirs[normalizedDir]; seen {
+			return matched
 		}
-		visitedDirs[normalizedDir] = true
 
 		matchedMarkers := make([]string, 0, len(markers))
 		for _, marker := range markers {
@@ -105,33 +105,27 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 
 		if len(matchedMarkers) == 0 {
 			logger.Debug("project dir scanned, no markers", "path", dir, "looking_for", strings.Join(markers, ","))
-			return
+			visitedDirs[normalizedDir] = false
+			return false
 		}
 
 		logger.Debug("project dir matched", "path", dir, "markers", strings.Join(matchedMarkers, ","))
 		discoveredProjects = append(discoveredProjects, ScannedProject{Path: dir, Markers: matchedMarkers})
+		visitedDirs[normalizedDir] = true
+		return true
 	}
 
-	scanChildDirs := func(dir string) int {
+	var scanChildDirs func(dir string) int
+	scanChildDirs = func(dir string) int {
 		initialCount := len(discoveredProjects)
 		entries, _ := os.ReadDir(dir)
 		for _, entry := range entries {
 			if !entry.IsDir() || shouldSkipDir(entry.Name()) {
 				continue
 			}
-
 			childDir := filepath.Join(dir, entry.Name())
-			beforeChild := len(discoveredProjects)
-			inspectDir(childDir)
-			if len(discoveredProjects) != beforeChild {
-				continue
-			}
-
-			grandchildren, _ := os.ReadDir(childDir)
-			for _, grandchild := range grandchildren {
-				if grandchild.IsDir() && !shouldSkipDir(grandchild.Name()) {
-					inspectDir(filepath.Join(childDir, grandchild.Name()))
-				}
+			if !dirMatches(childDir) {
+				scanChildDirs(childDir)
 			}
 		}
 		return len(discoveredProjects) - initialCount
@@ -142,8 +136,9 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 		return discoveredProjects
 	}
 
-	inspectDir(workingDir)
-	scanChildDirs(workingDir)
+	if !dirMatches(workingDir) {
+		scanChildDirs(workingDir)
+	}
 
 	currentDir := workingDir
 	for range 2 {
@@ -151,6 +146,7 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 		if parentDir == currentDir {
 			break
 		}
+		logger.Debug("scanning ancestor dir", "path", parentDir)
 		if scanChildDirs(parentDir) > 0 {
 			break
 		}
