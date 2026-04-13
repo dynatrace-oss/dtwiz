@@ -4,7 +4,16 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sync"
 	"time"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
+)
+
+const (
+	portPollInterval    = 500 * time.Millisecond
+	portPollTimeout     = 15 * time.Second
+	processSettleDelay  = 3 * time.Second
 )
 
 type ManagedProcess struct {
@@ -39,8 +48,6 @@ func StartManagedProcess(name, logName string, cmd *exec.Cmd, logFile *os.File) 
 	}, nil
 }
 
-// WaitResult is a non-blocking check of the process exit channel.
-// The first received cmd.Wait result is cached and returned on later calls.
 func (p *ManagedProcess) WaitResult() (exited bool, err error) {
 	if p.resultConsumed {
 		return p.hasExited, p.cachedWaitErr
@@ -56,8 +63,7 @@ func (p *ManagedProcess) WaitResult() (exited bool, err error) {
 	}
 }
 
-func (p *ManagedProcess) PrintSummaryLine() {
-	listeningPort := detectProcessListeningPort(p.PID)
+func (p *ManagedProcess) printLine(listeningPort string) {
 	hasExited, waitErr := p.WaitResult()
 
 	statusLine := fmt.Sprintf("  %s (PID %d)", p.Name, p.PID)
@@ -76,14 +82,88 @@ func (p *ManagedProcess) PrintSummaryLine() {
 	fmt.Println(statusLine)
 }
 
+// PrintSummaryLine performs a one-shot port detection. Prefer PrintProcessSummary
+// for multiple processes — it polls in parallel with a retry window.
+func (p *ManagedProcess) PrintSummaryLine() {
+	p.printLine(detectProcessListeningPort(p.PID))
+}
+
 func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) (aliveNames []string, alivePIDs []int) {
 	if len(procs) == 0 {
 		return
 	}
+	logger.Debug("waiting for processes to settle", "count", len(procs), "settle", settleDuration)
 	time.Sleep(settleDuration)
-	fmt.Println()
+
+	started := 0
+	notStarted := 0
 	for _, p := range procs {
-		p.PrintSummaryLine()
+		exited, _ := p.WaitResult()
+		if exited {
+			notStarted++
+		} else {
+			started++
+		}
+	}
+	logger.Debug("settle complete", "started", started, "not_started", notStarted)
+
+	ports := make([]string, len(procs))
+	fmt.Println()
+	if started == 0 {
+		logger.Debug("all processes exited during settle — skipping port detection")
+	} else {
+		if notStarted > 0 {
+			fmt.Printf("  %d of %d service(s) started (%d failed) — looking up addresses...\n", started, len(procs), notStarted)
+		} else {
+			fmt.Printf("  %d service(s) started — looking up addresses...\n", started)
+		}
+
+		deadline := time.Now().Add(portPollTimeout)
+		iteration := 0
+		for time.Now().Before(deadline) {
+			iteration++
+			var mu sync.Mutex
+			portsFound := 0
+			remaining := 0
+			var wg sync.WaitGroup
+			for i, p := range procs {
+				if ports[i] != "" {
+					portsFound++
+					continue
+				}
+				exited, _ := p.WaitResult()
+				if exited {
+					continue
+				}
+				remaining++
+				wg.Add(1)
+				go func(idx int, proc *ManagedProcess) {
+					defer wg.Done()
+					port := detectProcessListeningPort(proc.PID)
+					logger.Debug("port probe", "iteration", iteration, "pid", proc.PID, "name", proc.Name, "port", port)
+					if port != "" {
+						mu.Lock()
+						ports[idx] = port
+						portsFound++
+						mu.Unlock()
+					}
+				}(i, p)
+			}
+			wg.Wait()
+			logger.Debug("poll iteration complete", "iteration", iteration, "remaining", remaining, "ports_found", portsFound)
+			if remaining == 0 || portsFound == started {
+				logger.Debug("port detection done", "reason", map[bool]string{true: "all exited", false: "all ports found"}[remaining == 0])
+				break
+			}
+			time.Sleep(portPollInterval)
+		}
+	}
+
+	for i, p := range procs {
+		p.printLine(ports[i])
+	}
+
+	for _, p := range procs {
 		exited, _ := p.WaitResult()
 		if !exited {
 			aliveNames = append(aliveNames, p.Name)

@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/fatih/color"
@@ -257,7 +256,7 @@ func (p *PythonInstrumentationPlan) Execute() {
 		procs = append(procs, mp)
 	}
 
-	startedServices, _ := PrintProcessSummary(procs, 2*time.Second)
+	startedServices, _ := PrintProcessSummary(procs, processSettleDelay)
 
 	if len(startedServices) == 0 {
 		fmt.Println()
