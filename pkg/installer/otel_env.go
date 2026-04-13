@@ -16,6 +16,8 @@ import (
 
 const otelExporterOTLPHeadersEnvVar = "OTEL_EXPORTER_OTLP_HEADERS"
 
+const waitForServicesTimeout = 240 * time.Second
+
 func generateBaseOtelEnvVars(apiURL, token, serviceName string) map[string]string {
 	return map[string]string{
 		"OTEL_SERVICE_NAME":                                 serviceName,
@@ -124,7 +126,7 @@ func waitForServices(envURL, platformToken string, serviceNames []string) {
 		remainingServices[name] = true
 	}
 
-	timeout := time.After(240 * time.Second)
+	timeout := time.After(waitForServicesTimeout)
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 
