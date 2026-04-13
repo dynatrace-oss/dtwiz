@@ -113,6 +113,12 @@ func TestIsVenvHealthy_BrokenPython(t *testing.T) {
 }
 
 func TestIsVenvHealthy_WorkingPython(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// A stub .exe containing only "MZ" is not a valid PE executable and cannot
+		// be launched by the OS, so isVenvHealthy (which runs python --version)
+		// always returns false for stub binaries on Windows.
+		t.Skip("stub .exe cannot be executed on Windows")
+	}
 	projectDir := t.TempDir()
 	createStubVenvPython(t, projectDir, ".venv", "python", true)
 

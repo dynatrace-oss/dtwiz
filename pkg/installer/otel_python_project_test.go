@@ -225,11 +225,18 @@ func TestDetectPythonProjects_FindsCWD(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(orig) })
 
 	// EvalSymlinks resolves macOS /var → /private/var; match against the canonical path.
+	// On Windows, os.Getwd() may return a short path (RUNNER~1) while t.TempDir() returns
+	// the long path, so compare via os.SameFile rather than string equality.
 	expected, _ := filepath.EvalSymlinks(dir)
+	expectedInfo, err := os.Lstat(expected)
+	if err != nil {
+		t.Fatalf("Lstat expected path %q: %v", expected, err)
+	}
 	projects := detectPythonProjects()
 	found := false
 	for _, p := range projects {
-		if p.Path == expected {
+		info, err := os.Lstat(p.Path)
+		if err == nil && os.SameFile(expectedInfo, info) {
 			found = true
 			break
 		}
@@ -253,10 +260,15 @@ func TestDetectPythonProjects_FindsSubDir(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(orig) })
 
 	expectedSub, _ := filepath.EvalSymlinks(subDir)
+	expectedSubInfo, err := os.Lstat(expectedSub)
+	if err != nil {
+		t.Fatalf("Lstat expected subdir path %q: %v", expectedSub, err)
+	}
 	projects := detectPythonProjects()
 	found := false
 	for _, p := range projects {
-		if p.Path == expectedSub {
+		info, err := os.Lstat(p.Path)
+		if err == nil && os.SameFile(expectedSubInfo, info) {
 			found = true
 			break
 		}
