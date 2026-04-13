@@ -147,6 +147,30 @@ func TestFormatPrintableEnvVars(t *testing.T) {
 	}
 }
 
+func TestWaitForServices_LinkContainsDieter(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(dqlResponse{
+			Result: struct {
+				Records []map[string]interface{} `json:"records"`
+			}{
+				Records: []map[string]interface{}{
+					{"name": "my-svc"},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	output := captureStdout(t, func() {
+		waitForServices(server.URL, "dt0s16.token", []string{"my-svc"})
+	})
+
+	const wantSubstr = "my.getting.started.dieter"
+	if !strings.Contains(output, wantSubstr) {
+		t.Errorf("output does not contain %q:\n%s", wantSubstr, output)
+	}
+}
+
 func TestFetchSmartscapeServiceNames(t *testing.T) {
 	var receivedAuthorization string
 	var receivedContentType string
