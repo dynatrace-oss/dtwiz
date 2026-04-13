@@ -79,10 +79,11 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 
 	discoveredProjects := make([]ScannedProject, 0)
 	visitedDirs := make(map[string]bool)
+	matchedDirs := make(map[string]bool)
 
-	inspectDir := func(dir string) {
+	inspectDir := func(dir string) bool {
 		if shouldSkipDir(filepath.Base(dir)) {
-			return
+			return false
 		}
 
 		resolvedDir, err := filepath.EvalSymlinks(dir)
@@ -92,7 +93,7 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 
 		normalizedDir := strings.ToLower(resolvedDir)
 		if visitedDirs[normalizedDir] {
-			return
+			return matchedDirs[normalizedDir]
 		}
 		visitedDirs[normalizedDir] = true
 
@@ -105,33 +106,26 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 
 		if len(matchedMarkers) == 0 {
 			logger.Debug("project dir scanned, no markers", "path", dir, "looking_for", strings.Join(markers, ","))
-			return
+			return false
 		}
 
 		logger.Debug("project dir matched", "path", dir, "markers", strings.Join(matchedMarkers, ","))
 		discoveredProjects = append(discoveredProjects, ScannedProject{Path: dir, Markers: matchedMarkers})
+		matchedDirs[normalizedDir] = true
+		return true
 	}
 
-	scanChildDirs := func(dir string) int {
+	var scanChildDirs func(dir string) int
+	scanChildDirs = func(dir string) int {
 		initialCount := len(discoveredProjects)
 		entries, _ := os.ReadDir(dir)
 		for _, entry := range entries {
 			if !entry.IsDir() || shouldSkipDir(entry.Name()) {
 				continue
 			}
-
 			childDir := filepath.Join(dir, entry.Name())
-			beforeChild := len(discoveredProjects)
-			inspectDir(childDir)
-			if len(discoveredProjects) != beforeChild {
-				continue
-			}
-
-			grandchildren, _ := os.ReadDir(childDir)
-			for _, grandchild := range grandchildren {
-				if grandchild.IsDir() && !shouldSkipDir(grandchild.Name()) {
-					inspectDir(filepath.Join(childDir, grandchild.Name()))
-				}
+			if !inspectDir(childDir) {
+				scanChildDirs(childDir)
 			}
 		}
 		return len(discoveredProjects) - initialCount
@@ -142,8 +136,9 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 		return discoveredProjects
 	}
 
-	inspectDir(workingDir)
-	scanChildDirs(workingDir)
+	if !inspectDir(workingDir) {
+		scanChildDirs(workingDir)
+	}
 
 	currentDir := workingDir
 	for range 2 {
