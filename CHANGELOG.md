@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-04-14
+
+### Changed
+
+- OTel Python: refactor internals into dedicated modules for process management, venv handling, and package installation
+- OTel Python: improve reliability: broken venv detection and recreation, process wait before re-instrumentation, and better install feedback
+
 ## [0.2.4] - 2026-04-14
 
 ### Changed
@@ -125,7 +132,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.5...HEAD
+[0.2.5]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.1...v0.2.2
