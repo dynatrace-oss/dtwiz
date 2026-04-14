@@ -27,6 +27,14 @@ jobs:
           TAG="snapshot-$(echo "${{ github.ref_name }}" | tr '/' '-')"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
+      - name: Delete existing pre-release (if any)
+        run: |
+          gh release delete "${{ steps.tag.outputs.tag }}" --yes || true
+          git push origin ":refs/tags/${{ steps.tag.outputs.tag }}" || true
+          git tag -d "${{ steps.tag.outputs.tag }}" || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Run GoReleaser snapshot
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -39,15 +47,14 @@ jobs:
         id: version
         run: |
           VERSION=$(ls dist/dtwiz_*_linux_amd64.tar.gz | sed 's|.*dtwiz_\(.*\)_linux_amd64.tar.gz|\1|')
+          if [ -z "$VERSION" ]; then
+            echo "Error: could not determine snapshot version — no matching artifact found." >&2
+            echo "Contents of dist/:" >&2
+            ls -la dist/ 2>/dev/null || echo "  dist/ does not exist" >&2
+            exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "$VERSION" > dist/version.txt
-
-      - name: Delete existing pre-release (if any)
-        run: |
-          gh release delete "${{ steps.tag.outputs.tag }}" --yes || true
-          git push origin ":refs/tags/${{ steps.tag.outputs.tag }}" || true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish pre-release
         run: |
