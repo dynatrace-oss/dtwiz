@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-04-14
+
+### Changed
+
+- OTel Python: major refactor — process management, venv handling, and package installation extracted into dedicated modules (`otel_process.go`, `otel_python_venv.go`, `otel_python_packages.go`, `otel_python_project.go`) for improved reliability and testability
+- OTel Python: invoke `opentelemetry-instrument` binary directly instead of using `-m` flag for cross-platform compatibility
+- OTel Python: improved broken venv detection and automatic recreation with user confirmation
+- OTel Python: proper wait for running processes before re-instrumentation
+- OTel Python: better user feedback during install steps
+
+### Added
+
+- PR templates for feature, bugfix, and chore contributions
+
 ## [0.2.4] - 2026-04-14
 
 ### Changed
@@ -125,7 +139,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.5...HEAD
+[0.2.5]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.1...v0.2.2
