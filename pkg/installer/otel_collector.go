@@ -364,7 +364,7 @@ func waitForLogInDynatrace(envURL, token, searchTerm string, timeout time.Durati
 	queryURL := appsBase + "/platform/storage/query/v1/query:execute"
 
 	dqlQuery := fmt.Sprintf(
-		`fetch logs, from: now()-10m | filter contains(content, "%s") | limit 1`,
+		`fetch logs, from: now()-1m | filter contains(content, "%s") | limit 1`,
 		searchTerm,
 	)
 

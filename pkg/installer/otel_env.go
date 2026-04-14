@@ -128,7 +128,7 @@ func waitForServices(envURL, platformToken string, serviceNames []string, contai
 			conditions[i] = fmt.Sprintf("name == \"%s\"", name)
 		}
 	}
-	dql := fmt.Sprintf("smartscapeNodes SERVICE | filter %s", strings.Join(conditions, " or "))
+	dql := fmt.Sprintf("smartscapeNodes SERVICE, from:now() - 1m | filter %s", strings.Join(conditions, " or "))
 
 	remainingServices := make(map[string]bool, len(serviceNames))
 	for _, name := range serviceNames {
