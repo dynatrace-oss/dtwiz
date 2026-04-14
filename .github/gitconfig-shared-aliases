@@ -1,0 +1,28 @@
+[alias]
+    # branching
+    feature = "!f() { git switch -c feature/$1; }; f"
+    hotfix = "!f() { git switch -c hotfix/$1; }; f"
+    bugfix = "!f() { git switch -c bugfix/$1; }; f"
+    chore = "!f() { git switch -c chore/$1; }; f"
+    # pr
+    open-pr = "!f() { \
+        branch=$(git rev-parse --abbrev-ref HEAD); \
+        base=\"https://github.com/dynatrace-oss/dtwiz/compare/main...${branch}?expand=1&template\"; \
+        case \"${branch}\" in \
+            feature/*) rec=\"feature.md\" ;; \
+            bugfix/*|fix/*|hotfix/*) rec=\"bugfix.md\" ;; \
+            chore/*|docs/*|refactor/*|test/*|style/*|release/*) rec=\"chore.md\" ;; \
+            *) rec=\"\" ;; \
+        esac; \
+        echo \"\"; \
+        echo \"Open PR for branch: ${branch}\"; \
+        echo \"\"; \
+        if [ -n \"${rec}\" ]; then \
+            echo \"  recommended  →  ${base}=${rec}\"; \
+            echo \"\"; \
+        fi; \
+        echo \"  feature  →  ${base}=feature.md\"; \
+        echo \"  bugfix   →  ${base}=bugfix.md\"; \
+        echo \"  chore    →  ${base}=chore.md\"; \
+        echo \"\"; \
+    }; f"
