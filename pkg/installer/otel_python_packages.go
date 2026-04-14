@@ -114,6 +114,7 @@ func queryBootstrapRequirements(pythonBin string, installed map[string]bool) ([]
 }
 
 func ensureFrameworkInstrumentations(pythonBin string, pip *pipCommand) error {
+	logger.Debug("verifying framework instrumentations after bootstrap", "python", pythonBin)
 	installed, err := listInstalledPipPackages(pythonBin)
 	if err != nil {
 		return err
@@ -124,13 +125,16 @@ func ensureFrameworkInstrumentations(pythonBin string, pip *pipCommand) error {
 	for pkg := range installed {
 		if strings.HasPrefix(pkg, "opentelemetry-instrumentation-") &&
 			pkg != "opentelemetry-instrumentation" {
-			return nil // bootstrap worked
+			logger.Debug("framework instrumentations already present — bootstrap succeeded")
+			return nil
 		}
 	}
 
 	// Bootstrap missed — query its internal API to find what's needed.
+	logger.Debug("no framework instrumentation packages detected, falling back to internal API")
 	missing, err := queryBootstrapRequirements(pythonBin, installed)
 	if err != nil {
+		logger.Debug("bootstrap internal API unavailable", "error", err)
 		fmt.Printf("\n    Warning: could not detect missing instrumentation packages: %v\n", err)
 		fmt.Printf("    Run manually to install framework instrumentations:\n")
 		fmt.Printf("      %s -m opentelemetry.instrumentation.bootstrap -a install\n", pythonBin)
@@ -141,6 +145,7 @@ func ensureFrameworkInstrumentations(pythonBin string, pip *pipCommand) error {
 		return nil
 	}
 
+	logger.Debug("installing missing packages via pip", "count", len(missing))
 	fmt.Printf("\n    opentelemetry-bootstrap did not install framework instrumentations.\n")
 	fmt.Printf("    Detected %d missing packages — installing directly:\n", len(missing))
 	for _, pkg := range missing {
@@ -156,6 +161,7 @@ func ensureFrameworkInstrumentations(pythonBin string, pip *pipCommand) error {
 	}
 
 	// Final verification — report any remaining gaps.
+	logger.Debug("verifying installed packages after pip install")
 	updatedInstalled, err := listInstalledPipPackages(pythonBin)
 	if err != nil {
 		logger.Debug("install succeeded but post-install verification skipped — pip list failed", "error", err)
@@ -168,6 +174,7 @@ func ensureFrameworkInstrumentations(pythonBin string, pip *pipCommand) error {
 		}
 	}
 	if len(stillMissing) > 0 {
+		logger.Debug("post-install verification found remaining gaps", "still_missing", len(stillMissing))
 		fmt.Println()
 		fmt.Printf("    Warning: %d instrumentation packages are still not installed:\n", len(stillMissing))
 		for _, pkg := range stillMissing {
@@ -175,6 +182,8 @@ func ensureFrameworkInstrumentations(pythonBin string, pip *pipCommand) error {
 		}
 		fmt.Printf("    To install manually:\n")
 		fmt.Printf("      %s -m pip install %s\n", pythonBin, strings.Join(stillMissing, " "))
+	} else {
+		logger.Debug("all missing packages successfully installed", "count", len(missing))
 	}
 
 	return nil

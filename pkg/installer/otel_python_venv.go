@@ -10,6 +10,8 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
+var venvNames = []string{".venv", "venv", "env", ".env"}
+
 func detectPython() (string, error) {
 	for _, name := range []string{"python3", "python"} {
 		logger.Debug("checking python interpreter on PATH", "candidate", name)
@@ -31,7 +33,7 @@ func detectPython() (string, error) {
 		}
 	}
 	logger.Debug("no usable python 3 interpreter found on PATH")
-	return "", fmt.Errorf("Python 3 interpreter not found — install Python 3 and ensure either `python3` or `python` is in PATH")
+	return "", fmt.Errorf("Python 3 interpreter not found: install Python 3 and ensure either `python3` or `python` is in PATH")
 }
 
 func validatePythonPrerequisites() error {
@@ -54,7 +56,7 @@ func validatePythonPrerequisites() error {
 }
 
 func resolveVenvBinary(projectPath, name string) string {
-	for _, venvName := range []string{".venv", "venv", "env", ".env"} {
+	for _, venvName := range venvNames {
 		binPath := filepath.Join(projectPath, venvName, "bin", name)
 		if _, err := os.Stat(binPath); err == nil {
 			return binPath
@@ -68,7 +70,7 @@ func resolveVenvBinary(projectPath, name string) string {
 }
 
 func detectProjectVenvDir(projectPath string) string {
-	for _, venvName := range []string{".venv", "venv", "env", ".env"} {
+	for _, venvName := range venvNames {
 		venvDir := filepath.Join(projectPath, venvName)
 		info, err := os.Stat(venvDir)
 		if err == nil && info.IsDir() {
@@ -83,7 +85,7 @@ func detectProjectVenvDir(projectPath string) string {
 // detectProjectPip invokes pip via `python -m pip` using the venv's own Python binary
 // to avoid shebang breakage when the venv was created with a Python that no longer exists.
 func detectProjectPip(projectPath string) *pipCommand {
-	for _, venvName := range []string{".venv", "venv", "env", ".env"} {
+	for _, venvName := range venvNames {
 		for _, pyName := range []string{"python", "python3"} {
 			pyPath := filepath.Join(projectPath, venvName, "bin", pyName)
 			if _, err := os.Stat(pyPath); err == nil {

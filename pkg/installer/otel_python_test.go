@@ -497,6 +497,25 @@ func TestQueryBootstrapRequirements_ParsesPackageNames(t *testing.T) {
 	}
 }
 
+func TestQueryBootstrapRequirements_ReturnsErrorWhenAPIUnavailable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell stubs only work on Unix")
+	}
+	dir := t.TempDir()
+	stub := filepath.Join(dir, "python3")
+	// Stub exits non-zero to simulate bootstrap internal API being unavailable
+	// (e.g. different OTel version that removed _find_installed_libraries).
+	createStubFile(t, stub, "#!/bin/sh\necho 'ERROR:No module named opentelemetry' >&2\nexit 1\n", 0o755)
+
+	_, err := queryBootstrapRequirements(stub, map[string]bool{})
+	if err == nil {
+		t.Fatal("expected error when bootstrap API is unavailable, got nil")
+	}
+	if !strings.Contains(err.Error(), "bootstrap detection API unavailable") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
 func TestQueryBootstrapRequirements_SkipsAlreadyInstalled(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell stubs only work on Unix")

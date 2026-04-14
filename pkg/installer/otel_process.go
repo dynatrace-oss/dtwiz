@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	portPollInterval    = 500 * time.Millisecond
-	portPollTimeout     = 15 * time.Second
-	processSettleDelay  = 3 * time.Second
+	portPollInterval   = 500 * time.Millisecond
+	portPollTimeout    = 15 * time.Second
+	processSettleDelay = 3 * time.Second
 )
 
 type ManagedProcess struct {
@@ -172,4 +172,3 @@ func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) 
 	}
 	return
 }
-
