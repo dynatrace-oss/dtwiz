@@ -1,0 +1,64 @@
+name: Preview Snapshot
+
+on:
+  push:
+    branches:
+      - '**'
+      - '!main'
+      - '!release/**'
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Compute release tag
+        id: tag
+        run: |
+          TAG="snapshot-$(echo "${{ github.ref_name }}" | tr '/' '-')"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Run GoReleaser snapshot
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: release --snapshot --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Capture snapshot version
+        id: version
+        run: |
+          VERSION=$(ls dist/dtwiz_*_linux_amd64.tar.gz | sed 's|.*dtwiz_\(.*\)_linux_amd64.tar.gz|\1|')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "$VERSION" > dist/version.txt
+
+      - name: Delete existing pre-release (if any)
+        run: |
+          gh release delete "${{ steps.tag.outputs.tag }}" --yes || true
+          git push origin ":refs/tags/${{ steps.tag.outputs.tag }}" || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish pre-release
+        run: |
+          gh release create "${{ steps.tag.outputs.tag }}" \
+            --prerelease \
+            --title "Snapshot: ${{ github.ref_name }}" \
+            --notes "Preview snapshot from branch \`${{ github.ref_name }}\`. Not for production use." \
+            dist/dtwiz_*_linux_*.tar.gz \
+            dist/dtwiz_*_darwin_*.tar.gz \
+            dist/dtwiz_*_windows_*.zip \
+            dist/version.txt \
+            dist/checksums.txt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
