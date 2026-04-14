@@ -1,10 +1,4 @@
-## Description
-
-- [ ] Bug fix
-- [ ] New feature
-- [ ] Documentation update
-- [ ] Other (please describe):
-
+## Feature Description
 <!-- What does this PR add? Why is it relevant? -->
 
 ## How to test

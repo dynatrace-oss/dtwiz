@@ -1,11 +1,11 @@
-## Description
+## Bug Fix Description
+<!-- What was changed and why? -->
 
-- [ ] Bug fix
-- [ ] New feature
-- [ ] Documentation update
-- [ ] Other (please describe):
+## Root cause
+<!-- What was causing the bug? -->
 
-<!-- What does this PR add? Why is it relevant? -->
+## How to reproduce
+1.
 
 ## How to test
 1.
