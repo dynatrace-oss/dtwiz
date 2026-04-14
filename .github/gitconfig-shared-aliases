@@ -1,9 +1,9 @@
 [alias]
     # branching
-    feature = "!f() { git switch -c feature/$1; }; f"
-    hotfix = "!f() { git switch -c hotfix/$1; }; f"
-    bugfix = "!f() { git switch -c bugfix/$1; }; f"
-    chore = "!f() { git switch -c chore/$1; }; f"
+    feature = "!f() { if [ -z \"$1\" ]; then echo \"usage: git feature <name>\"; return 1; fi; git switch -c \"feature/$1\"; }; f"
+    hotfix = "!f() { if [ -z \"$1\" ]; then echo \"usage: git hotfix <name>\"; return 1; fi; git switch -c \"hotfix/$1\"; }; f"
+    bugfix = "!f() { if [ -z \"$1\" ]; then echo \"usage: git bugfix <name>\"; return 1; fi; git switch -c \"bugfix/$1\"; }; f"
+    chore = "!f() { if [ -z \"$1\" ]; then echo \"usage: git chore <name>\"; return 1; fi; git switch -c \"chore/$1\"; }; f"
     # pr
     open-pr = "!f() { \
         branch=$(git rev-parse --abbrev-ref HEAD); \
