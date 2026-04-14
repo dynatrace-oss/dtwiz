@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -56,37 +57,6 @@ func TestServiceNameFromEntrypoint(t *testing.T) {
 
 // ── parseEntrypointFromPyproject ──────────────────────────────────────────────
 
-func TestParseEntrypointFromPyproject_ProjectScripts(t *testing.T) {
-	content := `
-[build-system]
-requires = ["setuptools"]
-
-[project]
-name = "myapp"
-
-[project.scripts]
-myapp = "myapp.main:run"
-`
-	got := parseEntrypointFromPyproject(content)
-	if got != "myapp/main.py" {
-		t.Errorf("got %q, want %q", got, "myapp/main.py")
-	}
-}
-
-func TestParseEntrypointFromPyproject_PoetryScripts(t *testing.T) {
-	content := `
-[tool.poetry]
-name = "svc"
-
-[tool.poetry.scripts]
-svc = "svc.server:main"
-`
-	got := parseEntrypointFromPyproject(content)
-	if got != "svc/server.py" {
-		t.Errorf("got %q, want %q", got, "svc/server.py")
-	}
-}
-
 func TestParseEntrypointFromPyproject_SingleModuleScript(t *testing.T) {
 	content := `
 [project.scripts]
@@ -98,18 +68,6 @@ app = "app:main"
 	}
 }
 
-func TestParseEntrypointFromPyproject_NoScripts(t *testing.T) {
-	content := `
-[project]
-name = "notool"
-version = "0.1.0"
-`
-	got := parseEntrypointFromPyproject(content)
-	if got != "" {
-		t.Errorf("expected empty, got %q", got)
-	}
-}
-
 func TestParseEntrypointFromPyproject_EmptyContent(t *testing.T) {
 	got := parseEntrypointFromPyproject("")
 	if got != "" {
@@ -118,18 +76,6 @@ func TestParseEntrypointFromPyproject_EmptyContent(t *testing.T) {
 }
 
 // ── detectPythonEntrypoints ───────────────────────────────────────────────────
-
-func TestDetectPythonEntrypoints_CommonFile(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "app.py"), []byte(""), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	eps := detectPythonEntrypoints(dir)
-	if len(eps) == 0 || eps[0] != "app.py" {
-		t.Errorf("expected [app.py], got %v", eps)
-	}
-}
 
 func TestDetectPythonEntrypoints_PriorityOrder(t *testing.T) {
 	// main.py should win over app.py when both exist.
@@ -183,7 +129,7 @@ func TestDetectPythonEntrypoints_SubDirectory(t *testing.T) {
 
 func TestDetectPythonEntrypoints_SkipsHiddenAndPycache(t *testing.T) {
 	dir := t.TempDir()
-	for _, sub := range []string{".hidden", "__pycache__", "node_modules"} {
+	for _, sub := range []string{".hidden", "__pycache__", "node_modules", "target"} {
 		subDir := filepath.Join(dir, sub)
 		if err := os.Mkdir(subDir, 0755); err != nil {
 			t.Fatal(err)
@@ -195,17 +141,10 @@ func TestDetectPythonEntrypoints_SkipsHiddenAndPycache(t *testing.T) {
 
 	eps := detectPythonEntrypoints(dir)
 	for _, ep := range eps {
-		if strings.Contains(ep, ".hidden") || strings.Contains(ep, "__pycache__") || strings.Contains(ep, "node_modules") {
+		if strings.Contains(ep, ".hidden") || strings.Contains(ep, "__pycache__") ||
+			strings.Contains(ep, "node_modules") || strings.Contains(ep, "target") {
 			t.Errorf("entrypoint from excluded dir found: %s", ep)
 		}
-	}
-}
-
-func TestDetectPythonEntrypoints_None(t *testing.T) {
-	dir := t.TempDir()
-	eps := detectPythonEntrypoints(dir)
-	if len(eps) != 0 {
-		t.Errorf("expected no entrypoints, got %v", eps)
 	}
 }
 
@@ -299,60 +238,6 @@ func TestResolveVenvBinary_ChecksAllVenvNames(t *testing.T) {
 			got := resolveVenvBinary(dir, "pip")
 			if got != binPath {
 				t.Errorf("venv=%q: resolveVenvBinary = %q, want %q", venvName, got, binPath)
-			}
-		})
-	}
-}
-
-// ── detectProjectPip ─────────────────────────────────────────────────────────
-
-func TestDetectProjectPip_Found(t *testing.T) {
-	dir := t.TempDir()
-	binDir := filepath.Join(dir, ".venv", "bin")
-	if err := os.MkdirAll(binDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	pipPath := filepath.Join(binDir, "pip")
-	if err := os.WriteFile(pipPath, []byte(""), 0700); err != nil {
-		t.Fatal(err)
-	}
-
-	pip := detectProjectPip(dir)
-	if pip == nil {
-		t.Fatal("expected pip to be found, got nil")
-	}
-	if pip.name != pipPath {
-		t.Errorf("pip.name = %q, want %q", pip.name, pipPath)
-	}
-}
-
-func TestDetectProjectPip_NotFound(t *testing.T) {
-	dir := t.TempDir()
-	pip := detectProjectPip(dir)
-	if pip != nil {
-		t.Errorf("expected nil when no venv exists, got %+v", pip)
-	}
-}
-
-func TestDetectProjectPip_ChecksAllVenvNames(t *testing.T) {
-	for _, venvName := range []string{".venv", "venv", "env", ".env"} {
-		t.Run(venvName, func(t *testing.T) {
-			dir := t.TempDir()
-			binDir := filepath.Join(dir, venvName, "bin")
-			if err := os.MkdirAll(binDir, 0755); err != nil {
-				t.Fatal(err)
-			}
-			pipPath := filepath.Join(binDir, "pip")
-			if err := os.WriteFile(pipPath, []byte(""), 0700); err != nil {
-				t.Fatal(err)
-			}
-
-			pip := detectProjectPip(dir)
-			if pip == nil {
-				t.Fatalf("venv=%q: expected pip to be found, got nil", venvName)
-			}
-			if pip.name != pipPath {
-				t.Errorf("venv=%q: pip.name = %q, want %q", venvName, pip.name, pipPath)
 			}
 		})
 	}
@@ -486,10 +371,257 @@ func TestPythonInstrumentationPlan_ExecuteFailsWithoutPythonForVenvCreation(t *t
 		plan.Execute()
 	})
 
-	checks := []string{"Creating virtualenv... failed.", "Python 3 not found"}
+	checks := []string{"Creating virtualenv... failed.", "Python 3 interpreter not found"}
 	for _, check := range checks {
 		if !strings.Contains(output, check) {
 			t.Fatalf("expected output to contain %q, got:\n%s", check, output)
 		}
 	}
+}
+
+func TestInstallPackages_ErrorIncludesCommand(t *testing.T) {
+	pip := &pipCommand{
+		name: filepath.Join(t.TempDir(), "missing-python"),
+		args: []string{"-m", "pip"},
+	}
+
+	err := installPackages(pip, []string{"opentelemetry-distro"})
+	if err == nil || !strings.Contains(err.Error(), "command:") {
+		t.Fatalf("expected command in error, got %v", err)
+	}
+}
+
+func TestRunOtelBootstrap_ErrorIncludesCommand(t *testing.T) {
+	err := runOtelBootstrap(filepath.Join(t.TempDir(), "missing-python"))
+	if err == nil || !strings.Contains(err.Error(), "command:") {
+		t.Fatalf("expected command in error, got %v", err)
+	}
+}
+
+func TestGenerateOtelPythonEnvVars(t *testing.T) {
+	vars := generateOtelPythonEnvVars("https://abc123.live.dynatrace.com", "dt0c01.test", "my-svc")
+	if vars["OTEL_SERVICE_NAME"] != "my-svc" {
+		t.Fatalf("OTEL_SERVICE_NAME = %q, want %q", vars["OTEL_SERVICE_NAME"], "my-svc")
+	}
+	if !strings.Contains(vars["OTEL_EXPORTER_OTLP_ENDPOINT"], "/api/v2/otlp") {
+		t.Fatalf("OTEL_EXPORTER_OTLP_ENDPOINT = %q, want to contain /api/v2/otlp", vars["OTEL_EXPORTER_OTLP_ENDPOINT"])
+	}
+	if vars["OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE"] != "delta" {
+		t.Fatalf("temporality = %q, want delta", vars["OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE"])
+	}
+}
+
+func TestGenerateOtelPythonEnvVars_AllKeys(t *testing.T) {
+	vars := generateOtelPythonEnvVars("https://abc123.live.dynatrace.com", "dt0c01.test", "my-svc")
+	required := []string{
+		"OTEL_SERVICE_NAME",
+		"OTEL_EXPORTER_OTLP_ENDPOINT",
+		"OTEL_EXPORTER_OTLP_HEADERS",
+		"OTEL_EXPORTER_OTLP_PROTOCOL",
+		"OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE",
+		"OTEL_TRACES_EXPORTER",
+		"OTEL_METRICS_EXPORTER",
+		"OTEL_LOGS_EXPORTER",
+		"OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED",
+	}
+	for _, key := range required {
+		if _, ok := vars[key]; !ok {
+			t.Fatalf("missing env var %q", key)
+		}
+	}
+}
+
+func TestGenerateOtelPythonEnvVars_AuthHeaderFormat(t *testing.T) {
+	vars := generateOtelPythonEnvVars("https://abc123.live.dynatrace.com", "dt0c01.TOKEN123", "svc")
+	headers := vars["OTEL_EXPORTER_OTLP_HEADERS"]
+	if !strings.HasPrefix(headers, "Authorization=Api-Token%20") {
+		t.Fatalf("OTEL_EXPORTER_OTLP_HEADERS = %q, want prefix Authorization=Api-Token%%20", headers)
+	}
+	if !strings.Contains(headers, "dt0c01.TOKEN123") {
+		t.Fatalf("OTEL_EXPORTER_OTLP_HEADERS = %q, want to contain token", headers)
+	}
+}
+
+func TestGenerateOtelPythonEnvVars_TrimsTrailingSlash(t *testing.T) {
+	vars := generateOtelPythonEnvVars("https://abc123.live.dynatrace.com/", "dt0c01.test", "svc")
+	ep := vars["OTEL_EXPORTER_OTLP_ENDPOINT"]
+	if strings.Contains(ep, "//api") {
+		t.Fatalf("OTEL_EXPORTER_OTLP_ENDPOINT has double slash: %q", ep)
+	}
+}
+
+func TestGenerateEnvExportScript_AllKeysPresent(t *testing.T) {
+	vars := generateOtelPythonEnvVars("https://abc123.live.dynatrace.com", "dt0c01.test", "my-svc")
+	script := GenerateEnvExportScript(vars)
+	for k := range vars {
+		if !strings.Contains(script, k) {
+			t.Fatalf("script missing key %q, got:\n%s", k, script)
+		}
+	}
+}
+
+func TestListInstalledPipPackages_NormalizesNames(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell stubs only work on Unix")
+	}
+	dir := t.TempDir()
+	stub := filepath.Join(dir, "python3")
+	createStubFile(t, stub, "#!/bin/sh\necho '[{\"name\": \"Flask\", \"version\": \"3.0.0\"}, {\"name\": \"my_module\", \"version\": \"1.0\"}]'\n", 0o755)
+
+	packages, err := listInstalledPipPackages(stub)
+	if err != nil {
+		t.Fatalf("listInstalledPipPackages() error = %v", err)
+	}
+	if !packages["flask"] {
+		t.Fatalf("expected normalized flask in packages, got %v", packages)
+	}
+	if !packages["my-module"] {
+		t.Fatalf("expected normalized my-module in packages, got %v", packages)
+	}
+}
+
+func TestQueryBootstrapRequirements_ParsesPackageNames(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell stubs only work on Unix")
+	}
+	dir := t.TempDir()
+	stub := filepath.Join(dir, "python3")
+	createStubFile(t, stub, "#!/bin/sh\necho 'opentelemetry-instrumentation-flask'\necho 'opentelemetry-instrumentation-requests'\n", 0o755)
+
+	pkgs, err := queryBootstrapRequirements(stub, map[string]bool{})
+	if err != nil {
+		t.Fatalf("queryBootstrapRequirements() error = %v", err)
+	}
+	if !strings.Contains(strings.Join(pkgs, ","), "opentelemetry-instrumentation-flask") {
+		t.Fatalf("queryBootstrapRequirements() = %v, want flask", pkgs)
+	}
+}
+
+func TestQueryBootstrapRequirements_ReturnsErrorWhenAPIUnavailable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell stubs only work on Unix")
+	}
+	dir := t.TempDir()
+	stub := filepath.Join(dir, "python3")
+	// Stub exits non-zero to simulate bootstrap internal API being unavailable
+	// (e.g. different OTel version that removed _find_installed_libraries).
+	createStubFile(t, stub, "#!/bin/sh\necho 'ERROR:No module named opentelemetry' >&2\nexit 1\n", 0o755)
+
+	_, err := queryBootstrapRequirements(stub, map[string]bool{})
+	if err == nil {
+		t.Fatal("expected error when bootstrap API is unavailable, got nil")
+	}
+	if !strings.Contains(err.Error(), "bootstrap detection API unavailable") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+func TestQueryBootstrapRequirements_SkipsAlreadyInstalled(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell stubs only work on Unix")
+	}
+	dir := t.TempDir()
+	stub := filepath.Join(dir, "python3")
+	createStubFile(t, stub, "#!/bin/sh\necho 'opentelemetry-instrumentation-flask'\n", 0o755)
+
+	installed := map[string]bool{"opentelemetry-instrumentation-flask": true}
+	pkgs, err := queryBootstrapRequirements(stub, installed)
+	if err != nil {
+		t.Fatalf("queryBootstrapRequirements() error = %v", err)
+	}
+	if len(pkgs) != 0 {
+		t.Fatalf("queryBootstrapRequirements() = %v, want empty (already installed)", pkgs)
+	}
+}
+
+// --- Shared test helpers (used across otel_python_*_test.go files) ---
+
+func requireFakePython3(t *testing.T) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("shell helper for python prerequisite tests is only used on Unix-like platforms")
+	}
+	dir := t.TempDir()
+	createStubFile(t, filepath.Join(dir, "python3"), `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "Python 3.12.0"
+  exit 0
+fi
+if [ "$1" = "-m" ] && [ "$2" = "pip" ] && [ "$3" = "--version" ]; then
+  if [ "${DTWIZ_TEST_FAIL_PIP:-0}" = "1" ]; then
+    echo "pip unavailable" >&2
+    exit 1
+  fi
+  echo "pip 24.0 from /tmp/site-packages/pip"
+  exit 0
+fi
+if [ "$1" = "-m" ] && [ "$2" = "venv" ] && [ "$3" = "--help" ]; then
+  if [ "${DTWIZ_TEST_FAIL_VENV:-0}" = "1" ]; then
+    echo "venv unavailable" >&2
+    exit 1
+  fi
+  echo "usage: venv"
+  exit 0
+fi
+echo "unexpected args: $@" >&2
+exit 1
+`, 0o755)
+	return dir
+}
+
+func createStubVenvPython(t *testing.T, projectDir, venvName, pythonName string, executable bool) string {
+	t.Helper()
+	binDir := filepath.Join(projectDir, venvName, "bin")
+	if runtime.GOOS == "windows" {
+		binDir = filepath.Join(projectDir, venvName, "Scripts")
+		if !strings.HasSuffix(pythonName, ".exe") {
+			pythonName += ".exe"
+		}
+	}
+	mode := os.FileMode(0o644)
+	content := "stub"
+	if executable {
+		mode = 0o755
+		if runtime.GOOS == "windows" {
+			content = "MZ"
+		} else {
+			content = "#!/bin/sh\necho Python 3.12.0\n"
+		}
+	}
+	path := filepath.Join(binDir, pythonName)
+	createStubFile(t, path, content, mode)
+	return path
+}
+
+func createStubFile(t *testing.T, path, content string, mode os.FileMode) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, []byte(content), mode); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func withStdinText(t *testing.T, input string, fn func()) {
+	t.Helper()
+	stdinFile, err := os.CreateTemp(t.TempDir(), "stdin-*.txt")
+	if err != nil {
+		t.Fatalf("CreateTemp() error = %v", err)
+	}
+	if _, err := stdinFile.WriteString(input); err != nil {
+		t.Fatalf("WriteString() error = %v", err)
+	}
+	if _, err := stdinFile.Seek(0, 0); err != nil {
+		t.Fatalf("Seek() error = %v", err)
+	}
+
+	originalStdin := os.Stdin
+	os.Stdin = stdinFile
+	defer func() {
+		os.Stdin = originalStdin
+		_ = stdinFile.Close()
+	}()
+
+	fn()
 }

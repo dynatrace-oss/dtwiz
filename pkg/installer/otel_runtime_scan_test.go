@@ -9,6 +9,26 @@ import (
 	"time"
 )
 
+func TestIsIgnoredDir(t *testing.T) {
+	ignored := []string{
+		".git", ".venv", ".hidden",
+		"node_modules", "__pycache__",
+		"target", "vendor", "venv",
+		"dist", "build", "out",
+	}
+	for _, name := range ignored {
+		if !isIgnoredDir(name) {
+			t.Errorf("isIgnoredDir(%q) = false, want true", name)
+		}
+	}
+	notIgnored := []string{"src", "api", "mypackage", "services"}
+	for _, name := range notIgnored {
+		if isIgnoredDir(name) {
+			t.Errorf("isIgnoredDir(%q) = true, want false", name)
+		}
+	}
+}
+
 func TestMatchingProcessIDs(t *testing.T) {
 	procs := []DetectedProcess{
 		{PID: 100, Command: "/usr/bin/python app.py", WorkingDirectory: "/home/user/projects/my-api"},
