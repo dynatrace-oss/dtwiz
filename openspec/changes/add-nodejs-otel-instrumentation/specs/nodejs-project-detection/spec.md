@@ -111,7 +111,7 @@ The system SHALL detect running Node.js processes and correlate them to project 
 
 #### Scenario: npm processes excluded from detection
 
-- **GIVEN** processes matching `npm ` are running
+- **GIVEN** processes matching `npm` are running
 - **WHEN** `detectNodeProcesses()` filters processes
 - **THEN** npm management processes are excluded (following the existing pattern)
 
