@@ -50,9 +50,13 @@ if ($Branch) {
     # Derive the pre-release tag from the branch name (e.g. preview/foo -> snapshot-preview-foo)
     $ReleaseTag = "snapshot-" + ($Branch -replace '/', '-')
     Write-Host "Installing preview snapshot for branch: $Branch"
-    $Version = (Invoke-WebRequest `
+    $VersionFile = Join-Path ([System.IO.Path]::GetTempPath()) "dtwiz-version.txt"
+    Invoke-WebRequest `
         -Uri "https://github.com/$Repo/releases/download/$ReleaseTag/version.txt" `
-        -UseBasicParsing).Content.Trim()
+        -OutFile $VersionFile `
+        -UseBasicParsing
+    $Version = (Get-Content $VersionFile -Raw).Trim()
+    Remove-Item $VersionFile -ErrorAction SilentlyContinue
     if (-not $Version) {
         Write-Error "Could not find a snapshot release for branch '$Branch'. Make sure the branch exists and its snapshot workflow has completed."
         exit 1
