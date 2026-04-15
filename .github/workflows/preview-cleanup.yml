@@ -22,13 +22,15 @@ jobs:
             BRANCH="${{ github.event.pull_request.head.ref }}"
           fi
           TAG="snapshot-$(echo "$BRANCH" | tr '/' '-')"
+          ENCODED_TAG="$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$TAG")"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "encoded_tag=$ENCODED_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Delete preview release and tag
         run: |
           gh release delete "${{ steps.branch.outputs.tag }}" --yes || true
-          git push origin ":refs/tags/${{ steps.branch.outputs.tag }}" || true
+          gh api -X DELETE "repos/${{ github.repository }}/git/refs/tags/${{ steps.branch.outputs.encoded_tag }}" || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}

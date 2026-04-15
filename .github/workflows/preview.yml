@@ -27,6 +27,16 @@ jobs:
           TAG="snapshot-$(echo "${{ github.ref_name }}" | tr '/' '-')"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
+      - name: Check for semver tag
+        id: semver
+        run: |
+          if git describe --tags --match "v*" --abbrev=0 > /dev/null 2>&1; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "No semver tag reachable — skipping snapshot." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Delete existing pre-release (if any)
         run: |
           gh release delete "${{ steps.tag.outputs.tag }}" --yes || true
@@ -36,6 +46,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run GoReleaser snapshot
+        if: steps.semver.outputs.found == 'true'
         uses: goreleaser/goreleaser-action@v6
         with:
           version: latest
@@ -44,6 +55,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Capture snapshot version
+        if: steps.semver.outputs.found == 'true'
         id: version
         run: |
           VERSION=$(ls dist/dtwiz_*_linux_amd64.tar.gz | sed 's|.*dtwiz_\(.*\)_linux_amd64.tar.gz|\1|')
@@ -57,6 +69,7 @@ jobs:
           echo "$VERSION" > dist/version.txt
 
       - name: Publish pre-release
+        if: steps.semver.outputs.found == 'true'
         run: |
           gh release create "${{ steps.tag.outputs.tag }}" \
             --prerelease \
