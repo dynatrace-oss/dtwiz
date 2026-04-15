@@ -107,6 +107,11 @@ func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) 
 	}
 	logger.Debug("settle complete", "started", started, "not_started", notStarted)
 
+	// adoptExeclChildren handles the Windows-specific case where
+	// opentelemetry-instrument calls os.execl, which on Windows spawns a child
+	// process and exits the launcher cleanly. See otel_process_windows.go.
+	adoptExeclChildren(procs, &started, &notStarted)
+
 	ports := make([]string, len(procs))
 	fmt.Println()
 	if started == 0 {
