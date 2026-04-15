@@ -15,6 +15,11 @@
 
 REPO="dynatrace-oss/dtwiz"
 
+# Branch to install from. If set, a snapshot pre-release for that branch is used
+# instead of the latest stable release. Set via the DTWIZ_BRANCH env variable.
+# Example: DTWIZ_BRANCH=preview/my-branch source <(curl -sSL ...)
+BRANCH="${DTWIZ_BRANCH:-}"
+
 # ── Parse known flags ──────────────────────────────────────────────────────────
 INSTALL_DIR=""
 
@@ -51,20 +56,33 @@ esac
 
 echo "Detected platform: ${OS}/${ARCH}"
 
-# ── Resolve latest release version ────────────────────────────────────────────
+# ── Resolve release version ────────────────────────────────────────────────────
 if ! command -v curl >/dev/null 2>&1; then
     echo "Error: curl is required but not found." >&2
     exit 1
 fi
 
-# Follow the /releases/latest redirect to extract the tag from the final URL.
-VERSION="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
-    "https://github.com/${REPO}/releases/latest" \
-    | sed 's|.*/||')"
-
-if [ -z "$VERSION" ]; then
-    echo "Error: could not determine the latest dtwiz version." >&2
-    exit 1
+if [ -n "$BRANCH" ]; then
+    # Derive the pre-release tag from the branch name (e.g. preview/foo → snapshot-preview-foo)
+    RELEASE_TAG="snapshot-$(echo "$BRANCH" | tr '/' '-')"
+    echo "Installing preview snapshot for branch: ${BRANCH}"
+    VERSION="$(curl -fsSL \
+        "https://github.com/${REPO}/releases/download/${RELEASE_TAG}/version.txt")"
+    if [ -z "$VERSION" ]; then
+        echo "Error: could not find a snapshot release for branch '${BRANCH}'." >&2
+        echo "Make sure the branch exists and its snapshot workflow has completed." >&2
+        exit 1
+    fi
+else
+    # Follow the /releases/latest redirect to extract the tag from the final URL.
+    RELEASE_TAG="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
+        "https://github.com/${REPO}/releases/latest" \
+        | sed 's|.*/||')"
+    VERSION="$RELEASE_TAG"
+    if [ -z "$VERSION" ]; then
+        echo "Error: could not determine the latest dtwiz version." >&2
+        exit 1
+    fi
 fi
 
 # ── Determine install directory ────────────────────────────────────────────────
@@ -79,6 +97,9 @@ fi
 # ── Confirm installation ───────────────────────────────────────────────────────
 echo ""
 echo "This will download and install dtwiz ${VERSION}:"
+if [ -n "$BRANCH" ]; then
+    echo "  - Branch:   ${BRANCH} (pre-release)"
+fi
 echo "  - Download from github.com/${REPO}"
 echo "  - Install to ${INSTALL_DIR}"
 echo "  - Add ${INSTALL_DIR} to your PATH (if not already present)"
@@ -100,7 +121,7 @@ WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT INT TERM
 
 curl -fsSL \
-    "https://github.com/${REPO}/releases/download/${VERSION}/${ARCHIVE}" \
+    "https://github.com/${REPO}/releases/download/${RELEASE_TAG}/${ARCHIVE}" \
     -o "${WORK_DIR}/${ARCHIVE}"
 
 tar -xzf "${WORK_DIR}/${ARCHIVE}" -C "$WORK_DIR"

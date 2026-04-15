@@ -1,0 +1,71 @@
+name: Preview Snapshot
+
+on:
+  push:
+    branches:
+      - '**'
+      - '!main'
+      - '!release/**'
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Compute release tag
+        id: tag
+        run: |
+          TAG="snapshot-$(echo "${{ github.ref_name }}" | tr '/' '-')"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Delete existing pre-release (if any)
+        run: |
+          gh release delete "${{ steps.tag.outputs.tag }}" --yes || true
+          git push origin ":refs/tags/${{ steps.tag.outputs.tag }}" || true
+          git tag -d "${{ steps.tag.outputs.tag }}" || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run GoReleaser snapshot
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: release --snapshot --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Capture snapshot version
+        id: version
+        run: |
+          VERSION=$(ls dist/dtwiz_*_linux_amd64.tar.gz | sed 's|.*dtwiz_\(.*\)_linux_amd64.tar.gz|\1|')
+          if [ -z "$VERSION" ]; then
+            echo "Error: could not determine snapshot version — no matching artifact found." >&2
+            echo "Contents of dist/:" >&2
+            ls -la dist/ 2>/dev/null || echo "  dist/ does not exist" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "$VERSION" > dist/version.txt
+
+      - name: Publish pre-release
+        run: |
+          gh release create "${{ steps.tag.outputs.tag }}" \
+            --prerelease \
+            --title "Snapshot: ${{ github.ref_name }}" \
+            --notes "Preview snapshot from branch \`${{ github.ref_name }}\`. Not for production use." \
+            dist/dtwiz_*_linux_*.tar.gz \
+            dist/dtwiz_*_darwin_*.tar.gz \
+            dist/dtwiz_*_windows_*.zip \
+            dist/version.txt \
+            dist/checksums.txt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

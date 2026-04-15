@@ -14,7 +14,8 @@
 
 [CmdletBinding()]
 param(
-    [string]$InstallDir = ""
+    [string]$InstallDir = "",
+    [string]$Branch = $env:DTWIZ_BRANCH
 )
 
 $ErrorActionPreference = "Stop"
@@ -44,26 +45,39 @@ switch ($RawArch) {
 
 Write-Host "Detected platform: windows/$Arch"
 
-# ── Resolve latest release version ────────────────────────────────────────────
-# Follow the /releases/latest redirect to extract the tag from the final URL.
-$Response = Invoke-WebRequest `
-    -Uri "https://github.com/$Repo/releases/latest" `
-    -MaximumRedirection 0 `
-    -ErrorAction SilentlyContinue `
-    -UseBasicParsing
-$RedirectUrl = $Response.Headers.Location
-if (-not $RedirectUrl) {
-    # Some PS versions follow the redirect automatically
-    $RedirectUrl = $Response.BaseResponse.ResponseUri.AbsoluteUri
-    if (-not $RedirectUrl) {
-        $RedirectUrl = $Response.BaseResponse.RequestMessage.RequestUri.AbsoluteUri
+# ── Resolve release version ────────────────────────────────────────────────────
+if ($Branch) {
+    # Derive the pre-release tag from the branch name (e.g. preview/foo -> snapshot-preview-foo)
+    $ReleaseTag = "snapshot-" + ($Branch -replace '/', '-')
+    Write-Host "Installing preview snapshot for branch: $Branch"
+    $Version = (Invoke-WebRequest `
+        -Uri "https://github.com/$Repo/releases/download/$ReleaseTag/version.txt" `
+        -UseBasicParsing).Content.Trim()
+    if (-not $Version) {
+        Write-Error "Could not find a snapshot release for branch '$Branch'. Make sure the branch exists and its snapshot workflow has completed."
+        exit 1
     }
-}
-$Version = ($RedirectUrl -split '/')[-1]
-
-if (-not $Version) {
-    Write-Error "Could not determine the latest dtwiz version."
-    exit 1
+} else {
+    # Follow the /releases/latest redirect to extract the tag from the final URL.
+    $Response = Invoke-WebRequest `
+        -Uri "https://github.com/$Repo/releases/latest" `
+        -MaximumRedirection 0 `
+        -ErrorAction SilentlyContinue `
+        -UseBasicParsing
+    $RedirectUrl = $Response.Headers.Location
+    if (-not $RedirectUrl) {
+        # Some PS versions follow the redirect automatically
+        $RedirectUrl = $Response.BaseResponse.ResponseUri.AbsoluteUri
+        if (-not $RedirectUrl) {
+            $RedirectUrl = $Response.BaseResponse.RequestMessage.RequestUri.AbsoluteUri
+        }
+    }
+    $ReleaseTag = ($RedirectUrl -split '/')[-1]
+    $Version = $ReleaseTag
+    if (-not $Version) {
+        Write-Error "Could not determine the latest dtwiz version."
+        exit 1
+    }
 }
 
 # ── Determine install directory ────────────────────────────────────────────────
@@ -74,6 +88,9 @@ if (-not $InstallDir) {
 # ── Confirm installation ──────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "This will download and install dtwiz ${Version}:"
+if ($Branch) {
+    Write-Host "  * Branch:   $Branch (pre-release)"
+}
 Write-Host "  * Download from github.com/${Repo}"
 Write-Host "  * Install to $InstallDir"
 Write-Host "  * Add $InstallDir to your user PATH (if not already present)"
@@ -96,7 +113,7 @@ New-Item -ItemType Directory -Path $TmpDir | Out-Null
 try {
     $ArchivePath = Join-Path $TmpDir $Archive
 
-    $DownloadUrl = "https://github.com/$Repo/releases/download/$Version/$Archive"
+    $DownloadUrl = "https://github.com/$Repo/releases/download/$ReleaseTag/$Archive"
     Invoke-WebRequest -Uri $DownloadUrl -OutFile $ArchivePath -UseBasicParsing
 
     Expand-Archive -Path $ArchivePath -DestinationPath $TmpDir -Force
