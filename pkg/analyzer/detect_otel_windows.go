@@ -39,9 +39,12 @@ func detectOtelCollector() (bool, string, string) {
 	}
 
 	// Fall back to WMIC full command line search for custom-named builds.
+	// Exclude shell processes (powershell, pwsh, cmd) and the current process
+	// to avoid matching dtwiz's own detection commands whose arguments contain
+	// the search patterns.
 	for _, pattern := range []string{"otel-collector", "otelcol"} {
 		ok, output := runCmd("powershell", "-NoProfile", "-Command",
-			"Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match '"+pattern+"' } | Select-Object -First 1 -ExpandProperty CommandLine")
+			"Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match '"+pattern+"' -and $_.Name -notmatch 'powershell|pwsh|cmd' -and $_.ProcessId -ne $PID } | Select-Object -First 1 -ExpandProperty CommandLine")
 		if ok && output != "" {
 			binPath, configPath := parseWindowsCommandLine(output)
 			return true, binPath, configPath

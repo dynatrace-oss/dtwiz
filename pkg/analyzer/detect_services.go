@@ -1,3 +1,5 @@
+//go:build !windows
+
 package analyzer
 
 // detectServices checks for common application runtimes and databases.
