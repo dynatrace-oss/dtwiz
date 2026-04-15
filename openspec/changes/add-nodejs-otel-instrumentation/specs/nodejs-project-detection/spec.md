@@ -71,6 +71,36 @@ The system SHALL identify Next.js projects by checking for `next.config.js`, `ne
 - **WHEN** `isNextJSProject()` is called
 - **THEN** it returns false
 
+### Requirement: Nuxt project identification
+
+The system SHALL identify Nuxt projects by checking for `nuxt.config.js`, `nuxt.config.ts`, `nuxt.config.mjs`, or `nuxt` in `package.json` dependencies/devDependencies.
+
+#### Scenario: Nuxt detected via config file
+
+- **GIVEN** a project directory contains `nuxt.config.ts` (or `.js` or `.mjs`)
+- **WHEN** `detectNodeFramework()` is called
+- **THEN** it returns `"nuxt"`
+
+#### Scenario: Nuxt detected via package dependency
+
+- **GIVEN** a project's `package.json` lists `"nuxt"` in `dependencies` or `devDependencies`
+- **AND** no `nuxt.config.*` file exists
+- **WHEN** `detectNodeFramework()` is called
+- **THEN** it returns `"nuxt"`
+
+#### Scenario: Next.js takes precedence over Nuxt
+
+- **GIVEN** a project has both `next` and `nuxt` in dependencies
+- **WHEN** `detectNodeFramework()` is called
+- **THEN** it returns `"next"` (Next.js checked first)
+
+#### Scenario: Regular Node.js project (not Nuxt)
+
+- **GIVEN** a project has no `nuxt.config.*` and no `nuxt` in dependencies
+- **AND** the project is not a Next.js project
+- **WHEN** `detectNodeFramework()` is called
+- **THEN** it returns `""`
+
 ### Requirement: Package manager detection from lockfiles
 
 The system SHALL auto-detect the project's package manager by checking for lockfiles.
@@ -148,3 +178,9 @@ The system SHALL detect the project entrypoint from `package.json` fields or com
 - **GIVEN** the project is identified as Next.js
 - **WHEN** `detectNodeEntrypoints()` is called
 - **THEN** it returns a Next.js marker entrypoint indicating `next start` should be used
+
+#### Scenario: Nuxt project entrypoint
+
+- **GIVEN** the project is identified as Nuxt
+- **WHEN** `detectNodeEntrypoints()` is called
+- **THEN** it returns a Nuxt marker entrypoint indicating `nuxt start` should be used

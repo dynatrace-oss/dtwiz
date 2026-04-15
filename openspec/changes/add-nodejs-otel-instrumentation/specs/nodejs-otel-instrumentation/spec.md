@@ -61,23 +61,62 @@ The system SHALL generate OTEL\_\* environment variables for Node.js including t
 - **WHEN** `generateOtelNodeEnvVars()` is called with apiURL, token, and serviceName
 - **THEN** the returned map includes `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_EXPORTER_OTLP_PROTOCOL`, and all exporter configs
 
-### Requirement: register.js generation for Next.js
+### Requirement: register.js generation for framework CLIs
 
-For Next.js projects only, the system SHALL generate a `.otel/register.js` file that sets `process.env.OTEL_*` variables and requires `@opentelemetry/auto-instrumentations-node/register`.
+For Next.js and Nuxt projects, the system SHALL generate wrapper scripts in `.otel/` that set `process.env.OTEL_*` variables and require `@opentelemetry/auto-instrumentations-node/register` before delegating to the framework CLI.
 
-#### Scenario: register.js generated for Next.js
+#### Scenario: next-register.js generated for Next.js
 
 - **GIVEN** a project is identified as Next.js
 - **WHEN** the `.otel/` directory is created
-- **THEN** `.otel/register.js` is written
-- **AND** it contains `process.env.OTEL_SERVICE_NAME = ...` for each OTEL\_\* var
-- **AND** it contains `require('@opentelemetry/auto-instrumentations-node/register')`
+- **THEN** `.otel/next-register.js` is written
+- **AND** it requires `@opentelemetry/auto-instrumentations-node/register`
+- **AND** it delegates to `next/dist/bin/next`
 
-#### Scenario: register.js NOT generated for regular projects
+#### Scenario: nuxt-register.js generated for Nuxt
 
-- **GIVEN** a project is NOT Next.js
+- **GIVEN** a project is identified as Nuxt
 - **WHEN** the `.otel/` directory is created
-- **THEN** `.otel/register.js` is NOT written
+- **THEN** `.otel/nuxt-register.js` is written
+- **AND** it requires `@opentelemetry/auto-instrumentations-node/register`
+- **AND** it delegates to `nuxt/bin/nuxt.mjs`
+
+#### Scenario: Wrapper script NOT generated for regular projects
+
+- **GIVEN** a project is NOT Next.js or Nuxt
+- **WHEN** the `.otel/` directory is created
+- **THEN** no wrapper script is written
+
+### Requirement: Entrypoint detection
+
+The system SHALL use the existing `detectNodeEntrypoints` function to resolve the entrypoint for regular Node.js projects. The detection priority is: `package.json` `"main"` field → `scripts.start` file reference → other `scripts` entries with `node <file>` patterns → conventional filenames at project root (`index`, `app`, `server` with `.js`, `.ts`, `.mjs`, `.cjs`, `.mts`, `.cts` extensions). If no entrypoint is found and the project is not a known framework (Next.js, Nuxt), the project is skipped.
+
+#### Scenario: Entrypoint detected via package.json main
+
+- **GIVEN** a project with `"main": "server.js"` in `package.json` and `server.js` exists on disk
+- **WHEN** `detectNodeEntrypoints` runs
+- **THEN** it returns `["server.js"]`
+
+#### Scenario: Entrypoint detected via scripts.start
+
+- **GIVEN** a project with `"scripts": {"start": "node app.js"}` and `app.js` exists on disk
+- **AND** no `"main"` field is set
+- **WHEN** `detectNodeEntrypoints` runs
+- **THEN** it returns `["app.js"]`
+
+#### Scenario: Entrypoint detected via conventional filename
+
+- **GIVEN** a project with no `"main"` field and no scripts referencing source files
+- **AND** `index.js` exists in the project root
+- **WHEN** `detectNodeEntrypoints` runs
+- **THEN** it returns `["index.js"]`
+
+#### Scenario: No entrypoint found and not a framework
+
+- **GIVEN** a project with no `"main"`, no scripts referencing source files, and no conventional files
+- **AND** the project is not Next.js or Nuxt
+- **WHEN** `buildNodeInstrumentationPlan` runs
+- **THEN** the project is skipped with a diagnostic message
 
 ### Requirement: Regular Node.js app launch
 
@@ -85,7 +124,7 @@ For non-Next.js projects, the system SHALL launch the app using `node --require 
 
 #### Scenario: Regular app launched with auto-instrumentation
 
-- **GIVEN** a regular Node.js project with entrypoint `server.js`
+- **GIVEN** a regular Node.js project where `detectNodeEntrypoints` resolved entrypoint `server.js`
 - **WHEN** `Execute()` launches the process
 - **THEN** the command is `node --require @opentelemetry/auto-instrumentations-node/register ../server.js`
 - **AND** CWD is set to the `.otel/` directory
@@ -100,15 +139,27 @@ For non-Next.js projects, the system SHALL launch the app using `node --require 
 
 ### Requirement: Next.js app launch
 
-For Next.js projects, the system SHALL launch the app using `node --require ./.otel/register.js ./node_modules/next/dist/bin/next start` with CWD set to the project root.
+For Next.js projects, the system SHALL launch the app using `node otel/next-register.js start` with CWD set to the project root.
 
-#### Scenario: Next.js app launched with register.js
+#### Scenario: Next.js app launched with wrapper
 
 - **GIVEN** a Next.js project
 - **WHEN** `Execute()` launches the process
-- **THEN** the command is `node --require ./.otel/register.js ./node_modules/next/dist/bin/next start`
+- **THEN** the command is `node otel/next-register.js start`
 - **AND** CWD is set to the project root (not `.otel/`)
-- **AND** `register.js` has already set the OTEL\_\* env vars programmatically
+- **AND** OTEL\_\* env vars are set on the process
+
+### Requirement: Nuxt app launch
+
+For Nuxt projects, the system SHALL launch the app using `node otel/nuxt-register.js start` with CWD set to the project root.
+
+#### Scenario: Nuxt app launched with wrapper
+
+- **GIVEN** a Nuxt project
+- **WHEN** `Execute()` launches the process
+- **THEN** the command is `node otel/nuxt-register.js start`
+- **AND** CWD is set to the project root (not `.otel/`)
+- **AND** OTEL\_\* env vars are set on the process
 
 ### Requirement: Dynatrace service verification
 
