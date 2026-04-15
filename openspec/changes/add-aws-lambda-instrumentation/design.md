@@ -91,7 +91,7 @@ Functions with unsupported or custom runtimes are skipped with a warning message
 `aws lambda update-function-configuration` replaces the entire `Environment.Variables` map. To avoid destroying existing env vars:
 
 1. Call `aws lambda get-function-configuration` to read the current config.
-2. Merge DT_* env vars into the existing map (add new keys, overwrite DT_* keys).
+2. Merge DT_*env vars into the existing map (add new keys, overwrite DT_* keys).
 3. Replace the Dynatrace layer in the `Layers` list (identified by ARN containing `Dynatrace_OneAgent`), or append if not present.
 4. Call `aws lambda update-function-configuration` with the merged config.
 
