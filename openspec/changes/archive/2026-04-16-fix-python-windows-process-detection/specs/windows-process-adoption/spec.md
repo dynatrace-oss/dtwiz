@@ -1,6 +1,10 @@
 # Spec: Windows Process Adoption
 
-## ADDED Requirements
+## Purpose
+
+Enable dtwiz to track and instrument Python child processes on Windows after their launchers exit, by adopting the child process for continued monitoring through liveness and port detection phases.
+
+## ADDED
 
 ### Requirement: Windows child process adoption after execl spawn
 
@@ -62,9 +66,9 @@ The adoption query is **entrypoint/CommandLine-based**, not parent-PID-based. `p
 - **THEN** `adoptExeclChildren` SHALL be a no-op and SHALL NOT attempt any process queries
 - **AND** no Windows-specific imports or symbols SHALL be referenced on non-Windows builds
 
-## Testing
+### Testing
 
-### Cross-platform unit tests (`pkg/installer/otel_runtime_scan_test.go`)
+#### Cross-platform unit tests (`pkg/installer/otel_runtime_scan_test.go`)
 
 Cover `parseWinProcessOutput` — the line-normalisation helper extracted from `winProcessQuery` into `otel_runtime_scan.go` (no build tag) so it can be exercised on all CI platforms:
 
@@ -74,7 +78,7 @@ Cover `parseWinProcessOutput` — the line-normalisation helper extracted from `
 - **Single-line input** → returns one-element slice with CR stripped
 - **Pipe-delimited field round-trip** → a typical `ProcessId|CommandLine|WorkingDirectory` line survives `parseWinProcessOutput` → `strings.SplitN(_, "|", 3)` intact
 
-### Windows-only integration tests (`pkg/installer/otel_runtime_scan_windows_test.go`, `//go:build windows`)
+#### Windows-only integration tests (`pkg/installer/otel_runtime_scan_windows_test.go`, `//go:build windows`)
 
 Require PowerShell (standard on all supported Windows versions):
 
@@ -83,7 +87,7 @@ Require PowerShell (standard on all supported Windows versions):
 - **`TestWinProcessQuery_PipeDelimitedMultiField`** — three-field query for current PID; verifies `SplitN` yields exactly three fields with the correct PID
 - **`TestDetectProcesses_ExcludeTermFilter`** — queries current PID, then re-queries with the PID as an exclude term; verifies the process is absent from the second result
 
-### Windows-only adoption logic tests (`pkg/installer/otel_process_windows_test.go`, `//go:build windows`)
+#### Windows-only adoption logic tests (`pkg/installer/otel_process_windows_test.go`, `//go:build windows`)
 
 Use the existing `runningManagedProcess`, `crashedManagedProcess`, and `cleanExitedManagedProcess` test helpers:
 
