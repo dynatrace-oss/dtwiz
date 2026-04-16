@@ -1,3 +1,5 @@
+# Design: Fix Python Windows Process Detection
+
 ## Context
 
 `opentelemetry-instrument` is the OTel-recommended way to launch a Python application with automatic instrumentation. Internally its `run()` function calls `os.execl()` at the end to hand off to the user's Python app. On Unix/macOS, `os.execl` is a true process replacement — the launcher's PID stays alive as the app. On Windows, Python's `os.execl` is implemented as `subprocess.Popen` + `sys.exit(0)`: the launcher spawns a new child process and then exits cleanly.
@@ -9,6 +11,7 @@ The existing PowerShell-based Windows helpers (`otel_runtime_scan_windows.go`, `
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Correctly detect and track running instrumented Python services on Windows after `opentelemetry-instrument` performs its `os.execl` child-spawn
 - Use consistent `Get-CimInstance Win32_Process` PowerShell queries for all Windows process enumeration, with pipe-delimited output format for multi-field queries
 - Provide actionable debug output when Windows process adoption fails so the user can self-diagnose
@@ -16,6 +19,7 @@ The existing PowerShell-based Windows helpers (`otel_runtime_scan_windows.go`, `
 - Promote `golang.org/x/sys` to a direct dependency (used only in `watchPID` for `OpenProcess`/`WaitForSingleObject`)
 
 **Non-Goals:**
+
 - Changing the `opentelemetry-instrument` invocation — the OTel-docs-recommended approach is correct and must stay
 - Replacing PowerShell for operations with no clean Win32 equivalent (working directory lookup, TCP port detection via `GetExtendedTcpTable`, MSI uninstall)
 - Supporting Windows process adoption for non-Python launchers

@@ -1,3 +1,5 @@
+# Proposal: Fix Python Windows Process Detection
+
 ## Why
 
 On Windows, Python's `os.execl()` (used by `opentelemetry-instrument` to launch the instrumented app) is implemented as `subprocess.Popen` + `sys.exit(0)` — unlike Unix where it replaces the process in-place. This causes Go's `cmd.Wait()` to return immediately when the launcher exits, making dtwiz incorrectly declare all instrumented services as dead even though Flask (and other frameworks) are running correctly in orphaned child processes.
