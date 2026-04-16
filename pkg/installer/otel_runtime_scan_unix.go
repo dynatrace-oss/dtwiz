@@ -11,6 +11,16 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
+// DetectProcesses is the exported version of detectProcesses for use by other packages.
+func DetectProcesses(filterTerm string, excludeTerms []string) []DetectedProcess {
+	return detectProcesses(filterTerm, excludeTerms)
+}
+
+// DetectProcessListeningPort is the exported version of detectProcessListeningPort for use by other packages.
+func DetectProcessListeningPort(pid int) string {
+	return detectProcessListeningPort(pid)
+}
+
 func detectProcesses(filterTerm string, excludeTerms []string) []DetectedProcess {
 	output, err := exec.Command("ps", "ax", "-o", "pid=,command=").Output()
 	if err != nil {
@@ -38,13 +48,14 @@ func detectProcesses(filterTerm string, excludeTerms []string) []DetectedProcess
 		}
 
 		command := strings.TrimSpace(parts[1])
-		if !strings.Contains(command, filterTerm) {
+		lowerCommand := strings.ToLower(command)
+		if !strings.Contains(lowerCommand, strings.ToLower(filterTerm)) {
 			continue
 		}
 
 		excluded := false
 		for _, excludeTerm := range excludeTerms {
-			if strings.Contains(command, excludeTerm) {
+			if strings.Contains(lowerCommand, strings.ToLower(excludeTerm)) {
 				excluded = true
 				break
 			}
