@@ -1,4 +1,4 @@
-## Why
+# Why
 
 The CLI uses a raw `os.Getenv("DTWIZ_ALL_RUNTIMES")` call in `pkg/installer/otel.go` as a makeshift feature flag to gate unreleased runtimes (Java, Node.js, Go). This pattern doesn't scale — each new gated feature would add another ad-hoc `os.Getenv` call scattered across the codebase. A centralized feature flag package reduces duplication, improves discoverability, and makes flags testable without polluting the process environment.
 
