@@ -10,11 +10,13 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// pythonChildPIDs returns the PIDs of direct child processes of parentPID
-// whose exe name contains "python", using Get-CimInstance.
-func pythonChildPIDs(parentPID int) ([]int, error) {
+// pythonPIDsByCommandLine returns the PIDs of running python processes whose
+// CommandLine contains the given entrypoint string, using Get-CimInstance.
+func pythonPIDsByCommandLine(entrypoint string) ([]int, error) {
+	// Escape backslashes for PowerShell -match (regex).
+	escaped := strings.ReplaceAll(entrypoint, `\`, `\\`)
 	lines, err := winProcessQuery(
-		"$_.ParentProcessId -eq "+strconv.Itoa(parentPID)+" -and $_.Name -match 'python'",
+		"$_.Name -match 'python' -and $_.CommandLine -match '"+escaped+"'",
 		"$_.ProcessId",
 	)
 	if err != nil {
@@ -27,15 +29,18 @@ func pythonChildPIDs(parentPID int) ([]int, error) {
 			pids = append(pids, pid)
 		}
 	}
-	logger.Debug("pythonChildPIDs result", "parent_pid", parentPID, "child_pids", pids)
+	logger.Debug("pythonPIDsByCommandLine result", "entrypoint", entrypoint, "pids", pids)
 	return pids, nil
 }
 
 // adoptExeclChildren handles the Windows os.execl child-adoption pass.
-// opentelemetry-instrument calls os.execl which on Windows is implemented as
-// subprocess.Popen + sys.exit(0) — the launcher exits cleanly while the real
-// app process runs as an orphaned child. This function finds and adopts those
-// children so dtwiz can continue tracking them.
+// opentelemetry-instrument on Windows spawns the real app via subprocess.Popen
+// then calls sys.exit(0). The launcher exits cleanly (~500ms after start) while
+// the real app runs as an orphaned python.exe process. By settle time the
+// launcher is gone, so parent-PID queries find nothing. Instead we match by
+// CommandLine: we know the entrypoint path we launched, and it always appears
+// in the CommandLine of the surviving python.exe process(es). We pick the
+// lowest matching PID (first spawned) and adopt it.
 func adoptExeclChildren(procs []*ManagedProcess, started, notStarted *int) {
 	for _, p := range procs {
 		exited, waitErr := p.WaitResult()
@@ -47,25 +52,24 @@ func adoptExeclChildren(procs []*ManagedProcess, started, notStarted *int) {
 			logger.Debug("adoption: process crashed, skipping", "name", p.Name, "pid", p.PID, "err", waitErr)
 			continue
 		}
-		logger.Debug("adoption: launcher exited cleanly, querying children", "name", p.Name, "pid", p.PID)
-		pids, err := pythonChildPIDs(p.PID)
+		if p.Entrypoint == "" {
+			logger.Debug("adoption: no entrypoint recorded, skipping", "name", p.Name, "pid", p.PID)
+			continue
+		}
+		pids, err := pythonPIDsByCommandLine(p.Entrypoint)
 		if err != nil {
-			logger.Debug("adoption: child query failed", "name", p.Name, "pid", p.PID, "err", err)
+			logger.Debug("adoption: CommandLine query failed", "name", p.Name, "entrypoint", p.Entrypoint, "err", err)
 			continue
 		}
 		if len(pids) == 0 {
-			logger.Debug("adoption: no python children found", "name", p.Name, "pid", p.PID)
+			logger.Debug("adoption: no running python process matched entrypoint", "name", p.Name, "entrypoint", p.Entrypoint)
 			continue
 		}
-		// Pick the lowest PID (earliest spawned).
 		childPID := pids[0]
 		for _, pid := range pids[1:] {
 			if pid < childPID {
 				childPID = pid
 			}
-		}
-		if len(pids) > 1 {
-			logger.Debug("adoption: multiple children found, picking lowest PID", "name", p.Name, "candidates", pids, "selected", childPID)
 		}
 		oldPID := p.PID
 		p.PID = childPID
@@ -76,7 +80,7 @@ func adoptExeclChildren(procs []*ManagedProcess, started, notStarted *int) {
 		*started++
 		*notStarted--
 		logger.Debug("adoption: adopted windows child process",
-			"name", p.Name, "launcher_pid", oldPID, "child_pid", childPID)
+			"name", p.Name, "launcher_pid", oldPID, "child_pid", childPID, "entrypoint", p.Entrypoint)
 	}
 }
 

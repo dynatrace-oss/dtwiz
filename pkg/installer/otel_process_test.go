@@ -34,7 +34,7 @@ func TestManagedProcessHelper(t *testing.T) {
 func TestWaitResult_Idempotent(t *testing.T) {
 	cmd := managedProcessHelperCommand(t, "exit1")
 	logFile := createManagedProcessLogFile(t)
-	mp, err := StartManagedProcess("svc", filepath.Base(logFile.Name()), cmd, logFile)
+	mp, err := StartManagedProcess("svc", filepath.Base(logFile.Name()), "", cmd, logFile)
 	if err != nil {
 		t.Fatalf("StartManagedProcess() error = %v", err)
 	}
@@ -53,7 +53,7 @@ func TestWaitResult_Idempotent(t *testing.T) {
 func TestWaitResult_StillRunning(t *testing.T) {
 	cmd := managedProcessHelperCommand(t, "block")
 	logFile := createManagedProcessLogFile(t)
-	mp, err := StartManagedProcess("svc", filepath.Base(logFile.Name()), cmd, logFile)
+	mp, err := StartManagedProcess("svc", filepath.Base(logFile.Name()), "", cmd, logFile)
 	if err != nil {
 		t.Fatalf("StartManagedProcess() error = %v", err)
 	}
@@ -169,7 +169,7 @@ func runningManagedProcess(name string) *ManagedProcess {
 func TestStartManagedProcess_CleanExit(t *testing.T) {
 	cmd := managedProcessHelperCommand(t, "exit0")
 	logFile := createManagedProcessLogFile(t)
-	mp, err := StartManagedProcess("svc", filepath.Base(logFile.Name()), cmd, logFile)
+	mp, err := StartManagedProcess("svc", filepath.Base(logFile.Name()), "", cmd, logFile)
 	if err != nil {
 		t.Fatalf("StartManagedProcess() error = %v", err)
 	}

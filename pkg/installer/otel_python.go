@@ -248,7 +248,7 @@ func (p *PythonInstrumentationPlan) Execute() {
 		cmd.Dir = proj.Path
 		cmd.Env = append(os.Environ(), formatEnvVars(epEnvVars)...)
 
-		mp, err := StartManagedProcess(svcName, logName, cmd, logFile)
+		mp, err := StartManagedProcess(svcName, logName, ep, cmd, logFile)
 		if err != nil {
 			fmt.Printf("    Failed to start %s: %v\n", ep, err)
 			continue

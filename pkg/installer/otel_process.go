@@ -20,13 +20,14 @@ type ManagedProcess struct {
 	Name           string
 	PID            int
 	LogName        string
+	Entrypoint     string // script/entrypoint that was launched, used for process re-discovery on Windows
 	exitResultCh   chan error
 	hasExited      bool
 	cachedWaitErr  error
 	resultConsumed bool
 }
 
-func StartManagedProcess(name, logName string, cmd *exec.Cmd, logFile *os.File) (*ManagedProcess, error) {
+func StartManagedProcess(name, logName, entrypoint string, cmd *exec.Cmd, logFile *os.File) (*ManagedProcess, error) {
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	if err := cmd.Start(); err != nil {
@@ -38,6 +39,14 @@ func StartManagedProcess(name, logName string, cmd *exec.Cmd, logFile *os.File) 
 	logger.Debug("managed process started", "name", name, "pid", pid, "cmd", cmd.Path)
 
 	exitCh := make(chan error, 1)
+	mp := &ManagedProcess{
+		Name:         name,
+		PID:          pid,
+		LogName:      logName,
+		Entrypoint:   entrypoint,
+		exitResultCh: exitCh,
+	}
+
 	go func() {
 		err := cmd.Wait()
 		if err != nil {
@@ -49,12 +58,7 @@ func StartManagedProcess(name, logName string, cmd *exec.Cmd, logFile *os.File) 
 		logFile.Close()
 	}()
 
-	return &ManagedProcess{
-		Name:         name,
-		PID:          pid,
-		LogName:      logName,
-		exitResultCh: exitCh,
-	}, nil
+	return mp, nil
 }
 
 func (p *ManagedProcess) WaitResult() (exited bool, err error) {
