@@ -31,13 +31,16 @@ jobs:
         id: semver
         run: |
           if git describe --tags --match "v*" --abbrev=0 > /dev/null 2>&1; then
+            SEMVER_TAG=$(git describe --tags --match "v*" --abbrev=0)
             echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "semver_tag=$SEMVER_TAG" >> "$GITHUB_OUTPUT"
           else
             echo "found=false" >> "$GITHUB_OUTPUT"
             echo "No semver tag reachable — skipping snapshot." >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Delete existing pre-release (if any)
+        if: steps.semver.outputs.found == 'true'
         run: |
           gh release delete "${{ steps.tag.outputs.tag }}" --yes || true
           git push origin ":refs/tags/${{ steps.tag.outputs.tag }}" || true
@@ -53,6 +56,7 @@ jobs:
           args: release --snapshot --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ steps.semver.outputs.semver_tag }}
 
       - name: Capture snapshot version
         if: steps.semver.outputs.found == 'true'
