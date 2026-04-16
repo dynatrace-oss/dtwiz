@@ -9,7 +9,6 @@ import (
 )
 
 // detectOtelCollector looks for a running OpenTelemetry Collector process on Windows.
-// Searches by command-line pattern via Get-CimInstance.
 // Returns (running, binaryPath, configPath).
 func detectOtelCollector() (bool, string, string) {
 	// Patterns to search for in the process list.
