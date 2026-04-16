@@ -7,10 +7,10 @@ Create the `pkg/featureflags` package with the registry, `IsEnabled`, `List`, an
 **Files:** `pkg/featureflags/featureflags.go` (create), `pkg/featureflags/featureflags_test.go` (create)
 
 - [x] 1.1 Create `pkg/featureflags/featureflags.go` with `Flag` type (int const), `CLIFeatureFlag` struct (flag, name, envVar, defaultVal, desc, bound), and `registry` slice with the `AllRuntimes` entry (`"all-runtimes"`, `"DTWIZ_ALL_RUNTIMES"`, `false`); add unexported helpers `getFlag(flag Flag) *CLIFeatureFlag` (linear registry scan) and `resolveFlag(r *CLIFeatureFlag) (bool, string)` (precedence resolution)
-- [x] 1.2 Implement `IsEnabled(flag Flag) bool` — resolution order: test override → CLI override → env var (`"true"`/`"1"`) → default
+- [x] 1.2 Implement `IsEnabled(flag Flag) bool` — resolution order: CLI override → env var (`"true"`/`"1"`) → default
 - [x] 1.3 Implement `List() []FlagState` — iterate registry, resolve each flag, return name, env var, enabled state, and source
-- [x] 1.4 Implement `SetForTest(t testing.TB, flag Flag, val bool)` — store override in mutex-protected `testOverrides` map, restore previous value via `t.Cleanup`
-- [x] 1.5 Add unit tests: default returns false, env var `"true"` returns true, env var `"1"` returns true, env var `"false"` returns false, unknown flag returns false, `SetForTest` overrides and restores, `List` returns a correct source for each override type
+- [x] 1.4 Implement `SetCLIOverrideForTest(t testCleaner, flag Flag, val bool)` in `utils_test.go` — store override in mutex-protected `cliOverrides` map, restore previous value via `t.Cleanup`
+- [x] 1.5 Add unit tests: default returns false, env var `"true"` returns true, env var `"1"` returns true, env var `"false"` returns false, unknown flag returns false, `SetCLIOverrideForTest` overrides and restores, `List` returns a correct source for each override type
 
 ## 2. Cobra integration
 
@@ -18,11 +18,11 @@ Wire feature flags into the cobra command tree as persistent boolean flags on `r
 
 **Files:** `pkg/featureflags/featureflags.go` (modify), `cmd/root.go` (modify)
 
-- [ ] 2.1 Add `RegisterFlags(flags *pflag.FlagSet)` — iterate registry, call `flags.BoolVar` for each entry binding cobra's output to the `bound` field of the registry entry
-- [ ] 2.2 Add `ApplyCLIOverrides(flags *pflag.FlagSet)` — iterate registry, check `flags.Changed(name)`, store value in `cliOverrides` map if changed
-- [ ] 2.3 In `cmd/root.go` `init()`, call `featureflags.RegisterFlags(rootCmd.PersistentFlags())` after existing flag registrations
-- [ ] 2.4 In `rootCmd.PersistentPreRun`, call `featureflags.ApplyCLIOverrides(cmd.Flags())` after `logger.Init`
-- [ ] 2.5 Add tests: CLI override takes precedence over env var, CLI flag not passed does not stomp env var (`Changed` is false)
+- [x] 2.1 Add `RegisterFlags(flags *pflag.FlagSet)` — iterate registry, call `flags.BoolVar` for each entry binding cobra's output to the `bound` field of the registry entry
+- [x] 2.2 Add `ApplyCLIOverrides(flags *pflag.FlagSet)` — iterate registry, check `flags.Changed(name)`, store value in `cliOverrides` map if changed
+- [x] 2.3 In `cmd/root.go` `init()`, call `featureflags.RegisterFlags(rootCmd.PersistentFlags())` after existing flag registrations
+- [x] 2.4 In `rootCmd.PersistentPreRun`, call `featureflags.ApplyCLIOverrides(cmd.Flags())` after `logger.Init`
+- [x] 2.5 Add tests: CLI override takes precedence over env var, CLI flag not passed does not stomp env var (`Changed` is false)
 
 ## 3. Migrate otel.go
 

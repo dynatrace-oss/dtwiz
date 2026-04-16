@@ -4,6 +4,8 @@ import (
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/spf13/pflag"
 )
 
 // Flag identifies a feature flag.
@@ -28,9 +30,8 @@ var registry = []CLIFeatureFlag{
 }
 
 var (
-	cliOverrides  = map[Flag]bool{}
-	testOverrides = map[Flag]bool{}
-	mu            sync.Mutex
+	cliOverrides = map[Flag]bool{}
+	mu           sync.Mutex
 )
 
 // FlagState represents the resolved state of a feature flag.
@@ -38,11 +39,29 @@ type FlagState struct {
 	Name    string // "all-runtimes"
 	EnvVar  string // "DTWIZ_ALL_RUNTIMES"
 	Enabled bool   // resolved value
-	Source  string // "cli", "env", "default", or "test"
+	Source  string // "cli", "env", or "default"
+}
+
+// RegisterFlags registers the custom CLI Feature Flags to be bound to the Cobra instance.
+func RegisterFlags(flags *pflag.FlagSet) {
+	for i := range registry {
+		cliFlag := &registry[i]
+		flags.BoolVar(&cliFlag.bound, cliFlag.name, cliFlag.defaultVal, cliFlag.desc)
+	}
+}
+
+// ApplyCLIOverrides populates the cliOverrides map in case any flags were set at runtime.
+func ApplyCLIOverrides(flags *pflag.FlagSet) {
+	for i := range registry {
+		cliFlag := &registry[i]
+		if flags.Changed(cliFlag.name) {
+			cliOverrides[cliFlag.flag] = cliFlag.bound
+		}
+	}
 }
 
 // IsEnabled returns whether the given feature flag is enabled.
-// Resolution order: test override → CLI override → env var ("true"/"1") → default.
+// Resolution order: CLI override → env var ("true"/"1") → default.
 func IsEnabled(flag Flag) bool {
 	featureFlag := getFlag(flag)
 	if featureFlag == nil {
@@ -81,13 +100,9 @@ func getFlag(flag Flag) *CLIFeatureFlag {
 // resolveFlag determines the value and source for a single flag entry.
 func resolveFlag(r *CLIFeatureFlag) (bool, string) {
 	mu.Lock()
-	if val, ok := testOverrides[r.flag]; ok {
-		mu.Unlock()
-		return val, "test"
-	}
+	val, ok := cliOverrides[r.flag]
 	mu.Unlock()
-
-	if val, ok := cliOverrides[r.flag]; ok {
+	if ok {
 		return val, "cli"
 	}
 
@@ -97,29 +112,4 @@ func resolveFlag(r *CLIFeatureFlag) (bool, string) {
 	}
 
 	return r.defaultVal, "default"
-}
-
-// testCleaner is a minimal interface satisfied by *testing.T and *testing.B,
-// allowing SetForTest to avoid importing the testing package in production code.
-type testCleaner interface {
-	Cleanup(func())
-}
-
-// SetForTest sets a test-scoped override for the given flag.
-// The override is automatically removed via t.Cleanup.
-func SetForTest(t testCleaner, flag Flag, val bool) {
-	mu.Lock()
-	prev, hadPrev := testOverrides[flag]
-	testOverrides[flag] = val
-	mu.Unlock()
-
-	t.Cleanup(func() {
-		mu.Lock()
-		defer mu.Unlock()
-		if hadPrev {
-			testOverrides[flag] = prev
-		} else {
-			delete(testOverrides, flag)
-		}
-	})
 }

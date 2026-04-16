@@ -77,20 +77,20 @@ The package SHALL expose `RegisterFlags(flags *pflag.FlagSet)` that registers a 
 - **WHEN** `ApplyCLIOverrides` runs and then `IsEnabled(AllRuntimes)` is called
 - **THEN** it returns `true` (cobra's default `false` does NOT override the env var)
 
-### Requirement: Test helper `SetForTest`
+### Requirement: Test helper `SetCLIOverrideForTest`
 
-The package SHALL expose `SetForTest(t testing.TB, flag Flag, val bool)` that sets a test-scoped override. The override SHALL be automatically removed via `t.Cleanup`. Test overrides take highest precedence in the resolution order.
+The package SHALL expose `SetCLIOverrideForTest(t testCleaner, flag Flag, val bool)` in `utils_test.go` that injects a CLI-scoped override, equivalent to the user having passed the flag explicitly on the command line. The override SHALL be automatically removed via `t.Cleanup`.
 
-#### Scenario: Test override scoped to test
+#### Scenario: CLI override scoped to test
 
-- **GIVEN** a test calls `SetForTest(t, AllRuntimes, true)`
+- **GIVEN** a test calls `SetCLIOverrideForTest(t, AllRuntimes, true)`
 - **WHEN** `IsEnabled(AllRuntimes)` is called within the test
-- **THEN** it returns `true`
+- **THEN** it returns `true` with source `"cli"`
 - **AND** after the test completes, the override is removed
 
 ### Requirement: Zero external dependencies
 
-The `pkg/featureflags` package SHALL use only Go standard library packages (plus `testing` for the test helper). The cobra integration (`pflag.FlagSet`) is the only non-stdlib dependency, and it is already used throughout the project.
+The `pkg/featureflags` package SHALL use only Go standard library packages. The cobra integration (`pflag.FlagSet`) is the only non-stdlib dependency, and it is already used throughout the project. The `testing` package SHALL NOT be imported in production code; test helpers use a local `testCleaner` interface instead.
 
 ### Requirement: Backward compatibility
 

@@ -16,7 +16,7 @@ dtctl (sibling project) has no centralized feature flag system. Its `pkg/aidetec
 - Expose each feature flag as a cobra persistent boolean flag on `rootCmd`, following the same pattern as `--environment` and `--access-token`.
 - Migrate `allRuntimesEnabled()` in `otel.go` to `featureflags.IsEnabled(featureflags.AllRuntimes)`.
 - Show active feature flags in `dtwiz status`.
-- Provide `SetForTest(t, flag, val)` so tests can override flags without `os.Setenv`.
+- Provide `SetCLIOverrideForTest(t, flag, val)` so tests can override flags without `os.Setenv`.
 
 **Non-Goals:**
 
@@ -79,18 +79,18 @@ Two unexported helpers support the public API:
 
 This two-step approach is necessary because cobra initializes all bool flags to `false`. Without checking `Changed`, `--all-runtimes` not being passed would always resolve to `false`, stomping the env var.
 
-### 4. Test helper: `SetForTest(t, flag, val)`
+### 4. Test helper: `SetCLIOverrideForTest(t, flag, val)`
 
 ```go
-func SetForTest(t testing.TB, flag Flag, val bool) {
-    // store override in testOverrides map
+func SetCLIOverrideForTest(t testCleaner, flag Flag, val bool) {
+    // store override in cliOverrides map
     // t.Cleanup restores previous state
 }
 ```
 
-Resolution order with test override: **test override → CLI → env var → default**. This allows tests to control flags without touching the environment or cobra state. The override is scoped to the test via `t.Cleanup`.
+Resolution order: **CLI → env var → default**. Tests control flag state by injecting directly into `cliOverrides` via `SetCLIOverrideForTest`, equivalent to the user having passed the flag on the command line. The override is scoped to the test via `t.Cleanup`.
 
-The `testOverrides` map is package-level and protected by a mutex. This is safe with `t.Parallel()` because each test sets its own flag key, and `t.Cleanup` restores the previous value.
+The `cliOverrides` map is protected by a mutex in `SetCLIOverrideForTest` (concurrent test writes are possible with `t.Parallel()`), but read without a lock in production (written exactly once at startup before any concurrent access).
 
 ### 5. `List()` returns all flags with current state
 
@@ -99,7 +99,7 @@ type FlagState struct {
     Name    string // "all-runtimes"
     EnvVar  string // "DTWIZ_ALL_RUNTIMES"
     Enabled bool   // resolved value
-    Source  string // "cli", "env", "default", or "test"
+    Source  string // "cli", "env", or "default"
 }
 
 func List() []FlagState
@@ -123,10 +123,10 @@ If no flags are enabled, the section is omitted entirely — keeping the default
 
 The `allRuntimesEnabled()` function in `otel.go` is replaced with `featureflags.IsEnabled(featureflags.AllRuntimes)`. The function is removed. `detectAvailableRuntimes()` calls `featureflags.IsEnabled` directly.
 
-The three test functions in `otel_test.go` are updated to use `featureflags.SetForTest(t, featureflags.AllRuntimes, true/false)` instead of `t.Setenv("DTWIZ_ALL_RUNTIMES", ...)`.
+The three test functions in `otel_test.go` are updated to use `featureflags.SetCLIOverrideForTest(t, featureflags.AllRuntimes, true/false)` instead of `t.Setenv("DTWIZ_ALL_RUNTIMES", ...)`.
 
 ## Risks / Trade-offs
 
-- **[Package-level mutable state]** → `cliOverrides` and `testOverrides` are package-level maps mutated at runtime. Mitigation: `cliOverrides` is written once during `PersistentPreRun` and read-only after; `testOverrides` is mutex-protected and scoped via `t.Cleanup`. The mutex covers only `testOverrides` reads and writes — `cliOverrides` is intentionally unprotected because it is written exactly once at startup before any concurrent access is possible.
+- **[Package-level mutable state]** → `cliOverrides` is a package-level map mutated at runtime. Mitigation: written once during `PersistentPreRun` and read-only after; mutex-protected in test helpers where concurrent writes are possible via `t.Parallel()`.
 - **[Cobra flag namespace]** → Feature flags share the global flag namespace with operational flags (`--environment`, `--dry-run`). Mitigation: use descriptive names (`--all-runtimes`) and document that these are feature flags in the help text.
 - **[Not applicable to non-boolean flags]** → The registry only supports boolean flags. Mitigation: all current and foreseeable feature flags are on/off toggles. String/int flags can be added later if needed.
