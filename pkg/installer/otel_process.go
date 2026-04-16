@@ -17,14 +17,15 @@ const (
 )
 
 type ManagedProcess struct {
-	Name           string
-	PID            int
-	LogName        string
-	Entrypoint     string // script/entrypoint that was launched, used for process re-discovery on Windows
-	exitResultCh   chan error
-	hasExited      bool
-	cachedWaitErr  error
-	resultConsumed bool
+	Name            string
+	PID             int
+	LogName         string
+	Entrypoint      string // script/entrypoint that was launched, used for process re-discovery on Windows
+	IsExeclLauncher bool   // true when the process is expected to exec-spawn a child and exit (Python on Windows)
+	exitResultCh    chan error
+	hasExited       bool
+	cachedWaitErr   error
+	resultConsumed  bool
 }
 
 func StartManagedProcess(name, logName, entrypoint string, cmd *exec.Cmd, logFile *os.File) (*ManagedProcess, error) {
@@ -40,11 +41,12 @@ func StartManagedProcess(name, logName, entrypoint string, cmd *exec.Cmd, logFil
 
 	exitCh := make(chan error, 1)
 	mp := &ManagedProcess{
-		Name:         name,
-		PID:          pid,
-		LogName:      logName,
-		Entrypoint:   entrypoint,
-		exitResultCh: exitCh,
+		Name:            name,
+		PID:             pid,
+		LogName:         logName,
+		Entrypoint:      entrypoint,
+		IsExeclLauncher: entrypoint != "",
+		exitResultCh:    exitCh,
 	}
 
 	go func() {

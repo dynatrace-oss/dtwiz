@@ -3,6 +3,7 @@
 package installer
 
 import (
+	"os/exec"
 	"strconv"
 	"strings"
 
@@ -10,27 +11,28 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// pythonPIDsByCommandLine returns the PIDs of running python processes whose
-// CommandLine contains the given entrypoint string, using Get-CimInstance.
-func pythonPIDsByCommandLine(entrypoint string) ([]int, error) {
-	// Escape backslashes for PowerShell -match (regex).
+// pythonLeafPID finds the leaf python process matching the given entrypoint —
+// i.e. the real app process, not the opentelemetry-instrument launcher.
+// On Windows, opentelemetry-instrument spawns the real app as a child via
+// subprocess.Popen then calls sys.exit(0), leaving a two-process chain
+// (launcher → real app). The leaf is the process whose ProcessId does not
+// appear as the ParentProcessId of any other matched process.
+//
+// Returns 0, nil if no matching processes are found.
+func pythonLeafPID(entrypoint string) (int, error) {
 	escaped := strings.ReplaceAll(entrypoint, `\`, `\\`)
-	lines, err := winProcessQuery(
-		"$_.Name -match 'python' -and $_.CommandLine -match '"+escaped+"'",
-		"$_.ProcessId",
-	)
+	script := `$m = Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'python' -and $_.CommandLine -match '` + escaped + `' }; ($m | Where-Object { $_.ProcessId -notin @($m.ParentProcessId) } | Select-Object -First 1).ProcessId`
+	out, err := exec.Command("powershell", "-NoProfile", "-Command", script).Output()
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	var pids []int
-	for _, s := range lines {
-		pid, err := strconv.Atoi(strings.TrimSpace(s))
-		if err == nil {
-			pids = append(pids, pid)
-		}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(out)))
+	if err != nil {
+		logger.Debug("pythonLeafPID: no matching process found", "entrypoint", entrypoint)
+		return 0, nil
 	}
-	logger.Debug("pythonPIDsByCommandLine result", "entrypoint", entrypoint, "pids", pids)
-	return pids, nil
+	logger.Debug("pythonLeafPID: leaf found", "entrypoint", entrypoint, "pid", pid)
+	return pid, nil
 }
 
 // adoptExeclChildren handles the Windows os.execl child-adoption pass.
@@ -52,24 +54,18 @@ func adoptExeclChildren(procs []*ManagedProcess, started, notStarted *int) {
 			logger.Debug("adoption: process crashed, skipping", "name", p.Name, "pid", p.PID, "err", waitErr)
 			continue
 		}
-		if p.Entrypoint == "" {
-			logger.Debug("adoption: no entrypoint recorded, skipping", "name", p.Name, "pid", p.PID)
+		if p.Entrypoint == "" || !p.IsExeclLauncher {
+			logger.Debug("adoption: not an execl launcher, skipping", "name", p.Name, "pid", p.PID)
 			continue
 		}
-		pids, err := pythonPIDsByCommandLine(p.Entrypoint)
+		childPID, err := pythonLeafPID(p.Entrypoint)
 		if err != nil {
 			logger.Debug("adoption: CommandLine query failed", "name", p.Name, "entrypoint", p.Entrypoint, "err", err)
 			continue
 		}
-		if len(pids) == 0 {
+		if childPID == 0 {
 			logger.Debug("adoption: no running python process matched entrypoint", "name", p.Name, "entrypoint", p.Entrypoint)
 			continue
-		}
-		childPID := pids[0]
-		for _, pid := range pids[1:] {
-			if pid < childPID {
-				childPID = pid
-			}
 		}
 		oldPID := p.PID
 		p.PID = childPID
