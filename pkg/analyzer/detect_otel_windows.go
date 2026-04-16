@@ -59,6 +59,17 @@ func detectOtelCollector() (bool, string, string) {
 	return false, "", ""
 }
 
+// otelInfoFromProcessName retrieves the command line of a process by name on Windows
+// and extracts the binary path and config path.
+func otelInfoFromProcessName(name string) (binaryPath, configPath string) {
+	ok, output := runCmd("powershell", "-NoProfile", "-Command",
+		"Get-CimInstance Win32_Process -Filter \"Name='"+name+".exe'\" | Select-Object -First 1 -ExpandProperty CommandLine")
+	if !ok || output == "" {
+		return name + ".exe", ""
+	}
+	return parseWindowsCommandLine(output)
+}
+
 // parseWindowsCommandLine extracts the binary path and OTel config path from a command line string.
 func parseWindowsCommandLine(cmdline string) (binaryPath, configPath string) {
 	fields := strings.Fields(cmdline)
