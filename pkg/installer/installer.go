@@ -21,8 +21,13 @@ func killAndWaitProcess(proc *os.Process) error {
 			// Fallback: taskkill handles console/orphaned processes
 			// that TerminateProcess cannot access directly.
 			out, tkErr := exec.Command("taskkill", "/F", "/PID", strconv.Itoa(proc.Pid)).CombinedOutput()
+			outStr := strings.TrimSpace(string(out))
 			if tkErr != nil {
-				return fmt.Errorf("%v (taskkill also failed: %s)", err, strings.TrimSpace(string(out)))
+				// Process already exited — not an error.
+				if strings.Contains(strings.ToLower(outStr), "not found") {
+					return nil
+				}
+				return fmt.Errorf("%v (taskkill also failed: %s)", err, outStr)
 			}
 		} else {
 			return err
