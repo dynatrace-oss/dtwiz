@@ -59,7 +59,7 @@ Adding a new flag requires adding one `const` and one `CLIFeatureFlag` entry. No
 
 `IsEnabled(flag)` resolves in this order:
 
-1. **CLI override** — if a cobra flag was explicitly set (`--all-runtimes` / `--all-runtimes=false`), use that value. Tracked via a package-level `cliOverrides map[Flag]bool` populated by `SetCLIOverride(flag, val)`.
+1. **CLI override** — if a cobra flag was explicitly set (`--all-runtimes` / `--all-runtimes=false`), use that value. Tracked via a package-level `cliOverrides map[Flag]bool` populated by `ApplyCLIOverrides(flags *pflag.FlagSet)`, which checks `flags.Changed(name)` for each registered flag and stores only explicitly set values.
 2. **Env var** — check `os.Getenv(envVar)`. Values `"true"` and `"1"` → enabled; everything else → disabled.
 3. **Default** — the `defaultVal` field from the registry.
 
