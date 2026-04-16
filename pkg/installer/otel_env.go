@@ -101,6 +101,7 @@ func printableEnvVarValue(key, value string) string {
 }
 
 type dqlResponse struct {
+	State  string `json:"state"`
 	Result struct {
 		Records []map[string]interface{} `json:"records"`
 	} `json:"result"`
@@ -128,7 +129,7 @@ func waitForServices(envURL, platformToken string, serviceNames []string, contai
 			conditions[i] = fmt.Sprintf("name == \"%s\"", name)
 		}
 	}
-	dql := fmt.Sprintf("smartscapeNodes SERVICE, from:now() - 3m | filter %s", strings.Join(conditions, " or "))
+	dql := fmt.Sprintf("smartscapeNodes SERVICE, from:now() - 1m | filter %s", strings.Join(conditions, " or "))
 
 	remainingServices := make(map[string]bool, len(serviceNames))
 	for _, name := range serviceNames {
@@ -208,6 +209,11 @@ func fetchSmartscapeServiceNames(queryURL, platformToken, dql string) []string {
 
 	var result dqlResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil
+	}
+
+	if result.State != "SUCCEEDED" {
+		logger.Debug("smartscape DQL query not yet complete", "state", result.State)
 		return nil
 	}
 
