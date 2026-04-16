@@ -40,9 +40,10 @@ func pythonLeafPID(entrypoint string) (int, error) {
 // then calls sys.exit(0). The launcher exits cleanly (~500ms after start) while
 // the real app runs as an orphaned python.exe process. By settle time the
 // launcher is gone, so parent-PID queries find nothing. Instead we match by
-// CommandLine: we know the entrypoint path we launched, and it always appears
-// in the CommandLine of the surviving python.exe process(es). We pick the
-// lowest matching PID (first spawned) and adopt it.
+// CommandLine via pythonLeafPID: we know the entrypoint path we launched, and
+// it always appears in the CommandLine of the surviving python.exe process.
+// The leaf is the python.exe whose PID does not appear as the ParentProcessId
+// of any other matched process — i.e. the real app, not an intermediate launcher.
 func adoptExeclChildren(procs []*ManagedProcess, started, notStarted *int) {
 	for _, p := range procs {
 		exited, waitErr := p.WaitResult()
