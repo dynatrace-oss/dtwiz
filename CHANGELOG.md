@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.7] - 2026-04-16
+
+### Fixed
+
+- OTel install (Windows): kill running OTel Collector before downloading new binary
+- Windows process detection: improve reliability of process lookups
+
 ## [0.2.6] - 2026-04-16
 
 ### Added
@@ -147,7 +154,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.6...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.7...HEAD
+[0.2.7]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.6...v0.2.7
 [0.2.6]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.3...v0.2.4
