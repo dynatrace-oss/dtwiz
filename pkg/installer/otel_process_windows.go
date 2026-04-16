@@ -12,14 +12,13 @@ import (
 
 // pythonChildPIDs returns the PIDs of direct child processes of parentPID
 // whose exe name contains "python", using Get-CimInstance.
-func pythonChildPIDs(parentPID int) []int {
-	lines := winProcessQuery(
+func pythonChildPIDs(parentPID int) ([]int, error) {
+	lines, err := winProcessQuery(
 		"$_.ParentProcessId -eq "+strconv.Itoa(parentPID)+" -and $_.Name -match 'python'",
 		"$_.ProcessId",
 	)
-	if lines == nil {
-		logger.Debug("windows child adoption: PowerShell query failed", "parent_pid", parentPID)
-		return nil
+	if err != nil {
+		return nil, err
 	}
 	var pids []int
 	for _, s := range lines {
@@ -28,7 +27,8 @@ func pythonChildPIDs(parentPID int) []int {
 			pids = append(pids, pid)
 		}
 	}
-	return pids
+	logger.Debug("pythonChildPIDs result", "parent_pid", parentPID, "child_pids", pids)
+	return pids, nil
 }
 
 // adoptExeclChildren handles the Windows os.execl child-adoption pass.
@@ -39,11 +39,22 @@ func pythonChildPIDs(parentPID int) []int {
 func adoptExeclChildren(procs []*ManagedProcess, started, notStarted *int) {
 	for _, p := range procs {
 		exited, waitErr := p.WaitResult()
-		if !exited || waitErr != nil {
+		if !exited {
+			logger.Debug("adoption: process still running, skipping", "name", p.Name, "pid", p.PID)
 			continue
 		}
-		pids := pythonChildPIDs(p.PID)
+		if waitErr != nil {
+			logger.Debug("adoption: process crashed, skipping", "name", p.Name, "pid", p.PID, "err", waitErr)
+			continue
+		}
+		logger.Debug("adoption: launcher exited cleanly, querying children", "name", p.Name, "pid", p.PID)
+		pids, err := pythonChildPIDs(p.PID)
+		if err != nil {
+			logger.Debug("adoption: child query failed", "name", p.Name, "pid", p.PID, "err", err)
+			continue
+		}
 		if len(pids) == 0 {
+			logger.Debug("adoption: no python children found", "name", p.Name, "pid", p.PID)
 			continue
 		}
 		// Pick the lowest PID (earliest spawned).
@@ -53,6 +64,9 @@ func adoptExeclChildren(procs []*ManagedProcess, started, notStarted *int) {
 				childPID = pid
 			}
 		}
+		if len(pids) > 1 {
+			logger.Debug("adoption: multiple children found, picking lowest PID", "name", p.Name, "candidates", pids, "selected", childPID)
+		}
 		oldPID := p.PID
 		p.PID = childPID
 		p.hasExited = false
@@ -61,8 +75,8 @@ func adoptExeclChildren(procs []*ManagedProcess, started, notStarted *int) {
 		p.exitResultCh = watchPID(childPID)
 		*started++
 		*notStarted--
-		logger.Debug("adopted windows child process",
-			"name", p.Name, "old_pid", oldPID, "new_pid", childPID)
+		logger.Debug("adoption: adopted windows child process",
+			"name", p.Name, "launcher_pid", oldPID, "child_pid", childPID)
 	}
 }
 

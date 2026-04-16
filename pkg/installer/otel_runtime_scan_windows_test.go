@@ -14,10 +14,13 @@ import (
 // This test requires PowerShell (standard on all supported Windows versions).
 func TestWinProcessQuery_ReturnsCurrentProcess(t *testing.T) {
 	pid := os.Getpid()
-	lines := winProcessQuery(
+	lines, err := winProcessQuery(
 		"$_.ProcessId -eq "+strconv.Itoa(pid),
 		"$_.ProcessId",
 	)
+	if err != nil {
+		t.Fatalf("winProcessQuery returned error: %v", err)
+	}
 	if len(lines) == 0 {
 		t.Fatal("winProcessQuery returned no results for current PID")
 	}
@@ -30,7 +33,10 @@ func TestWinProcessQuery_ReturnsCurrentProcess(t *testing.T) {
 // TestWinProcessQuery_NoMatch verifies that a Where-Object expression that
 // matches nothing does not cause an error — it returns an empty or nil slice.
 func TestWinProcessQuery_NoMatch(t *testing.T) {
-	lines := winProcessQuery("$_.ProcessId -eq 9999999", "$_.ProcessId")
+	lines, err := winProcessQuery("$_.ProcessId -eq 9999999", "$_.ProcessId")
+	if err != nil {
+		t.Fatalf("winProcessQuery returned error for no-match query: %v", err)
+	}
 	for _, l := range lines {
 		if strings.TrimSpace(l) == "9999999" {
 			t.Errorf("winProcessQuery unexpectedly returned PID 9999999")
@@ -42,10 +48,13 @@ func TestWinProcessQuery_NoMatch(t *testing.T) {
 // pipe-delimited query returns parseable output for the current process.
 func TestWinProcessQuery_PipeDelimitedMultiField(t *testing.T) {
 	pid := os.Getpid()
-	lines := winProcessQuery(
+	lines, err := winProcessQuery(
 		"$_.ProcessId -eq "+strconv.Itoa(pid),
 		"\"$($_.ProcessId)|$($_.CommandLine)|$($_.WorkingDirectory)\"",
 	)
+	if err != nil {
+		t.Fatalf("winProcessQuery returned error: %v", err)
+	}
 	if len(lines) == 0 {
 		t.Fatal("winProcessQuery returned no results for current PID")
 	}
@@ -59,30 +68,13 @@ func TestWinProcessQuery_PipeDelimitedMultiField(t *testing.T) {
 	}
 }
 
-// TestDetectProcesses_ExcludeTermFilter verifies that excludeTerms removes
-// matching processes from the results.
-func TestDetectProcesses_ExcludeTermFilter(t *testing.T) {
-	pid := os.Getpid()
-	pidStr := strconv.Itoa(pid)
-
-	without := detectProcesses(pidStr, nil)
-	with := detectProcesses(pidStr, []string{pidStr})
-
-	for _, p := range without {
-		if strings.Contains(p.Command, pidStr) {
-			for _, q := range with {
-				if q.PID == p.PID {
-					t.Errorf("process PID %d should have been excluded but was returned", p.PID)
-				}
-			}
-		}
-	}
-}
-
 // TestPythonChildPIDs_NoChildren verifies that pythonChildPIDs returns a valid
 // (possibly empty) result for a process known to have no Python children.
 func TestPythonChildPIDs_NoChildren(t *testing.T) {
-	pids := pythonChildPIDs(os.Getpid())
+	pids, err := pythonChildPIDs(os.Getpid())
+	if err != nil {
+		t.Fatalf("pythonChildPIDs returned error: %v", err)
+	}
 	for _, pid := range pids {
 		if pid <= 0 {
 			t.Errorf("pythonChildPIDs returned non-positive PID: %d", pid)

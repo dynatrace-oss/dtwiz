@@ -16,16 +16,24 @@ import (
 // "$_.CommandLine -match 'foo'". fieldsExpr is the ForEach-Object body that
 // produces one line of output per matching process, e.g.
 // "\"$($_.ProcessId)|$($_.CommandLine)\"".
-// Returns the raw trimmed lines of output; blank lines are omitted.
-func winProcessQuery(whereClause, fieldsExpr string) []string {
-	out, err := exec.Command(
-		"powershell", "-NoProfile", "-Command",
-		"Get-CimInstance Win32_Process | Where-Object { "+whereClause+" } | ForEach-Object { "+fieldsExpr+" }",
-	).Output()
+// Returns the trimmed non-blank output lines and nil error on success.
+// Returns nil, err if the PowerShell invocation fails.
+func winProcessQuery(whereClause, fieldsExpr string) ([]string, error) {
+	script := "Get-CimInstance Win32_Process | Where-Object { " + whereClause + " } | ForEach-Object { " + fieldsExpr + " }"
+	logger.Debug("winProcessQuery: executing", "where", whereClause, "fields", fieldsExpr)
+	cmd := exec.Command("powershell", "-NoProfile", "-Command", script)
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil
+		logger.Debug("winProcessQuery: PowerShell invocation failed",
+			"where", whereClause,
+			"err", err,
+			"output", strings.TrimSpace(string(out)),
+		)
+		return nil, err
 	}
-	return parseWinProcessOutput(string(out))
+	lines := parseWinProcessOutput(string(out))
+	logger.Debug("winProcessQuery: success", "where", whereClause, "result_count", len(lines))
+	return lines, nil
 }
 
 // detectProcesses lists running processes on Windows matching filterTerm in the
@@ -37,12 +45,12 @@ func detectProcesses(filterTerm string, excludeTerms []string) []DetectedProcess
 	currentPID := os.Getpid()
 	lowerFilter := strings.ToLower(filterTerm)
 
-	lines := winProcessQuery(
+	lines, err := winProcessQuery(
 		"$_.CommandLine -match '"+filterTerm+"'",
 		"\"$($_.ProcessId)|$($_.CommandLine)|$($_.WorkingDirectory)\"",
 	)
-	if lines == nil {
-		logger.Debug("detectProcesses: PowerShell query failed", "filter", filterTerm)
+	if err != nil {
+		logger.Debug("detectProcesses: PowerShell query failed", "filter", filterTerm, "err", err)
 		return nil
 	}
 
@@ -111,7 +119,12 @@ func detectProcessListeningPort(pid int) string {
 			" -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -notin @(4317,4318) } | Select-Object -First 1 -ExpandProperty LocalPort",
 	).Output()
 	if err != nil {
+		logger.Debug("detectProcessListeningPort: query failed", "pid", pid, "err", err)
 		return ""
 	}
-	return strings.TrimSpace(string(output))
+	port := strings.TrimSpace(string(output))
+	if port != "" {
+		logger.Debug("detectProcessListeningPort: found port", "pid", pid, "port", port)
+	}
+	return port
 }

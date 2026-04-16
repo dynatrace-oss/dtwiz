@@ -34,15 +34,24 @@ func StartManagedProcess(name, logName string, cmd *exec.Cmd, logFile *os.File) 
 		return nil, err
 	}
 
+	pid := cmd.Process.Pid
+	logger.Debug("managed process started", "name", name, "pid", pid, "cmd", cmd.Path)
+
 	exitCh := make(chan error, 1)
 	go func() {
-		exitCh <- cmd.Wait()
+		err := cmd.Wait()
+		if err != nil {
+			logger.Debug("managed process exited with error", "name", name, "pid", pid, "err", err)
+		} else {
+			logger.Debug("managed process exited cleanly", "name", name, "pid", pid)
+		}
+		exitCh <- err
 		logFile.Close()
 	}()
 
 	return &ManagedProcess{
 		Name:         name,
-		PID:          cmd.Process.Pid,
+		PID:          pid,
 		LogName:      logName,
 		exitResultCh: exitCh,
 	}, nil
@@ -98,10 +107,16 @@ func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) 
 	started := 0
 	notStarted := 0
 	for _, p := range procs {
-		exited, _ := p.WaitResult()
+		exited, waitErr := p.WaitResult()
 		if exited {
+			if waitErr != nil {
+				logger.Debug("settle: process crashed", "name", p.Name, "pid", p.PID, "err", waitErr)
+			} else {
+				logger.Debug("settle: process exited cleanly", "name", p.Name, "pid", p.PID)
+			}
 			notStarted++
 		} else {
+			logger.Debug("settle: process still running", "name", p.Name, "pid", p.PID)
 			started++
 		}
 	}

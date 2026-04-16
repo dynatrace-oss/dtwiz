@@ -14,12 +14,12 @@ func findRunningOtelCollectors() []runningCollector {
 	seen := map[int]bool{}
 	var result []runningCollector
 	for _, pattern := range []string{"dynatrace-otel-collector", "otelcol"} {
-		lines := winProcessQuery(
+		lines, err := winProcessQuery(
 			"$_.Name -match '"+pattern+"'",
 			"$_.ProcessId",
 		)
-		if lines == nil {
-			logger.Debug("findRunningOtelCollectors: PowerShell query failed", "pattern", pattern)
+		if err != nil {
+			logger.Debug("findRunningOtelCollectors: PowerShell query failed", "pattern", pattern, "err", err)
 			continue
 		}
 		for _, s := range lines {
