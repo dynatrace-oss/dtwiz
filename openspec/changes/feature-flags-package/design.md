@@ -38,15 +38,16 @@ const (
 )
 
 type CLIFeatureFlag struct {
-    flag    Flag
-    name    string // kebab-case, used as cobra flag name: --all-runtimes
-    envVar  string // env var name: DTWIZ_ALL_RUNTIMES
+    flag       Flag
+    name       string // kebab-case, used as cobra flag name: --all-runtimes
+    envVar     string // env var name: DTWIZ_ALL_RUNTIMES
     defaultVal bool   // default value
-    desc    string // cobra flag description
+    desc       string // cobra flag description
+    bound      bool   // bound variable for cobra BoolVar; written by cobra when the flag is parsed
 }
 
 var registry = []CLIFeatureFlag{
-    {AllRuntimes, "all-runtimes", "DTWIZ_ALL_RUNTIMES", false, "enable all runtimes including experimental (Java, Node.js, Go)"},
+    {AllRuntimes, "all-runtimes", "DTWIZ_ALL_RUNTIMES", false, "enable all runtimes including experimental (Java, Node.js, Go)", false},
 }
 ```
 
@@ -62,24 +63,19 @@ Adding a new flag requires adding one `const` and one `CLIFeatureFlag` entry. No
 2. **Env var** — check `os.Getenv(envVar)`. Values `"true"` and `"1"` → enabled; everything else → disabled.
 3. **Default** — the `defaultVal` field from the registry.
 
-```
-CLI flag set?  ──yes──▶  use CLI value, parse "true"/"1"
-     │ no
-     ▼
-Env var set?   ──yes──▶  parse "true"/"1"
-     │ no
-     ▼
-Return default
-```
-
 **Alternative considered:** A single `--feature-flag key=value` map flag (like `--set` in Helm). Rejected — individual cobra flags are more discoverable (`--help` lists them), support shell completion, and follow the existing pattern of per-flag registration on `rootCmd`.
 
 ### 3. Cobra integration via `RegisterFlags` + `ApplyCLIOverrides`
 
 The package exposes two functions for cmd integration:
 
-- `RegisterFlags(flags *pflag.FlagSet)` — called in `cmd/root.go` `init()`. Iterates the registry and registers a `BoolVar` for each flag. The bound variable is stored in the registry entry.
+- `RegisterFlags(flags *pflag.FlagSet)` — called in `cmd/root.go` `init()`. Iterates the registry and registers a `BoolVar` for each flag, binding cobra's output to the `bound` field of each registry entry.
 - `ApplyCLIOverrides(flags *pflag.FlagSet)` — called in `rootCmd.PersistentPreRun`. For each registry entry, checks `flags.Changed(name)` to detect if the user explicitly set the flag. If changed, stores the value in `cliOverrides`. This ensures env vars are not overridden by cobra's default `false`.
+
+Two unexported helpers support the public API:
+
+- `getFlag(flag Flag) *CLIFeatureFlag` — linear scan of the registry returning a pointer to the matching entry, or `nil` for unknown flags.
+- `resolveFlag(r *CLIFeatureFlag) (bool, string)` — resolves a single entry's value and source following the precedence order.
 
 This two-step approach is necessary because cobra initializes all bool flags to `false`. Without checking `Changed`, `--all-runtimes` not being passed would always resolve to `false`, stomping the env var.
 
@@ -131,6 +127,6 @@ The three test functions in `otel_test.go` are updated to use `featureflags.SetF
 
 ## Risks / Trade-offs
 
-- **[Package-level mutable state]** → `cliOverrides` and `testOverrides` are package-level maps mutated at runtime. Mitigation: `cliOverrides` is written once during `PersistentPreRun` and read-only after; `testOverrides` is mutex-protected and scoped via `t.Cleanup`.
+- **[Package-level mutable state]** → `cliOverrides` and `testOverrides` are package-level maps mutated at runtime. Mitigation: `cliOverrides` is written once during `PersistentPreRun` and read-only after; `testOverrides` is mutex-protected and scoped via `t.Cleanup`. The mutex covers only `testOverrides` reads and writes — `cliOverrides` is intentionally unprotected because it is written exactly once at startup before any concurrent access is possible.
 - **[Cobra flag namespace]** → Feature flags share the global flag namespace with operational flags (`--environment`, `--dry-run`). Mitigation: use descriptive names (`--all-runtimes`) and document that these are feature flags in the help text.
 - **[Not applicable to non-boolean flags]** → The registry only supports boolean flags. Mitigation: all current and foreseeable feature flags are on/off toggles. String/int flags can be added later if needed.
