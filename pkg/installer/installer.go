@@ -17,7 +17,16 @@ import (
 // we poll with tasklist until the PID is gone so file locks are released.
 func killAndWaitProcess(proc *os.Process) error {
 	if err := proc.Kill(); err != nil {
-		return err
+		if runtime.GOOS == "windows" {
+			// Fallback: taskkill handles console/orphaned processes
+			// that TerminateProcess cannot access directly.
+			out, tkErr := exec.Command("taskkill", "/F", "/PID", strconv.Itoa(proc.Pid)).CombinedOutput()
+			if tkErr != nil {
+				return fmt.Errorf("%v (taskkill also failed: %s)", err, strings.TrimSpace(string(out)))
+			}
+		} else {
+			return err
+		}
 	}
 	// Try Wait first — works reliably for child processes on all platforms.
 	_, waitErr := proc.Wait()
