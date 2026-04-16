@@ -113,7 +113,7 @@ func TestDetectMatchedProjects_AttachesProcessMatches(t *testing.T) {
 // TestPrintProjectList_Formatting verifies the project list output format.
 func TestPrintProjectList_Formatting(t *testing.T) {
 	projects := []detectedProject{
-		{ScannedProject: ScannedProject{Path: "/home/user/api", Markers: []string{"requirements.txt"}, RunningProcessIDs: []int{1234}}, Runtime: "Python"},
+		{ScannedProject: ScannedProject{Path: "/home/user/api", Markers: []string{"requirements.txt"}, RunningProcessIDs: []int{-1}}, Runtime: "Python"},
 		{ScannedProject: ScannedProject{Path: "/home/user/svc", Markers: []string{"pom.xml"}}, Runtime: "Java"},
 		{ScannedProject: ScannedProject{Path: "/home/user/go-svc", Markers: []string{"go.mod"}}, Runtime: "Go", ModuleName: "github.com/example/go-svc"},
 	}
@@ -134,8 +134,8 @@ func TestPrintProjectList_Formatting(t *testing.T) {
 		"Python",
 		"/home/user/api",
 		"requirements.txt",
-		"processes",  // new: count label
-		"PIDs: 1234", // PID fallback (no real port for PID 1234)
+		"processes", // new: count label
+		"PIDs: -1",  // PID fallback uses an invalid PID to keep output deterministic
 		"Java",
 		"/home/user/svc",
 		"pom.xml",
@@ -151,8 +151,9 @@ func TestPrintProjectList_Formatting(t *testing.T) {
 
 // TestPrintProjectList_ProcessCountFormat verifies that a project with running
 // processes shows the "N processes (PIDs: ...)" annotation in the list output.
-// PID 1 is used because detectProcessListeningPort is unlikely to return a port
-// for it in the test environment, giving us the PID-fallback path.
+// Fixed high-numbered PIDs 99991 and 99992 are used because
+// detectProcessListeningPort is unlikely to return a port for them in the test
+// environment, giving us the PID-fallback path.
 func TestPrintProjectList_ProcessCountFormat(t *testing.T) {
 	projects := []detectedProject{
 		{

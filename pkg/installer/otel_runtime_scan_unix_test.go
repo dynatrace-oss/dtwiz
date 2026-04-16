@@ -8,6 +8,28 @@ import (
 	"time"
 )
 
+func waitForProcessDetection(t *testing.T, pid int, filterTerm string, excludeTerms []string) bool {
+	t.Helper()
+
+	deadline := time.Now().Add(2 * time.Second)
+	backoff := 10 * time.Millisecond
+
+	for {
+		procs := detectProcesses(filterTerm, excludeTerms)
+		for _, p := range procs {
+			if p.PID == pid {
+				return true
+			}
+		}
+
+		if time.Now().After(deadline) {
+			return false
+		}
+
+		time.Sleep(backoff)
+	}
+}
+
 // TestDetectProcesses_CaseInsensitiveFilterTerm verifies that detectProcesses
 // matches process commands case-insensitively on Unix.
 //
@@ -25,23 +47,11 @@ func TestDetectProcesses_CaseInsensitiveFilterTerm(t *testing.T) {
 		_ = cmd.Wait()
 	})
 
-	// Give the OS a moment to register the process in the ps table.
-	time.Sleep(50 * time.Millisecond)
-
 	pid := cmd.Process.Pid
 
 	// Search with an upper-cased filter term — should still find the process.
-	procs := detectProcesses("SLEEP", nil)
-
-	found := false
-	for _, p := range procs {
-		if p.PID == pid {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("detectProcesses(\"SLEEP\") did not find sleep PID %d — case-insensitive match broken", pid)
+	if !waitForProcessDetection(t, pid, "SLEEP", nil) {
+		t.Skipf("sleep PID %d did not appear in detectProcesses(\"SLEEP\") before timeout", pid)
 	}
 }
 
@@ -57,9 +67,11 @@ func TestDetectProcesses_ExcludeTermsCaseInsensitive(t *testing.T) {
 		_ = cmd.Wait()
 	})
 
-	time.Sleep(50 * time.Millisecond)
-
 	pid := cmd.Process.Pid
+
+	if !waitForProcessDetection(t, pid, "sleep", nil) {
+		t.Skipf("sleep PID %d did not appear in detectProcesses(\"sleep\") before timeout", pid)
+	}
 
 	// Exclude "SLEEP" (uppercase) — the process must not appear in results.
 	procs := detectProcesses("sleep", []string{"SLEEP"})

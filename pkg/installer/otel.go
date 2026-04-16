@@ -137,7 +137,14 @@ func printProjectList(projects []detectedProject) {
 			for port := range portSet {
 				ports = append(ports, port)
 			}
-			sort.Strings(ports)
+			sort.Slice(ports, func(i, j int) bool {
+				leftPort, leftErr := strconv.Atoi(ports[i])
+				rightPort, rightErr := strconv.Atoi(ports[j])
+				if leftErr != nil || rightErr != nil {
+					return ports[i] < ports[j]
+				}
+				return leftPort < rightPort
+			})
 
 			pidStrs := make([]string, len(p.RunningProcessIDs))
 			for j, pid := range p.RunningProcessIDs {

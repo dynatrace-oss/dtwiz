@@ -31,6 +31,11 @@ func detectProcesses(filterTerm string, excludeTerms []string) []DetectedProcess
 
 	processes := make([]DetectedProcess, 0)
 	currentPID := os.Getpid()
+	lowerFilter := strings.ToLower(filterTerm)
+	lowerExcludeTerms := make([]string, 0, len(excludeTerms))
+	for _, excludeTerm := range excludeTerms {
+		lowerExcludeTerms = append(lowerExcludeTerms, strings.ToLower(excludeTerm))
+	}
 	for _, line := range strings.Split(string(output), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -49,13 +54,13 @@ func detectProcesses(filterTerm string, excludeTerms []string) []DetectedProcess
 
 		command := strings.TrimSpace(parts[1])
 		lowerCommand := strings.ToLower(command)
-		if !strings.Contains(lowerCommand, strings.ToLower(filterTerm)) {
+		if !strings.Contains(lowerCommand, lowerFilter) {
 			continue
 		}
 
 		excluded := false
-		for _, excludeTerm := range excludeTerms {
-			if strings.Contains(lowerCommand, strings.ToLower(excludeTerm)) {
+		for _, excludeTerm := range lowerExcludeTerms {
+			if strings.Contains(lowerCommand, excludeTerm) {
 				excluded = true
 				break
 			}
