@@ -31,9 +31,7 @@ jobs:
         id: semver
         run: |
           if git describe --tags --match "v*" --abbrev=0 > /dev/null 2>&1; then
-            SEMVER_TAG=$(git describe --tags --match "v*" --abbrev=0)
             echo "found=true" >> "$GITHUB_OUTPUT"
-            echo "semver_tag=$SEMVER_TAG" >> "$GITHUB_OUTPUT"
           else
             echo "found=false" >> "$GITHUB_OUTPUT"
             echo "No semver tag reachable — skipping snapshot." >> "$GITHUB_STEP_SUMMARY"
@@ -48,6 +46,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Remove non-semver tags locally
+        if: steps.semver.outputs.found == 'true'
+        run: git tag -l | grep -v '^v' | xargs -r git tag -d
+
       - name: Run GoReleaser snapshot
         if: steps.semver.outputs.found == 'true'
         uses: goreleaser/goreleaser-action@v6
@@ -56,7 +58,6 @@ jobs:
           args: release --snapshot --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GORELEASER_CURRENT_TAG: ${{ steps.semver.outputs.semver_tag }}
 
       - name: Capture snapshot version
         if: steps.semver.outputs.found == 'true'
