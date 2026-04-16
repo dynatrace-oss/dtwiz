@@ -40,26 +40,53 @@ func TestAdoptExeclChildren_CrashedProcessSkipped(t *testing.T) {
 	}
 }
 
-// TestAdoptExeclChildren_CleanExitNoChildrenSkipped verifies that a process
-// that exited cleanly (exit code 0) but has no Python children is left as-is
-// — not adopted, counters unchanged.
-func TestAdoptExeclChildren_CleanExitNoChildrenSkipped(t *testing.T) {
-	// Use the current process as the parent PID — it has no python.exe children
-	// in a Go test binary, so pythonChildPIDs should return empty.
+// TestAdoptExeclChildren_NotExeclLauncher_Skipped verifies that a process that
+// exited cleanly but is not marked as an execl launcher is not adopted.
+func TestAdoptExeclChildren_NotExeclLauncher_Skipped(t *testing.T) {
+	p := cleanExitedManagedProcess("svc") // IsExeclLauncher defaults to false
+	started := 0
+	notStarted := 1
+	adoptExeclChildren([]*ManagedProcess{p}, &started, &notStarted)
+	if started != 0 || notStarted != 1 {
+		t.Errorf("counters changed for non-launcher: started=%d notStarted=%d", started, notStarted)
+	}
+	if p.PID != 999999 {
+		t.Errorf("PID was modified for non-launcher: got %d", p.PID)
+	}
+}
+
+// TestAdoptExeclChildren_NoChildFound_Skipped verifies that an execl launcher
+// that exited cleanly but has no matching Python child is not adopted —
+// counters unchanged, PID unchanged.
+func TestAdoptExeclChildren_NoChildFound_Skipped(t *testing.T) {
 	p := cleanExitedManagedProcess("svc")
-	// Override PID to the current process so pythonChildPIDs queries a real PID
-	// (one with no python children).
-	p.PID = 99999999 // nonexistent — pythonChildPIDs will return nil/empty
+	p.IsExeclLauncher = true
+	// Use an entrypoint that cannot appear in any real process CommandLine.
+	p.Entrypoint = `C:\nonexistent_dtwiz_test_xyz_app.py`
 
 	started := 0
 	notStarted := 1
 	adoptExeclChildren([]*ManagedProcess{p}, &started, &notStarted)
 
-	// No children found → no adoption → counters unchanged, PID unchanged.
 	if started != 0 || notStarted != 1 {
 		t.Errorf("counters changed despite no python child: started=%d notStarted=%d", started, notStarted)
 	}
-	if p.PID != 99999999 {
+	if p.PID != 999999 {
 		t.Errorf("PID was changed despite no python child: got %d", p.PID)
+	}
+}
+
+// TestWatchPID_NonexistentPID verifies that watchPID handles an OpenProcess
+// failure gracefully — the channel receives nil (process treated as gone)
+// without blocking.
+func TestWatchPID_NonexistentPID(t *testing.T) {
+	ch := watchPID(99999999) // PID almost certainly does not exist
+	select {
+	case err := <-ch:
+		if err != nil {
+			t.Errorf("watchPID returned non-nil error for nonexistent PID: %v", err)
+		}
+	default:
+		t.Error("watchPID channel was empty; expected immediate nil send on OpenProcess failure")
 	}
 }
