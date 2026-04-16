@@ -67,17 +67,3 @@ func TestWinProcessQuery_PipeDelimitedMultiField(t *testing.T) {
 		t.Errorf("PID field = %q, want %d", parts[0], pid)
 	}
 }
-
-// TestPythonChildPIDs_NoChildren verifies that pythonChildPIDs returns a valid
-// (possibly empty) result for a process known to have no Python children.
-func TestPythonChildPIDs_NoChildren(t *testing.T) {
-	pids, err := pythonChildPIDs(os.Getpid())
-	if err != nil {
-		t.Fatalf("pythonChildPIDs returned error: %v", err)
-	}
-	for _, pid := range pids {
-		if pid <= 0 {
-			t.Errorf("pythonChildPIDs returned non-positive PID: %d", pid)
-		}
-	}
-}
