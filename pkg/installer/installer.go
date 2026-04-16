@@ -6,8 +6,37 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"runtime"
+	"strconv"
 	"strings"
+	"time"
 )
+
+// killAndWaitProcess kills a process and waits for it to fully exit.
+// proc.Wait() only works for child processes; for external processes on Windows
+// we poll with tasklist until the PID is gone so file locks are released.
+func killAndWaitProcess(proc *os.Process) error {
+	if err := proc.Kill(); err != nil {
+		return err
+	}
+	// Try Wait first — works reliably for child processes on all platforms.
+	_, waitErr := proc.Wait()
+	if waitErr == nil {
+		return nil
+	}
+	// For non-child processes on Windows, poll until the PID disappears.
+	if runtime.GOOS == "windows" {
+		pid := strconv.Itoa(proc.Pid)
+		for range 30 { // up to ~3 seconds
+			time.Sleep(100 * time.Millisecond)
+			out, err := exec.Command("tasklist", "/FI", "PID eq "+pid, "/NH").Output()
+			if err != nil || !strings.Contains(string(out), pid) {
+				return nil
+			}
+		}
+	}
+	return nil
+}
 
 // AuthHeader returns the correct Authorization header value for a given token.
 // API tokens (starting with "dt0c01.") use "Api-Token" scheme; all others use "Bearer".

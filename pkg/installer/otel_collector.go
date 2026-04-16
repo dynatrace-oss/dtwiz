@@ -761,6 +761,24 @@ func (cp *collectorPlan) execute(envURL, platformToken string, skipVerification 
 		return fmt.Errorf("creating install directory: %w", err)
 	}
 
+	// Stop any running collectors first so file locks are released before
+	// the download overwrites the binary (critical on Windows).
+	if procs := cp.runningPIDs; len(procs) > 0 {
+		fmt.Printf("  Stopping existing collector (PIDs: %s)...\n", formatPIDs(procs))
+		for _, rc := range procs {
+			proc, err := os.FindProcess(rc.pid)
+			if err != nil {
+				fmt.Printf("  Warning: could not find process %d: %v\n", rc.pid, err)
+				continue
+			}
+			if err := killAndWaitProcess(proc); err != nil {
+				fmt.Printf("  Warning: could not kill process %d: %v\n", rc.pid, err)
+				continue
+			}
+			fmt.Printf("  Stopped collector (PID %d).\n", rc.pid)
+		}
+	}
+
 	binaryPath, err := downloadOtelCollector(cp.installDir)
 	if err != nil {
 		return err
@@ -770,22 +788,6 @@ func (cp *collectorPlan) execute(envURL, platformToken string, skipVerification 
 		return fmt.Errorf("writing OTel Collector config: %w", err)
 	}
 	fmt.Printf("  Config written to: %s\n", cp.configPath)
-
-	if procs := cp.runningPIDs; len(procs) > 0 {
-		fmt.Printf("  Stopping existing collector (PIDs: %s)...\n", formatPIDs(procs))
-		for _, rc := range procs {
-			proc, err := os.FindProcess(rc.pid)
-			if err != nil {
-				fmt.Printf("  Warning: could not find process %d: %v\n", rc.pid, err)
-				continue
-			}
-			if err := proc.Kill(); err != nil {
-				fmt.Printf("  Warning: could not kill process %d: %v\n", rc.pid, err)
-				continue
-			}
-			fmt.Printf("  Stopped collector (PID %d).\n", rc.pid)
-		}
-	}
 
 	crashed, err := startOtelCollector(binaryPath, cp.configPath)
 	if err != nil {

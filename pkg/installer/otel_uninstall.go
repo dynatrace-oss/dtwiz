@@ -123,13 +123,10 @@ func killCollectorProcesses(procs []otelProcessInfo) string {
 			fmt.Printf("  Warning: could not find process %d: %v\n", p.pid, err)
 			continue
 		}
-		if err := proc.Kill(); err != nil {
+		if err := killAndWaitProcess(proc); err != nil {
 			fmt.Printf("  Warning: could not kill process %d: %v\n", p.pid, err)
 			continue
 		}
-		// Wait for the process to fully exit so the OS releases file locks
-		// (especially important on Windows where the .exe stays locked).
-		_, _ = proc.Wait()
 		fmt.Printf("  Stopped collector (PID %d).\n", p.pid)
 		if restartBinary == "" && p.binaryPath != "" {
 			restartBinary = p.binaryPath

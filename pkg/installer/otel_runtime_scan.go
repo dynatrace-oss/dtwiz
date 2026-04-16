@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -218,11 +219,20 @@ func stopProcesses(pids []int) {
 		if err != nil {
 			continue
 		}
-		if err := process.Signal(os.Interrupt); err != nil {
+		// On Unix send SIGINT for graceful shutdown; on Windows use
+		// killAndWaitProcess which calls Kill() and polls until the PID is gone.
+		if runtime.GOOS == "windows" {
+			err = killAndWaitProcess(process)
+		} else {
+			err = process.Signal(os.Interrupt)
+			if err == nil {
+				_, _ = process.Wait()
+			}
+		}
+		if err != nil {
 			fmt.Printf("    Warning: could not stop PID %d: %v\n", pid, err)
 			continue
 		}
-		_, _ = process.Wait()
 		fmt.Printf("    Stopped PID %d\n", pid)
 	}
 }
