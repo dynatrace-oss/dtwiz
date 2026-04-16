@@ -415,3 +415,65 @@ func TestScanProjectDirs_AncestorWalk(t *testing.T) {
 		t.Errorf("expected sibling project to be found via ancestor walk, got %v", projects)
 	}
 }
+
+func TestParseWinProcessOutput_Empty(t *testing.T) {
+	if got := parseWinProcessOutput(""); len(got) != 0 {
+		t.Errorf("expected empty result for empty input, got %v", got)
+	}
+	if got := parseWinProcessOutput("   \r\n  \r\n"); len(got) != 0 {
+		t.Errorf("expected empty result for whitespace-only input, got %v", got)
+	}
+}
+
+func TestParseWinProcessOutput_StripsCRLF(t *testing.T) {
+	// PowerShell on Windows uses \r\n line endings.
+	raw := "1234|python.exe|C:\\Users\\user\r\n5678|flask|C:\\app\r\n"
+	got := parseWinProcessOutput(raw)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 lines, got %d: %v", len(got), got)
+	}
+	if got[0] != "1234|python.exe|C:\\Users\\user" {
+		t.Errorf("line 0 = %q, want CR stripped", got[0])
+	}
+	if got[1] != "5678|flask|C:\\app" {
+		t.Errorf("line 1 = %q, want CR stripped", got[1])
+	}
+}
+
+func TestParseWinProcessOutput_SkipsBlankLines(t *testing.T) {
+	raw := "line1\n\nline2\n\n\nline3\n"
+	got := parseWinProcessOutput(raw)
+	if len(got) != 3 {
+		t.Fatalf("expected 3 non-blank lines, got %d: %v", len(got), got)
+	}
+}
+
+func TestParseWinProcessOutput_SingleLine(t *testing.T) {
+	raw := "42\r\n"
+	got := parseWinProcessOutput(raw)
+	if len(got) != 1 || got[0] != "42" {
+		t.Errorf("got %v, want [\"42\"]", got)
+	}
+}
+
+func TestParseWinProcessOutput_PipeDelimitedFields(t *testing.T) {
+	// Verify pipe-delimited lines round-trip correctly through SplitN.
+	raw := "100|C:\\Python312\\python.exe -m flask run|C:\\app\r\n"
+	lines := parseWinProcessOutput(raw)
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 line, got %d", len(lines))
+	}
+	parts := strings.SplitN(lines[0], "|", 3)
+	if len(parts) != 3 {
+		t.Fatalf("expected 3 fields after SplitN, got %d: %v", len(parts), parts)
+	}
+	if parts[0] != "100" {
+		t.Errorf("PID field = %q, want \"100\"", parts[0])
+	}
+	if parts[1] != "C:\\Python312\\python.exe -m flask run" {
+		t.Errorf("CommandLine field = %q", parts[1])
+	}
+	if parts[2] != "C:\\app" {
+		t.Errorf("WorkingDirectory field = %q", parts[2])
+	}
+}

@@ -615,7 +615,6 @@ func (cp *collectorPlan) printConfigPreview(cyan *color.Color, sep string) {
 	fmt.Printf("  %s\n", sep)
 }
 
-// findRunningOtelCollectors returns the PIDs of all running dynatrace-otel-collector
 // runningCollector holds info about a detected running OTel Collector process.
 type runningCollector struct {
 	pid  int
@@ -624,35 +623,8 @@ type runningCollector struct {
 
 // findRunningOtelCollectors returns info about all running dynatrace-otel-collector
 // processes (there may be more than one if a previous kill was incomplete).
-func findRunningOtelCollectors() []runningCollector {
-	if runtime.GOOS == "windows" {
-		pids := findRunningOtelCollectorsWindows()
-		result := make([]runningCollector, len(pids))
-		for i, p := range pids {
-			result[i] = runningCollector{pid: p}
-		}
-		return result
-	}
-	out, err := exec.Command("pgrep", "-f", "dynatrace-otel-collector").Output()
-	if err != nil {
-		return nil
-	}
-	var result []runningCollector
-	for _, s := range strings.Fields(strings.TrimSpace(string(out))) {
-		pid, err := strconv.Atoi(s)
-		if err != nil {
-			continue
-		}
-		rc := runningCollector{pid: pid}
-		if exe, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid)); err == nil {
-			rc.path = exe
-		} else if out, err := exec.Command("ps", "-o", "comm=", "-p", strconv.Itoa(pid)).Output(); err == nil {
-			rc.path = strings.TrimSpace(string(out))
-		}
-		result = append(result, rc)
-	}
-	return result
-}
+// Platform-specific detection is in otel_collector_windows.go (//go:build windows)
+// and otel_collector_other.go (//go:build !windows).
 
 // formatPIDs formats a slice of PIDs as a comma-separated string.
 func formatPIDs(procs []runningCollector) string {
@@ -661,53 +633,6 @@ func formatPIDs(procs []runningCollector) string {
 		s[i] = strconv.Itoa(p.pid)
 	}
 	return strings.Join(s, ", ")
-}
-
-// findRunningOtelCollectorsWindows searches for all known OTel Collector
-// process names on Windows, matching the same set the analyzer detects.
-func findRunningOtelCollectorsWindows() []int {
-	processNames := []string{
-		"dynatrace-otel-collector",
-		"otelcol",
-		"otelcol-contrib",
-	}
-	seen := map[int]bool{}
-	var pids []int
-
-	for _, name := range processNames {
-		out, err := exec.Command("powershell", "-NoProfile", "-Command",
-			"Get-Process -Name '"+name+"' -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }").Output()
-		if err != nil {
-			continue
-		}
-		for _, s := range strings.Fields(strings.TrimSpace(string(out))) {
-			pid, err := strconv.Atoi(s)
-			if err == nil && !seen[pid] {
-				seen[pid] = true
-				pids = append(pids, pid)
-			}
-		}
-	}
-
-	// Fall back to command-line search for custom-named builds.
-	if len(pids) == 0 {
-		for _, pattern := range []string{"otel-collector", "otelcol"} {
-			out, err := exec.Command("powershell", "-NoProfile", "-Command",
-				"Get-CimInstance Win32_Process | Where-Object { $_.Name -match '"+pattern+"' } | ForEach-Object { $_.ProcessId }").Output()
-			if err != nil {
-				continue
-			}
-			for _, s := range strings.Fields(strings.TrimSpace(string(out))) {
-				pid, err := strconv.Atoi(s)
-				if err == nil && !seen[pid] {
-					seen[pid] = true
-					pids = append(pids, pid)
-				}
-			}
-		}
-	}
-
-	return pids
 }
 
 // startOtelCollector starts the collector as a background process.

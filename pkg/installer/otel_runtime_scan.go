@@ -227,4 +227,17 @@ func stopProcesses(pids []int) {
 	}
 }
 
-
+// parseWinProcessOutput splits raw PowerShell output into non-blank lines,
+// stripping the trailing CR that PowerShell adds on Windows (\r\n line endings).
+// It is defined here (not in the windows-only file) so it can be unit-tested on
+// all platforms without a real PowerShell invocation.
+func parseWinProcessOutput(raw string) []string {
+	var lines []string
+	for _, line := range strings.Split(strings.TrimSpace(raw), "\n") {
+		line = strings.TrimRight(line, "\r")
+		if line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines
+}

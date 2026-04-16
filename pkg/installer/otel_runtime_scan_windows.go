@@ -3,7 +3,6 @@
 package installer
 
 import (
-	"encoding/csv"
 	"os"
 	"os/exec"
 	"strconv"
@@ -12,45 +11,63 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
-// detectProcesses lists running processes on Windows using Get-CimInstance Win32_Process
-// and filters by filterTerm in the command line, excluding those matching excludeTerms.
-func detectProcesses(filterTerm string, excludeTerms []string) []DetectedProcess {
-	output, err := exec.Command(
-		"powershell", "-NoProfile", "-Command",
-		"Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine,WorkingDirectory | ConvertTo-Csv -NoTypeInformation",
-	).Output()
+// winProcessQuery runs a Get-CimInstance Win32_Process query on Windows.
+// whereClause is the PowerShell Where-Object expression (without braces), e.g.
+// "$_.CommandLine -match 'foo'". fieldsExpr is the ForEach-Object body that
+// produces one line of output per matching process, e.g.
+// "\"$($_.ProcessId)|$($_.CommandLine)\"".
+// Returns the trimmed non-blank output lines and nil error on success.
+// Returns nil, err if the PowerShell invocation fails.
+func winProcessQuery(whereClause, fieldsExpr string) ([]string, error) {
+	script := "Get-CimInstance Win32_Process | Where-Object { " + whereClause + " } | ForEach-Object { " + fieldsExpr + " }"
+	logger.Debug("winProcessQuery: executing", "where", whereClause, "fields", fieldsExpr)
+	cmd := exec.Command("powershell", "-NoProfile", "-Command", script)
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		logger.Warn("Get-CimInstance failed", "filter", filterTerm, "err", err)
-		return nil
+		logger.Debug("winProcessQuery: PowerShell invocation failed",
+			"where", whereClause,
+			"err", err,
+			"output", strings.TrimSpace(string(out)),
+		)
+		return nil, err
 	}
-	logger.Debug("scanning processes", "filter", filterTerm)
+	lines := parseWinProcessOutput(string(out))
+	logger.Debug("winProcessQuery: success", "where", whereClause, "result_count", len(lines))
+	return lines, nil
+}
 
-	csvReader := csv.NewReader(strings.NewReader(string(output)))
-	records, err := csvReader.ReadAll()
-	if err != nil || len(records) < 2 {
-		logger.Debug("Get-CimInstance CSV parse failed or empty", "filter", filterTerm, "err", err, "rows", len(records))
-		return nil
-	}
+// detectProcesses lists running processes on Windows matching filterTerm in the
+// command line, excluding those matching excludeTerms.
+// Uses Get-CimInstance Win32_Process to query command line and working directory.
+func detectProcesses(filterTerm string, excludeTerms []string) []DetectedProcess {
+	logger.Debug("scanning processes via PowerShell", "filter", filterTerm)
 
-	processes := make([]DetectedProcess, 0)
 	currentPID := os.Getpid()
-	// records[0] is the header row; data starts at records[1]
-	for _, record := range records[1:] {
-		if len(record) < 3 {
+	lowerFilter := strings.ToLower(filterTerm)
+
+	lines, err := winProcessQuery(
+		"$_.CommandLine -match '"+filterTerm+"'",
+		"\"$($_.ProcessId)|$($_.CommandLine)|$($_.WorkingDirectory)\"",
+	)
+	if err != nil {
+		logger.Debug("detectProcesses: PowerShell query failed", "filter", filterTerm, "err", err)
+		return nil
+	}
+
+	var processes []DetectedProcess
+	for _, line := range lines {
+		row := strings.SplitN(line, "|", 3)
+		if len(row) < 3 {
 			continue
 		}
 
-		pid, err := strconv.Atoi(strings.TrimSpace(record[0]))
+		pid, err := strconv.Atoi(strings.TrimSpace(row[0]))
 		if err != nil || pid == currentPID {
 			continue
 		}
 
-		command := strings.TrimSpace(record[1])
-		if command == "" {
-			continue
-		}
-
-		if !strings.Contains(strings.ToLower(command), strings.ToLower(filterTerm)) {
+		command := strings.TrimSpace(row[1])
+		if command == "" || !strings.Contains(strings.ToLower(command), lowerFilter) {
 			continue
 		}
 
@@ -62,16 +79,19 @@ func detectProcesses(filterTerm string, excludeTerms []string) []DetectedProcess
 			}
 		}
 		if excluded {
+			logger.Debug("process excluded by term", "pid", pid, "terms", excludeTerms)
 			continue
 		}
 
-		workingDir := strings.TrimSpace(record[2])
+		workingDir := strings.TrimSpace(row[2])
+		logger.Debug("process matched", "pid", pid, "working_dir", workingDir)
 		processes = append(processes, DetectedProcess{
 			PID:              pid,
 			Command:          command,
 			WorkingDirectory: workingDir,
 		})
 	}
+
 	logger.Debug("process scan complete", "filter", filterTerm, "matched", len(processes))
 	return processes
 }
@@ -99,7 +119,12 @@ func detectProcessListeningPort(pid int) string {
 			" -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -notin @(4317,4318) } | Select-Object -First 1 -ExpandProperty LocalPort",
 	).Output()
 	if err != nil {
+		logger.Debug("detectProcessListeningPort: query failed", "pid", pid, "err", err)
 		return ""
 	}
-	return strings.TrimSpace(string(output))
+	port := strings.TrimSpace(string(output))
+	if port != "" {
+		logger.Debug("detectProcessListeningPort: found port", "pid", pid, "port", port)
+	}
+	return port
 }

@@ -17,16 +17,18 @@ const (
 )
 
 type ManagedProcess struct {
-	Name           string
-	PID            int
-	LogName        string
-	exitResultCh   chan error
-	hasExited      bool
-	cachedWaitErr  error
-	resultConsumed bool
+	Name            string
+	PID             int
+	LogName         string
+	Entrypoint      string // script/entrypoint that was launched, used for process re-discovery on Windows
+	IsExeclLauncher bool   // true when the process is expected to exec-spawn a child and exit (Python on Windows)
+	exitResultCh    chan error
+	hasExited       bool
+	cachedWaitErr   error
+	resultConsumed  bool
 }
 
-func StartManagedProcess(name, logName string, cmd *exec.Cmd, logFile *os.File) (*ManagedProcess, error) {
+func StartManagedProcess(name, logName, entrypoint string, cmd *exec.Cmd, logFile *os.File) (*ManagedProcess, error) {
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	if err := cmd.Start(); err != nil {
@@ -34,18 +36,31 @@ func StartManagedProcess(name, logName string, cmd *exec.Cmd, logFile *os.File) 
 		return nil, err
 	}
 
+	pid := cmd.Process.Pid
+	logger.Debug("managed process started", "name", name, "pid", pid, "cmd", cmd.Path)
+
 	exitCh := make(chan error, 1)
+	mp := &ManagedProcess{
+		Name:            name,
+		PID:             pid,
+		LogName:         logName,
+		Entrypoint:      entrypoint,
+		IsExeclLauncher: entrypoint != "",
+		exitResultCh:    exitCh,
+	}
+
 	go func() {
-		exitCh <- cmd.Wait()
+		err := cmd.Wait()
+		if err != nil {
+			logger.Debug("managed process exited with error", "name", name, "pid", pid, "err", err)
+		} else {
+			logger.Debug("managed process exited cleanly", "name", name, "pid", pid)
+		}
+		exitCh <- err
 		logFile.Close()
 	}()
 
-	return &ManagedProcess{
-		Name:         name,
-		PID:          cmd.Process.Pid,
-		LogName:      logName,
-		exitResultCh: exitCh,
-	}, nil
+	return mp, nil
 }
 
 func (p *ManagedProcess) WaitResult() (exited bool, err error) {
@@ -98,14 +113,25 @@ func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) 
 	started := 0
 	notStarted := 0
 	for _, p := range procs {
-		exited, _ := p.WaitResult()
+		exited, waitErr := p.WaitResult()
 		if exited {
+			if waitErr != nil {
+				logger.Debug("settle: process crashed", "name", p.Name, "pid", p.PID, "err", waitErr)
+			} else {
+				logger.Debug("settle: process exited cleanly", "name", p.Name, "pid", p.PID)
+			}
 			notStarted++
 		} else {
+			logger.Debug("settle: process still running", "name", p.Name, "pid", p.PID)
 			started++
 		}
 	}
 	logger.Debug("settle complete", "started", started, "not_started", notStarted)
+
+	// adoptExeclChildren handles the Windows-specific case where
+	// opentelemetry-instrument calls os.execl, which on Windows spawns a child
+	// process and exits the launcher cleanly. See otel_process_windows.go.
+	adoptExeclChildren(procs, &started, &notStarted)
 
 	ports := make([]string, len(procs))
 	fmt.Println()

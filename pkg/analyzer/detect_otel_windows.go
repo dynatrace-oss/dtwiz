@@ -2,10 +2,14 @@
 
 package analyzer
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
+)
 
 // detectOtelCollector looks for a running OpenTelemetry Collector process on Windows.
-// Uses tasklist and WMIC since pgrep is not available.
+// Searches by command-line pattern via Get-CimInstance.
 // Returns (running, binaryPath, configPath).
 func detectOtelCollector() (bool, string, string) {
 	// Patterns to search for in the process list.
@@ -46,11 +50,12 @@ func detectOtelCollector() (bool, string, string) {
 		ok, output := runCmd("powershell", "-NoProfile", "-Command",
 			"Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match '"+pattern+"' -and $_.Name -notmatch 'powershell|pwsh|cmd' -and $_.ProcessId -ne $PID } | Select-Object -First 1 -ExpandProperty CommandLine")
 		if ok && output != "" {
+			logger.Debug("detectOtelCollector: found via PowerShell", "pattern", pattern)
 			binPath, configPath := parseWindowsCommandLine(output)
 			return true, binPath, configPath
 		}
 	}
-
+	logger.Debug("detectOtelCollector: no collector found")
 	return false, "", ""
 }
 
@@ -69,7 +74,6 @@ func otelInfoFromProcessName(name string) (binaryPath, configPath string) {
 func parseWindowsCommandLine(cmdline string) (binaryPath, configPath string) {
 	fields := strings.Fields(cmdline)
 	if len(fields) > 0 {
-		// Remove surrounding quotes if present.
 		binaryPath = strings.Trim(fields[0], "\"")
 	}
 	configPath = extractOtelConfigPath(cmdline)
