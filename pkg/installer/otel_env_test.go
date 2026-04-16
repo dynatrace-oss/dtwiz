@@ -150,6 +150,7 @@ func TestFormatPrintableEnvVars(t *testing.T) {
 func TestWaitForServices_LinkContainsDieter(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(dqlResponse{
+			State: "SUCCEEDED",
 			Result: struct {
 				Records []map[string]interface{} `json:"records"`
 			}{
@@ -176,6 +177,7 @@ func TestWaitForServices_ContainsMatch(t *testing.T) {
 	// the input name is just "helloWorldNode2".
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(dqlResponse{
+			State: "SUCCEEDED",
 			Result: struct {
 				Records []map[string]interface{} `json:"records"`
 			}{
@@ -217,6 +219,7 @@ func TestFetchSmartscapeServiceNames(t *testing.T) {
 		receivedQuery = payload.Query
 
 		_ = json.NewEncoder(w).Encode(dqlResponse{
+			State: "SUCCEEDED",
 			Result: struct {
 				Records []map[string]interface{} `json:"records"`
 			}{

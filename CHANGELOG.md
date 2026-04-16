@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.12] - 2026-04-16
+
+### Fixed
+
+- Fix test mocks to include Grail query `state` field required since v0.2.9
+
 ## [0.2.11] - 2026-04-16
 
 ### Fixed
@@ -178,7 +184,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.11...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.12...HEAD
+[0.2.12]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.11...v0.2.12
 [0.2.11]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.10...v0.2.11
 [0.2.10]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.9...v0.2.10
 [0.2.9]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.8...v0.2.9
