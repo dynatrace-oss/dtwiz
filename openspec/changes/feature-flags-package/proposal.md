@@ -6,11 +6,11 @@ The CLI uses a raw `os.Getenv("DTWIZ_ALL_RUNTIMES")` call in `pkg/installer/otel
 
 - New `pkg/featureflags` package with a registry of known flags, each mapped to an environment variable name and a default value.
 - Single-entry-point `IsEnabled(flag) bool` function for checking flags.
-- `List() []Flag` function returning all registered flags and their current state (for debugging and `dtwiz status`).
+- `List() []FlagState` function returning all registered flags with their current resolved value and source (`"cli"`, `"env"`, `"default"`, or `"test"`) — for debugging and `dtwiz status`.
 - `SetForTest(t, flag, val)` test helper for scoped overrides using `t.Cleanup`, avoiding `os.Setenv`/`os.Unsetenv` and enabling `t.Parallel()`.
 - Migrate all `os.Getenv("DTWIZ_ALL_RUNTIMES")` usage in `otel.go` to the new package.
 - `DTWIZ_ALL_RUNTIMES` env var name preserved for backward compatibility.
-- Each feature flag exposed as a cobra persistent boolean flag on the root command (e.g. `--all-runtimes`), reusing cobra's flag infrastructure. Resolution order: CLI flag → env var → default.
+- Each feature flag exposed as a cobra persistent boolean flag on the root command (e.g. `--all-runtimes`), reusing cobra's flag infrastructure. Resolution order: test override → CLI flag → env var → default.
 - `dtwiz status` prints active feature flags when any are enabled.
 - Evaluate gating Docker, Kubernetes, OneAgent, AWS, Azure, and GCP analysis/recommendations behind feature flags — a manual evaluation task for the implementer.
 

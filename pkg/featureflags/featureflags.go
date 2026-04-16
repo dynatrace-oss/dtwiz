@@ -4,7 +4,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"testing"
 )
 
 // Flag identifies a feature flag.
@@ -69,25 +68,6 @@ func List() []FlagState {
 	return flatStates
 }
 
-// SetForTest sets a test-scoped override for the given flag.
-// The override is automatically removed via t.Cleanup.
-func SetForTest(t testing.TB, flag Flag, val bool) {
-	mu.Lock()
-	prev, hadPrev := testOverrides[flag]
-	testOverrides[flag] = val
-	mu.Unlock()
-
-	t.Cleanup(func() {
-		mu.Lock()
-		defer mu.Unlock()
-		if hadPrev {
-			testOverrides[flag] = prev
-		} else {
-			delete(testOverrides, flag)
-		}
-	})
-}
-
 // getFlag returns a flag from the registry based on its enum value
 func getFlag(flag Flag) *CLIFeatureFlag {
 	for i := range registry {
@@ -117,4 +97,29 @@ func resolveFlag(r *CLIFeatureFlag) (bool, string) {
 	}
 
 	return r.defaultVal, "default"
+}
+
+// testCleaner is a minimal interface satisfied by *testing.T and *testing.B,
+// allowing SetForTest to avoid importing the testing package in production code.
+type testCleaner interface {
+	Cleanup(func())
+}
+
+// SetForTest sets a test-scoped override for the given flag.
+// The override is automatically removed via t.Cleanup.
+func SetForTest(t testCleaner, flag Flag, val bool) {
+	mu.Lock()
+	prev, hadPrev := testOverrides[flag]
+	testOverrides[flag] = val
+	mu.Unlock()
+
+	t.Cleanup(func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if hadPrev {
+			testOverrides[flag] = prev
+		} else {
+			delete(testOverrides, flag)
+		}
+	})
 }
