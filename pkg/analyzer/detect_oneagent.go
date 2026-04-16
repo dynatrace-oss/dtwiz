@@ -2,15 +2,14 @@
 
 package analyzer
 
-import "os"
-
-// detectOneAgent checks for a Dynatrace OneAgent installation on Unix systems.
+// detectOneAgent checks for a running Dynatrace OneAgent on Unix systems.
 func detectOneAgent() bool {
-	// Check the default Linux install path.
-	if _, err := os.Stat("/opt/dynatrace/oneagent"); err == nil {
+	// Check whether the oneagent service is active.
+	ok, _ := runCmd("systemctl", "is-active", "--quiet", "oneagent")
+	if ok {
 		return true
 	}
 	// Check for oneagentctl in PATH.
-	ok, _ := runCmd("oneagentctl", "--version")
+	ok, _ = runCmd("oneagentctl", "--version")
 	return ok
 }

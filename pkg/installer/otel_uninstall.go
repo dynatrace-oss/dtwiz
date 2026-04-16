@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/fatih/color"
@@ -126,12 +127,35 @@ func killCollectorProcesses(procs []otelProcessInfo) string {
 			fmt.Printf("  Warning: could not kill process %d: %v\n", p.pid, err)
 			continue
 		}
+		// Wait for the process to fully exit so the OS releases file locks
+		// (especially important on Windows where the .exe stays locked).
+		_, _ = proc.Wait()
 		fmt.Printf("  Stopped collector (PID %d).\n", p.pid)
 		if restartBinary == "" && p.binaryPath != "" {
 			restartBinary = p.binaryPath
 		}
 	}
 	return restartBinary
+}
+
+// removeWithRetry attempts os.RemoveAll, retrying a few times with a short
+// delay. On Windows the OS may briefly hold file locks after a process is
+// killed, causing the first attempt to fail with "Access is denied".
+func removeWithRetry(path string) error {
+	const maxAttempts = 5
+	const delay = 500 * time.Millisecond
+
+	var err error
+	for i := range maxAttempts {
+		if err = os.RemoveAll(path); err == nil {
+			return nil
+		}
+		if i < maxAttempts-1 {
+			logger.Debug("RemoveAll failed, retrying", "path", path, "attempt", i+1, "err", err)
+			time.Sleep(delay)
+		}
+	}
+	return err
 }
 
 // UninstallOtelCollector kills all running Dynatrace OTel Collector processes
@@ -206,7 +230,7 @@ func UninstallOtelCollector(dryRun bool) error {
 
 	// ── Remove directories ───────────────────────────────────────────────────
 	for _, d := range dirs {
-		if err := os.RemoveAll(d); err != nil {
+		if err := removeWithRetry(d); err != nil {
 			fmt.Printf("  Warning: could not remove %s: %v\n", d, err)
 			continue
 		}

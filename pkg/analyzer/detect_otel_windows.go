@@ -12,9 +12,43 @@ import (
 // Searches by command-line pattern via Get-CimInstance.
 // Returns (running, binaryPath, configPath).
 func detectOtelCollector() (bool, string, string) {
-	for _, pattern := range []string{"dynatrace-otel-collector", "otelcol"} {
+	// Patterns to search for in the process list.
+	processNames := []string{
+		"otelcol.exe",
+		"otelcol-contrib.exe",
+		"dynatrace-otel-collector.exe",
+	}
+
+	// First try Get-Process via powershell for a quick name-based check.
+	for _, name := range processNames {
+		// Strip the .exe suffix for Get-Process -Name which doesn't want it.
+		baseName := strings.TrimSuffix(name, ".exe")
+		ok, pidOutput := runCmd("powershell", "-NoProfile", "-Command",
+			"Get-Process -Name '"+baseName+"' -ErrorAction SilentlyContinue | Select-Object -First 1 | ForEach-Object { $_.Id }")
+		if ok && strings.TrimSpace(pidOutput) != "" {
+			// Get the executable path directly from Get-Process (doesn't need elevation).
+			binPath := ""
+			okPath, pathOutput := runCmd("powershell", "-NoProfile", "-Command",
+				"Get-Process -Name '"+baseName+"' -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Path")
+			if okPath && strings.TrimSpace(pathOutput) != "" {
+				binPath = strings.TrimSpace(pathOutput)
+			}
+			// Try to get the command line for config path extraction.
+			_, configPath := otelInfoFromProcessName(baseName)
+			if binPath == "" {
+				binPath = baseName + ".exe"
+			}
+			return true, binPath, configPath
+		}
+	}
+
+	// Fall back to WMIC full command line search for custom-named builds.
+	// Exclude shell processes (powershell, pwsh, cmd) and the current process
+	// to avoid matching dtwiz's own detection commands whose arguments contain
+	// the search patterns.
+	for _, pattern := range []string{"otel-collector", "otelcol"} {
 		ok, output := runCmd("powershell", "-NoProfile", "-Command",
-			"Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match '"+pattern+"' } | Select-Object -First 1 -ExpandProperty CommandLine")
+			"Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match '"+pattern+"' -and $_.Name -notmatch 'powershell|pwsh|cmd' -and $_.ProcessId -ne $PID } | Select-Object -First 1 -ExpandProperty CommandLine")
 		if ok && output != "" {
 			logger.Debug("detectOtelCollector: found via PowerShell", "pattern", pattern)
 			binPath, configPath := parseWindowsCommandLine(output)
