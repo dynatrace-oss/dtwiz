@@ -7,6 +7,7 @@
 On Windows, when a process started by dtwiz exits cleanly within the settle window **and is marked as an execl launcher** (`IsExeclLauncher == true`), the system SHALL attempt to adopt its Python child process for continued liveness tracking.
 
 `ManagedProcess` carries two new fields used by the adoption path:
+
 - `Entrypoint string` — the script/entrypoint that was launched (e.g. `app.py`), set by `StartManagedProcess` when `entrypoint != ""`
 - `IsExeclLauncher bool` — set to `true` when `entrypoint != ""` (i.e. when the process is expected to exec-spawn a child and exit)
 
