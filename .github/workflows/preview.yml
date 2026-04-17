@@ -104,7 +104,7 @@ jobs:
         run: |
           PR_NUMBER=$(gh pr list \
             --repo "${{ github.repository }}" \
-            --head "${{ github.repository_owner }}:${{ github.ref_name }}" \
+            --head "${{ github.ref_name }}" \
             --json number \
             --jq '.[0].number // empty')
           echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
