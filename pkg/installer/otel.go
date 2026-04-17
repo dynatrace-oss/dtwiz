@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -127,38 +126,13 @@ func printProjectList(projects []detectedProject) {
 	for i, p := range projects {
 		line := fmt.Sprintf("  [%d]  %s  %s  (%s)", i+1, p.Runtime, p.Path, strings.Join(p.Markers, ", "))
 		if len(p.RunningProcessIDs) > 0 {
-			portSet := make(map[string]struct{})
-			for _, pid := range p.RunningProcessIDs {
-				if port := detectProcessListeningPort(pid); port != "" {
-					portSet[port] = struct{}{}
-				}
-			}
-			ports := make([]string, 0, len(portSet))
-			for port := range portSet {
-				ports = append(ports, port)
-			}
-			sort.Slice(ports, func(i, j int) bool {
-				leftPort, leftErr := strconv.Atoi(ports[i])
-				rightPort, rightErr := strconv.Atoi(ports[j])
-				if leftErr != nil || rightErr != nil {
-					return ports[i] < ports[j]
-				}
-				return leftPort < rightPort
-			})
-
 			pidStrs := make([]string, len(p.RunningProcessIDs))
 			for j, pid := range p.RunningProcessIDs {
 				pidStrs[j] = strconv.Itoa(pid)
 			}
-			if len(ports) > 0 {
-				line += fmt.Sprintf("  ← %d processes (ports: %s)",
-					len(p.RunningProcessIDs),
-					strings.Join(ports, ", "))
-			} else {
-				line += fmt.Sprintf("  ← %d processes (PIDs: %s)",
-					len(p.RunningProcessIDs),
-					strings.Join(pidStrs, ", "))
-			}
+			line += fmt.Sprintf("  ← %d processes (PIDs: %s)",
+				len(p.RunningProcessIDs),
+				strings.Join(pidStrs, ", "))
 		}
 		if p.ModuleName != "" {
 			line += fmt.Sprintf("  (module: %s)", p.ModuleName)
@@ -244,14 +218,12 @@ func InstallOtelCollector(envURL, token, ingestToken, platformToken string, dryR
 	projects := detectAllProjects(runtimes)
 
 	var plan InstrumentationPlan
-	var selectedRunningProcesses int
 	if len(projects) > 0 {
 		cyan.Println("  Detected projects:")
 		fmt.Println("  " + strings.Repeat("─", 50))
 		printProjectList(projects)
 
 		if selected, ok := selectProject(projects); ok {
-			selectedRunningProcesses = len(selected.RunningProcessIDs)
 			plan = createRuntimePlan(selected, cp.apiURL, token, envURL, platformToken)
 		}
 	}
@@ -282,13 +254,6 @@ func InstallOtelCollector(envURL, token, ingestToken, platformToken string, dryR
 		fmt.Println()
 		cyan.Printf("  2) %s auto-instrumentation\n", plan.Runtime())
 		plan.PrintPlanSteps()
-		if selectedRunningProcesses > 0 {
-			fmt.Println()
-			yellow := color.New(color.FgYellow)
-			yellow.Printf("  Warning: this project is already running (%d processes).\n", selectedRunningProcesses)
-			fmt.Println("  If you re-run it after instrumentation, it may fail because the same ports are already in use.")
-			fmt.Println("  Stop the running process(es) first, then re-run with the new environment variables.")
-		}
 	}
 
 	fmt.Println()
