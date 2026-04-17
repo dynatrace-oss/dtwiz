@@ -36,16 +36,6 @@ func winProcessQuery(whereClause, fieldsExpr string) ([]string, error) {
 	return lines, nil
 }
 
-// DetectProcesses is the exported version of detectProcesses for use by other packages.
-func DetectProcesses(filterTerm string, excludeTerms []string) []DetectedProcess {
-	return detectProcesses(filterTerm, excludeTerms)
-}
-
-// DetectProcessListeningPort is the exported version of detectProcessListeningPort for use by other packages.
-func DetectProcessListeningPort(pid int) string {
-	return detectProcessListeningPort(pid)
-}
-
 // detectProcesses lists running processes on Windows matching filterTerm in the
 // command line, excluding those matching excludeTerms.
 // Uses Get-CimInstance Win32_Process to query command line and working directory.
