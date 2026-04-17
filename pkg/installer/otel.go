@@ -130,7 +130,9 @@ func printProjectList(projects []detectedProject) {
 			for j, pid := range p.RunningProcessIDs {
 				pidStrs[j] = strconv.Itoa(pid)
 			}
-			line += fmt.Sprintf("  ← PIDs: %s", strings.Join(pidStrs, ", "))
+			line += fmt.Sprintf("  ← %d processes (PIDs: %s)",
+				len(p.RunningProcessIDs),
+				strings.Join(pidStrs, ", "))
 		}
 		if p.ModuleName != "" {
 			line += fmt.Sprintf("  (module: %s)", p.ModuleName)

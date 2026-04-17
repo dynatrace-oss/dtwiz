@@ -7,9 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
+## [0.2.14] - 2026-04-17
 
-- Preview snapshot install: switch from `DTWIZ_BRANCH` to `DTWIZ_TAG` environment variable to avoid shell escaping issues with branch names. Release tag is now computed server-side in the preview workflow for use in install commands.
+### Fixed
+
+- OTel Python: fix detection of already-running processes
 
 ## [0.2.13] - 2026-04-16
 
@@ -194,7 +196,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.13...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.14...HEAD
+[0.2.14]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.13...v0.2.14
 [0.2.13]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.12...v0.2.13
 [0.2.12]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.11...v0.2.12
 [0.2.11]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.10...v0.2.11
