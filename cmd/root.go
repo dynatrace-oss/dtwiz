@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -34,6 +35,8 @@ Then use dtwiz commands to analyze and instrument your system.`,
 		logger.Init(debugFlag, verbosityFlag)
 		logger.Verbose("logging: verbose")
 		logger.Debug("logging: debug")
+
+		featureflags.ApplyCLIOverrides(cmd.Flags())
 	},
 }
 
@@ -73,6 +76,8 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&environmentFlag, "environment", "", "Dynatrace environment URL (also read from DT_ENVIRONMENT)")
 	rootCmd.PersistentFlags().StringVar(&accessTokenFlag, "access-token", "", "Dynatrace API access token (also read from DT_ACCESS_TOKEN)")
 	rootCmd.PersistentFlags().StringVar(&platformTokenFlag, "platform-token", "", "Dynatrace platform token (dt0s16.*) for AWS installer (also read from DT_PLATFORM_TOKEN)")
+
+	featureflags.RegisterFlags(rootCmd.PersistentFlags())
 
 	rootCmd.AddCommand(analyzeCmd)
 	rootCmd.AddCommand(recommendCmd)
