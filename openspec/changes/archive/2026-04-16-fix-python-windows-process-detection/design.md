@@ -27,11 +27,13 @@ The existing PowerShell-based Windows helpers (`otel_runtime_scan_windows.go`, `
 
 ## Decisions
 
-### Decision 1: Child adoption via PowerShell `Get-CimInstance` after settle delay
+### Decision 1: Child adoption via entrypoint/CommandLine matching + leaf detection after settle delay
 
-**Chosen**: After `processSettleDelay` (3 seconds), if a process exited cleanly (exit code 0), query child processes via `Get-CimInstance Win32_Process` filtering by `ParentProcessId` and look for a child whose name contains `python`. Replace the `ManagedProcess` PID with the child's PID and wire up a new `watchPID` goroutine.
+**Chosen**: After `processSettleDelay` (3 seconds), if a process exited cleanly (exit code 0) and is marked as an execl launcher (`IsExeclLauncher == true`), query all Python processes whose `CommandLine` contains the known entrypoint path via `Get-CimInstance Win32_Process`. Among those matches, identify the *leaf* — the process whose `ProcessId` does not appear as the `ParentProcessId` of any other matched process. Replace the `ManagedProcess` PID with that leaf PID and wire up a new `watchPID` goroutine.
 
-**Why not Job Objects**: Job Objects would need to be assigned before the child spawns. The window between `cmd.Start()` returning and the launcher calling `subprocess.Popen` is too narrow to reliably assign a Job Object before the child is created. Windows 8+ supports nested Jobs, but the child might still not inherit the Job object depending on how Python's subprocess module creates it.
+**Why entrypoint/CommandLine, not parent-PID**: The launcher (`opentelemetry-instrument.exe`) exits in milliseconds. By the time the 3-second settle delay completes, the launcher is already gone — a `ParentProcessId` query would find no children because the parent PID no longer exists. The entrypoint path (e.g. `app.py`) is durable: it always appears in the `CommandLine` of the surviving Python process. This approach does not depend on the launcher still being alive.
+
+**Why leaf detection**: `opentelemetry-instrument` spawns the real app via `subprocess.Popen` and then calls `sys.exit(0)`, creating a two-process chain (launcher → real app). The real app is the leaf — its PID does not appear as the `ParentProcessId` of any other matched Python process. Selecting the leaf rather than the root correctly identifies the instrumented app even if `opentelemetry-instrument` itself is also a Python process that appears in the match set.
 
 **Why not polling during the settle window**: The launcher exits in milliseconds; the child starts within the same Python process call. By the time the 3-second settle delay completes, the child is either fully running or has already crashed. Polling during the settle window adds complexity for zero practical benefit.
 
@@ -59,11 +61,9 @@ All "enumerate via `Where-Object` and return fields" queries within `pkg/install
 
 ## Risks / Trade-offs
 
-**[Risk] Child Python process starts after the adoption window** → Extremely unlikely. The 3-second settle delay dwarfs the time between launcher exit and child start (sub-millisecond). Mitigation: debug logging captures the snapshot result so users can report edge cases.
+**[Risk] Child Python process starts after the adoption window** → Extremely unlikely. The 3-second settle delay dwarfs the time between launcher exit and child start (sub-millisecond). Mitigation: debug logging captures the query result so users can report edge cases.
 
-**[Risk] Multiple Python children found** → Edge case if the instrumented app itself spawns Python subprocesses within 3 seconds. Mitigation: take the child with the lowest PID (earliest spawned); log all PIDs found at debug level so the user can investigate if the wrong one is picked.
-
-**[Limitation] Child filter is exe-name only, not entrypoint-verified** → `adoptExeclChildren` identifies candidates by checking whether the exe name contains `python` (e.g. `python.exe`, `python3.12.exe`). This is applied only to direct children of the dead launcher PID — a narrow scope that makes system-wide false positives extremely unlikely. However, there is no check that the child's command line contains the specific entrypoint path (e.g. `app.py`) that dtwiz launched. In the normal case `opentelemetry-instrument.exe` spawns exactly one Python child (the instrumented app) within milliseconds, so the filter is sufficient. The gap is that if the instrumented app itself spawns a Python subprocess before the 3-second snapshot is taken, the lowest-PID tie-breaker will coincidentally pick the correct process — but this is not structurally guaranteed. Future hardening: pass the entrypoint path into `pythonChildPIDs` and verify it appears in the candidate's command line (already retrievable via the existing `winProcessQuery` mechanism). `ManagedProcess` would need a small struct extension to carry the entrypoint path alongside `Name`.
+**[Limitation] Entrypoint path must be unique enough to identify the process** → `pythonLeafPID` matches any Python process whose `CommandLine` contains the entrypoint path. If the same script path appears in an unrelated Python process's command line at the moment of the snapshot, that process could be adopted. In practice this is extremely unlikely (the entrypoint path is typically a full absolute path specific to the project). Future hardening: verify additional fields (working directory, user) if false positives are reported.
 
 **[Risk] `OpenProcess` fails due to user mismatch** → Only if something outside dtwiz re-spawned the child under a different account. Mitigation: explicit, actionable debug message directing the user to run dtwiz as the same user.
 

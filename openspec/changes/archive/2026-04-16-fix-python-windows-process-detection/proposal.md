@@ -6,7 +6,7 @@ On Windows, Python's `os.execl()` (used by `opentelemetry-instrument` to launch 
 
 ## What Changes
 
-- **New**: Windows child-process adoption — after a launched process exits cleanly, scan for its Python child process via PowerShell `Get-CimInstance` and take over tracking it using `OpenProcess`/`WaitForSingleObject` (`golang.org/x/sys/windows`)
+- **New**: Windows child-process adoption — after a launched process exits cleanly, match the surviving Python process by entrypoint/CommandLine via PowerShell `Get-CimInstance` (leaf detection: the process whose PID is not the `ParentProcessId` of any other match) and take over tracking it using `OpenProcess`/`WaitForSingleObject` (`golang.org/x/sys/windows`)
 - **New**: Windows-only `watchPID` helper that waits on an arbitrary PID via process handle, with explicit user-facing debug messages when access is denied
 - **Modified**: `PrintProcessSummary` in `otel_process.go` — inserts adoption pass between settle delay and port detection; Unix/macOS path is completely unchanged
 - **Modified**: `otel_runtime_scan_windows.go` — `detectProcesses` uses `Get-CimInstance Win32_Process` with pipe-delimited `ForEach-Object` output and `strings.SplitN` parsing; removes `ConvertTo-Csv`, `Select-Object`, and `parseSimpleCSVRow`
@@ -26,8 +26,8 @@ On Windows, Python's `os.execl()` (used by `opentelemetry-instrument` to launch 
 
 ## Impact
 
-- `pkg/installer/otel_process.go` — `ManagedProcess` struct (`adopted` field removed), `PrintProcessSummary`
-- `pkg/installer/otel_process_windows.go` — new file (`//go:build windows`): `pythonChildPIDs`, `adoptExeclChildren`, `watchPID`
+- `pkg/installer/otel_process.go` — `ManagedProcess` struct (`adopted` field removed; `Entrypoint string` and `IsExeclLauncher bool` fields added), `PrintProcessSummary`
+- `pkg/installer/otel_process_windows.go` — new file (`//go:build windows`): `pythonLeafPID`, `adoptExeclChildren`, `watchPID`
 - `pkg/installer/otel_process_other.go` — new file (`//go:build !windows`): no-op `adoptExeclChildren` stub
 - `pkg/installer/otel_runtime_scan_windows.go` — `detectProcesses`: pipe-delimited PowerShell output, `parseSimpleCSVRow` removed
 - `pkg/installer/otel_collector_windows.go` — new file (`//go:build windows`): `findRunningOtelCollectors` via `Get-CimInstance`

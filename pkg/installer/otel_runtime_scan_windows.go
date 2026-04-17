@@ -12,12 +12,8 @@ import (
 )
 
 // winProcessQuery runs a Get-CimInstance Win32_Process query on Windows.
-// whereClause is the PowerShell Where-Object expression (without braces), e.g.
-// "$_.CommandLine -match 'foo'". fieldsExpr is the ForEach-Object body that
-// produces one line of output per matching process, e.g.
-// "\"$($_.ProcessId)|$($_.CommandLine)\"".
-// Returns the trimmed non-blank output lines and nil error on success.
-// Returns nil, err if the PowerShell invocation fails.
+// whereClause is the PowerShell Where-Object expression and fieldsExpr
+// is the ForEach-Object body that produces one line per matching process.
 func winProcessQuery(whereClause, fieldsExpr string) ([]string, error) {
 	script := "Get-CimInstance Win32_Process | Where-Object { " + whereClause + " } | ForEach-Object { " + fieldsExpr + " }"
 	logger.Debug("winProcessQuery: executing", "where", whereClause, "fields", fieldsExpr)

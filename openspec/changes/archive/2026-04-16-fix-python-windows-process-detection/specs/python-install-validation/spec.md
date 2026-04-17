@@ -1,5 +1,9 @@
 # Spec: Python Install Validation
 
+## Purpose
+
+Enhance process launch and lifecycle tracking on Windows by detecting and adopting Python child processes spawned via `opentelemetry-instrument`, enabling proper instrumentation collection across execl-launchers.
+
 ## MODIFIED Requirements
 
 ### Requirement: Process crash visibility
@@ -54,9 +58,11 @@ When the installer launches instrumented processes, the user SHALL receive expli
 - **AND** a listening TCP port is detected for its PID
 - **THEN** the summary line SHALL show `→ http://localhost:<port>` and the log filename
 
-## Testing
+## ADDED
 
-### Cross-platform unit tests (`pkg/installer/otel_process_test.go`)
+### Testing
+
+#### Cross-platform unit tests (`pkg/installer/otel_process_test.go`)
 
 Use pre-built `ManagedProcess` helpers with pre-filled exit channels — no real processes spawned:
 
