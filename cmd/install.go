@@ -112,6 +112,23 @@ var installOtelPythonCmd = &cobra.Command{
 	},
 }
 
+var otelNodeServiceName string
+var installOtelNodeCmd = &cobra.Command{
+	Use:   "otel-node",
+	Short: "Set up OpenTelemetry Node.js auto-instrumentation",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		envURL, accessTok, platformTok, err := getDtEnvironment()
+		if err != nil {
+			return err
+		}
+		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+			return err
+		}
+		return installer.InstallOtelNode(envURL, accessTok, platformTok, otelNodeServiceName, installDryRun)
+	},
+}
+
 var otelJavaServiceName string
 var installOtelJavaCmd = &cobra.Command{
 	Use:   "otel-java",
@@ -183,6 +200,7 @@ func init() {
 	installCmd.PersistentFlags().BoolVar(&installDryRun, "dry-run", false, "show what would be done without executing")
 
 	installOtelPythonCmd.Flags().StringVar(&otelPythonServiceName, "service-name", "", "OTEL_SERVICE_NAME for the instrumented application (default: my-service)")
+	installOtelNodeCmd.Flags().StringVar(&otelNodeServiceName, "service-name", "", "OTEL_SERVICE_NAME for the instrumented application (default: my-service)")
 	installOtelJavaCmd.Flags().StringVar(&otelJavaServiceName, "service-name", "", "OTEL_SERVICE_NAME for the instrumented application (default: my-service)")
 
 	installOneAgentCmd.Flags().Bool("quiet", false, "Run a silent/unattended installation with no output")
@@ -193,6 +211,7 @@ func init() {
 	installCmd.AddCommand(installOtelCmd)
 	installCmd.AddCommand(installOtelCollectorCmd)
 	installCmd.AddCommand(installOtelPythonCmd)
+	installCmd.AddCommand(installOtelNodeCmd)
 	installCmd.AddCommand(installOtelJavaCmd)
 	installCmd.AddCommand(installAWSCmd)
 	installCmd.AddCommand(installAWSLambdaCmd)

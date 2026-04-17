@@ -307,8 +307,8 @@ func TestCreateRuntimePlan(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected NodeInstrumentationPlan, got %T", plan)
 		}
-		if nodePlan.Entrypoint != "server.js" {
-			t.Fatalf("unexpected node entrypoint: %s", nodePlan.Entrypoint)
+		if len(nodePlan.Entrypoints) == 0 || nodePlan.Entrypoints[0] != "server.js" {
+			t.Fatalf("unexpected node entrypoints: %v", nodePlan.Entrypoints)
 		}
 	})
 
