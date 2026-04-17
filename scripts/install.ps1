@@ -15,7 +15,7 @@
 [CmdletBinding()]
 param(
     [string]$InstallDir = "",
-    [string]$Branch = $env:DTWIZ_BRANCH
+    [string]$Tag = $env:DTWIZ_TAG
 )
 
 $ErrorActionPreference = "Stop"
@@ -46,10 +46,10 @@ switch ($RawArch) {
 Write-Host "Detected platform: windows/$Arch"
 
 # ── Resolve release version ────────────────────────────────────────────────────
-if ($Branch) {
-    # Derive the pre-release tag from the branch name (e.g. preview/foo -> snapshot-preview-foo)
-    $ReleaseTag = "snapshot-" + ($Branch -replace '/', '-')
-    Write-Host "Installing preview snapshot for branch: $Branch"
+if ($Tag) {
+    # Use the provided release tag directly
+    $ReleaseTag = $Tag
+    Write-Host "Installing preview snapshot for tag: $Tag"
     $VersionFile = Join-Path ([System.IO.Path]::GetTempPath()) "dtwiz-version.txt"
     Invoke-WebRequest `
         -Uri "https://github.com/$Repo/releases/download/$ReleaseTag/version.txt" `
@@ -58,7 +58,7 @@ if ($Branch) {
     $Version = (Get-Content $VersionFile -Raw).Trim()
     Remove-Item $VersionFile -ErrorAction SilentlyContinue
     if (-not $Version) {
-        Write-Error "Could not find a snapshot release for branch '$Branch'. Make sure the branch exists and its snapshot workflow has completed."
+        Write-Error "Could not find a snapshot release for tag '$Tag'. Make sure the tag exists and its release has been published."
         exit 1
     }
 } else {
@@ -92,8 +92,8 @@ if (-not $InstallDir) {
 # ── Confirm installation ──────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "This will download and install dtwiz ${Version}:"
-if ($Branch) {
-    Write-Host "  * Branch:   $Branch (pre-release)"
+if ($Tag) {
+    Write-Host "  * Tag:      $Tag (pre-release)"
 }
 Write-Host "  * Download from github.com/${Repo}"
 Write-Host "  * Install to $InstallDir"
