@@ -15,10 +15,10 @@
 
 REPO="dynatrace-oss/dtwiz"
 
-# Branch to install from. If set, a snapshot pre-release for that branch is used
-# instead of the latest stable release. Set via the DTWIZ_BRANCH env variable.
-# Example: DTWIZ_BRANCH=preview/my-branch source <(curl -sSL ...)
-BRANCH="${DTWIZ_BRANCH:-}"
+# Release tag to install. If set, a snapshot pre-release with that tag is used
+# instead of the latest stable release. Set via the DTWIZ_TAG env variable.
+# Example: DTWIZ_TAG=snapshot-preview-my-branch source <(curl -sSL ...)
+TAG="${DTWIZ_TAG:-}"
 
 # ── Parse known flags ──────────────────────────────────────────────────────────
 INSTALL_DIR=""
@@ -62,15 +62,15 @@ if ! command -v curl >/dev/null 2>&1; then
     exit 1
 fi
 
-if [ -n "$BRANCH" ]; then
-    # Derive the pre-release tag from the branch name (e.g. preview/foo → snapshot-preview-foo)
-    RELEASE_TAG="snapshot-$(echo "$BRANCH" | tr '/' '-')"
-    echo "Installing preview snapshot for branch: ${BRANCH}"
+if [ -n "$TAG" ]; then
+    # Use the provided release tag directly
+    RELEASE_TAG="$TAG"
+    echo "Installing preview snapshot for tag: ${TAG}"
     VERSION="$(curl -fsSL \
         "https://github.com/${REPO}/releases/download/${RELEASE_TAG}/version.txt")"
     if [ -z "$VERSION" ]; then
-        echo "Error: could not find a snapshot release for branch '${BRANCH}'." >&2
-        echo "Make sure the branch exists and its snapshot workflow has completed." >&2
+        echo "Error: could not find a snapshot release for tag '${TAG}'." >&2
+        echo "Make sure the tag exists and its release has been published." >&2
         exit 1
     fi
 else
@@ -97,8 +97,8 @@ fi
 # ── Confirm installation ───────────────────────────────────────────────────────
 echo ""
 echo "This will download and install dtwiz ${VERSION}:"
-if [ -n "$BRANCH" ]; then
-    echo "  - Branch:   ${BRANCH} (pre-release)"
+if [ -n "$TAG" ]; then
+    echo "  - Tag:      ${TAG} (pre-release)"
 fi
 echo "  - Download from github.com/${REPO}"
 echo "  - Install to ${INSTALL_DIR}"

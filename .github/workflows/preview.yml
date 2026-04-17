@@ -12,6 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      published: ${{ steps.semver.outputs.found }}
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,12 +40,15 @@ jobs:
             echo "No semver tag reachable — skipping snapshot." >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      - name: Remove non-semver tags locally
+        if: steps.semver.outputs.found == 'true'
+        run: git tag -l | (grep -v '^v' || true) | xargs -r git tag -d
+
       - name: Delete existing pre-release (if any)
         if: steps.semver.outputs.found == 'true'
         run: |
           gh release delete "${{ steps.tag.outputs.tag }}" --yes || true
           git push origin ":refs/tags/${{ steps.tag.outputs.tag }}" || true
-          git tag -d "${{ steps.tag.outputs.tag }}" || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -87,3 +93,85 @@ jobs:
             dist/checksums.txt
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  pr-comment:
+    needs: snapshot
+    if: needs.snapshot.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Find PR for branch
+        id: pr
+        run: |
+          PR_NUMBER=$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --head "${{ github.ref_name }}" \
+            --json number \
+            --jq '.[0].number // empty')
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post preview install instructions
+        if: steps.pr.outputs.number != ''
+        uses: actions/github-script@v7
+        env:
+          RELEASE_TAG: ${{ needs.snapshot.outputs.tag }}
+        with:
+          script: |
+            const releaseTag = process.env.RELEASE_TAG;
+            const releaseUrl = `${{ github.server_url }}/${{ github.repository }}/releases/tag/${releaseTag}`;
+            const body = [
+              '## Preview snapshot available',
+              '',
+              'A snapshot build for this branch has been published. Install it to try out the changes:',
+              '',
+              '**Linux / macOS**',
+              '```sh',
+              `DTWIZ_TAG="${releaseTag}" source <(curl -sSL https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.sh)`,
+              '```',
+              '',
+              '**Windows (PowerShell)**',
+              '```powershell',
+              `$env:DTWIZ_TAG="${releaseTag}"; irm https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.ps1 | iex`,
+              '```',
+              '',
+              '> The snapshot is rebuilt on every push to this branch. Re-run the install command to pick up the latest changes.',
+              '',
+              '---',
+              `<details><summary>ℹ️ Release info</summary>`,
+              '',
+              `Snapshot release: [${releaseUrl}](${releaseUrl})`,
+              '',
+              'Artifacts are attached to that release and can be downloaded directly if you prefer manual installation.',
+              '</details>',
+            ].join('\n');
+
+            const marker = '## Preview snapshot available';
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ steps.pr.outputs.number }},
+              per_page: 100,
+            });
+            const existing = comments.find(c =>
+              c.user.login === 'github-actions[bot]' && c.body.startsWith(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: ${{ steps.pr.outputs.number }},
+                body,
+              });
+            }
