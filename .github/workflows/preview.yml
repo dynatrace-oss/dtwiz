@@ -114,10 +114,12 @@ jobs:
       - name: Post preview install instructions
         if: steps.pr.outputs.number != ''
         uses: actions/github-script@v7
+        env:
+          RELEASE_TAG: ${{ needs.snapshot.outputs.tag }}
         with:
           script: |
-            const releaseTag = '${{ needs.snapshot.outputs.tag }}';
-            const releaseUrl = '${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ needs.snapshot.outputs.tag }}';
+            const releaseTag = process.env.RELEASE_TAG;
+            const releaseUrl = `${{ github.server_url }}/${{ github.repository }}/releases/tag/${releaseTag}`;
             const body = [
               '## Preview snapshot available',
               '',

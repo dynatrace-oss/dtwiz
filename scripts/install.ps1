@@ -51,12 +51,17 @@ if ($Tag) {
     $ReleaseTag = $Tag
     Write-Host "Installing preview snapshot for tag: $Tag"
     $VersionFile = Join-Path ([System.IO.Path]::GetTempPath()) "dtwiz-version.txt"
-    Invoke-WebRequest `
-        -Uri "https://github.com/$Repo/releases/download/$ReleaseTag/version.txt" `
-        -OutFile $VersionFile `
-        -UseBasicParsing
-    $Version = (Get-Content $VersionFile -Raw).Trim()
-    Remove-Item $VersionFile -ErrorAction SilentlyContinue
+    try {
+        Invoke-WebRequest `
+            -Uri "https://github.com/$Repo/releases/download/$ReleaseTag/version.txt" `
+            -OutFile $VersionFile `
+            -UseBasicParsing
+        $Version = (Get-Content $VersionFile -Raw).Trim()
+        Remove-Item $VersionFile -ErrorAction SilentlyContinue
+    } catch {
+        Write-Error "Could not find a snapshot release for tag '$Tag'. Make sure the tag exists and its release has been published."
+        exit 1
+    }
     if (-not $Version) {
         Write-Error "Could not find a snapshot release for tag '$Tag'. Make sure the tag exists and its release has been published."
         exit 1
