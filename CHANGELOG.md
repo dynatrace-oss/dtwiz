@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Preview snapshot install: switch from `DTWIZ_BRANCH` to `DTWIZ_TAG` environment variable to avoid shell escaping issues with branch names. Release tag is now computed server-side in the preview workflow, ensuring only safe characters are used in install commands.
+- Preview snapshot install: switch from `DTWIZ_BRANCH` to `DTWIZ_TAG` environment variable to avoid shell escaping issues with branch names. Release tag is now computed server-side in the preview workflow for use in install commands.
 
 ## [0.2.13] - 2026-04-16
 
