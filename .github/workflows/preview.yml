@@ -38,12 +38,17 @@ jobs:
           fi
 
       - name: Delete existing pre-release (if any)
+        if: steps.semver.outputs.found == 'true'
         run: |
           gh release delete "${{ steps.tag.outputs.tag }}" --yes || true
           git push origin ":refs/tags/${{ steps.tag.outputs.tag }}" || true
           git tag -d "${{ steps.tag.outputs.tag }}" || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Remove non-semver tags locally
+        if: steps.semver.outputs.found == 'true'
+        run: git tag -l | grep -v '^v' | xargs -r git tag -d
 
       - name: Run GoReleaser snapshot
         if: steps.semver.outputs.found == 'true'
