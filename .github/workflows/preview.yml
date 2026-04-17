@@ -12,6 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      published: ${{ steps.semver.outputs.found }}
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,7 +51,7 @@ jobs:
 
       - name: Remove non-semver tags locally
         if: steps.semver.outputs.found == 'true'
-        run: git tag -l | grep -v '^v' | xargs -r git tag -d
+        run: git tag -l | (grep -v '^v' || true) | xargs -r git tag -d
 
       - name: Run GoReleaser snapshot
         if: steps.semver.outputs.found == 'true'
@@ -90,16 +93,18 @@ jobs:
 
   pr-comment:
     needs: snapshot
+    if: needs.snapshot.outputs.published == 'true'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
+      issues: write
     steps:
       - name: Find PR for branch
         id: pr
         run: |
           PR_NUMBER=$(gh pr list \
             --repo "${{ github.repository }}" \
-            --head "${{ github.ref_name }}" \
+            --head "${{ github.repository_owner }}:${{ github.ref_name }}" \
             --json number \
             --jq '.[0].number // empty')
           echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
@@ -112,6 +117,7 @@ jobs:
         with:
           script: |
             const branch = '${{ github.ref_name }}';
+            const releaseUrl = '${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ needs.snapshot.outputs.tag }}';
             const body = [
               '## Preview snapshot available',
               '',
@@ -128,15 +134,23 @@ jobs:
               '```',
               '',
               '> The snapshot is rebuilt on every push to this branch. Re-run the install command to pick up the latest changes.',
+              '',
+              '---',
+              `<details><summary>ℹ️ Release info</summary>`,
+              '',
+              `Snapshot release: [${releaseUrl}](${releaseUrl})`,
+              '',
+              'Artifacts are attached to that release and can be downloaded directly if you prefer manual installation.',
+              '</details>',
             ].join('\n');
 
-            const { data: comments } = await github.rest.issues.listComments({
+            const marker = '## Preview snapshot available';
+            const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: ${{ steps.pr.outputs.number }},
+              per_page: 100,
             });
-
-            const marker = '## Preview snapshot available';
             const existing = comments.find(c =>
               c.user.login === 'github-actions[bot]' && c.body.startsWith(marker)
             );
