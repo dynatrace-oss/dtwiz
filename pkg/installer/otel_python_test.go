@@ -460,6 +460,50 @@ func TestGenerateEnvExportScript_AllKeysPresent(t *testing.T) {
 	}
 }
 
+// ── pipPackageName ────────────────────────────────────────────────────────────
+
+func TestPipPackageName_BarePackage(t *testing.T) {
+	if got := pipPackageName("requests"); got != "requests" {
+		t.Errorf("pipPackageName(%q) = %q, want %q", "requests", got, "requests")
+	}
+}
+
+func TestPipPackageName_StripsEqualEqual(t *testing.T) {
+	if got := pipPackageName("opentelemetry-instrumentation-flask==0.61b0"); got != "opentelemetry-instrumentation-flask" {
+		t.Errorf("pipPackageName() = %q, want %q", got, "opentelemetry-instrumentation-flask")
+	}
+}
+
+func TestPipPackageName_StripsGreaterThanOrEqual(t *testing.T) {
+	if got := pipPackageName("requests>=2.0"); got != "requests" {
+		t.Errorf("pipPackageName() = %q, want %q", got, "requests")
+	}
+}
+
+func TestPipPackageName_StripsCompatible(t *testing.T) {
+	if got := pipPackageName("urllib3~=1.26"); got != "urllib3" {
+		t.Errorf("pipPackageName() = %q, want %q", got, "urllib3")
+	}
+}
+
+func TestPipPackageName_StripsExtras(t *testing.T) {
+	if got := pipPackageName("requests[security]>=2.0"); got != "requests" {
+		t.Errorf("pipPackageName() = %q, want %q", got, "requests")
+	}
+}
+
+func TestPipPackageName_NormalizesUnderscores(t *testing.T) {
+	if got := pipPackageName("my_package==1.0"); got != "my-package" {
+		t.Errorf("pipPackageName() = %q, want %q", got, "my-package")
+	}
+}
+
+func TestPipPackageName_NormalizesDots(t *testing.T) {
+	if got := pipPackageName("my.package==1.0"); got != "my-package" {
+		t.Errorf("pipPackageName() = %q, want %q", got, "my-package")
+	}
+}
+
 func TestListInstalledPipPackages_NormalizesNames(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell stubs only work on Unix")
@@ -531,6 +575,33 @@ func TestQueryBootstrapRequirements_SkipsAlreadyInstalled(t *testing.T) {
 	}
 	if len(pkgs) != 0 {
 		t.Fatalf("queryBootstrapRequirements() = %v, want empty (already installed)", pkgs)
+	}
+}
+
+// TestQueryBootstrapRequirements_SkipsAlreadyInstalled_WithVersionSpecifier verifies
+// that packages reported by the bootstrap script as "pkg==x.y" are correctly
+// recognised as already installed when pip list shows them without the version
+// suffix. This is the false-positive regression test.
+func TestQueryBootstrapRequirements_SkipsAlreadyInstalled_WithVersionSpecifier(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell stubs only work on Unix")
+	}
+	dir := t.TempDir()
+	stub := filepath.Join(dir, "python3")
+	// Bootstrap outputs specifiers with ==version (as the real bootstrap does).
+	createStubFile(t, stub, "#!/bin/sh\necho 'opentelemetry-instrumentation-flask==0.61b0'\necho 'opentelemetry-instrumentation-requests>=0.40b0'\n", 0o755)
+
+	// pip list returns bare, normalized names — no version in the key.
+	installed := map[string]bool{
+		"opentelemetry-instrumentation-flask":    true,
+		"opentelemetry-instrumentation-requests": true,
+	}
+	pkgs, err := queryBootstrapRequirements(stub, installed)
+	if err != nil {
+		t.Fatalf("queryBootstrapRequirements() error = %v", err)
+	}
+	if len(pkgs) != 0 {
+		t.Fatalf("queryBootstrapRequirements() = %v, want empty — packages are installed but specifier version suffix caused false positive", pkgs)
 	}
 }
 

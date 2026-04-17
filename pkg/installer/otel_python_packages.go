@@ -67,6 +67,16 @@ func normalizePipName(name string) string {
 	return n
 }
 
+// pipPackageName extracts the bare package name from a pip requirement
+// specifier such as "opentelemetry-instrumentation-flask==0.61b0" or
+// "requests>=2.0,<3" and normalizes it for comparison with pip-list output.
+func pipPackageName(spec string) string {
+	if i := strings.IndexAny(spec, "><=!~;["); i != -1 {
+		spec = spec[:i]
+	}
+	return normalizePipName(strings.TrimSpace(spec))
+}
+
 func listInstalledPipPackages(pythonBin string) (map[string]bool, error) {
 	args := []string{"-m", "pip", "list", "--format=json"}
 	cmd := exec.Command(pythonBin, args...)
@@ -106,7 +116,7 @@ func queryBootstrapRequirements(pythonBin string, installed map[string]bool) ([]
 	var pkgs []string
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		line = strings.TrimSpace(line)
-		if line != "" && !installed[normalizePipName(line)] {
+		if line != "" && !installed[pipPackageName(line)] {
 			pkgs = append(pkgs, line)
 		}
 	}
@@ -169,7 +179,7 @@ func ensureFrameworkInstrumentations(pythonBin string, pip *pipCommand) error {
 	}
 	var stillMissing []string
 	for _, pkg := range missing {
-		if !updatedInstalled[normalizePipName(pkg)] {
+		if !updatedInstalled[pipPackageName(pkg)] {
 			stillMissing = append(stillMissing, pkg)
 		}
 	}
