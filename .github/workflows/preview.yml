@@ -38,12 +38,17 @@ jobs:
           fi
 
       - name: Delete existing pre-release (if any)
+        if: steps.semver.outputs.found == 'true'
         run: |
           gh release delete "${{ steps.tag.outputs.tag }}" --yes || true
           git push origin ":refs/tags/${{ steps.tag.outputs.tag }}" || true
           git tag -d "${{ steps.tag.outputs.tag }}" || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Remove non-semver tags locally
+        if: steps.semver.outputs.found == 'true'
+        run: git tag -l | grep -v '^v' | xargs -r git tag -d
 
       - name: Run GoReleaser snapshot
         if: steps.semver.outputs.found == 'true'
@@ -82,3 +87,72 @@ jobs:
             dist/checksums.txt
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  pr-comment:
+    needs: snapshot
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Find PR for branch
+        id: pr
+        run: |
+          PR_NUMBER=$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --head "${{ github.ref_name }}" \
+            --json number \
+            --jq '.[0].number // empty')
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post preview install instructions
+        if: steps.pr.outputs.number != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const branch = '${{ github.ref_name }}';
+            const body = [
+              '## Preview snapshot available',
+              '',
+              'A snapshot build for this branch has been published. Install it to try out the changes:',
+              '',
+              '**Linux / macOS**',
+              '```sh',
+              `DTWIZ_BRANCH="${branch}" source <(curl -sSL https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.sh)`,
+              '```',
+              '',
+              '**Windows (PowerShell)**',
+              '```powershell',
+              `$env:DTWIZ_BRANCH="${branch}"; irm https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.ps1 | iex`,
+              '```',
+              '',
+              '> The snapshot is rebuilt on every push to this branch. Re-run the install command to pick up the latest changes.',
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ steps.pr.outputs.number }},
+            });
+
+            const marker = '## Preview snapshot available';
+            const existing = comments.find(c =>
+              c.user.login === 'github-actions[bot]' && c.body.startsWith(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: ${{ steps.pr.outputs.number }},
+                body,
+              });
+            }
