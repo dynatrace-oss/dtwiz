@@ -758,7 +758,6 @@ func InstallAWSLambda(envURL, token, platformToken string, dryRun, confirm bool)
 
 	succeeded := 0
 	failed := 0
-	var succeededNames []string
 
 	for i, fn := range functions {
 		if actions[i] == "skip" {
@@ -773,7 +772,6 @@ func InstallAWSLambda(envURL, token, platformToken string, dryRun, confirm bool)
 		}
 		fmt.Printf(" done\n")
 		succeeded++
-		succeededNames = append(succeededNames, fn.Name)
 	}
 
 	// ── Summary ──────────────────────────────────────────────────────────────
@@ -790,7 +788,6 @@ func InstallAWSLambda(envURL, token, platformToken string, dryRun, confirm bool)
 	if succeeded > 0 {
 		fmt.Println()
 		fmt.Println("  Waiting for traffic — invoke your Lambda functions to generate traces.")
-		waitForServices(envURL, platformToken, succeededNames, true)
 	}
 	return nil
 }

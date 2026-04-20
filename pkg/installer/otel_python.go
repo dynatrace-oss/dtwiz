@@ -266,7 +266,6 @@ func (p *PythonInstrumentationPlan) Execute() {
 
 	fmt.Println()
 	fmt.Println("  Waiting for traffic — send requests to your services to generate traces and metrics.")
-	waitForServices(p.EnvURL, p.PlatformToken, startedServices, false)
 }
 
 func InstallOtelPython(envURL, token, platformToken, serviceName string, dryRun bool) error {

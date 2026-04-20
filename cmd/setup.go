@@ -106,26 +106,34 @@ var setupCmd = &cobra.Command{
 			return err
 		}
 
+		var installErr error
 		switch selected.Method {
 		case recommender.MethodOneAgent:
-			return installer.InstallOneAgent(envURL, accessTok, setupDryRun, false, "")
+			installErr = installer.InstallOneAgent(envURL, accessTok, setupDryRun, false, "")
 		case recommender.MethodKubernetes:
-			return installer.InstallKubernetes(envURL, accessTok, accessTok, "" /* name */, setupDryRun)
+			installErr = installer.InstallKubernetes(envURL, accessTok, accessTok, "" /* name */, setupDryRun)
 		case recommender.MethodDocker:
-			return installer.InstallDocker(envURL, accessTok, setupDryRun)
+			installErr = installer.InstallDocker(envURL, accessTok, setupDryRun)
 		case recommender.MethodOtelCollector:
-			return installer.InstallOtelCollector(envURL, accessTok, accessTok, platformTok, setupDryRun)
+			installErr = installer.InstallOtelCollector(envURL, accessTok, accessTok, platformTok, setupDryRun)
 		case recommender.MethodOtelUpdate:
 			cfgPath := selected.ConfigPath
 			if cfgPath == "" {
 				cfgPath = "config.yaml" // fall back to CWD default
 			}
-			return installer.UpdateOtelConfig(cfgPath, envURL, accessTok, platformTok, setupDryRun)
+			installErr = installer.UpdateOtelConfig(cfgPath, envURL, accessTok, platformTok, setupDryRun)
 		case recommender.MethodAWS:
-			return installer.InstallAWS(envURL, accessTok, platformTok, setupDryRun)
+			installErr = installer.InstallAWS(envURL, accessTok, platformTok, setupDryRun)
 		default:
 			return fmt.Errorf("unsupported method: %s", selected.Method)
 		}
+		if installErr != nil {
+			return installErr
+		}
+		if !setupDryRun {
+			installer.WatchIngest(envURL, platformTok)
+		}
+		return nil
 	},
 }
 
