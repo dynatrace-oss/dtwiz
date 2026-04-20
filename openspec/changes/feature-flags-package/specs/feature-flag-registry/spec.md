@@ -79,7 +79,7 @@ The package SHALL expose `RegisterFlags(flags *pflag.FlagSet)` that registers a 
 
 ### Requirement: Test helper `SetCLIOverrideForTest`
 
-The package SHALL expose `SetCLIOverrideForTest(t testCleaner, flag Flag, val bool)` in `utils_test.go` that injects a CLI-scoped override, equivalent to the user having passed the flag explicitly on the command line. The override SHALL be automatically removed via `t.Cleanup`.
+The package SHALL expose `SetCLIOverrideForTest(t testCleaner, flag Flag, val bool)` in `test_utils.go` that injects a CLI-scoped override, equivalent to the user having passed the flag explicitly on the command line. The override SHALL be automatically removed via `t.Cleanup`.
 
 #### Scenario: CLI override scoped to test
 
