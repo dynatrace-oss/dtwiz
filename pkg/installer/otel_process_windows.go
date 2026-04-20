@@ -11,13 +11,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// pythonLeafPID finds the leaf python process matching the given entrypoint —
-// i.e. the real app process, not the opentelemetry-instrument launcher.
-// On Windows, opentelemetry-instrument spawns the real app as a child via
-// subprocess.Popen then calls sys.exit(0), leaving a two-process chain
-// (launcher → real app). The leaf is the process whose ProcessId does not
-// appear as the ParentProcessId of any other matched process.
-//
+// pythonLeafPID finds the leaf python process matching the given entrypoint.
 // Returns 0, nil if no matching processes are found.
 func pythonLeafPID(entrypoint string) (int, error) {
 	escaped := strings.ReplaceAll(entrypoint, `\`, `\\`)
@@ -36,14 +30,8 @@ func pythonLeafPID(entrypoint string) (int, error) {
 }
 
 // adoptExeclChildren handles the Windows os.execl child-adoption pass.
-// opentelemetry-instrument on Windows spawns the real app via subprocess.Popen
-// then calls sys.exit(0). The launcher exits cleanly (~500ms after start) while
-// the real app runs as an orphaned python.exe process. By settle time the
-// launcher is gone, so parent-PID queries find nothing. Instead we match by
-// CommandLine via pythonLeafPID: we know the entrypoint path we launched, and
-// it always appears in the CommandLine of the surviving python.exe process.
-// The leaf is the python.exe whose PID does not appear as the ParentProcessId
-// of any other matched process — i.e. the real app, not an intermediate launcher.
+// For processes that exited cleanly, attempts to find and adopt the surviving
+// Python child process by matching its CommandLine entrypoint.
 func adoptExeclChildren(procs []*ManagedProcess, started, notStarted *int) {
 	for _, p := range procs {
 		exited, waitErr := p.WaitResult()
@@ -82,13 +70,8 @@ func adoptExeclChildren(procs []*ManagedProcess, started, notStarted *int) {
 }
 
 // watchPID opens the process with SYNCHRONIZE access and waits for it to exit
-// in a goroutine, sending the result (always nil — we can't get an exit code
-// this way) to a buffered channel of capacity 1. This mirrors the pattern used
-// by StartManagedProcess for cmd.Wait().
-//
-// If OpenProcess fails (e.g. the process belongs to a different user or has
-// already exited), an actionable debug message is logged and nil is sent so
-// the caller sees the process as gone — no regression from current behaviour.
+// in a goroutine, sending the result to a buffered channel.
+// If OpenProcess fails, logs a debug message and sends nil to the channel.
 func watchPID(pid int) chan error {
 	ch := make(chan error, 1)
 	handle, err := windows.OpenProcess(windows.SYNCHRONIZE, false, uint32(pid))
