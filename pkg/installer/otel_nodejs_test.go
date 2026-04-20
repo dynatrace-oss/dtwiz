@@ -251,7 +251,7 @@ func TestNodeInstrumentationPlan_PrintPlanSteps_NextJS(t *testing.T) {
 		"Package manager: yarn",
 		"Framework:       next",
 		"npm install (in .otel/)",
-		"node .otel/next-register.js start",
+		"node .otel/next-otel-bootstrap.js start",
 	}
 	for _, check := range checks {
 		if !strings.Contains(output, check) {
@@ -287,8 +287,8 @@ func TestNodeInstrumentationPlan_PrintPlanSteps_Nuxt(t *testing.T) {
 		}
 	}
 	// Should NOT reference the old wrapper script.
-	if strings.Contains(output, "nuxt-register.js") {
-		t.Fatalf("unexpected nuxt-register.js reference in output:\n%s", output)
+	if strings.Contains(output, "nuxt-otel-bootstrap.js") {
+		t.Fatalf("unexpected nuxt-otel-bootstrap.js reference in output:\n%s", output)
 	}
 }
 

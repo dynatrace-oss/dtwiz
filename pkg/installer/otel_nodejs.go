@@ -354,7 +354,7 @@ func (p *NodeInstrumentationPlan) PrintPlanSteps() {
 	fmt.Printf("     npm install (in .otel/)\n")
 	switch p.Framework {
 	case "next":
-		fmt.Printf("     node .otel/next-register.js start\n")
+		fmt.Printf("     node .otel/next-otel-bootstrap.js start\n")
 	case "nuxt":
 		fmt.Printf("     node --import .otel/nuxt-otel-bootstrap.mjs .output/server/index.mjs\n")
 	default:
@@ -491,7 +491,7 @@ func (p *NodeInstrumentationPlan) Execute() {
 	// (nuxt preview spawns a child process that loses OTel registration),
 	// so we generate an ESM bootstrap script that uses module.register() for ESM hooks.
 	if p.Framework == "next" {
-		scriptName := "next-register.js"
+		scriptName := "next-otel-bootstrap.js"
 		scriptPath := filepath.Join(p.OtelDir, scriptName)
 		fmt.Printf("  Writing %s... ", scriptName)
 		content := generateWrapperJS(p.Framework, p.EnvVars)
@@ -532,7 +532,7 @@ func (p *NodeInstrumentationPlan) Execute() {
 		epEnvVars := copyEnvVars(p.EnvVars)
 		epEnvVars["OTEL_SERVICE_NAME"] = svcName
 
-		cmd := exec.Command("node", filepath.Join(".otel", "next-register.js"), "start")
+		cmd := exec.Command("node", filepath.Join(".otel", "next-otel-bootstrap.js"), "start")
 		cmd.Dir = proj.Path
 		cmd.Env = append(os.Environ(), formatEnvVars(epEnvVars)...)
 

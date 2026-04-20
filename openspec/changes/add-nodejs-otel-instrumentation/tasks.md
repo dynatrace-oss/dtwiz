@@ -70,8 +70,8 @@ Rewrite `Execute()` to perform actual installation, process launch, and Dynatrac
 
 - [x] 4.1 Rewrite `Execute()`: stop running processes (reuse `stopProcesses()`), call `createOtelDir()`, for Next.js/Nuxt write framework wrapper script, call `installOtelNodeDeps()`, build the run command (regular vs Next.js vs Nuxt), set OTEL\_\* env vars on the process, use `StartManagedProcess()` to launch, use `PrintProcessSummary()` for port detection, use `waitForServices()` for Smartscape polling
 - [x] 4.2 For regular apps: the run command is `node --require @opentelemetry/auto-instrumentations-node/register <entrypoint>` with CWD set to `.otel/` and entrypoint path adjusted to be relative from `.otel/` (e.g., `../server.js`)
-- [x] 4.3 For Next.js apps: the run command is `node otel/next-register.js start` with CWD set to project root
-- [x] 4.4 For Nuxt apps: the run command is `node otel/nuxt-register.js start` with CWD set to project root
+- [x] 4.3 For Next.js apps: the run command is `node otel/next-otel-bootstrap.js start` with CWD set to project root
+- [x] 4.4 For Nuxt apps: the run command is `node otel/nuxt-otel-bootstrap.js start` with CWD set to project root
 - [x] 4.5 Update `PrintPlanSteps()` to show: project path, package manager, framework status (Next.js/Nuxt if applicable), `.otel/` directory creation, `npm install` in `.otel/`, run command
 - [x] 4.6 Update `DetectNodePlan()` to call updated `buildNodeInstrumentationPlan()` with `apiURL, token` (not `envURL, platformToken` — those are set later like Python)
 - [x] 4.7 Tests:
@@ -99,7 +99,7 @@ Add Node.js `.otel/` cleanup to the existing `dtwiz uninstall otel` command.
 **Files:** `pkg/installer/otel_uninstall.go` (modify)
 
 - [ ] 6.1 Add `findNodeOtelDirs() []string` — scan CWD and parent directories for `.otel/` directories that contain a `package.json` with `@opentelemetry` in its content
-- [ ] 6.2 Add `findInstrumentedNodeProcesses() []otelProcessInfo` — detect running `node` processes whose command line contains `@opentelemetry/auto-instrumentations-node/register`, `.otel/next-register.js`, or `.otel/nuxt-register.js`
+- [ ] 6.2 Add `findInstrumentedNodeProcesses() []otelProcessInfo` — detect running `node` processes whose command line contains `@opentelemetry/auto-instrumentations-node/register`, `.otel/next-otel-bootstrap.js`, or `.otel/nuxt-otel-bootstrap.js`
 - [ ] 6.3 Extend `UninstallOtelCollector()` — after the existing collector preview section, add a "Node.js instrumentation" subsection showing `.otel/` dirs to remove and instrumented node processes to kill. On confirmation, handle Node.js cleanup alongside collector cleanup.
 - [ ] 6.4 Handle the case where only Node.js artifacts exist (no collector) — the "nothing to remove" check must account for Node.js dirs/processes too
 - [ ] 6.5 Tests:
