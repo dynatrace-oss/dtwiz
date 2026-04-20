@@ -41,11 +41,34 @@ The installer SHALL detect runnable entrypoints for the selected Java project wi
 - **THEN** it SHALL look for `*.jar` files in `build/libs/` that contain a `Main-Class` entry in their `MANIFEST.MF`
 - **AND** SHALL offer the discovered JAR(s) as launch candidates
 
-#### Scenario: Build-tool wrapper available
+#### Scenario: Build-tool wrapper available — Spring Boot Maven project
 
-- **GIVEN** the project has a `mvnw` or `gradlew` wrapper but no built JAR artifact
+- **GIVEN** the project has a `mvnw` or `mvn` wrapper but no built JAR artifact
+- **AND** `pom.xml` contains a reference to `spring-boot`
 - **WHEN** the installer scans for entrypoints
-- **THEN** it SHALL offer a build-tool run command as a candidate (e.g., `./mvnw exec:java` or `./gradlew run`)
+- **THEN** it SHALL offer `./mvnw spring-boot:run` as a candidate
+
+#### Scenario: Build-tool wrapper available — Spring Boot Gradle project
+
+- **GIVEN** the project has a `gradlew` or `gradle` wrapper but no built JAR artifact
+- **AND** `build.gradle` or `build.gradle.kts` references `springframework.boot` or `spring-boot`
+- **WHEN** the installer scans for entrypoints
+- **THEN** it SHALL offer `./gradlew bootRun` as a candidate
+
+#### Scenario: Build-tool wrapper available — non-Spring Boot Gradle project
+
+- **GIVEN** the project has a `gradlew` or `gradle` wrapper but no built JAR artifact
+- **AND** the Gradle build file does not reference Spring Boot
+- **WHEN** the installer scans for entrypoints
+- **THEN** it SHALL offer `./gradlew run` as a candidate
+
+#### Scenario: Build-tool wrapper available — non-Spring Boot Maven project
+
+- **GIVEN** the project has a `mvnw` or `mvn` wrapper but no built JAR artifact
+- **AND** `pom.xml` does not reference Spring Boot
+- **WHEN** the installer scans for entrypoints
+- **THEN** NO wrapper candidate SHALL be offered (generic `exec:java` requires `mainClass` POM config absent in most projects)
+- **AND** the installer SHALL print build instructions and exit (see "No entrypoint found" scenario)
 
 #### Scenario: Single entrypoint candidate
 
@@ -151,6 +174,8 @@ The installer SHALL show a compact preview of all actions before execution and r
 - **GIVEN** a Java project and entrypoint have been selected and no running process is matched to the project
 - **WHEN** the plan preview is displayed
 - **THEN** it SHALL show: the project path, the resolved launch command (with `-javaagent` inserted), the agent JAR download URL, and the OTEL_* environment variables
+- **AND** if the project is multi-module, the preview SHALL show the build command (if build is needed) and the per-module launch command for each sub-module instead of a single launch command
+- **AND** the preview SHALL never show `your_app.jar` — the actual resolved command SHALL always be shown
 
 #### Scenario: Plan preview contents — running process will be stopped
 
@@ -225,3 +250,77 @@ The "Waiting for traffic" prompt SHALL terminate when traces/logs land in Dynatr
 - **WHEN** `waitForServices()` detects the service in Dynatrace via DQL
 - **THEN** the waiting prompt SHALL terminate immediately
 - **AND** SHALL print: `All services are reporting to Dynatrace.`
+
+### Requirement: Multi-module project detection and instrumentation
+
+When a Java project is detected as a multi-module Maven or Gradle project, the installer SHALL
+instrument all sub-modules as independent services rather than attempting to run the root project.
+
+#### Scenario: Maven multi-module project detected
+
+- **GIVEN** the selected project has a `pom.xml` with `<packaging>pom</packaging>` and `<modules>` entries
+- **WHEN** the installer analyzes the project
+- **THEN** it SHALL detect it as multi-module
+- **AND** SHALL resolve each declared `<module>` directory as a separate sub-module
+
+#### Scenario: Gradle multi-project detected
+
+- **GIVEN** the selected project has a `settings.gradle` or `settings.gradle.kts` with one or more `include` directives
+- **WHEN** the installer analyzes the project
+- **THEN** it SHALL detect it as a multi-project build
+- **AND** SHALL resolve each included sub-project path as a separate sub-module
+
+#### Scenario: Plan preview for multi-module project
+
+- **GIVEN** a multi-module project has been selected
+- **WHEN** the plan preview is displayed
+- **THEN** it SHALL show the build command (if build is needed)
+- **AND** SHALL show the instrumented launch command for each sub-module with its service name
+- **AND** SHALL show the OTEL_* env vars for each sub-module (with distinct `OTEL_SERVICE_NAME` values)
+
+#### Scenario: JARs already built — skip build step
+
+- **GIVEN** all sub-modules have fat JARs in their `target/` (Maven) or `build/libs/` (Gradle) directories
+- **WHEN** the installer checks for build necessity
+- **THEN** the build step SHALL be skipped
+- **AND** the plan preview SHALL NOT show a build command
+
+#### Scenario: Auto-build when JARs are missing
+
+- **GIVEN** at least one sub-module is missing a fat JAR
+- **WHEN** the user confirms the plan
+- **THEN** the installer SHALL run the build command at the project root (e.g. `./mvnw clean package -DskipTests`)
+- **AND** SHALL abort with an error message if the build fails, instructing the user to fix the build error
+- **AND** SHALL proceed to launch all modules after a successful build
+
+#### Scenario: No build wrapper available and JARs missing
+
+- **GIVEN** sub-modules are missing JARs AND no `mvnw`, `mvn`, `gradlew`, or `gradle` wrapper is found
+- **THEN** the installer SHALL print a message instructing the user to build the project manually and exit
+
+#### Scenario: All sub-modules launched as independent services
+
+- **GIVEN** the plan is confirmed and build (if needed) succeeds
+- **WHEN** the installer executes the plan
+- **THEN** each sub-module's fat JAR SHALL be started as a separate process with `-javaagent` and its own `OTEL_SERVICE_NAME`
+- **AND** each process SHALL have its own log file at `<sub-module-path>/<sub-module-name>.log`
+
+#### Scenario: Partial failure — some modules crash at startup
+
+- **GIVEN** some sub-modules crash during the settle period
+- **WHEN** the process summary is printed
+- **THEN** crashed modules SHALL show `[crashed: <exit error>]` in the summary
+- **AND** the installer SHALL continue with the surviving modules
+- **AND** DQL verification SHALL only track the surviving services
+
+### Requirement: Entrypoint resolved before preview
+
+The installer SHALL resolve the launch entrypoint before showing the plan preview, so the user
+can see exactly what command will be executed.
+
+#### Scenario: Entrypoint resolution in multi-runtime flow
+
+- **GIVEN** `dtwiz install otel` (multi-runtime) selects a Java project
+- **WHEN** the plan is built
+- **THEN** the installer SHALL detect entrypoints (or multi-module structure) immediately
+- **AND** the preview SHALL show the resolved launch command — never a placeholder like `java -javaagent:... -jar your_app.jar`

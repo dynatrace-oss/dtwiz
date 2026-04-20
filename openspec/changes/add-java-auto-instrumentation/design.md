@@ -44,7 +44,7 @@ Existing infrastructure to reuse:
 
 **Non-Goals:**
 
-- Full Maven/Gradle build invocation — if no built artifact exists yet, inform the user and print manual build instructions; do not invoke `mvn package` or `gradle build`.
+- Full Maven/Gradle build invocation for **single-module** projects — if no built artifact exists yet, inform the user and print manual build instructions; do not invoke `mvn package` or `gradle build`. For **multi-module** projects, auto-build is in scope (see Decision 14).
 - Instrumenting Java processes running inside Docker containers or managed by systemd (warn and skip).
 - Persistent configuration management (tracking which processes were instrumented).
 - Supporting GraalVM native images (no JVM, no `-javaagent`).
@@ -72,15 +72,24 @@ The installer inspects the project directory for runnable artifacts in priority 
 |---|---|---|
 | 1 | Fat JAR in `target/` (Maven) | `target/myapp-1.0-SNAPSHOT.jar` (with `Main-Class` in manifest) |
 | 2 | Fat JAR in `build/libs/` (Gradle) | `build/libs/myapp-all.jar` |
-| 3 | Build-tool wrapper + run goal | `./mvnw exec:java -Dexec.mainClass=…` or `./gradlew run` |
+| 3 | Build-tool wrapper (Spring Boot only for Maven) | `./mvnw spring-boot:run` or `./gradlew bootRun` / `./gradlew run` |
 
 For fat JARs, the installer checks the `MANIFEST.MF` for a `Main-Class` attribute to confirm the JAR is executable. JARs without `Main-Class` are skipped.
 
 If exactly one candidate is found, it is auto-selected without prompting — the installer prints the selected entrypoint and proceeds. If multiple candidates are found, the user is presented with a numbered menu to select one. If no entrypoint can be resolved, the installer prints manual build instructions and exits.
 
+**Wrapper fallback rules (only when no fat JAR is found):**
+
+- **Maven:** `./mvnw exec:java` is never offered — it requires an explicit `mainClass` configuration in the exec-maven-plugin that most projects omit, causing a cryptic plugin error with no actionable guidance for the user. Instead, `pom.xml` is checked for `spring-boot`; if found, `./mvnw spring-boot:run` is offered. For non-Spring Boot Maven projects with no built JAR, the "build first" message is shown instead (see Risks).
+- **Gradle:** `./gradlew bootRun` is offered when `build.gradle` / `build.gradle.kts` references `springframework.boot` or `spring-boot`. `./gradlew run` is offered for non-Spring Boot Gradle projects (the `run` task is reliably configured by the Gradle Application plugin).
+
+Spring Boot detection is done by substring matching (`spring-boot` in pom.xml, `spring-boot` or `springframework.boot` in Gradle build files) — no deep XML/Groovy parsing required.
+
 **Alternative considered:** Use the running process's `ps ax` command line as a fallback entrypoint source. Rejected — `ps` output does not include the working directory, args are truncated on most systems beyond 4096 bytes, and environment variables are not captured. The reconstructed command would silently fail or misbehave for any non-trivial app.
 
-**Alternative considered:** Invoke `mvn package` or `gradle build` automatically. Rejected for the first iteration — building can have side effects (running tests, fetching dependencies) that the user should control. A clear message pointing to `mvn package` or `./gradlew build` is sufficient.
+**Alternative considered:** Invoke `mvn package` or `gradle build` automatically. Rejected — building can have side effects (running tests, fetching dependencies) that the user should control. When no entrypoint is found, a clear message with the exact build command to run is shown instead.
+
+**Alternative considered:** Offer `./mvnw exec:java` as a generic Maven fallback. Rejected — this command requires `mainClass` to be configured in the exec-maven-plugin POM section, which is absent in the vast majority of projects (including all Spring Boot projects). The result is a cryptic Maven plugin error (`PluginParameterException: mainClass is missing`) with no clear path forward for the user.
 
 ### 3. Agent JAR download to `~/opentelemetry/java/opentelemetry-javaagent.jar`
 
@@ -178,9 +187,49 @@ In `pkg/installer/otel.go`, `detectAvailableRuntimes()` currently gates Java beh
 
 ## Risks / Trade-offs
 
-- **[No built artifact]** → If the user has not built their project yet (`mvn package` / `gradle build` not run), no fat JAR will be found. Mitigation: detect this case, print a clear message with the build command to run, then exit — don't silently fall through to a broken state.
+- **[No built artifact]** → If the user has not built their project yet (`mvn package` / `gradle build` not run), no fat JAR will be found. For non-Spring Boot Maven projects, no wrapper fallback is offered either (see Decision 2). Mitigation: detect this case, print a clear message with the exact build command to run (`./mvnw package -DskipTests` for Maven, `./gradlew build -x test` for Gradle — based on which wrapper is present), then exit — don't silently fall through to a broken state.
 - **[Process restart is disruptive]** → Stopping and restarting a Java process causes downtime. Mitigation: explicit plan preview and confirmation prompt before execution. `--dry-run` shows the plan without executing.
 - **[Java 8 version string format]** → Java 8 uses the old versioning scheme (`1.8.0_382`) while Java 9+ uses the new scheme (`17.0.1`). Mitigation: the parser handles both formats explicitly; unit tests cover all common patterns.
 - **[JPS availability]** → `jps` is part of the JDK, not the JRE. Users with only a JRE won't benefit from enriched process names. Mitigation: `jps` is optional.
 - **[Large JAR download]** → The agent JAR is ~20MB. Mitigation: show a progress indicator during download.
 - **[No uninstall]** → First iteration has no `dtwiz uninstall otel-java`. Mitigation: acceptable for MVP.
+- **[Multi-module build output verbosity]** → Running `./mvnw clean package` streams full Maven output to stdout. Mitigation: acceptable — the user needs to see build progress and errors.
+- **[Gradle colon notation]** → Gradle sub-project paths use colon separators (`:api`, `:ui:web`) which are converted to OS filesystem separators. Custom `projectDir` overrides in `settings.gradle` are not supported by the regex parser. Mitigation: the regex handles the common 80% case; projects with custom `projectDir` will have missing modules silently skipped.
+
+### 14. Multi-module project detection
+
+When a project is selected and it is the root of a multi-module Maven or Gradle build, the installer
+treats each sub-module as an independent service rather than trying to run the root.
+
+**Maven:** The root `pom.xml` is parsed (via `encoding/xml`) for `<modules><module>` entries. A parent
+POM with `<packaging>pom</packaging>` (or absent packaging, which defaults to `pom`) and at least one
+`<module>` qualifies as multi-module.
+
+**Gradle:** `settings.gradle` and `settings.gradle.kts` are scanned with a regex for `include '...'` /
+`include("...")` directives. Each matched path (converting colon notation to directory separators) is
+treated as a sub-project.
+
+**Build step:** If any sub-module is missing a fat JAR, the installer includes a build step in the plan:
+`./mvnw clean package -DskipTests` (Maven) or `./gradlew build -x test` (Gradle). The build is run
+after user confirmation. If the build fails, execution aborts with a clear error message. If no build
+wrapper is available and JARs are missing, the user is told to build manually and the installer exits.
+
+**Launch:** After a successful build (or if JARs already exist), each sub-module's fat JAR is launched
+as a separate `ManagedProcess` with `-javaagent` and a distinct `OTEL_SERVICE_NAME` matching the
+sub-module's directory name.
+
+**Alternative considered:** Offer a selection menu for sub-modules (pick which ones to instrument).
+Rejected for the initial implementation — "zero config, all defaults on" means all detected modules
+are instrumented. The user can kill individual processes after the fact.
+
+**Alternative considered:** Invoke `./mvnw spring-boot:run` for multi-module Spring Boot roots.
+Rejected — `spring-boot:run` at a parent POM does not start all modules; it either fails or runs the
+first module only. Building fat JARs and launching them individually is the reliable path.
+
+### 15. Entrypoint resolution before preview
+
+In both `createRuntimePlan()` (multi-runtime flow) and `InstallOtelJava()` (standalone), entrypoints
+are now resolved before the plan is printed. The preview always shows the exact command that will be
+executed — never a placeholder like `java -javaagent:... -jar your_app.jar`. If no entrypoint can be
+resolved at plan time, the preview shows `(entrypoint will be detected at execution time)` as a fallback,
+but this path is only reached in edge cases where the installer cannot auto-detect the entrypoint.

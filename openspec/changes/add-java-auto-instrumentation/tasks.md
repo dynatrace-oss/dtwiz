@@ -31,15 +31,22 @@
 
 - [ ] 3.1 Add `detectJavaEntrypoints(projectPath string) []JavaEntrypoint` — scan for runnable artifacts in the project directory. A `JavaEntrypoint` has `Command string` (the full launch command) and `Description string` (shown in the selection menu).
   - Scan `target/*.jar` and `build/libs/*.jar` for JARs with a `Main-Class` in `MANIFEST.MF` (use `archive/zip` to read the JAR).
-  - If a `mvnw` or `mvn` wrapper is found but no fat JAR, add a `./mvnw exec:java` candidate.
-  - If a `gradlew` or `gradle` wrapper is found but no fat JAR, add a `./gradlew run` candidate.
+  - If no fat JAR is found, check for build-tool wrappers with the following rules:
+    - **Maven:** only offer a wrapper if `pom.xml` references `spring-boot` → `./mvnw spring-boot:run`. `exec:java` is never offered (requires `mainClass` POM config absent in most projects).
+    - **Gradle Spring Boot:** if `build.gradle`/`build.gradle.kts` references `springframework.boot` or `spring-boot` → `./gradlew bootRun`.
+    - **Gradle generic:** `./gradlew run` for non-Spring Boot Gradle projects.
+    - **Maven non-Spring Boot with no JAR:** no wrapper offered — fall through to build instructions.
+  - Add `isSpringBootMaven(projectPath string) bool` — reads `pom.xml` and checks for `spring-boot` substring.
+  - Add `isSpringBootGradle(projectPath string) bool` — reads `build.gradle`/`build.gradle.kts` and checks for `spring-boot` or `springframework.boot` substrings.
 - [ ] 3.2 Add `isExecutableJar(jarPath string) bool` — open the JAR as a ZIP, read `META-INF/MANIFEST.MF`, return true if `Main-Class:` is present.
 - [ ] 3.3 Add `promptEntrypointSelection(entrypoints []JavaEntrypoint) *JavaEntrypoint` — when exactly one entrypoint is found, auto-select it (print the selection, no prompt); when multiple are found, present a numbered menu; return nil if user skips.
 - [ ] 3.4 Tests in `pkg/installer/otel_java_process_test.go`:
   - `TestDetectJavaEntrypoints_MavenFatJar` (temp dir with `target/app.jar` containing `Main-Class` → returns jar candidate)
   - `TestDetectJavaEntrypoints_GradleFatJar` (temp dir with `build/libs/app-all.jar` → returns jar candidate)
-  - `TestDetectJavaEntrypoints_MavenWrapperNoJar` (temp dir with `mvnw`, no jar → returns mvnw candidate)
-  - `TestDetectJavaEntrypoints_GradleWrapperNoJar` (temp dir with `gradlew`, no jar → returns gradlew candidate)
+  - `TestDetectJavaEntrypoints_MavenWrapperSpringBoot` (temp dir with `mvnw` + Spring Boot `pom.xml` → returns `spring-boot:run` candidate)
+  - `TestDetectJavaEntrypoints_MavenWrapperNonSpringBoot` (temp dir with `mvnw` + plain `pom.xml` → returns no entrypoint)
+  - `TestDetectJavaEntrypoints_GradleWrapperSpringBoot` (temp dir with `gradlew` + Spring Boot `build.gradle` → returns `bootRun` candidate)
+  - `TestDetectJavaEntrypoints_GradleWrapperNoJar` (temp dir with `gradlew`, no Spring Boot → returns `run` candidate)
   - `TestDetectJavaEntrypoints_NoEntrypoint` (empty project dir → returns empty slice)
   - `TestIsExecutableJar_WithMainClass` (JAR with `Main-Class` → true)
   - `TestIsExecutableJar_WithoutMainClass` (JAR without `Main-Class` → false)
@@ -104,7 +111,45 @@
 - [ ] 8.1 In `detectAvailableRuntimes()`, set `enabled: true` for Java unconditionally (remove the `allRuntimesEnabled()` gate)
 - [ ] 8.2 Remove the "Coming soon" label from the Java entry in the runtime list (if present in the display output)
 
-## 9. Integration Testing and Verification
+## 10. Multi-Module Project Detection and Instrumentation
+
+**Files:** `pkg/installer/otel_java_process.go` (modify), `pkg/installer/otel_java.go` (modify), `pkg/installer/otel.go` (modify)
+
+- [ ] 10.1 Add `isMavenMultiModule(projectPath string) bool` — parse root `pom.xml` via `encoding/xml` and return true when `<modules>` is non-empty
+- [ ] 10.2 Add `parseMavenModules(projectPath string) ([]string, error)` — extract `<module>` entries from root `pom.xml`; return nil/empty for non-multi-module projects
+- [ ] 10.3 Add `isGradleMultiProject(projectPath string) bool` and `parseGradleSubprojects(projectPath string) ([]string, error)` — regex scan `settings.gradle` / `settings.gradle.kts` for `include` directives; convert colon notation to path separators
+- [ ] 10.4 Add `mavenBuildCommand(projectPath string) string` and `gradleBuildCommand(projectPath string) string` — return the build command based on which wrapper is present, or `""` if none
+- [ ] 10.5 Add `needsBuild(subs []SubModule) bool` — return true when any sub-module is missing a fat JAR in `target/` or `build/libs/`
+- [ ] 10.6 Add `detectMultiModule(projectPath string) *MultiModuleProject` — checks Maven first, then Gradle; returns `nil` for single-module projects
+- [ ] 10.7 Add `SubModulePlan` struct with `Name`, `Path`, `LaunchCommand`, `EnvVars` fields
+- [ ] 10.8 Add `BuildCommand string` and `SubModules []SubModulePlan` fields to `JavaInstrumentationPlan`
+- [ ] 10.9 Add `buildMultiModulePlan(mm *MultiModuleProject, proj ScannedProject, ...) *JavaInstrumentationPlan` — constructs a full plan with per-module env vars and (pre-build) launch commands
+- [ ] 10.10 Add `executeMultiModule()` method — runs build (if `BuildCommand` is set), refreshes launch commands from newly-built JARs, launches each module as a separate `ManagedProcess`, calls `PrintProcessSummary` and `waitForServices` with all alive services
+- [ ] 10.11 Update `DetectJavaPlan()` to call `detectMultiModule()` before single-module entrypoint detection
+- [ ] 10.12 Update `InstallOtelJava()` to call `detectMultiModule()` after project selection; show multi-module plan preview with build command and per-module launch commands
+- [ ] 10.13 Update `createRuntimePlan()` in `otel.go` for the Java case to call `detectMultiModule()` and resolve single-module entrypoints at plan time (not deferred to `Execute()`)
+
+## 11. Entrypoint Resolution Before Preview
+
+**Files:** `pkg/installer/otel.go` (modify), `pkg/installer/otel_java.go` (modify)
+
+- [ ] 11.1 In `createRuntimePlan()` Java case: call `detectJavaEntrypoints()` + `promptEntrypointSelection()` at plan time and store result in `EntrypointCommand` — the preview SHALL always show the resolved command
+- [ ] 11.2 Update `PrintPlanSteps()` to show `(entrypoint will be detected at execution time)` only as a last-resort fallback, not as the default for unresolved entrypoints
+- [ ] 11.3 Remove all uses of `java -javaagent:... -jar your_app.jar` placeholder text from non-instruction contexts
+
+## 12. Unit Tests for Multi-Module Detection
+
+**Files:** `pkg/installer/otel_java_process_test.go` (modify)
+
+- [ ] 12.1 `TestIsMavenMultiModule_MultiModule` — temp dir with multi-module `pom.xml` → true
+- [ ] 12.2 `TestIsMavenMultiModule_SingleModule` — temp dir with single-module `pom.xml` → false
+- [ ] 12.3 `TestParseMavenModules_ReturnsModuleNames` — verify all `<module>` entries are extracted
+- [ ] 12.4 `TestParseGradleSubprojects_ColonNotation` — `include ':api'` → `["api"]`
+- [ ] 12.5 `TestParseGradleSubprojects_NestedPath` — `include ':ui:web'` → `["ui/web"]`
+- [ ] 12.6 `TestDetectMultiModule_Maven` — returns correct `MultiModuleProject` for Maven multi-module project
+- [ ] 12.7 `TestDetectMultiModule_NilForSingleModule` — returns nil for single-module project
+- [ ] 12.8 `TestNeedsBuild_TrueWhenJarsMissing` — returns true when sub-module has no JAR
+- [ ] 12.9 `TestNeedsBuild_FalseWhenJarsPresent` — returns false when all sub-modules have JARs
 
 - [ ] 9.1 Run `make test` — all existing tests must pass
 - [ ] 9.2 Run `make lint` — no new lint issues
