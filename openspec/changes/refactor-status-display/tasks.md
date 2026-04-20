@@ -45,10 +45,10 @@ Add the conditional "Feature Flags" section using `featureflags.List()` and the 
 
 ## 5. Verification
 
-- [ ] 5.1 Run `make test` — all tests pass
-- [ ] 5.2 Run `make lint` — no new lint issues
-- [ ] 5.3 Manual: `dtwiz status` with no credentials set — verify Connection Status section renders correctly with `✗` lines
-- [ ] 5.4 Manual: `dtwiz status` with valid credentials — verify `✓ valid (<url>)` shows correct URL for each token (API URL for Access Token, Apps URL for Platform Token)
-- [ ] 5.5 Manual: `dtwiz status` with `DTWIZ_ALL_RUNTIMES=true` — verify Feature Flags section appears
-- [ ] 5.6 Manual: `dtwiz status` with no flags set — verify no Feature Flags section in output
-- [ ] 5.7 Manual: simulate system analysis failure — verify command exits non-zero and prints `✗ system analysis failed: ...`
+- [x] 5.1 Run `make test` — all tests pass
+- [x] 5.2 Run `make lint` — no new lint issues
+- [x] 5.3 Manual: `dtwiz status` with no credentials set — verify Connection Status section renders correctly with `✗` lines
+- [x] 5.4 Manual: `dtwiz status` with valid credentials — verify `✓ valid (<url>)` shows correct URL for each token (API URL for Access Token, Apps URL for Platform Token)
+- [x] 5.5 Manual: `dtwiz status` with `DTWIZ_ALL_RUNTIMES=true` — verify Feature Flags section appears
+- [x] 5.6 Manual: `dtwiz status` with no flags set — verify no Feature Flags section in output
+- [x] 5.7 Manual: simulate system analysis failure — verify command exits non-zero and prints `✗ system analysis failed: ...`

@@ -28,14 +28,15 @@ The `pkg/display` package SHALL export a fixed set of terminal color variables u
 
 The `pkg/display` package SHALL expose `Header(message string)`, `PrintSectionDivider()`, and `PrintStatusLine(label, message string, c *color.Color)` as helpers for the recurring output patterns used in `dtwiz status` and other commands.
 
-`Header` SHALL print the message indented with two spaces using `ColorHeader`.
-`PrintSectionDivider` SHALL print a 42-character `─` separator indented with two spaces using `ColorMuted`.
+`Header` SHALL print the message indented with two spaces using `ColorHeader`, followed immediately by a section divider — callers SHALL NOT call `PrintSectionDivider()` after `Header()`.
+`PrintSectionDivider` SHALL print a 42-character `─` separator indented with two spaces using `ColorMuted`. It is available for use outside of `Header` where a standalone divider is needed.
 `PrintStatusLine` SHALL print a line of the form `<label>:  <message>` indented by two spaces, where the label is styled with `ColorLabel` and the message is styled with the provided color.
 
-#### Scenario: Header prints indented magenta bold title
+#### Scenario: Header prints indented magenta bold title followed by a divider
 
 - **GIVEN** a caller invokes `display.Header("Connection Status")`
-- **THEN** the output is the text "Connection Status" indented by two spaces, rendered in magenta bold, followed by a newline
+- **THEN** the output is the text "Connection Status" indented by two spaces, rendered in magenta bold, followed by a newline, followed by a 42-character `─` separator indented by two spaces using `ColorMuted`
+- **AND** the caller does not need to call `display.PrintSectionDivider()` separately
 
 #### Scenario: PrintStatusLine formats label and message
 

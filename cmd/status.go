@@ -73,7 +73,7 @@ func printCredentialStatus(label, envURL string, token CredentialToken) {
 	}
 	if envURL != "" {
 		if err := token.tokenVerifyFn(envURL, token.value); err != nil {
-			display.PrintStatusLine(label, fmt.Sprintf("%s", err), display.ColorError)
+			display.PrintStatusLine(label, fmt.Sprintf("✗ %s", err), display.ColorError)
 		} else {
 			display.PrintStatusLine(label, fmt.Sprintf("✓ valid (%s)", token.getUrlFn(envURL)), display.ColorOK)
 		}
@@ -93,7 +93,7 @@ func printFeatureFlags() {
 		fmt.Println()
 		display.Header("Feature Flags")
 		for _, f := range enabledFlags {
-			display.PrintStatusLine(f.EnvVar, fmt.Sprintf("enabled (%s)", f.Source), display.ColorOK)
+			display.PrintFlagLine(f.EnvVar, fmt.Sprintf("✓ enabled (%s)", f.Source), display.ColorOK)
 		}
 	}
 }

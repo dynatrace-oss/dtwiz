@@ -119,6 +119,8 @@ func List() []FlagState
 
 If no flags are enabled, the section is omitted entirely — keeping the default output clean.
 
+Feature flag lines are printed with `display.PrintFlagLine` (not `PrintStatusLine`) to omit the colon separator after the label. The env var name is the label, and the value is `✓ enabled (<source>)`. This keeps the output consistent with the spec example above.
+
 ### 7. Migration in `otel.go`
 
 The `allRuntimesEnabled()` function in `otel.go` is replaced with `featureflags.IsEnabled(featureflags.AllRuntimes)`. The function is removed. `detectAvailableRuntimes()` calls `featureflags.IsEnabled` directly.

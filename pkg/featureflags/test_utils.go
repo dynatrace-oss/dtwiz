@@ -26,3 +26,23 @@ func SetCLIOverrideForTest(t testCleaner, flag Flag, val bool) {
 		}
 	})
 }
+
+// ClearCLIOverrideForTest removes any CLI-scoped override for the given flag,
+// restoring resolution to env var / default order.
+// The removal is automatically restored via t.Cleanup if a previous value existed.
+func ClearCLIOverrideForTest(t testCleaner, flag Flag) {
+	mu.Lock()
+	prev, hadPrev := cliOverrides[flag]
+	delete(cliOverrides, flag)
+	mu.Unlock()
+
+	t.Cleanup(func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if hadPrev {
+			cliOverrides[flag] = prev
+		} else {
+			delete(cliOverrides, flag)
+		}
+	})
+}

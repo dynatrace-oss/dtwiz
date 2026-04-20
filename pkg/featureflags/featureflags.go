@@ -52,6 +52,8 @@ func RegisterFlags(flags *pflag.FlagSet) {
 
 // ApplyCLIOverrides populates the cliOverrides map in case any flags were set at runtime.
 func ApplyCLIOverrides(flags *pflag.FlagSet) {
+	mu.Lock()
+	defer mu.Unlock()
 	for i := range registry {
 		cliFlag := &registry[i]
 		if flags.Changed(cliFlag.name) {

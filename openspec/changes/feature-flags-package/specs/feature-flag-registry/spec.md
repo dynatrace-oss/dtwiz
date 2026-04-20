@@ -52,7 +52,7 @@ The package SHALL expose `IsEnabled(flag) bool` as the single entry point for ch
 
 ### Requirement: `List()` returns all flags with resolved state
 
-The package SHALL expose `List() []FlagState` returning all registered flags with their current resolved value and the source of that value (`"cli"`, `"env"`, `"default"`, or `"test"`).
+The package SHALL expose `List() []FlagState` returning all registered flags with their current resolved value and the source of that value (`"cli"`, `"env"`, or `"default"`).
 
 #### Scenario: Mixed sources
 

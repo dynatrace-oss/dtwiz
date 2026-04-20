@@ -34,6 +34,27 @@ func TestIsEnabled_EnvFalse(t *testing.T) {
 	}
 }
 
+func TestIsEnabled_EnvCaseInsensitive(t *testing.T) {
+	t.Setenv("DTWIZ_ALL_RUNTIMES", "TRUE")
+	if !IsEnabled(AllRuntimes) {
+		t.Error("expected AllRuntimes enabled with env=TRUE (case-insensitive match)")
+	}
+}
+
+func TestIsEnabled_EnvWhitespaceNotTrimmed(t *testing.T) {
+	t.Setenv("DTWIZ_ALL_RUNTIMES", " true")
+	if IsEnabled(AllRuntimes) {
+		t.Error("expected AllRuntimes disabled with env=\" true\" (whitespace is not trimmed)")
+	}
+}
+
+func TestIsEnabled_EnvZeroIsFalsy(t *testing.T) {
+	t.Setenv("DTWIZ_ALL_RUNTIMES", "0")
+	if IsEnabled(AllRuntimes) {
+		t.Error("expected AllRuntimes disabled with env=0 (only \"1\" is truthy, not \"0\")")
+	}
+}
+
 func TestIsEnabled_UnknownFlag(t *testing.T) {
 	unknown := Flag(999)
 	if IsEnabled(unknown) {
@@ -146,17 +167,17 @@ func TestApplyCLIOverrides_ExplicitFlagStored(t *testing.T) {
 }
 
 func TestApplyCLIOverrides_CLIBeatsEnvVar(t *testing.T) {
-	SetCLIOverrideForTest(t, AllRuntimes, false)
+	ClearCLIOverrideForTest(t, AllRuntimes)
 	t.Setenv("DTWIZ_ALL_RUNTIMES", "false")
 
 	fs := newFlagSet()
-	if err := fs.Parse([]string{"--all-runtimes"}); err != nil {
+	if err := fs.Parse([]string{"--all-runtimes=true"}); err != nil {
 		t.Fatal(err)
 	}
 	ApplyCLIOverrides(fs)
 
 	if !IsEnabled(AllRuntimes) {
-		t.Error("expected AllRuntimes enabled: CLI flag should beat env var")
+		t.Error("expected AllRuntimes enabled: CLI true should beat env false")
 	}
 	if _, source := resolveFlag(getFlag(AllRuntimes)); source != "cli" {
 		t.Errorf("expected source cli, got %s", source)
@@ -164,8 +185,8 @@ func TestApplyCLIOverrides_CLIBeatsEnvVar(t *testing.T) {
 }
 
 func TestApplyCLIOverrides_UnsetFlagDoesNotStompEnvVar(t *testing.T) {
-	t.Cleanup(func() { delete(cliOverrides, AllRuntimes) })
-	t.Setenv("DTWIZ_ALL_RUNTIMES", "true")
+	ClearCLIOverrideForTest(t, AllRuntimes)
+	t.Setenv("DTWIZ_ALL_RUNTIMES", "false")
 
 	fs := newFlagSet()
 	if err := fs.Parse([]string{}); err != nil {
@@ -173,7 +194,7 @@ func TestApplyCLIOverrides_UnsetFlagDoesNotStompEnvVar(t *testing.T) {
 	}
 	ApplyCLIOverrides(fs)
 
-	if !IsEnabled(AllRuntimes) {
+	if IsEnabled(AllRuntimes) {
 		t.Error("expected AllRuntimes enabled via env var (CLI flag not passed)")
 	}
 	if _, source := resolveFlag(getFlag(AllRuntimes)); source != "env" {

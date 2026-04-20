@@ -103,7 +103,7 @@ func TestPrintCredentialStatus_TokenSetEnvURLVerifyFails(t *testing.T) {
 		})
 	})
 
-	want := "authentication failed"
+	want := "✗ authentication failed"
 	if !strings.Contains(got, want) {
 		t.Errorf("expected output to contain %q, got %q", want, got)
 	}
@@ -116,7 +116,7 @@ func TestPrintCredentialStatus_LabelAppearsInOutput(t *testing.T) {
 			cliName:       "platform-token",
 			envName:       "DT_PLATFORM_TOKEN",
 			tokenVerifyFn: okVerify,
-			getUrlFn:      installer.APIURL,
+			getUrlFn:      installer.AppsURL,
 		})
 	})
 

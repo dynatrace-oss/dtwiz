@@ -34,7 +34,8 @@ func setTestStdin(t *testing.T, input string) {
 }
 
 func TestDetectAvailableRuntimes_DefaultEnabled(t *testing.T) {
-	featureflags.SetCLIOverrideForTest(t, featureflags.AllRuntimes, false)
+	featureflags.ClearCLIOverrideForTest(t, featureflags.AllRuntimes)
+	t.Setenv("DTWIZ_ALL_RUNTIMES", "")
 
 	runtimes := detectAvailableRuntimes()
 
@@ -65,7 +66,7 @@ func TestDetectAvailableRuntimes_UnlockAll(t *testing.T) {
 }
 
 func TestDetectAvailableRuntimes_UnlockAll_1(t *testing.T) {
-	featureflags.SetCLIOverrideForTest(t, featureflags.AllRuntimes, true)
+	t.Setenv("DTWIZ_ALL_RUNTIMES", "1")
 
 	if !featureflags.IsEnabled(featureflags.AllRuntimes) {
 		t.Error("featureflags.IsEnabled(AllRuntimes) should return true when set via SetCLIOverrideForTest")

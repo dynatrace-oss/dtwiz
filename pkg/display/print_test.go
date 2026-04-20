@@ -9,9 +9,8 @@ import (
 )
 
 // captureOutput redirects color.Output (used by fatih/color Printf/Println)
-// and os.Stdout (used by fmt.Printf in PrintStatusLine) to a buffer for the
-// duration of fn. Colors are disabled, so assertions are not fragile against
-// terminal capability detection.
+// to a buffer for the duration of fn. Colors are disabled,
+// so assertions are not fragile against terminal capability detection.
 func captureOutput(t *testing.T, fn func()) string {
 	t.Helper()
 
@@ -84,5 +83,27 @@ func TestPrintStatusLine_EmptyMessage(t *testing.T) {
 	want := "  Label:  \n"
 	if got != want {
 		t.Errorf("PrintStatusLine() with empty message = %q, want %q", got, want)
+	}
+}
+
+func TestPrintFlagLine_NoColonAfterLabel(t *testing.T) {
+	got := captureOutput(t, func() {
+		PrintFlagLine("DTWIZ_ALL_RUNTIMES", "✓ enabled (env)", ColorOK)
+	})
+	want := "  DTWIZ_ALL_RUNTIMES  ✓ enabled (env)\n"
+	if got != want {
+		t.Errorf("PrintFlagLine() = %q, want %q", got, want)
+	}
+}
+
+func TestPrintFlagLine_DiffersFromPrintStatusLine(t *testing.T) {
+	label, message := "DTWIZ_ALL_RUNTIMES", "✓ enabled (cli)"
+	flagLine := captureOutput(t, func() { PrintFlagLine(label, message, ColorOK) })
+	statusLine := captureOutput(t, func() { PrintStatusLine(label, message, ColorOK) })
+	if flagLine == statusLine {
+		t.Error("PrintFlagLine() and PrintStatusLine() should produce different output (colon vs no colon)")
+	}
+	if strings.Contains(flagLine, label+":") {
+		t.Errorf("PrintFlagLine() must not include a colon after the label, got %q", flagLine)
 	}
 }

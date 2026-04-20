@@ -42,12 +42,12 @@ Replace `allRuntimesEnabled()` with `featureflags.IsEnabled(featureflags.AllRunt
 
 End-to-end verification of all flows.
 
-- [ ] 5.1 Run `make test` — all existing and new tests pass
-- [ ] 5.2 Run `make lint` — no new lint issues
-- [ ] 5.3 Manual: unset all feature flag env vars → `dtwiz install otel` shows only Python projects
-- [ ] 5.4 Manual: `export DTWIZ_ALL_RUNTIMES=true` → `dtwiz install otel` shows all runtimes
-- [ ] 5.5 Manual: `export DTWIZ_ALL_RUNTIMES=1` → same result as 5.4
-- [ ] 5.6 Manual: `dtwiz install otel --all-runtimes` → shows all runtimes (CLI flag works)
+- [x] 5.1 Run `make test` — all existing and new tests pass
+- [x] 5.2 Run `make lint` — no new lint issues
+- [x] 5.3 Manual: unset all feature flag env vars → `dtwiz install otel` shows only Python projects
+- [x] 5.4 Manual: `export DTWIZ_ALL_RUNTIMES=true` → `dtwiz install otel` shows all runtimes
+- [x] 5.5 Manual: `export DTWIZ_ALL_RUNTIMES=1` → same result as 5.4
+- [x] 5.6 Manual: `dtwiz install otel --all-runtimes` → shows all runtimes (CLI flag works)
 
 ## 6. Evaluate gating other analyzers/recommendations
 
