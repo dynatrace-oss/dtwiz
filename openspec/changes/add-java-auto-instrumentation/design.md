@@ -7,6 +7,7 @@
 Java auto-instrumentation works by attaching a single agent JAR at JVM startup via the `-javaagent` flag. Applications are typically long-running JVM processes started via `java -jar`, classpath-based commands, or build tool wrappers (Maven/Gradle). Because the flag can only be set at startup, instrumenting a running process requires a stop-and-restart cycle. Dependency isolation is handled by the build system, not the installer — there are no virtualenvs to manage.
 
 Existing infrastructure to reuse:
+
 - `detectProcesses("java", nil)` in `otel_runtime_scan_unix.go` already detects Java processes.
 - `ManagedProcess`, `StartManagedProcess`, `PrintProcessSummary` in `otel_process.go` handle process lifecycle.
 - `waitForServices()` in `otel_env.go` polls DQL for service entities.
@@ -39,6 +40,7 @@ Existing infrastructure to reuse:
 ### 1. Agent JAR download to `~/opentelemetry/java/opentelemetry-javaagent.jar`
 
 The agent JAR is downloaded from the official GitHub releases URL (`https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar`) to `~/opentelemetry/java/opentelemetry-javaagent.jar`. This location is:
+
 - Outside any project directory (the JAR is reusable across projects).
 - Under the user's home directory (no root/sudo required).
 - Consistent with a potential future convention for other runtime agents.
@@ -53,13 +55,14 @@ If the file already exists, it is re-downloaded (the "latest" release URL may po
 
 `java -version` outputs to **stderr** (not stdout) and the format varies by vendor:
 
-```
+```text
 openjdk version "1.8.0_382"        → Java 8
 java version "17.0.1" 2021-10-19   → Java 17
 openjdk version "21" 2023-09-19    → Java 21
 ```
 
 The parser extracts the quoted version string from any line matching the pattern `version "X.Y.Z…"`. The major version is determined by:
+
 - If the version starts with `1.`, the major version is the second component (e.g., `1.8.0` → 8).
 - Otherwise, the first component is the major version (e.g., `17.0.1` → 17, `21` → 21).
 
@@ -91,6 +94,7 @@ The `ps` command line for a Java process reveals how it was launched. We parse i
 For each pattern, the `-javaagent:/path/to/opentelemetry-javaagent.jar` flag is inserted immediately after `java` (and any existing JVM flags like `-Xmx`).
 
 Complex launch patterns that cannot be reliably reconstructed:
+
 - Wrapper scripts (e.g., `catalina.sh`, `startup.sh`) — the `ps` output shows the script, not the final `java` command.
 - Processes where `java` doesn't appear in the command (e.g., custom native launchers).
 
@@ -113,6 +117,7 @@ The user sees this in the plan preview and must confirm before execution. This i
 ### 6. Reuse `ManagedProcess` and `waitForServices` from existing infrastructure
 
 After launching the instrumented process:
+
 - `StartManagedProcess()` handles the lifecycle (PID tracking, log file, exit detection).
 - `PrintProcessSummary()` shows status after the settle period (crashed / running / port detected).
 - `waitForServices()` polls DQL to verify the service appears in Dynatrace.
