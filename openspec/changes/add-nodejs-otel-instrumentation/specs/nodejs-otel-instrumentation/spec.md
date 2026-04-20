@@ -65,11 +65,11 @@ The system SHALL generate OTEL\_\* environment variables for Node.js including t
 
 For Next.js and Nuxt projects, the system SHALL generate framework-specific bootstrap scripts in `.otel/`. These scripts set `process.env.OTEL_*` variables and require the auto-instrumentation register module before delegating to the framework.
 
-#### Scenario: next-register.js generated for Next.js
+#### Scenario: next-otel-bootstrap.js generated for Next.js
 
 - **GIVEN** a project is identified as Next.js
 - **WHEN** the `.otel/` directory is created
-- **THEN** `.otel/next-register.js` is written (CommonJS)
+- **THEN** `.otel/next-otel-bootstrap.js` is written (CommonJS)
 - **AND** it sets `process.env` variables for all OTEL\_\* config
 - **AND** it requires `@opentelemetry/auto-instrumentations-node/register`
 - **AND** it delegates to `next/dist/bin/next` (Next.js CLI)
@@ -141,13 +141,13 @@ For non-Next.js projects, the system SHALL launch the app using `node --require 
 
 ### Requirement: Next.js app launch
 
-For Next.js projects, the system SHALL launch the app using `node .otel/next-register.js start` with CWD set to the project root.
+For Next.js projects, the system SHALL launch the app using `node .otel/next-otel-bootstrap.js start` with CWD set to the project root.
 
 #### Scenario: Next.js app launched via wrapper
 
-- **GIVEN** a Next.js project and `.otel/next-register.js` has been written
+- **GIVEN** a Next.js project and `.otel/next-otel-bootstrap.js` has been written
 - **WHEN** `Execute()` launches the process
-- **THEN** the command is `node .otel/next-register.js start`
+- **THEN** the command is `node .otel/next-otel-bootstrap.js start`
 - **AND** CWD is set to the project root (not `.otel/`)
 - **AND** OTEL\_\* env vars are set on the process
 - **AND** the process is tracked with log file capture

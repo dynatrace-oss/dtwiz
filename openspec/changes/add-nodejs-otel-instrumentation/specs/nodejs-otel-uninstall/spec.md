@@ -60,7 +60,7 @@ The system SHALL scan CWD and parent directories for `.otel/` directories that c
 
 ### Requirement: Detect instrumented Node.js processes
 
-The system SHALL detect running `node` processes whose command line includes `@opentelemetry/auto-instrumentations-node/register`, `.otel/next-register.js`, or `.otel/nuxt-otel-bootstrap.mjs`.
+The system SHALL detect running `node` processes whose command line includes `@opentelemetry/auto-instrumentations-node/register`, `.otel/next-otel-bootstrap.js`, or `.otel/nuxt-otel-bootstrap.mjs`.
 
 #### Scenario: Instrumented node process found
 
@@ -70,7 +70,7 @@ The system SHALL detect running `node` processes whose command line includes `@o
 
 #### Scenario: Next.js framework wrapper process found
 
-- **GIVEN** a `node` process is running with `otel/next-register.js` in its command
+- **GIVEN** a `node` process is running with `otel/next-otel-bootstrap.js` in its command
 - **WHEN** `findInstrumentedNodeProcesses()` scans
 - **THEN** the process PID is included in the results
 
