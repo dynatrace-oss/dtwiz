@@ -2,21 +2,23 @@
 
 ## ADDED Requirements
 
-### Requirement: Running Java process discovery
+### Requirement: Running Java process discovery as enrichment
 
-The installer SHALL detect running Java processes and present them in an interactive selection menu.
+The installer SHALL detect running Java processes and use them to enrich the project selection menu and to stop any running instance before relaunch. A running process is NOT required to proceed with instrumentation.
 
-#### Scenario: Java processes detected via ps
+#### Scenario: Java processes matched to projects
 
 - **GIVEN** one or more Java processes are running on the system
-- **WHEN** the installer scans for running processes using `ps ax`
-- **THEN** all processes whose command line contains `java` SHALL be listed with their PID and command
+- **WHEN** the installer scans for running processes using `ps ax` and matches them to detected projects
+- **THEN** each matched project in the selection menu SHALL display the associated PID(s) (e.g., `← PIDs: 1234`)
+- **AND** the plan preview SHALL explicitly list the process(es) that will be stopped, including PID and description
+- **AND** matched processes SHALL only be stopped after the user has confirmed the plan
 
 #### Scenario: JPS enrichment available
 
 - **GIVEN** `jps` is available in PATH (JDK installed)
 - **WHEN** the installer detects Java processes
-- **THEN** process entries SHALL be enriched with the main class or JAR name from `jps` output for improved readability in the selection menu
+- **THEN** process entries SHALL be enriched with the main class or JAR name from `jps` output for improved readability in stop-step output
 - **AND** processes detected by `ps` but not present in `jps` output SHALL still be included
 
 #### Scenario: JPS not available
@@ -27,53 +29,9 @@ The installer SHALL detect running Java processes and present them in an interac
 #### Scenario: No Java processes running
 
 - **WHEN** no running Java processes are detected
-- **THEN** the installer SHALL inform the user: "No running Java processes detected"
-- **AND** SHALL print manual instrumentation instructions (env vars + `-javaagent` flag)
-
-#### Scenario: Process selection
-
-- **GIVEN** multiple Java processes are detected
-- **WHEN** the user is presented with the selection menu
-- **THEN** each entry SHALL show the PID and a readable description (main class, JAR name, or truncated command)
-- **AND** the user SHALL be able to select one process by number or skip
-
-### Requirement: Command reconstruction from ps output
-
-The installer SHALL reconstruct a restartable Java command from the selected process's `ps` output, inserting the `-javaagent` flag and OTEL environment variables.
-
-#### Scenario: java -jar pattern
-
-- **GIVEN** a process command is `java -Xmx512m -jar /path/to/app.jar --port 8080`
-- **WHEN** the command is reconstructed
-- **THEN** the result SHALL be `java -Xmx512m -javaagent:/path/to/opentelemetry-javaagent.jar -jar /path/to/app.jar --port 8080`
-- **AND** existing JVM flags SHALL be preserved in their original position
-
-#### Scenario: Classpath-based pattern
-
-- **GIVEN** a process command is `java -cp lib/*:. com.example.Main`
-- **WHEN** the command is reconstructed
-- **THEN** the `-javaagent` flag SHALL be inserted before `-cp`
-- **AND** the classpath and main class SHALL be preserved
-
-#### Scenario: Module-based pattern
-
-- **GIVEN** a process command is `java -m com.example/com.example.Main`
-- **WHEN** the command is reconstructed
-- **THEN** the `-javaagent` flag SHALL be inserted before `-m`
-
-#### Scenario: Already instrumented process
-
-- **GIVEN** a process command already contains `-javaagent:` pointing to `opentelemetry-javaagent.jar`
-- **WHEN** the command is reconstructed
-- **THEN** the existing `-javaagent` flag SHALL be replaced with the new path rather than adding a duplicate
-
-#### Scenario: Unrecognized launch pattern
-
-- **GIVEN** a process command does not match any known Java launch pattern (e.g., it was started via a wrapper script like `catalina.sh` or a systemd service)
-- **WHEN** command reconstruction is attempted
-- **THEN** the installer SHALL print a warning: "Cannot reconstruct launch command for this process"
-- **AND** SHALL print manual `-javaagent` instructions for the user to apply themselves
-- **AND** SHALL NOT attempt an automatic restart
+- **THEN** the project selection menu SHALL still be shown (with no PID annotations)
+- **AND** the installer SHALL proceed normally using the project-based entrypoint detection path
+- **AND** the installer SHALL NOT print "No running Java processes detected" as an error or terminal condition
 
 ### Requirement: Windows process detection
 
@@ -84,4 +42,4 @@ On Windows, the installer SHALL detect Java processes using OS-appropriate mecha
 - **GIVEN** the installer is running on Windows
 - **WHEN** Java processes are scanned
 - **THEN** the existing `detectProcesses` Windows implementation SHALL be used to find processes with `java` in the command line
-- **AND** the selection menu and command reconstruction SHALL work the same as on Unix/macOS
+- **AND** the PID annotation in the project menu SHALL work the same as on Unix/macOS

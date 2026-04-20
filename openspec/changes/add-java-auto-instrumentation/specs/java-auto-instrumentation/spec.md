@@ -23,16 +23,54 @@ The installer SHALL automatically download the OpenTelemetry Java agent JAR from
 - **WHEN** the download fails (network error, non-200 HTTP status)
 - **THEN** the installer SHALL exit with a clear error message including the URL and the HTTP status or error
 
+### Requirement: Java entrypoint detection
+
+The installer SHALL detect runnable entrypoints for the selected Java project without requiring the application to already be running.
+
+#### Scenario: Fat JAR found in Maven target directory
+
+- **GIVEN** the selected project has a `pom.xml`
+- **WHEN** the installer scans for entrypoints
+- **THEN** it SHALL look for `*.jar` files in `target/` that contain a `Main-Class` entry in their `MANIFEST.MF`
+- **AND** SHALL offer the discovered JAR(s) as launch candidates
+
+#### Scenario: Fat JAR found in Gradle build directory
+
+- **GIVEN** the selected project has a `build.gradle` or `build.gradle.kts`
+- **WHEN** the installer scans for entrypoints
+- **THEN** it SHALL look for `*.jar` files in `build/libs/` that contain a `Main-Class` entry in their `MANIFEST.MF`
+- **AND** SHALL offer the discovered JAR(s) as launch candidates
+
+#### Scenario: Build-tool wrapper available
+
+- **GIVEN** the project has a `mvnw` or `gradlew` wrapper but no built JAR artifact
+- **WHEN** the installer scans for entrypoints
+- **THEN** it SHALL offer a build-tool run command as a candidate (e.g., `./mvnw exec:java` or `./gradlew run`)
+
+#### Scenario: Multiple entrypoint candidates
+
+- **GIVEN** multiple runnable JARs or wrappers are found in the project
+- **WHEN** the entrypoint selection step runs
+- **THEN** the installer SHALL present a numbered menu for the user to select one
+- **AND** SHALL allow the user to skip (which falls back to manual instructions)
+
+#### Scenario: No entrypoint found
+
+- **WHEN** no built JAR with a `Main-Class` and no build-tool wrapper is found in the project
+- **THEN** the installer SHALL inform the user that no runnable entrypoint was detected
+- **AND** SHALL print build instructions (e.g., `mvn package` or `./gradlew build`) along with manual `-javaagent` instructions
+- **AND** SHALL NOT attempt to start any process
+
 ### Requirement: Instrumented process launch
 
-The installer SHALL stop the selected Java process and restart it with the `-javaagent` flag and OTEL_* environment variables configured for Dynatrace.
+The installer SHALL stop any running instance of the selected project and start the application fresh with the `-javaagent` flag and OTEL_* environment variables configured for Dynatrace.
 
-#### Scenario: Successful instrumented launch
+#### Scenario: Successful instrumented launch from project artifact
 
-- **GIVEN** the user has selected a running Java process and confirmed the plan
+- **GIVEN** the user has selected a project and a launch entrypoint and confirmed the plan
 - **WHEN** the installer executes the plan
-- **THEN** the existing process SHALL be stopped (SIGINT, then SIGKILL after timeout)
-- **AND** a new process SHALL be started with the reconstructed command including `-javaagent:~/opentelemetry/java/opentelemetry-javaagent.jar`
+- **THEN** any running processes matched to the project SHALL be stopped first (SIGINT, then SIGKILL after timeout)
+- **AND** a new process SHALL be started using the resolved entrypoint command with `-javaagent:~/opentelemetry/java/opentelemetry-javaagent.jar` prepended to the JVM flags
 - **AND** the process SHALL inherit OTEL_* environment variables: `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_EXPORTER_OTLP_PROTOCOL`, `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE`, `OTEL_TRACES_EXPORTER`, `OTEL_METRICS_EXPORTER`, `OTEL_LOGS_EXPORTER`
 
 #### Scenario: Process crash after instrumented launch
@@ -47,7 +85,25 @@ The installer SHALL stop the selected Java process and restart it with the `-jav
 - **GIVEN** the instrumented process is launched
 - **WHEN** the process is still running after the settle period and has bound a TCP port
 - **THEN** the summary line SHALL show the listening URL
-- **AND** the installer SHALL proceed to Dynatrace verification
+- **AND** the installer SHALL proceed to OTel Collector update and Dynatrace verification
+
+### Requirement: OTel Collector config update
+
+After launching the instrumented Java process, the installer SHALL update the local OTel Collector configuration if one exists.
+
+#### Scenario: OTel Collector config found
+
+- **GIVEN** an OTel Collector configuration file exists on the machine (as detected by the same logic as `dtwiz update otel`)
+- **WHEN** the instrumented Java process has been started successfully
+- **THEN** the installer SHALL update the collector config to ensure the Java service's OTLP pipeline is covered
+- **AND** SHALL restart the collector to apply the new config
+
+#### Scenario: No OTel Collector config found
+
+- **GIVEN** no OTel Collector configuration is found
+- **WHEN** the installer reaches the collector update step
+- **THEN** the step SHALL be skipped silently
+- **AND** the Java agent SHALL export directly to Dynatrace via OTLP without a local collector
 
 ### Requirement: Dynatrace verification via DQL
 
@@ -83,16 +139,31 @@ After launching the instrumented process, the installer SHALL verify the service
 
 The installer SHALL show a compact preview of all actions before execution and require user confirmation.
 
-#### Scenario: Plan preview contents
+#### Scenario: Plan preview contents — no running process
 
-- **GIVEN** a Java process has been selected for instrumentation
+- **GIVEN** a Java project and entrypoint have been selected and no running process is matched to the project
 - **WHEN** the plan preview is displayed
-- **THEN** it SHALL show: the project path, the process PID and command, the agent JAR download URL, the `-javaagent` flag that will be added, and the OTEL_* environment variables
+- **THEN** it SHALL show: the project path, the resolved launch command (with `-javaagent` inserted), the agent JAR download URL, and the OTEL_* environment variables
 
-#### Scenario: User confirms
+#### Scenario: Plan preview contents — running process will be stopped
 
-- **WHEN** the user confirms the plan (Enter or "y")
+- **GIVEN** a Java project and entrypoint have been selected and one or more running processes are matched to the project
+- **WHEN** the plan preview is displayed
+- **THEN** it SHALL explicitly list the PID(s) and process description(s) that will be stopped
+- **AND** the preview SHALL make clear that stopping the process will cause a brief interruption
+- **SO THAT** the user is not surprised when their running application goes down
+
+#### Scenario: User confirms — no running process
+
+- **WHEN** no running process is matched to the selected project
+- **AND** the user confirms the plan (Enter or "y")
 - **THEN** execution SHALL proceed
+
+#### Scenario: User confirms — running process will be stopped
+
+- **WHEN** one or more running processes are matched to the selected project
+- **THEN** the confirmation prompt SHALL name the process(es) being stopped, e.g. `Stop PID 1234 (myapp) and proceed with installation?`
+- **AND** execution SHALL only proceed after the user confirms
 
 #### Scenario: User cancels
 
@@ -137,7 +208,7 @@ Each instrumented Java process SHALL have its stdout/stderr redirected to a log 
 - **WHEN** the summary line is displayed
 - **THEN** it SHALL include `[log: <filename>]` so the user knows where to find output
 
-### Requirement: Waiting for traffic terminates on log detection
+### Requirement: Waiting for traffic terminates on detection
 
 The "Waiting for traffic" prompt SHALL terminate when traces/logs land in Dynatrace, not only on timeout.
 
