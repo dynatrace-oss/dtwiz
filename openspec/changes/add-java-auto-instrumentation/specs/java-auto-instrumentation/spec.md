@@ -47,6 +47,13 @@ The installer SHALL detect runnable entrypoints for the selected Java project wi
 - **WHEN** the installer scans for entrypoints
 - **THEN** it SHALL offer a build-tool run command as a candidate (e.g., `./mvnw exec:java` or `./gradlew run`)
 
+#### Scenario: Single entrypoint candidate
+
+- **GIVEN** exactly one runnable JAR or wrapper is found in the project
+- **WHEN** the entrypoint selection step runs
+- **THEN** the installer SHALL auto-select the single entrypoint without prompting the user
+- **AND** SHALL print the selected entrypoint's description and command for transparency
+
 #### Scenario: Multiple entrypoint candidates
 
 - **GIVEN** multiple runnable JARs or wrappers are found in the project
@@ -93,16 +100,16 @@ After launching the instrumented Java process, the installer SHALL update the lo
 
 #### Scenario: OTel Collector config found
 
-- **GIVEN** an OTel Collector configuration file exists on the machine (as detected by the same logic as `dtwiz update otel`)
+- **GIVEN** the dtwiz well-known collector config path (`<cwd>/opentelemetry/config.yaml`) exists on the machine
 - **WHEN** the instrumented Java process has been started successfully
-- **THEN** the installer SHALL update the collector config to ensure the Java service's OTLP pipeline is covered
-- **AND** SHALL restart the collector to apply the new config
+- **THEN** the installer SHALL patch the collector config silently using `PatchConfigFile` — no interactive prompt, no restart
+- **AND** SHALL print a single summary line indicating the config was updated
 
 #### Scenario: No OTel Collector config found
 
-- **GIVEN** no OTel Collector configuration is found
+- **GIVEN** the dtwiz well-known collector config path does not exist
 - **WHEN** the installer reaches the collector update step
-- **THEN** the step SHALL be skipped silently
+- **THEN** the step SHALL be skipped silently with no output
 - **AND** the Java agent SHALL export directly to Dynatrace via OTLP without a local collector
 
 ### Requirement: Dynatrace verification via DQL

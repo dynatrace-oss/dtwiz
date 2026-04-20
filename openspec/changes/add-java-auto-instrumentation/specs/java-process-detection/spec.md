@@ -18,7 +18,8 @@ The installer SHALL detect running Java processes and use them to enrich the pro
 
 - **GIVEN** `jps` is available in PATH (JDK installed)
 - **WHEN** the installer detects Java processes
-- **THEN** process entries SHALL be enriched with the main class or JAR name from `jps` output for improved readability in stop-step output
+- **THEN** process entries SHALL be enriched with the main class or JAR name from `jps` output, stored in the `Description` field of `DetectedProcess`
+- **AND** the stop-step summary SHALL display `Description` when non-empty, falling back to `Command`
 - **AND** processes detected by `ps` but not present in `jps` output SHALL still be included
 
 #### Scenario: JPS not available

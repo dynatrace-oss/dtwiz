@@ -76,7 +76,7 @@ The installer inspects the project directory for runnable artifacts in priority 
 
 For fat JARs, the installer checks the `MANIFEST.MF` for a `Main-Class` attribute to confirm the JAR is executable. JARs without `Main-Class` are skipped.
 
-If multiple candidates are found, the user is presented with a numbered menu to select one. If no entrypoint can be resolved, the installer prints manual build instructions and exits.
+If exactly one candidate is found, it is auto-selected without prompting — the installer prints the selected entrypoint and proceeds. If multiple candidates are found, the user is presented with a numbered menu to select one. If no entrypoint can be resolved, the installer prints manual build instructions and exits.
 
 **Alternative considered:** Use the running process's `ps ax` command line as a fallback entrypoint source. Rejected — `ps` output does not include the working directory, args are truncated on most systems beyond 4096 bytes, and environment variables are not captured. The reconstructed command would silently fail or misbehave for any non-trivial app.
 
@@ -94,7 +94,21 @@ If the file already exists, it is re-downloaded (the "latest" release URL may po
 
 **Alternative considered:** Download to the project directory. Rejected because the same JAR is used across all Java projects and downloading per-project wastes disk and complicates cleanup.
 
-### 4. Java version parsing from `java -version` stderr
+### 4. `DetectedProcess.Description` field for JPS enrichment
+
+`enrichProcessesWithJPS` needs to attach a human-readable name (main class or JAR name from `jps`) to each detected Java process without losing the original `ps` command line. A new `Description string` field is added to the shared `DetectedProcess` struct in `otel_runtime_scan.go`. Display code in the Java installer uses `Description` when non-empty, falling back to `Command`. This field is ignored by all existing non-Java callers (Python, Node.js, Go).
+
+**Alternative considered:** Return a separate `map[int]string` from `enrichProcessesWithJPS`. Rejected because it requires callers to carry two parallel data structures; embedding in the struct is cleaner and consistent with how `WorkingDirectory` is already attached.
+
+**Alternative considered:** Mutate the `Command` field in-place with the JPS description. Rejected because it destroys the original `ps` output, which is useful for process matching (`matchProcessesToProjects` compares against `Command`).
+
+### 5. Silent OTel Collector config probe after Java launch
+
+After the instrumented Java process starts, the installer calls `updateOtelCollectorIfPresent(envURL, token, dryRun bool)` — a new helper that probes the well-known dtwiz collector config path (`<cwd>/opentelemetry/config.yaml`, matching the path used by `dtwiz install otel`) and patches it silently with `PatchConfigFile` if it exists. If the file does not exist, the step is skipped with no output. No interactive prompt, no error.
+
+**Alternative considered:** Call the existing `UpdateOtelConfig(configPath, ...)` with a discovered path. Rejected because `UpdateOtelConfig` is interactive (shows a diff, asks for confirmation, restarts the collector) — too disruptive as an automatic post-launch step.
+
+### 6. Java version parsing from `java -version` stderr
 
 `java -version` outputs to **stderr** (not stdout) and the format varies by vendor:
 
@@ -113,22 +127,20 @@ This handles all common JDK distributions (Oracle, OpenJDK, Adoptium, Amazon Cor
 
 **Alternative considered:** Using `java --version` (double dash). Rejected because `--version` was introduced in Java 9 and fails on Java 8, which we need to support.
 
-### 5. Process detection: enrichment and stop signal
+### 7. Process detection: enrichment and stop signal
 
 Running process detection via `detectProcesses("java", nil)` serves two purposes:
 
 1. **Enrichment:** Projects with a matched running PID show `← PIDs: 1234` in the selection menu, giving the user a visual cue that the project is live.
 2. **Stop before launch:** When executing the plan, any PIDs matched to the selected project are stopped (SIGINT → SIGKILL fallback) before the instrumented process is started.
 
-When `jps` (JDK tool) is available in PATH, it provides richer process descriptions (main class / JAR name) for the stop-step summary line. `jps` is supplemental, never required.
+When `jps` (JDK tool) is available in PATH, it provides richer process descriptions (main class / JAR name) stored in the new `DetectedProcess.Description` field (see Decision 4). `jps` is supplemental, never required.
 
-### 6. OTel Collector config update
+### 8. OTel Collector config update
 
-After the instrumented Java process is started, the installer checks whether an OTel Collector is already configured (same detection as `dtwiz update otel`). If found, it updates the config to ensure the Java service's OTLP pipeline is covered.
+After the instrumented Java process is started, the installer calls `updateOtelCollectorIfPresent(envURL, token, dryRun)`. This helper probes the well-known dtwiz collector config path (`<cwd>/opentelemetry/config.yaml`) and patches it silently with `PatchConfigFile` if found. If not found, the step is skipped with no output (see Decision 5).
 
-If no collector config is found, this step is skipped silently (the Java agent exports directly to Dynatrace via OTLP — no local collector is strictly required).
-
-### 7. Stop-and-restart flow
+### 9. Stop-and-restart flow
 
 The instrumented launch requires JVM flags (`-javaagent`) that can only be set at JVM startup. Therefore:
 
@@ -138,7 +150,7 @@ The instrumented launch requires JVM flags (`-javaagent`) that can only be set a
 
 When a running process is matched, the plan preview explicitly lists the PID(s) and process description(s) that will be stopped, and the `confirmProceed()` prompt names the process(es) being stopped — e.g. `Stop PID 1234 (myapp) and proceed with installation?`. When no process is matched, the prompt is the standard `Proceed with installation?`. The user must confirm before any process is stopped.
 
-### 8. Reuse `ManagedProcess` and `waitForServices` from existing infrastructure
+### 10. Reuse `ManagedProcess` and `waitForServices` from existing infrastructure
 
 After launching the instrumented process:
 
@@ -146,20 +158,21 @@ After launching the instrumented process:
 - `PrintProcessSummary()` shows status after the settle period (crashed / running / port detected).
 - `waitForServices()` polls DQL to verify the service appears in Dynatrace.
 
-### 9. Pass `platformToken` to `InstallOtelJava` for DQL verification
+### 11. Pass `platformToken` to `InstallOtelJava` for DQL verification
 
 The function signature becomes `InstallOtelJava(envURL, token, platformToken, serviceName string, dryRun bool) error`. The `platformToken` is needed by `waitForServices()` to authenticate against the DQL endpoint. The Cobra command in `cmd/install.go` already resolves `platformTok` via `getDtEnvironment()` — it just needs to be passed through.
 
-### 10. Enable Java by default in `dtwiz install otel`
+### 12. Enable Java by default in `dtwiz install otel`
 
 In `pkg/installer/otel.go`, `detectAvailableRuntimes()` currently gates Java behind `allRuntimesEnabled()`. Once all other tasks are implemented and verified, the `enabled` field for Java is set to `true` unconditionally — removing the gate is the **last code change** before integration testing.
 
-### 11. File layout
+### 13. File layout
 
 | File | Responsibility |
 |---|---|
-| `otel_java.go` | `InstallOtelJava`, `DetectJavaPlan`, `JavaInstrumentationPlan`, plan/execute flow, JAR download, env var generation |
+| `otel_java.go` | `InstallOtelJava`, `DetectJavaPlan`, `JavaInstrumentationPlan`, plan/execute flow, JAR download, env var generation, `updateOtelCollectorIfPresent` |
 | `otel_java_process.go` (new) | `parseJavaVersion`, `validateJavaPrerequisites`, Java entrypoint detection (`detectJavaEntrypoints`, `isExecutableJar`), process detection/enrichment via `jps` |
+| `otel_runtime_scan.go` | `DetectedProcess` struct — add `Description string` field for JPS enrichment |
 | `otel_java_test.go` | Tests for project detection, plan detection (existing + new) |
 | `otel_java_process_test.go` (new) | Tests for version parsing, entrypoint detection, process detection |
 

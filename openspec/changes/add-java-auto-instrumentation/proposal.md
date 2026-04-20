@@ -8,7 +8,7 @@
 
 - Implement a fully automated `InstallOtelJava()` flow: detect Java projects on disk, resolve launch entrypoints, download the OpenTelemetry Java agent JAR from GitHub releases, stop any matching running processes, and start the application fresh with `-javaagent` and `OTEL_*` environment variables configured for Dynatrace.
 - **Project-first, not process-first.** The installer scans for Java projects (by presence of `pom.xml`, `build.gradle`, etc.), matches any already-running processes to those projects, and prompts the user to select a project. It then resolves the launch command from the project — it does not require the app to already be running.
-- **Java entrypoint detection.** Inspect the selected project to find a runnable artifact: the fat JAR produced by Maven/Gradle (`target/*.jar`, `build/libs/*.jar`), a `mvnw`/`gradlew` wrapper, or a build-tool `run` goal. Present the candidates to the user if more than one is found.
+- **Java entrypoint detection.** Inspect the selected project to find a runnable artifact: the fat JAR produced by Maven/Gradle (`target/*.jar`, `build/libs/*.jar`), a `mvnw`/`gradlew` wrapper, or a build-tool `run` goal. When exactly one entrypoint is found, auto-select it without prompting. Present candidates to the user only if more than one is found.
 - **OTel Collector config update.** After instrumenting the Java process, update the existing OTel Collector config (if one is present) to include a Java-specific pipeline or confirm the OTLP receiver is already covering it — mirroring the `dtwiz update otel` behavior.
 - Add pre-flight validation: Java in PATH, version >= 8.
 - Add Java version parsing that handles all common `java -version` output formats (openjdk version "1.8.0_…", java version "17.0.1", etc.).

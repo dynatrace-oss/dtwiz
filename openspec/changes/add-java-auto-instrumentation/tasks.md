@@ -34,7 +34,7 @@
   - If a `mvnw` or `mvn` wrapper is found but no fat JAR, add a `./mvnw exec:java` candidate.
   - If a `gradlew` or `gradle` wrapper is found but no fat JAR, add a `./gradlew run` candidate.
 - [ ] 3.2 Add `isExecutableJar(jarPath string) bool` — open the JAR as a ZIP, read `META-INF/MANIFEST.MF`, return true if `Main-Class:` is present.
-- [ ] 3.3 Add `promptEntrypointSelection(entrypoints []JavaEntrypoint) *JavaEntrypoint` — present a numbered menu; return nil if user skips.
+- [ ] 3.3 Add `promptEntrypointSelection(entrypoints []JavaEntrypoint) *JavaEntrypoint` — when exactly one entrypoint is found, auto-select it (print the selection, no prompt); when multiple are found, present a numbered menu; return nil if user skips.
 - [ ] 3.4 Tests in `pkg/installer/otel_java_process_test.go`:
   - `TestDetectJavaEntrypoints_MavenFatJar` (temp dir with `target/app.jar` containing `Main-Class` → returns jar candidate)
   - `TestDetectJavaEntrypoints_GradleFatJar` (temp dir with `build/libs/app-all.jar` → returns jar candidate)
@@ -46,9 +46,10 @@
 
 ## 4. Java Process Detection
 
-**Files:** `pkg/installer/otel_java_process.go` (modify), `pkg/installer/otel_java_process_test.go` (modify)
+**Files:** `pkg/installer/otel_runtime_scan.go` (modify), `pkg/installer/otel_java_process.go` (modify), `pkg/installer/otel_java_process_test.go` (modify)
 
-- [ ] 4.1 Add `enrichProcessesWithJPS(processes []DetectedProcess) []DetectedProcess` — if `jps` is in PATH, run `jps -l`, match output to `ps`-based processes by PID, and add main class name to the process description.
+- [ ] 4.0 Add `Description string` field to `DetectedProcess` struct in `otel_runtime_scan.go`
+- [ ] 4.1 Add `enrichProcessesWithJPS(processes []DetectedProcess) []DetectedProcess` — if `jps` is in PATH, run `jps -l`, match output to `ps`-based processes by PID, and populate `DetectedProcess.Description` with the main class or JAR name from `jps`
 
 ## 5. Full InstallOtelJava Automated Flow
 
@@ -61,7 +62,7 @@
   1. Detect Java projects via `detectJavaProjects()` and processes via `detectJavaProcesses()`; match processes to projects.
   2. Present project selection menu (with PID annotations where applicable).
   3. Detect entrypoints for the selected project via `detectJavaEntrypoints()`.
-  4. If entrypoints found: present entrypoint selection menu.
+  4. If exactly one entrypoint found: auto-select it (no prompt). If multiple entrypoints found: present entrypoint selection menu.
   5. If no entrypoints found: print build instructions + manual `-javaagent` steps and exit.
   6. Show plan preview (project path, launch command with `-javaagent`, JAR URL, OTEL vars, PIDs to stop).
   7. Confirm with user via `confirmProceed()` — if matched processes exist, prompt text SHALL name them: `Stop PID 1234 (myapp) and proceed with installation?`; otherwise use `Proceed with installation?`
@@ -69,9 +70,9 @@
   9. Stop any running processes matched to the project.
   10. Launch instrumented process via `StartManagedProcess`.
   11. Print process summary via `PrintProcessSummary`.
-  12. Update OTel Collector config if present (call `UpdateOtelCollector` or equivalent).
+  12. Call `updateOtelCollectorIfPresent(envURL, token, dryRun)` — probes `<cwd>/opentelemetry/config.yaml`, patches silently with `PatchConfigFile` if found, skips with no output if not found.
   13. Call `waitForServices()` if at least one process is alive.
-- [ ] 5.5 Use `StartManagedProcess` to launch the instrumented process with log file at `<project-path>/<service-name>.log`
+- [ ] 5.5 Use `StartManagedProcess` to launch the instrumented process with log file at `<project-path>/<service-name>.log`. Before building the `exec.Cmd`, add `logger.Debug("launching instrumented java process", "cmd", launchCmd, "dir", proj.Path)` so the full command is visible in debug output.
 - [ ] 5.6 Use `PrintProcessSummary` after the settle period; if no alive processes, print "No services are running — check the logs above for errors." and skip `waitForServices`
 - [ ] 5.7 Call `waitForServices(envURL, platformToken, aliveServiceNames)` when at least one process is alive
 - [ ] 5.8 Update `DetectJavaPlan` to build fully executable plans — pass `envURL`, `platformToken`, resolved entrypoint command through the `JavaInstrumentationPlan` struct

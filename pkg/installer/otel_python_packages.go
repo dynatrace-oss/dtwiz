@@ -23,6 +23,7 @@ var otelPythonPackages = []string{
 
 func installPackages(pip *pipCommand, packages []string) error {
 	args := append(append([]string{}, pip.args...), append([]string{"install"}, packages...)...)
+	logger.Debug("running pip install", "pip", pip.name, "args", args)
 	cmd := exec.Command(pip.name, args...)
 	full := pip.name + " " + strings.Join(args, " ")
 	out, err := cmd.CombinedOutput()
@@ -35,6 +36,7 @@ func installPackages(pip *pipCommand, packages []string) error {
 
 func runOtelBootstrap(pythonPath string) error {
 	args := []string{"-m", "opentelemetry.instrumentation.bootstrap", "-a", "install"}
+	logger.Debug("running opentelemetry-bootstrap", "python", pythonPath, "args", args)
 	cmd := exec.Command(pythonPath, args...)
 	full := pythonPath + " " + strings.Join(args, " ")
 	out, err := cmd.CombinedOutput()
@@ -79,6 +81,7 @@ func pipPackageName(spec string) string {
 
 func listInstalledPipPackages(pythonBin string) (map[string]bool, error) {
 	args := []string{"-m", "pip", "list", "--format=json"}
+	logger.Debug("listing installed pip packages", "python", pythonBin)
 	cmd := exec.Command(pythonBin, args...)
 	out, err := cmd.Output()
 	if err != nil {
@@ -104,6 +107,7 @@ func listInstalledPipPackages(pythonBin string) (map[string]bool, error) {
 // queryBootstrapRequirements calls bootstrap's internal detection API and returns
 // packages that need installing. Returns an error if the API is unavailable.
 func queryBootstrapRequirements(pythonBin string, installed map[string]bool) ([]string, error) {
+	logger.Debug("querying bootstrap requirements", "python", pythonBin)
 	cmd := exec.Command(pythonBin, "-c", bootstrapRequirementsScript)
 	out, err := cmd.Output()
 	if err != nil {
@@ -222,6 +226,7 @@ func installProjectDeps(pip *pipCommand, projectPath string) (string, error) {
 		}
 		full := pip.name + " " + strings.Join(args, " ")
 		fmt.Printf("\n    %s\n", full)
+		logger.Debug("running pip install from source", "pip", pip.name, "source", src.file, "args", args)
 		cmd := exec.Command(pip.name, args...)
 		cmd.Dir = projectPath
 		out, err := cmd.CombinedOutput()
