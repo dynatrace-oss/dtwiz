@@ -44,11 +44,10 @@ Existing infrastructure to reuse:
 
 **Non-Goals:**
 
-- Full Maven/Gradle build invocation for **single-module** projects — if no built artifact exists yet, inform the user and print manual build instructions; do not invoke `mvn package` or `gradle build`. For **multi-module** projects, auto-build is in scope (see Decision 14).
+- Full Maven/Gradle build invocation for single-module projects when no build tool is present — if no built artifact exists and no `mvnw`, `mvn`, `gradlew`, or `gradle` is found, inform the user and exit.
 - Instrumenting Java processes running inside Docker containers or managed by systemd (warn and skip).
 - Persistent configuration management (tracking which processes were instrumented).
 - Supporting GraalVM native images (no JVM, no `-javaagent`).
-- Uninstall command for Java (the user stops the process manually).
 - Reconstructing a launch command from a running process's `ps` output — this approach is unreliable due to missing working directory, truncated args, and absent environment variables.
 
 ## Decisions
@@ -87,7 +86,7 @@ Spring Boot detection is done by substring matching (`spring-boot` in pom.xml, `
 
 **Alternative considered:** Use the running process's `ps ax` command line as a fallback entrypoint source. Rejected — `ps` output does not include the working directory, args are truncated on most systems beyond 4096 bytes, and environment variables are not captured. The reconstructed command would silently fail or misbehave for any non-trivial app.
 
-**Alternative considered:** Invoke `mvn package` or `gradle build` automatically. Rejected — building can have side effects (running tests, fetching dependencies) that the user should control. When no entrypoint is found, a clear message with the exact build command to run is shown instead.
+**Alternative considered:** Invoke `mvn package` or `gradle build` automatically. For single-module projects this is now the default behaviour — if no entrypoint is found, the installer attempts the build, then re-scans. If the build fails, a clear error directing the user to fix it is shown. For both single- and multi-module projects, if no build wrapper is available and JARs are missing, the user is told to build manually and the installer exits.
 
 **Alternative considered:** Offer `./mvnw exec:java` as a generic Maven fallback. Rejected — this command requires `mainClass` to be configured in the exec-maven-plugin POM section, which is absent in the vast majority of projects (including all Spring Boot projects). The result is a cryptic Maven plugin error (`PluginParameterException: mainClass is missing`) with no clear path forward for the user.
 
@@ -187,12 +186,12 @@ In `pkg/installer/otel.go`, `detectAvailableRuntimes()` currently gates Java beh
 
 ## Risks / Trade-offs
 
-- **[No built artifact]** → If the user has not built their project yet (`mvn package` / `gradle build` not run), no fat JAR will be found. For non-Spring Boot Maven projects, no wrapper fallback is offered either (see Decision 2). Mitigation: detect this case, print a clear message with the exact build command to run (`./mvnw package -DskipTests` for Maven, `./gradlew build -x test` for Gradle — based on which wrapper is present), then exit — don't silently fall through to a broken state.
+- **[No built artifact]** → If the user has not built their project yet, no fat JAR will be found. The installer attempts an auto-build (`./mvnw clean package -DskipTests` for Maven, `./gradlew build -x test` for Gradle). If the build fails, a clear message is printed directing the user to fix the build error and re-run. For non-Spring Boot Maven projects with no build wrapper and no built JAR, no wrapper fallback is offered and the user is told to build manually. This applies equally to single-module and multi-module projects.
 - **[Process restart is disruptive]** → Stopping and restarting a Java process causes downtime. Mitigation: explicit plan preview and confirmation prompt before execution. `--dry-run` shows the plan without executing.
 - **[Java 8 version string format]** → Java 8 uses the old versioning scheme (`1.8.0_382`) while Java 9+ uses the new scheme (`17.0.1`). Mitigation: the parser handles both formats explicitly; unit tests cover all common patterns.
 - **[JPS availability]** → `jps` is part of the JDK, not the JRE. Users with only a JRE won't benefit from enriched process names. Mitigation: `jps` is optional.
 - **[Large JAR download]** → The agent JAR is ~20MB. Mitigation: show a progress indicator during download.
-- **[No uninstall]** → First iteration has no `dtwiz uninstall otel-java`. Mitigation: acceptable for MVP.
+- **[Uninstall is best-effort]** → `dtwiz uninstall otel-java` identifies processes by the dtwiz agent JAR path, which is a heuristic — another process could independently use the same path. Mitigation: the preview explicitly asks the user to verify the list before confirming; `--dry-run` is supported.
 - **[Multi-module build output verbosity]** → Running `./mvnw clean package` streams full Maven output to stdout. Mitigation: acceptable — the user needs to see build progress and errors.
 - **[Gradle colon notation]** → Gradle sub-project paths use colon separators (`:api`, `:ui:web`) which are converted to OS filesystem separators. Custom `projectDir` overrides in `settings.gradle` are not supported by the regex parser. Mitigation: the regex handles the common 80% case; projects with custom `projectDir` will have missing modules silently skipped.
 
@@ -210,9 +209,7 @@ POM with `<packaging>pom</packaging>` (or absent packaging, which defaults to `p
 treated as a sub-project.
 
 **Build step:** If any sub-module is missing a fat JAR, the installer includes a build step in the plan:
-`./mvnw clean package -DskipTests` (Maven) or `./gradlew build -x test` (Gradle). The build is run
-after user confirmation. If the build fails, execution aborts with a clear error message. If no build
-wrapper is available and JARs are missing, the user is told to build manually and the installer exits.
+`./mvnw clean package -DskipTests` (Maven) or `./gradlew build -x test` (Gradle). The same logic applies to single-module projects — if no fat JAR is found, the installer attempts the build automatically before showing the "no entrypoint" error. The build is run after user confirmation (multi-module) or immediately (single-module, as part of entrypoint resolution before the plan is shown). If the build fails, execution aborts with a clear error message. If no build wrapper is available and JARs are missing, the user is told to build manually and the installer exits.
 
 **Launch:** After a successful build (or if JARs already exist), each sub-module's fat JAR is launched
 as a separate `ManagedProcess` with `-javaagent` and a distinct `OTEL_SERVICE_NAME` matching the
@@ -233,3 +230,19 @@ are now resolved before the plan is printed. The preview always shows the exact 
 executed — never a placeholder like `java -javaagent:... -jar your_app.jar`. If no entrypoint can be
 resolved at plan time, the preview shows `(entrypoint will be detected at execution time)` as a fallback,
 but this path is only reached in edge cases where the installer cannot auto-detect the entrypoint.
+
+### 16. Uninstall: full agent path filtering (best-effort)
+
+`dtwiz uninstall otel-java` uses a stateless discover-at-uninstall-time approach, consistent with all other dtwiz uninstall commands. It does not rely on PID files or a process registry.
+
+Running Java processes are discovered via `detectJavaProcesses()` + `enrichProcessesWithJPS()`. The result is filtered to those whose command line contains the **exact agent JAR path** dtwiz uses: `~/opentelemetry/java/opentelemetry-javaagent.jar` (resolved via `javaAgentPath()`). This is a best-effort heuristic — matching on the full path rather than just the filename makes false positives unlikely, but another process could independently use the same agent location. The preview explicitly notes this and asks the user to verify the list before confirming.
+
+The agent JAR directory (`~/opentelemetry/java/`) is removed unconditionally if it exists, regardless of whether any processes were found. This cleans up the downloaded artifact even when the user stopped the process manually.
+
+**Flow:** discover → preview (processes to stop + directory to remove, with caveat) → confirm → stop → remove.
+
+**Alternative considered:** Filter by filename only (`opentelemetry-javaagent.jar`). Rejected — too broad; any process using the OTel Java agent from any location would match.
+
+**Alternative considered:** Match processes to detected projects (the same approach used at install time). Rejected — at uninstall time the user may have moved or deleted the project directory.
+
+**Alternative considered:** Track PIDs in a state file at install time. This would be the only truly reliable approach, but adds statefulness and complexity. Deferred — the full-path heuristic is good enough for the common case, and the preview + confirmation prompt mitigates the risk of stopping the wrong process.

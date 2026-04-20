@@ -70,7 +70,7 @@
   2. Present project selection menu (with PID annotations where applicable).
   3. Detect entrypoints for the selected project via `detectJavaEntrypoints()`.
   4. If exactly one entrypoint found: auto-select it (no prompt). If multiple entrypoints found: present entrypoint selection menu.
-  5. If no entrypoints found: print build instructions + manual `-javaagent` steps and exit.
+   5. If no entrypoints found: attempt auto-build via `attemptSingleModuleBuild()`; if build fails or no build tool is present, print an error and exit.
   6. Show plan preview (project path, launch command with `-javaagent`, JAR URL, OTEL vars, PIDs to stop).
   7. Confirm with user via `confirmProceed()` — if matched processes exist, prompt text SHALL name them: `Stop PID 1234 (myapp) and proceed with installation?`; otherwise use `Proceed with installation?`
   8. Download the agent JAR.
@@ -100,7 +100,7 @@
 - [ ] 7.2 Add `TestInstallOtelJava_DryRun` — verify dry-run output includes all expected fields (API URL, service name, agent JAR URL, env vars, `-javaagent` flag)
 - [ ] 7.3 Add `TestInstallOtelJava_JavaNotFound` — verify error message when Java is not on PATH
 - [ ] 7.4 Add `TestJavaInstrumentationPlan_PrintPlanSteps_Updated` — verify plan shows launch command with `-javaagent`, JAR download URL, and OTEL vars
-- [ ] 7.5 Add `TestInstallOtelJava_NoBuildArtifact_NoRunningProcess` — verify fallback message with build instructions is printed and no process is started
+- [ ] 7.5 Add `TestInstallOtelJava_NoBuildArtifact_NoRunningProcess` — verify that when no JAR exists and no build tool is found, a "no build tool detected" message is printed and no process is started; verify that when a build tool is present but the build fails, `Auto-build failed` is printed
 
 ## 8. Remove DTWIZ_ALL_RUNTIMES Gate
 
@@ -155,8 +155,28 @@
 - [ ] 9.2 Run `make lint` — no new lint issues
 - [ ] 9.3 Manual verification: `dtwiz install otel-java --dry-run` shows preview with JAR URL, env vars, and `-javaagent` flag
 - [ ] 9.4 Manual verification: `dtwiz install otel-java` with a Java project that has a built fat JAR — JAR is detected as entrypoint, app is launched with instrumentation (no prior running process needed)
-- [ ] 9.5 Manual verification: `dtwiz install otel-java` with no built artifact and no running process — prints build instructions and manual `-javaagent` steps, exits cleanly
+- [ ] 9.5 Manual verification: `dtwiz install otel-java` with no built artifact — installer attempts auto-build; if build succeeds the app is launched; if build fails a clear error is printed with instructions to fix and re-run
 - [ ] 9.6 Manual verification: generate some traffic to the instrumented app and verify traces/logs appear in Dynatrace
 - [ ] 9.7 Manual verification: `dtwiz install otel` shows Java projects in the selection menu without `DTWIZ_ALL_RUNTIMES`
 - [ ] 9.8 Manual verification: "Waiting for traffic" terminates when service appears in Dynatrace (not just on timeout)
 - [ ] 9.9 Manual verification: OTel Collector config is updated after Java instrumentation when a collector config exists on the machine
+
+## 13. Uninstall Java Instrumentation
+
+**Files:** `pkg/installer/otel_java_uninstall.go` (create), `pkg/installer/otel_java_uninstall_test.go` (create), `cmd/uninstall.go` (modify)
+
+- [ ] 13.1 Create `pkg/installer/otel_java_uninstall.go` with `UninstallOtelJava(dryRun bool) error`
+  - `findInstrumentedJavaProcesses()` — calls `detectJavaProcesses()` + `enrichProcessesWithJPS()`, filters to processes whose `Command` contains `opentelemetry-javaagent.jar`
+  - `javaAgentDir()` — returns `filepath.Dir(javaAgentPath())`
+  - `UninstallOtelJava()` — discover → preview → dry-run check → confirm → stop processes → remove `~/opentelemetry/java/`
+- [ ] 13.2 Register `uninstallOtelJavaCmd` in `cmd/uninstall.go` (`Use: "otel-java"`, `Short: "Stop instrumented Java processes and remove the OTel agent JAR"`)
+- [ ] 13.3 Tests in `pkg/installer/otel_java_uninstall_test.go`:
+  - `TestFindInstrumentedJavaProcesses_FiltersByAgentFlag` — verify only processes with `opentelemetry-javaagent.jar` in command are returned
+  - `TestFindInstrumentedJavaProcesses_NoneMatching` — verify empty result when no processes have the agent flag
+  - `TestJavaAgentDir_ReturnsParentOfJar` — verify the directory name ends in `java`
+  - `TestUninstallOtelJava_DryRun_NothingPresent` — no processes, no agent dir → returns nil without error
+  - `TestUninstallOtelJava_DryRun_AgentDirExists` — agent dir present, dry-run → dir not removed
+- [ ] 13.4 Manual verification: `dtwiz uninstall otel-java --dry-run` with a running instrumented process — shows PID and agent dir, makes no changes
+- [ ] 13.5 Manual verification: `dtwiz uninstall otel-java` stops only the dtwiz-instrumented process, not other Java processes
+- [ ] 13.6 Manual verification: `dtwiz uninstall otel-java` with no running processes but agent JAR present — removes `~/opentelemetry/java/` only
+- [ ] 13.7 Manual verification: `dtwiz uninstall otel-java` with nothing to remove — prints informational message and exits cleanly

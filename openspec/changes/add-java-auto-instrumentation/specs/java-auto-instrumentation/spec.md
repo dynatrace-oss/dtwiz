@@ -84,11 +84,19 @@ The installer SHALL detect runnable entrypoints for the selected Java project wi
 - **THEN** the installer SHALL present a numbered menu for the user to select one
 - **AND** SHALL allow the user to skip (which falls back to manual instructions)
 
-#### Scenario: No entrypoint found
+#### Scenario: No entrypoint found — auto-build attempted
 
 - **WHEN** no built JAR with a `Main-Class` and no build-tool wrapper is found in the project
-- **THEN** the installer SHALL inform the user that no runnable entrypoint was detected
-- **AND** SHALL print build instructions (e.g., `mvn package` or `./gradlew build`) along with manual `-javaagent` instructions
+- **AND** a Maven or Gradle wrapper (`mvnw`, `mvn`, `gradlew`, `gradle`) is present
+- **THEN** the installer SHALL attempt an auto-build (`./mvnw clean package -DskipTests` or `./gradlew build -x test`)
+- **AND** SHALL print the build command before running it
+- **AND** if the build succeeds SHALL re-scan for entrypoints and continue normally
+- **AND** if the build fails SHALL print `Auto-build failed: <error>` and direct the user to fix the build error and re-run
+
+#### Scenario: No entrypoint found — no build tool available
+
+- **WHEN** no built JAR with a `Main-Class` is found and no Maven or Gradle wrapper is present
+- **THEN** the installer SHALL inform the user that no runnable entrypoint was detected and no build tool is available
 - **AND** SHALL NOT attempt to start any process
 
 ### Requirement: Instrumented process launch
@@ -324,3 +332,44 @@ can see exactly what command will be executed.
 - **WHEN** the plan is built
 - **THEN** the installer SHALL detect entrypoints (or multi-module structure) immediately
 - **AND** the preview SHALL show the resolved launch command — never a placeholder like `java -javaagent:... -jar your_app.jar`
+
+### Requirement: Uninstall Java instrumentation
+
+`dtwiz uninstall otel-java` SHALL stop all Java processes instrumented by dtwiz and remove the downloaded OTel agent JAR directory.
+
+#### Scenario: Instrumented processes found
+
+- **GIVEN** one or more Java processes are running with `-javaagent:...opentelemetry-javaagent.jar` in their command line
+- **WHEN** `dtwiz uninstall otel-java` is run
+- **THEN** the installer SHALL display a preview listing the PIDs and process descriptions to be stopped and the agent directory to be removed
+- **AND** SHALL prompt for confirmation before making any changes
+- **AND** upon confirmation SHALL stop all matched processes (SIGINT → SIGKILL fallback)
+- **AND** SHALL remove `~/opentelemetry/java/` if it exists
+
+#### Scenario: No instrumented processes, but agent JAR exists
+
+- **GIVEN** no Java processes with the agent flag are running
+- **AND** `~/opentelemetry/java/` exists on disk
+- **WHEN** `dtwiz uninstall otel-java` is run
+- **THEN** the installer SHALL display a preview showing only the directory removal
+- **AND** SHALL remove `~/opentelemetry/java/` after confirmation
+
+#### Scenario: Nothing to remove
+
+- **GIVEN** no instrumented Java processes are running
+- **AND** `~/opentelemetry/java/` does not exist
+- **WHEN** `dtwiz uninstall otel-java` is run
+- **THEN** the installer SHALL print an informational message and exit without prompting
+
+#### Scenario: Dry-run
+
+- **WHEN** `dtwiz uninstall otel-java --dry-run` is run
+- **THEN** the installer SHALL print the preview (processes and/or directory) without stopping anything or removing any files
+
+#### Scenario: Only dtwiz-instrumented processes are stopped
+
+- **GIVEN** multiple Java processes are running
+- **WHEN** `dtwiz uninstall otel-java` discovers processes
+- **THEN** it SHALL only include processes whose command line contains the exact dtwiz agent path (`~/opentelemetry/java/opentelemetry-javaagent.jar`)
+- **AND** the preview SHALL note that the list is best-effort and ask the user to verify before confirming
+- **AND** SHALL NOT stop processes that do not reference that specific path
