@@ -78,8 +78,10 @@ func DetectPythonPlanFromPath(projectPath, apiURL, token string) *PythonInstrume
 	}
 
 	if projectPath != "" {
-		proj := ScannedProject{Path: projectPath}
-		return buildPythonInstrumentationPlan(proj, apiURL, token, "", "")
+		projects := []ScannedProject{{Path: projectPath}}
+		processes := detectPythonProcesses()
+		matchProcessesToProjects(projects, processes)
+		return buildPythonInstrumentationPlan(projects[0], apiURL, token, "", "")
 	}
 
 	projects, processes := runInParallel(detectPythonProjects, detectPythonProcesses)
