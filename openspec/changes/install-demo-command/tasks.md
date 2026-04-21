@@ -1,3 +1,5 @@
+# Tasks: install demo command
+
 ## 1. Refactor: Move confirmProceed to installer.go
 
 - [x] 1.1 Add `var AutoConfirm bool` to `pkg/installer/installer.go`

@@ -1,3 +1,5 @@
+# Design: install demo command
+
 ## Context
 
 `dtwiz` is a Go CLI that deploys Dynatrace observability automatically. Currently all `install` subcommands require users to bring their own application. There is no built-in demo path.
@@ -7,6 +9,7 @@ The OTel install flow (`install otel`, `install otel-python`) is interactive: it
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Add `dtwiz install demo` that bootstraps the schnitzel Python app and wires it to Dynatrace OTel end-to-end
 - Add `--yes` / `-y` to skip all confirmation prompts across install/update/uninstall
 - Add `--project <path>` to pre-select a project in the OTel install flow
@@ -14,6 +17,7 @@ The OTel install flow (`install otel`, `install otel-python`) is interactive: it
 - Auto-install Python if not present (macOS/Linux/Windows)
 
 **Non-Goals:**
+
 - Supporting multiple demo apps (schnitzel is the only one for now)
 - Persistent demo state tracking beyond checking if `./schnitzel/` exists
 - Modifying the schnitzel app itself
@@ -47,6 +51,7 @@ The OTel install flow (`install otel`, `install otel-python`) is interactive: it
 ### Python installation uses platform package manager with explicit confirmation
 
 **Decision:** If `python3` is not found, show a plan line "Install Python 3 via `<tool>`" and include it in the single pre-execution confirmation prompt. Install using:
+
 - macOS: `brew install python3` (error with helpful message if brew not found)
 - Linux (Debian/Ubuntu): `sudo apt-get install -y python3`
 - Linux (RHEL/Fedora/CentOS): `sudo dnf install -y python3`
@@ -62,7 +67,7 @@ Detect Linux distro via `/etc/os-release`.
 
 ## Risks / Trade-offs
 
-- **Brew not installed on macOS** → Surface a clear error: "Python 3 is required. Install Homebrew first: https://brew.sh" rather than failing silently.
+- **Brew not installed on macOS** → Surface a clear error: "Python 3 is required. Install Homebrew first: <https://brew.sh>" rather than failing silently.
 - **schnitzel URL changes** → The download URL (`https://github.com/dietermayrhofer/schnitzel/archive/refs/heads/master.zip`) is hardcoded. If the repo moves or branch is renamed, the command breaks. Mitigation: make URL a named constant, easy to update.
 - **`AutoConfirm` is a global var** → Slightly less clean than passing context, but consistent with how `installDryRun` and other package-level flags already work in this codebase.
 - **Partial extraction on download failure** → If the zip download or extract fails mid-way, a partial `./schnitzel/` dir may exist. Mitigation: extract to a temp dir, rename atomically on success.

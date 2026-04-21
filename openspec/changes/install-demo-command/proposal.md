@@ -1,3 +1,5 @@
+# Proposal: install demo command
+
 ## Why
 
 New users need a fast path to see Dynatrace observability in action without bringing their own application. A single `dtwiz install demo` command bootstraps a ready-made 4-service Python app and wires it up to Dynatrace OTel monitoring end-to-end — zero prior setup required.
