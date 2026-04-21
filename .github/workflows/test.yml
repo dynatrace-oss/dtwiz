@@ -19,7 +19,6 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        go: ['1.24.13']
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -27,7 +26,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go }}
+          go-version-file: go.mod
 
       - name: Download dependencies
         run: go mod download
