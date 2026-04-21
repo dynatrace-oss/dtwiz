@@ -182,6 +182,18 @@ func renderRelationships(buf *strings.Builder, sec watchSection, appsURL string,
 }
 
 // pollAll executes all DQL queries in parallel and returns the aggregated state.
+// dqlFromLiteral formats a fromClause for use in DQL queries.
+// DQL relative expressions (containing parentheses, e.g. "now()-1h") must not
+// be quoted; RFC3339 absolute timestamps must be quoted.
+func dqlFromLiteral(fromClause string) string {
+	for _, ch := range fromClause {
+		if ch == '(' || ch == ')' {
+			return fromClause
+		}
+	}
+	return `"` + fromClause + `"`
+}
+
 func pollAll(queryURL, token string, fromClause string) watchState {
 	var state watchState
 
@@ -190,13 +202,14 @@ func pollAll(queryURL, token string, fromClause string) watchState {
 		data *dqlResponse
 	}
 
+	from := dqlFromLiteral(fromClause)
 	queries := map[string]string{
-		"services":      fmt.Sprintf(`smartscapeNodes SERVICE, from:"%s" | fields name | limit 100`, fromClause),
-		"nodes":         fmt.Sprintf(`smartscapeNodes "*", from:"%s" | summarize count=count(), by:{type} | limit 200`, fromClause),
-		"relationships": fmt.Sprintf(`smartscapeEdges "*", from:"%s" | summarize count=count(), by:{type}`, fromClause),
-		"logs":          fmt.Sprintf(`fetch logs, from:"%s" | summarize count=count(), by:{loglevel}`, fromClause),
-		"requests":      fmt.Sprintf(`fetch spans, from:"%s" | filter request.is_root_span == true | summarize failed=countIf(request.is_failed == true), success=countIf(request.is_failed != true)`, fromClause),
-		"exceptions":    fmt.Sprintf(`fetch spans, from:"%s" | expand events = span.events | filter events[type] == "exception" | summarize count=count()`, fromClause),
+		"services":      fmt.Sprintf(`smartscapeNodes SERVICE, from:%s | fields name | limit 100`, from),
+		"nodes":         fmt.Sprintf(`smartscapeNodes "*", from:%s | summarize count=count(), by:{type} | limit 200`, from),
+		"relationships": fmt.Sprintf(`smartscapeEdges "*", from:%s | summarize count=count(), by:{type}`, from),
+		"logs":          fmt.Sprintf(`fetch logs, from:%s | summarize count=count(), by:{loglevel}`, from),
+		"requests":      fmt.Sprintf(`fetch spans, from:%s | filter request.is_root_span == true | summarize failed=countIf(request.is_failed == true), success=countIf(request.is_failed != true)`, from),
+		"exceptions":    fmt.Sprintf(`fetch spans, from:%s | expand events = span.events | filter events[type] == "exception" | summarize count=count()`, from),
 	}
 
 	ch := make(chan result, len(queries))
