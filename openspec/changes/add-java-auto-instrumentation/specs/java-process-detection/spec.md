@@ -44,3 +44,32 @@ On Windows, the installer SHALL detect Java processes using OS-appropriate mecha
 - **WHEN** Java processes are scanned
 - **THEN** the existing `detectProcesses` Windows implementation SHALL be used to find processes with `java` in the command line
 - **AND** the PID annotation in the project menu SHALL work the same as on Unix/macOS
+
+### Requirement: Debug logging for process detection
+
+The process detection pipeline SHALL emit debug-level log lines so users running with `--debug` can trace what was found, what was enriched, and what was matched to a project.
+
+#### Scenario: Raw process scan result
+
+- **WHEN** `detectJavaProcesses` completes
+- **THEN** a debug line SHALL be emitted: `"detected java processes" count=<n>`
+
+#### Scenario: JPS enrichment applied
+
+- **WHEN** `enrichProcessesWithJPS` successfully enriches a process entry
+- **THEN** a debug line SHALL be emitted: `"jps enrichment" pid=<pid> description=<description>`
+
+#### Scenario: JPS not available
+
+- **WHEN** `jps` is not found in PATH
+- **THEN** a debug line SHALL be emitted: `"jps not found, skipping enrichment"`
+
+#### Scenario: Process matched to project
+
+- **WHEN** a running process is matched to a detected project
+- **THEN** a debug line SHALL be emitted: `"matched process to project" pid=<pid> project=<path>`
+
+#### Scenario: No processes matched
+
+- **WHEN** no running processes are matched to any detected project
+- **THEN** a debug line SHALL be emitted: `"no running java processes matched to any project"`

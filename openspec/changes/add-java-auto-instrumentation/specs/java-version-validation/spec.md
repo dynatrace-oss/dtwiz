@@ -59,3 +59,27 @@ The version parser SHALL correctly extract the major version number from all com
 - **GIVEN** `java -version` outputs lines from vendors like Amazon Corretto, GraalVM, or Azul Zulu that include additional text before or after the version string
 - **WHEN** the version string is parsed
 - **THEN** the parser SHALL correctly extract the quoted version string regardless of surrounding text
+
+### Requirement: Debug logging for version validation
+
+The validation and parsing steps SHALL emit debug-level log lines so users running with `--debug` can see exactly what `java -version` returned and what version was parsed.
+
+#### Scenario: Java binary found
+
+- **WHEN** `java` is located in PATH
+- **THEN** a debug line SHALL be emitted: `"java binary found" path=<path>`
+
+#### Scenario: Version string parsed
+
+- **WHEN** `parseJavaVersion` successfully extracts a major version
+- **THEN** a debug line SHALL be emitted: `"java version parsed" raw=<raw output> major=<n>`
+
+#### Scenario: Version validation passed
+
+- **WHEN** the parsed version is >= 8
+- **THEN** a debug line SHALL be emitted: `"java version OK" major=<n>`
+
+#### Scenario: Version validation failed
+
+- **WHEN** the parsed version is < 8
+- **THEN** a debug line SHALL be emitted: `"java version too old" major=<n> minimum=8` before the error is returned to the caller

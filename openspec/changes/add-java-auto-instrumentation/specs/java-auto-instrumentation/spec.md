@@ -99,6 +99,57 @@ The installer SHALL detect runnable entrypoints for the selected Java project wi
 - **THEN** the installer SHALL inform the user that no runnable entrypoint was detected and no build tool is available
 - **AND** SHALL NOT attempt to start any process
 
+### Requirement: Entrypoint detection debug logging
+
+The installer SHALL emit debug-level log lines throughout the entrypoint detection pipeline so that users running with `--debug` can understand exactly what was scanned, what was found, and why a candidate was accepted or rejected.
+
+#### Scenario: JAR scan — directory not found
+
+- **WHEN** `target/` (Maven) or `build/libs/` (Gradle) does not exist in the project directory
+- **THEN** a debug line SHALL be emitted: `"<dir> not found, skipping JAR scan" dir=<path>`
+
+#### Scenario: JAR scan — candidate accepted
+
+- **WHEN** a JAR file is found and `isExecutableJar` returns true
+- **THEN** a debug line SHALL be emitted: `"executable JAR found" jar=<path>`
+
+#### Scenario: JAR scan — candidate rejected
+
+- **WHEN** a JAR file is found but `isExecutableJar` returns false (no `Main-Class` in `MANIFEST.MF`)
+- **THEN** a debug line SHALL be emitted: `"skipping JAR — no Main-Class in MANIFEST.MF" jar=<path>`
+
+#### Scenario: Spring Boot detection
+
+- **WHEN** `isSpringBootMaven` or `isSpringBootGradle` is evaluated
+- **THEN** a debug line SHALL be emitted: `"Spring Boot detection" file=<path> result=<true|false>`
+
+#### Scenario: Wrapper fallback chosen
+
+- **WHEN** no fat JAR was found and a build-tool wrapper candidate is selected
+- **THEN** a debug line SHALL be emitted: `"no fat JAR found, using wrapper fallback" command=<command>`
+
+#### Scenario: No entrypoint found
+
+- **WHEN** `detectJavaEntrypoints` returns an empty slice
+- **THEN** a debug line SHALL be emitted: `"no entrypoint found" project=<path> scanned=<list of dirs/files checked>`
+
+#### Scenario: Entrypoint auto-selected
+
+- **WHEN** exactly one candidate is found and auto-selected
+- **THEN** a debug line SHALL be emitted: `"auto-selected single entrypoint" command=<command>`
+
+#### Scenario: Auto-build triggered
+
+- **WHEN** no entrypoint is found and an auto-build is attempted
+- **THEN** a debug line SHALL be emitted: `"attempting auto-build" command=<build command> project=<path>`
+
+#### Scenario: Auto-build result
+
+- **WHEN** the auto-build completes
+- **THEN** a debug line SHALL be emitted: `"auto-build succeeded" project=<path>` on success, or `"auto-build failed" project=<path> error=<error>` on failure
+
+---
+
 ### Requirement: Instrumented process launch
 
 The installer SHALL stop any running instance of the selected project and start the application fresh with the `-javaagent` flag and OTEL_* environment variables configured for Dynatrace.
@@ -222,7 +273,7 @@ The installer SHALL show a compact preview of all actions before execution and r
 
 ### Requirement: Java enabled by default in multi-runtime selection
 
-Java SHALL no longer be gated behind the `DTWIZ_ALL_RUNTIMES` feature flag.
+Java SHALL no longer be gated behind the `DTWIZ_ALL_RUNTIMES` feature flag once all implementation tasks are complete. During development, the flag continues to hide Java from `dtwiz install otel` — removing the gate is the final step before release.
 
 #### Scenario: Java appears in `dtwiz install otel` project list
 

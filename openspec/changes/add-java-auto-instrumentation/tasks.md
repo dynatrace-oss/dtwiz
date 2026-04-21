@@ -6,6 +6,11 @@
 
 - [ ] 1.1 Create `pkg/installer/otel_java_process.go` with `parseJavaVersion(output string) (int, error)` — extract the quoted version string from `java -version` stderr; handle legacy (`1.8.0_382` → 8) and modern (`17.0.1` → 17, `21` → 21) formats
 - [ ] 1.2 Add `validateJavaPrerequisites() (string, error)` — check `java` in PATH via `exec.LookPath`, run `java -version`, parse the output, return error if version < 8. Return the java binary path on success.
+- [ ] 1.2a Add debug logging in `validateJavaPrerequisites` and `parseJavaVersion`:
+  - Java binary found: `logger.Debug("java binary found", "path", javaPath)`
+  - Version string parsed: `logger.Debug("java version parsed", "raw", rawOutput, "major", major)`
+  - Version OK: `logger.Debug("java version OK", "major", major)`
+  - Version too old: `logger.Debug("java version too old", "major", major, "minimum", 8)`
 - [ ] 1.3 Tests in `pkg/installer/otel_java_process_test.go`:
   - `TestParseJavaVersion_Legacy_1_8` (input: `openjdk version "1.8.0_382"` → 8)
   - `TestParseJavaVersion_Modern_17` (input: `java version "17.0.1" 2021-10-19` → 17)
@@ -40,6 +45,18 @@
   - Add `isSpringBootMaven(projectPath string) bool` — reads `pom.xml` and checks for `spring-boot` substring.
   - Add `isSpringBootGradle(projectPath string) bool` — reads `build.gradle`/`build.gradle.kts` and checks for `spring-boot` or `springframework.boot` substrings.
 - [ ] 3.2 Add `isExecutableJar(jarPath string) bool` — open the JAR as a ZIP, read `META-INF/MANIFEST.MF`, return true if `Main-Class:` is present.
+- [ ] 3.2a Add debug logging throughout `detectJavaEntrypoints`:
+  - When `target/` or `build/libs/` does not exist: `logger.Debug("dir not found, skipping JAR scan", "dir", path)`
+  - When a JAR is accepted: `logger.Debug("executable JAR found", "jar", jarPath)`
+  - When a JAR is rejected (no `Main-Class`): `logger.Debug("skipping JAR — no Main-Class in MANIFEST.MF", "jar", jarPath)`
+  - After `isSpringBootMaven`/`isSpringBootGradle` evaluation: `logger.Debug("Spring Boot detection", "file", filePath, "result", result)`
+  - When a wrapper fallback is chosen: `logger.Debug("no fat JAR found, using wrapper fallback", "command", cmd)`
+  - When the result slice is empty: `logger.Debug("no entrypoint found", "project", projectPath, "scanned", scannedList)`
+  - When exactly one candidate is auto-selected: `logger.Debug("auto-selected single entrypoint", "command", cmd)`
+- [ ] 3.2b Add debug logging for auto-build in `attemptSingleModuleBuild`:
+  - Before running the build: `logger.Debug("attempting auto-build", "command", buildCmd, "project", projectPath)`
+  - On success: `logger.Debug("auto-build succeeded", "project", projectPath)`
+  - On failure: `logger.Debug("auto-build failed", "project", projectPath, "error", err)`
 - [ ] 3.3 Add `promptEntrypointSelection(entrypoints []JavaEntrypoint) *JavaEntrypoint` — when exactly one entrypoint is found, auto-select it (print the selection, no prompt); when multiple are found, present a numbered menu; return nil if user skips.
 - [ ] 3.4 Tests in `pkg/installer/otel_java_process_test.go`:
   - `TestDetectJavaEntrypoints_MavenFatJar` (temp dir with `target/app.jar` containing `Main-Class` → returns jar candidate)
@@ -58,6 +75,12 @@
 
 - [ ] 4.0 Add `Description string` field to `DetectedProcess` struct in `otel_runtime_scan.go`
 - [ ] 4.1 Add `enrichProcessesWithJPS(processes []DetectedProcess) []DetectedProcess` — if `jps` is in PATH, run `jps -l`, match output to `ps`-based processes by PID, and populate `DetectedProcess.Description` with the main class or JAR name from `jps`
+- [ ] 4.2 Add debug logging in `detectJavaProcesses` and `enrichProcessesWithJPS`:
+  - After raw scan: `logger.Debug("detected java processes", "count", len(processes))`
+  - JPS not found: `logger.Debug("jps not found, skipping enrichment")`
+  - Per enriched process: `logger.Debug("jps enrichment", "pid", pid, "description", description)`
+  - Per matched process: `logger.Debug("matched process to project", "pid", pid, "project", projectPath)`
+  - No matches: `logger.Debug("no running java processes matched to any project")`
 
 ## 5. Full InstallOtelJava Automated Flow
 
@@ -159,7 +182,7 @@
 - [ ] 9.4 Manual verification: `dtwiz install otel-java` with a Java project that has a built fat JAR — JAR is detected as entrypoint, app is launched with instrumentation (no prior running process needed)
 - [ ] 9.5 Manual verification: `dtwiz install otel-java` with no built artifact — installer attempts auto-build; if build succeeds the app is launched; if build fails a clear error is printed with instructions to fix and re-run
 - [ ] 9.6 Manual verification: generate some traffic to the instrumented app and verify traces/logs appear in Dynatrace
-- [ ] 9.7 Manual verification: `dtwiz install otel` shows Java projects in the selection menu without `DTWIZ_ALL_RUNTIMES`
+- [ ] 9.7 Manual verification: `dtwiz install otel` shows Java projects in the selection menu (requires `DTWIZ_ALL_RUNTIMES=true` until task 8 is complete)
 - [ ] 9.8 Manual verification: "Waiting for traffic" terminates when service appears in Dynatrace (not just on timeout)
 - [ ] 9.9 Manual verification: OTel Collector config is updated after Java instrumentation when a collector config exists on the machine
 

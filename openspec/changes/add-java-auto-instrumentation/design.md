@@ -7,6 +7,7 @@
 Java auto-instrumentation works by attaching a single agent JAR at JVM startup via the `-javaagent` flag. There are no packages to install — the agent is a single JAR added to the JVM command line. The key challenge is determining *how* to launch the application: from a built artifact (fat JAR) or a build-tool wrapper.
 
 The installer follows a project-first flow:
+
 1. Scan for Java projects on disk.
 2. Match any already-running processes to those projects (informational — shows which are live).
 3. User selects a project.
@@ -55,6 +56,7 @@ Existing infrastructure to reuse:
 ### 1. Project-first flow
 
 `detectJavaProjects()` scans for `pom.xml`, `build.gradle`, `build.gradle.kts`, `gradlew`, `.mvn`.
+
 - `detectJavaProcesses()` detects running Java processes; `matchProcessesToProjects()` associates PIDs with projects.
 - User selects a project from the list (which shows live PIDs if any).
 - `detectJavaEntrypoints()` inspects the project directory for runnable artifacts.
@@ -116,7 +118,13 @@ After the instrumented Java process starts, the installer calls `updateOtelColle
 
 **Alternative considered:** Call the existing `UpdateOtelConfig(configPath, ...)` with a discovered path. Rejected because `UpdateOtelConfig` is interactive (shows a diff, asks for confirmation, restarts the collector) — too disruptive as an automatic post-launch step.
 
-### 6. Java version parsing from `java -version` stderr
+### 6. Minimum Java version: 8
+
+The OpenTelemetry Java agent requires Java 8 as its minimum runtime (see [opentelemetry-java-instrumentation requirements](https://github.com/open-telemetry/opentelemetry-java-instrumentation#requirements)). Any JVM older than 8 cannot load the agent JAR and will fail at startup with a cryptic JVM error. The pre-flight check surfaces this before any download or process manipulation happens, giving the user a clear actionable message.
+
+**Alternative considered:** Allow the installer to proceed and let the JVM fail at launch. Rejected — the failure mode is a raw JVM error with no guidance, and the user may have already waited through a JAR download.
+
+### 8. Java version parsing from `java -version` stderr
 
 `java -version` outputs to **stderr** (not stdout) and the format varies by vendor:
 
@@ -135,7 +143,7 @@ This handles all common JDK distributions (Oracle, OpenJDK, Adoptium, Amazon Cor
 
 **Alternative considered:** Using `java --version` (double dash). Rejected because `--version` was introduced in Java 9 and fails on Java 8, which we need to support.
 
-### 7. Process detection: enrichment and stop signal
+### 9. Process detection: enrichment and stop signal
 
 Running process detection via `detectProcesses("java", nil)` serves two purposes:
 
@@ -144,11 +152,11 @@ Running process detection via `detectProcesses("java", nil)` serves two purposes
 
 When `jps` (JDK tool) is available in PATH, it provides richer process descriptions (main class / JAR name) stored in the new `DetectedProcess.Description` field (see Decision 4). `jps` is supplemental, never required.
 
-### 8. OTel Collector config update
+### 10. OTel Collector config update
 
 After the instrumented Java process is started, the installer calls `updateOtelCollectorIfPresent(envURL, token, dryRun)`. This helper probes the well-known dtwiz collector config path (`<cwd>/opentelemetry/config.yaml`) and patches it silently with `PatchConfigFile` if found. If not found, the step is skipped with no output (see Decision 5).
 
-### 9. Stop-and-restart flow
+### 11. Stop-and-restart flow
 
 The instrumented launch requires JVM flags (`-javaagent`) that can only be set at JVM startup. Therefore:
 
@@ -158,7 +166,7 @@ The instrumented launch requires JVM flags (`-javaagent`) that can only be set a
 
 When a running process is matched, the plan preview explicitly lists the PID(s) and process description(s) that will be stopped, and the `confirmProceed()` prompt names the process(es) being stopped — e.g. `Stop PID 1234 (myapp) and proceed with installation?`. When no process is matched, the prompt is the standard `Proceed with installation?`. The user must confirm before any process is stopped.
 
-### 10. Reuse `ManagedProcess` and `waitForServices` from existing infrastructure
+### 12. Reuse `ManagedProcess` and `waitForServices` from existing infrastructure
 
 After launching the instrumented process:
 
@@ -166,15 +174,15 @@ After launching the instrumented process:
 - `PrintProcessSummary()` shows status after the settle period (crashed / running / port detected).
 - `waitForServices()` polls DQL to verify the service appears in Dynatrace.
 
-### 11. Pass `platformToken` to `InstallOtelJava` for DQL verification
+### 13. Pass `platformToken` to `InstallOtelJava` for DQL verification
 
 The function signature becomes `InstallOtelJava(envURL, token, platformToken, serviceName string, dryRun bool) error`. The `platformToken` is needed by `waitForServices()` to authenticate against the DQL endpoint. The Cobra command in `cmd/install.go` already resolves `platformTok` via `getDtEnvironment()` — it just needs to be passed through.
 
-### 12. Enable Java by default in `dtwiz install otel`
+### 14. Enable Java by default in `dtwiz install otel`
 
 In `pkg/installer/otel.go`, `detectAvailableRuntimes()` currently gates Java behind `allRuntimesEnabled()`. Once all other tasks are implemented and verified, the `enabled` field for Java is set to `true` unconditionally — removing the gate is the **last code change** before integration testing.
 
-### 13. File layout
+### 15. File layout
 
 | File | Responsibility |
 |---|---|
@@ -183,6 +191,26 @@ In `pkg/installer/otel.go`, `detectAvailableRuntimes()` currently gates Java beh
 | `otel_runtime_scan.go` | `DetectedProcess` struct — add `Description string` field for JPS enrichment |
 | `otel_java_test.go` | Tests for project detection, plan detection (existing + new) |
 | `otel_java_process_test.go` (new) | Tests for version parsing, entrypoint detection, process detection |
+
+### 16. Debug logging for entrypoint detection
+
+`detectJavaEntrypoints` and `attemptSingleModuleBuild` emit `logger.Debug` lines at every meaningful branch so users running with `--debug` can trace exactly what was scanned and why a candidate was accepted or rejected. No debug output is produced in normal runs.
+
+Key log points:
+
+| Location | Message pattern |
+|---|---|
+| Directory not found | `"<dir> not found, skipping JAR scan" dir=<path>` |
+| JAR accepted | `"executable JAR found" jar=<path>` |
+| JAR rejected (no `Main-Class`) | `"skipping JAR — no Main-Class in MANIFEST.MF" jar=<path>` |
+| Spring Boot detection result | `"Spring Boot detection" file=<path> result=<true\|false>` |
+| Wrapper fallback chosen | `"no fat JAR found, using wrapper fallback" command=<cmd>` |
+| No entrypoint found | `"no entrypoint found" project=<path> scanned=<list>` |
+| Single candidate auto-selected | `"auto-selected single entrypoint" command=<cmd>` |
+| Auto-build triggered | `"attempting auto-build" command=<cmd> project=<path>` |
+| Auto-build result | `"auto-build succeeded"` or `"auto-build failed" error=<err>` |
+
+All messages use structured key=value pairs consistent with the rest of the codebase. The launch debug line in task 5.5 (`"launching instrumented java process"`) remains the final entry point before the process starts.
 
 ## Risks / Trade-offs
 
@@ -195,7 +223,7 @@ In `pkg/installer/otel.go`, `detectAvailableRuntimes()` currently gates Java beh
 - **[Multi-module build output verbosity]** → Running `./mvnw clean package` streams full Maven output to stdout. Mitigation: acceptable — the user needs to see build progress and errors.
 - **[Gradle colon notation]** → Gradle sub-project paths use colon separators (`:api`, `:ui:web`) which are converted to OS filesystem separators. Custom `projectDir` overrides in `settings.gradle` are not supported by the regex parser. Mitigation: the regex handles the common 80% case; projects with custom `projectDir` will have missing modules silently skipped.
 
-### 14. Multi-module project detection
+### 17. Multi-module project detection
 
 When a project is selected and it is the root of a multi-module Maven or Gradle build, the installer
 treats each sub-module as an independent service rather than trying to run the root.
@@ -223,7 +251,7 @@ are instrumented. The user can kill individual processes after the fact.
 Rejected — `spring-boot:run` at a parent POM does not start all modules; it either fails or runs the
 first module only. Building fat JARs and launching them individually is the reliable path.
 
-### 15. Entrypoint resolution before preview
+### 18. Entrypoint resolution before preview
 
 In both `createRuntimePlan()` (multi-runtime flow) and `InstallOtelJava()` (standalone), entrypoints
 are now resolved before the plan is printed. The preview always shows the exact command that will be
@@ -231,7 +259,7 @@ executed — never a placeholder like `java -javaagent:... -jar your_app.jar`. I
 resolved at plan time, the preview shows `(entrypoint will be detected at execution time)` as a fallback,
 but this path is only reached in edge cases where the installer cannot auto-detect the entrypoint.
 
-### 16. Uninstall: full agent path filtering (best-effort)
+### 19. Uninstall: full agent path filtering (best-effort)
 
 `dtwiz uninstall otel-java` uses a stateless discover-at-uninstall-time approach, consistent with all other dtwiz uninstall commands. It does not rely on PID files or a process registry.
 
