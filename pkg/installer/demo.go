@@ -235,6 +235,10 @@ func InstallDemo(envURL, accessTok, platformTok string, dryRun bool) error {
 	}
 
 	// Step 3+4: OTel Collector + Python instrumentation
+	absDemoDir, err := filepath.Abs(demoDirName)
+	if err != nil {
+		return fmt.Errorf("resolving demo directory path: %w", err)
+	}
 	AutoConfirm = true
-	return InstallOtelCollectorWithProject(envURL, accessTok, accessTok, platformTok, demoDirName, dryRun)
+	return InstallOtelCollectorWithProject(envURL, accessTok, accessTok, platformTok, absDemoDir, dryRun)
 }
