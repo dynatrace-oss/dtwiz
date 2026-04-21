@@ -224,5 +224,7 @@ func FormatRecommendations(recs []Recommendation) string {
 			sb.WriteString(fmt.Sprintf("  %s  %s\n", badge, title))
 		}
 	}
+	sb.WriteString("\n")
+	sb.WriteString(fmt.Sprintf("  %s  %s\n", recMuted.Sprint("[d]"), recMuted.Sprint("Install demo app (schnitzel)")))
 	return strings.TrimRight(sb.String(), "\n")
 }
