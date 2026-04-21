@@ -38,7 +38,7 @@ Existing infrastructure to reuse:
 - Parse `java -version` output reliably across JDK vendors and versions (Oracle, OpenJDK, GraalVM, etc.).
 - Match already-running Java processes to detected projects so the UI can show which are live.
 - Stop any running instance of the selected project before launching the instrumented one.
-- Pass `platformToken` through `InstallOtelJava` for DQL verification via `waitForServices()`.
+
 - Update the OTel Collector config (if present) after instrumentation is applied.
 - Remove the `DTWIZ_ALL_RUNTIMES` gate so Java appears in `dtwiz install otel` by default — **done last, after all other tasks are implemented and verified**.
 - Support `--dry-run`.
@@ -174,11 +174,7 @@ After launching the instrumented process:
 - `PrintProcessSummary()` shows status after the settle period (crashed / running / port detected).
 - `waitForServices()` polls DQL to verify the service appears in Dynatrace.
 
-### 13. Pass `platformToken` to `InstallOtelJava` for DQL verification
-
-The function signature becomes `InstallOtelJava(envURL, token, platformToken, serviceName string, dryRun bool) error`. The `platformToken` is needed by `waitForServices()` to authenticate against the DQL endpoint. The Cobra command in `cmd/install.go` already resolves `platformTok` via `getDtEnvironment()` — it just needs to be passed through.
-
-### 14. Enable Java by default in `dtwiz install otel`
+### 13. Enable Java by default in `dtwiz install otel`
 
 In `pkg/installer/otel.go`, `detectAvailableRuntimes()` currently gates Java behind `allRuntimesEnabled()`. Once all other tasks are implemented and verified, the `enabled` field for Java is set to `true` unconditionally — removing the gate is the **last code change** before integration testing.
 
@@ -188,6 +184,7 @@ In `pkg/installer/otel.go`, `detectAvailableRuntimes()` currently gates Java beh
 |---|---|
 | `otel_java.go` | `InstallOtelJava`, `DetectJavaPlan`, `JavaInstrumentationPlan`, plan/execute flow, JAR download, env var generation, `updateOtelCollectorIfPresent` |
 | `otel_java_process.go` (new) | `parseJavaVersion`, `validateJavaPrerequisites`, Java entrypoint detection (`detectJavaEntrypoints`, `isExecutableJar`), process detection/enrichment via `jps` |
+| `otel_uninstall.go` | Extended `UninstallOtelCollector` — adds Java process discovery (`findInstrumentedJavaProcesses`) and agent-dir removal as a cleanup section |
 | `otel_runtime_scan.go` | `DetectedProcess` struct — add `Description string` field for JPS enrichment |
 | `otel_java_test.go` | Tests for project detection, plan detection (existing + new) |
 | `otel_java_process_test.go` (new) | Tests for version parsing, entrypoint detection, process detection |
@@ -259,15 +256,17 @@ executed — never a placeholder like `java -javaagent:... -jar your_app.jar`. I
 resolved at plan time, the preview shows `(entrypoint will be detected at execution time)` as a fallback,
 but this path is only reached in edge cases where the installer cannot auto-detect the entrypoint.
 
-### 19. Uninstall: full agent path filtering (best-effort)
+### 19. Uninstall: folded into `dtwiz uninstall otel` (best-effort)
 
-`dtwiz uninstall otel-java` uses a stateless discover-at-uninstall-time approach, consistent with all other dtwiz uninstall commands. It does not rely on PID files or a process registry.
+Java uninstall logic is folded into the existing `UninstallOtelCollector()` in `otel_uninstall.go`, as an additional cleanup section alongside the OTel Collector and Node.js sections. No separate `dtwiz uninstall otel-java` command is added — this mirrors the pattern established by Node.js uninstall.
 
 Running Java processes are discovered via `detectJavaProcesses()` + `enrichProcessesWithJPS()`. The result is filtered to those whose command line contains the **exact agent JAR path** dtwiz uses: `~/opentelemetry/java/opentelemetry-javaagent.jar` (resolved via `javaAgentPath()`). This is a best-effort heuristic — matching on the full path rather than just the filename makes false positives unlikely, but another process could independently use the same agent location. The preview explicitly notes this and asks the user to verify the list before confirming.
 
 The agent JAR directory (`~/opentelemetry/java/`) is removed unconditionally if it exists, regardless of whether any processes were found. This cleans up the downloaded artifact even when the user stopped the process manually.
 
-**Flow:** discover → preview (processes to stop + directory to remove, with caveat) → confirm → stop → remove.
+**Flow (within `UninstallOtelCollector`):** discover Java processes + agent dir → include Java section in combined preview → confirm (once, for all sections) → stop Java processes → remove `~/opentelemetry/java/` → proceed with existing collector cleanup.
+
+**Alternative considered:** Keep Java as a standalone `dtwiz uninstall otel-java` subcommand. Rejected — consistency with the Node.js uninstall pattern (which is also folded into `uninstall otel`) is preferred. A single `dtwiz uninstall otel` cleans up all OTel-related instrumentation regardless of runtime.
 
 **Alternative considered:** Filter by filename only (`opentelemetry-javaagent.jar`). Rejected — too broad; any process using the OTel Java agent from any location would match.
 

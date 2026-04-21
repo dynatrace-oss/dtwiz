@@ -86,7 +86,7 @@
 
 **Files:** `pkg/installer/otel_java.go` (modify)
 
-- [ ] 5.1 Update `InstallOtelJava` signature to `InstallOtelJava(envURL, token, platformToken, serviceName string, dryRun bool) error`
+- [ ] 5.1 Update `InstallOtelJava` signature to `InstallOtelJava(envURL, token, serviceName string, dryRun bool) error`
 - [ ] 5.2 Add pre-flight validation call to `validateJavaPrerequisites()` at the top of `InstallOtelJava()`, before any other work
 - [ ] 5.3 Rewrite the dry-run path to include: API URL, service name, agent JAR download URL, environment variables, and the `-javaagent` JVM flag
 - [ ] 5.4 Implement the interactive flow:
@@ -105,22 +105,22 @@
   13. Call `waitForServices()` if at least one process is alive.
 - [ ] 5.5 Use `StartManagedProcess` to launch the instrumented process with log file at `<project-path>/<service-name>.log`. Immediately before constructing the `exec.Cmd`, add `logger.Debug("launching instrumented java process", "cmd", launchCmd, "dir", proj.Path)` — this must be the last debug statement before the process starts so the full resolved command is visible when running with `--debug`.
 - [ ] 5.6 Use `PrintProcessSummary` after the settle period; if no alive processes, print "No services are running — check the logs above for errors." and skip `waitForServices`
-- [ ] 5.7 Call `waitForServices(envURL, platformToken, aliveServiceNames)` when at least one process is alive
-- [ ] 5.8 Update `DetectJavaPlan` to build fully executable plans — pass `envURL`, `platformToken`, resolved entrypoint command through the `JavaInstrumentationPlan` struct
+- [ ] 5.7 Call `waitForServices(envURL, token, aliveServiceNames)` when at least one process is alive
+- [ ] 5.8 Update `DetectJavaPlan` to build fully executable plans — pass `envURL`, resolved entrypoint command through the `JavaInstrumentationPlan` struct
 - [ ] 5.9 Update `JavaInstrumentationPlan.Execute()` to use the full automated flow (detect entrypoint → stop → download → launch → update collector)
 
 ## 6. Cobra Command Updates
 
 **Files:** `cmd/install.go` (modify), `pkg/installer/otel.go` (modify)
 
-- [ ] 6.1 Update `installOtelJavaCmd` RunE in `cmd/install.go` to pass `platformTok` to `installer.InstallOtelJava(envURL, accessTok, platformTok, otelJavaServiceName, installDryRun)`
-- [ ] 6.2 Update `createRuntimePlan` for the `"Java"` case to pass `envURL` and `platformToken` through to the `JavaInstrumentationPlan`
+- [ ] 6.1 Update `installOtelJavaCmd` RunE in `cmd/install.go` to pass credentials to `installer.InstallOtelJava(envURL, accessTok, otelJavaServiceName, installDryRun)`
+- [ ] 6.2 Update `createRuntimePlan` for the `"Java"` case to pass `envURL` through to the `JavaInstrumentationPlan`
 
 ## 7. Unit Tests for Full Flow
 
 **Files:** `pkg/installer/otel_java_test.go` (modify)
 
-- [ ] 7.1 Update `TestDetectJavaPlan_FindsProject` to verify the plan includes the new fields (EnvURL, PlatformToken, EntrypointCommand)
+- [ ] 7.1 Update `TestDetectJavaPlan_FindsProject` to verify the plan includes the new fields (EnvURL, EntrypointCommand)
 - [ ] 7.2 Add `TestInstallOtelJava_DryRun` — verify dry-run output includes all expected fields (API URL, service name, agent JAR URL, env vars, `-javaagent` flag)
 - [ ] 7.3 Add `TestInstallOtelJava_JavaNotFound` — verify error message when Java is not on PATH
 - [ ] 7.4 Add `TestJavaInstrumentationPlan_PrintPlanSteps_Updated` — verify plan shows launch command with `-javaagent`, JAR download URL, and OTEL vars
@@ -186,22 +186,20 @@
 - [ ] 9.8 Manual verification: "Waiting for traffic" terminates when service appears in Dynatrace (not just on timeout)
 - [ ] 9.9 Manual verification: OTel Collector config is updated after Java instrumentation when a collector config exists on the machine
 
-## 13. Uninstall Java Instrumentation
+## 13. Extend `uninstall otel` with Java Cleanup
 
-**Files:** `pkg/installer/otel_java_uninstall.go` (create), `pkg/installer/otel_java_uninstall_test.go` (create), `cmd/uninstall.go` (modify)
+**Files:** `pkg/installer/otel_uninstall.go` (modify), `pkg/installer/otel_uninstall_test.go` (modify or create)
 
-- [ ] 13.1 Create `pkg/installer/otel_java_uninstall.go` with `UninstallOtelJava(dryRun bool) error`
-  - `findInstrumentedJavaProcesses()` — calls `detectJavaProcesses()` + `enrichProcessesWithJPS()`, filters to processes whose `Command` contains `opentelemetry-javaagent.jar`
-  - `javaAgentDir()` — returns `filepath.Dir(javaAgentPath())`
-  - `UninstallOtelJava()` — discover → preview → dry-run check → confirm → stop processes → remove `~/opentelemetry/java/`
-- [ ] 13.2 Register `uninstallOtelJavaCmd` in `cmd/uninstall.go` (`Use: "otel-java"`, `Short: "Stop instrumented Java processes and remove the OTel agent JAR"`)
-- [ ] 13.3 Tests in `pkg/installer/otel_java_uninstall_test.go`:
+- [ ] 13.1 Add `findInstrumentedJavaProcesses() []DetectedProcess` in `otel_uninstall.go` — calls `detectJavaProcesses()` + `enrichProcessesWithJPS()`, filters to processes whose `Command` contains the exact dtwiz agent path (`~/opentelemetry/java/opentelemetry-javaagent.jar`)
+- [ ] 13.2 Add `javaAgentDir() string` helper — returns `filepath.Dir(javaAgentPath())`
+- [ ] 13.3 Extend `UninstallOtelCollector(dryRun bool) error` to include a Java cleanup section: discover instrumented Java processes and the agent dir, include them in the combined preview alongside existing collector artifacts, and on confirmation stop matched processes then remove `~/opentelemetry/java/` if it exists
+- [ ] 13.4 Tests:
   - `TestFindInstrumentedJavaProcesses_FiltersByAgentFlag` — verify only processes with `opentelemetry-javaagent.jar` in command are returned
   - `TestFindInstrumentedJavaProcesses_NoneMatching` — verify empty result when no processes have the agent flag
   - `TestJavaAgentDir_ReturnsParentOfJar` — verify the directory name ends in `java`
-  - `TestUninstallOtelJava_DryRun_NothingPresent` — no processes, no agent dir → returns nil without error
-  - `TestUninstallOtelJava_DryRun_AgentDirExists` — agent dir present, dry-run → dir not removed
-- [ ] 13.4 Manual verification: `dtwiz uninstall otel-java --dry-run` with a running instrumented process — shows PID and agent dir, makes no changes
-- [ ] 13.5 Manual verification: `dtwiz uninstall otel-java` stops only the dtwiz-instrumented process, not other Java processes
-- [ ] 13.6 Manual verification: `dtwiz uninstall otel-java` with no running processes but agent JAR present — removes `~/opentelemetry/java/` only
-- [ ] 13.7 Manual verification: `dtwiz uninstall otel-java` with nothing to remove — prints informational message and exits cleanly
+  - `TestUninstallOtelCollector_JavaDryRun_NothingPresent` — no Java processes, no agent dir → Java section absent from preview
+  - `TestUninstallOtelCollector_JavaDryRun_AgentDirExists` — agent dir present, dry-run → dir not removed
+- [ ] 13.5 Manual verification: `dtwiz uninstall otel --dry-run` with a running instrumented Java process — shows Java PID and agent dir in preview, makes no changes
+- [ ] 13.6 Manual verification: `dtwiz uninstall otel` stops only the dtwiz-instrumented Java process, not other Java processes
+- [ ] 13.7 Manual verification: `dtwiz uninstall otel` with no running Java processes but agent JAR present — removes `~/opentelemetry/java/` only
+- [ ] 13.8 Manual verification: `dtwiz uninstall otel` with nothing Java-related to remove — Java section is absent from output; existing collector behavior unchanged

@@ -210,12 +210,11 @@ After launching the instrumented process, the installer SHALL verify the service
 - **WHEN** the service does not appear in Dynatrace within 120 seconds
 - **THEN** the installer SHALL print a timeout message indicating the service may take more time to appear
 
-#### Scenario: No platform token provided
+#### Scenario: DQL verification uses access token with Bearer auth
 
-- **GIVEN** `platformToken` is empty
-- **WHEN** the installer reaches the DQL verification step
-- **THEN** DQL verification SHALL be skipped
-- **AND** the installer SHALL print: `Skipping Dynatrace verification — no platform token provided (set DT_PLATFORM_TOKEN to enable)`
+- **GIVEN** the installer reaches the DQL verification step
+- **WHEN** `waitForServices` is called
+- **THEN** the access token SHALL be used with Bearer auth for the DQL endpoint
 
 #### Scenario: All processes crashed
 
@@ -384,43 +383,44 @@ can see exactly what command will be executed.
 - **THEN** the installer SHALL detect entrypoints (or multi-module structure) immediately
 - **AND** the preview SHALL show the resolved launch command — never a placeholder like `java -javaagent:... -jar your_app.jar`
 
-### Requirement: Uninstall Java instrumentation
+### Requirement: Uninstall Java instrumentation via `dtwiz uninstall otel`
 
-`dtwiz uninstall otel-java` SHALL stop all Java processes instrumented by dtwiz and remove the downloaded OTel agent JAR directory.
+`dtwiz uninstall otel` SHALL be extended to also stop all Java processes instrumented by dtwiz and remove the downloaded OTel agent JAR directory, as an additional section alongside the existing OTel Collector cleanup. No separate `dtwiz uninstall otel-java` command is added.
 
 #### Scenario: Instrumented processes found
 
 - **GIVEN** one or more Java processes are running with `-javaagent:...opentelemetry-javaagent.jar` in their command line
-- **WHEN** `dtwiz uninstall otel-java` is run
-- **THEN** the installer SHALL display a preview listing the PIDs and process descriptions to be stopped and the agent directory to be removed
-- **AND** SHALL prompt for confirmation before making any changes
-- **AND** upon confirmation SHALL stop all matched processes (SIGINT → SIGKILL fallback)
+- **WHEN** `dtwiz uninstall otel` is run
+- **THEN** the preview SHALL include a Java instrumentation section listing the PIDs and process descriptions to be stopped and the agent directory to be removed
+- **AND** SHALL prompt for confirmation (once, covering all sections in the preview) before making any changes
+- **AND** upon confirmation SHALL stop all matched Java processes (SIGINT → SIGKILL fallback)
 - **AND** SHALL remove `~/opentelemetry/java/` if it exists
 
 #### Scenario: No instrumented processes, but agent JAR exists
 
 - **GIVEN** no Java processes with the agent flag are running
 - **AND** `~/opentelemetry/java/` exists on disk
-- **WHEN** `dtwiz uninstall otel-java` is run
-- **THEN** the installer SHALL display a preview showing only the directory removal
+- **WHEN** `dtwiz uninstall otel` is run
+- **THEN** the preview SHALL include a Java section showing only the directory removal
 - **AND** SHALL remove `~/opentelemetry/java/` after confirmation
 
-#### Scenario: Nothing to remove
+#### Scenario: Nothing Java-related to remove
 
 - **GIVEN** no instrumented Java processes are running
 - **AND** `~/opentelemetry/java/` does not exist
-- **WHEN** `dtwiz uninstall otel-java` is run
-- **THEN** the installer SHALL print an informational message and exit without prompting
+- **WHEN** `dtwiz uninstall otel` is run
+- **THEN** the Java section SHALL be absent from the preview and output
+- **AND** existing OTel Collector cleanup behavior SHALL be unchanged
 
 #### Scenario: Dry-run
 
-- **WHEN** `dtwiz uninstall otel-java --dry-run` is run
-- **THEN** the installer SHALL print the preview (processes and/or directory) without stopping anything or removing any files
+- **WHEN** `dtwiz uninstall otel --dry-run` is run
+- **THEN** the preview SHALL include the Java section (processes and/or directory) if applicable, without stopping anything or removing any files
 
 #### Scenario: Only dtwiz-instrumented processes are stopped
 
 - **GIVEN** multiple Java processes are running
-- **WHEN** `dtwiz uninstall otel-java` discovers processes
+- **WHEN** `dtwiz uninstall otel` discovers processes
 - **THEN** it SHALL only include processes whose command line contains the exact dtwiz agent path (`~/opentelemetry/java/opentelemetry-javaagent.jar`)
 - **AND** the preview SHALL note that the list is best-effort and ask the user to verify before confirming
 - **AND** SHALL NOT stop processes that do not reference that specific path
