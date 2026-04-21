@@ -30,9 +30,11 @@ Commands frequently need both API families in a single operation. Exposing them 
 
 Retrying on transient server errors is safe. Retrying on 4xx (e.g. 401, 403, 404) would mask configuration problems and slow down error feedback.
 
-### 4. Sensitive header redaction in debug output
+### 4. Sensitive header redaction and body size cap in debug output
 
 Authorization tokens must never appear in logs. The redaction list (`authorization`, `x-api-key`, `cookie`, `set-cookie`) is checked at output time, not at client construction, so it applies to all requests regardless of how the header was set.
+
+Response bodies are capped at 2048 bytes. API responses can be large and may contain sensitive fields; arbitrary JSON field redaction would be brittle and hard to maintain. A size cap limits both the blast radius of accidental secret exposure and the volume of stderr noise. The cap is applied as a byte slice, not a JSON parse, to keep the implementation simple and unconditional.
 
 ### 5. `--extensions` as an opt-in flag, not default behaviour
 

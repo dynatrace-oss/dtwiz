@@ -48,7 +48,7 @@ The HTTP client SHALL automatically retry requests that fail with a network erro
 
 ### Requirement: Request/response debug logging
 
-When verbosity is enabled (`-v` or `--debug`), the client SHALL log request and response details to stderr. Sensitive headers SHALL be redacted.
+When verbosity is enabled (`-v` or `--debug`), the client SHALL log request and response details to stderr. Sensitive headers SHALL be redacted. Response bodies SHALL be capped at 2048 bytes to prevent large or sensitive payloads from flooding stderr.
 
 #### Scenario: Verbose mode logs request method and URL
 
@@ -60,7 +60,13 @@ When verbosity is enabled (`-v` or `--debug`), the client SHALL log request and 
 
 - **GIVEN** the user passes `--debug`
 - **WHEN** any HTTP request is made via the client
-- **THEN** request headers and the response body are also printed to stderr; `Authorization`, `x-api-key`, `cookie`, and `set-cookie` header values are replaced with `[REDACTED]`
+- **THEN** request headers and the first 2048 bytes of the response body are printed to stderr; `Authorization`, `x-api-key`, `cookie`, and `set-cookie` header values are replaced with `[REDACTED]`
+
+#### Scenario: Response body truncated when larger than 2048 bytes
+
+- **GIVEN** the user passes `--debug` and the response body exceeds 2048 bytes
+- **WHEN** the response is received
+- **THEN** only the first 2048 bytes are printed, followed by `[... truncated]` and the total byte count
 
 ### Requirement: --extensions flag on dtwiz status
 

@@ -117,7 +117,13 @@ func newRestyClient(baseURL, authHeader string, verbosityLevel int) *resty.Clien
 			fmt.Fprintf(os.Stderr, "===> RESPONSE <===\nSTATUS: %s\nTIME: %s\n",
 				resp.Status(), resp.Time())
 			if verbosityLevel >= 2 {
-				fmt.Fprintf(os.Stderr, "BODY:\n%s\n", resp.String())
+				const maxBodyBytes = 2048
+				body := resp.String()
+				if len(body) > maxBodyBytes {
+					fmt.Fprintf(os.Stderr, "BODY (first %d of %d bytes):\n%s\n[... truncated]\n", maxBodyBytes, len(body), body[:maxBodyBytes])
+				} else {
+					fmt.Fprintf(os.Stderr, "BODY:\n%s\n", body)
+				}
 			}
 			return nil
 		})
