@@ -2,6 +2,7 @@
 package installer
 
 import (
+	"bufio"
 	"fmt"
 	"net/url"
 	"os"
@@ -11,6 +12,25 @@ import (
 	"strings"
 	"time"
 )
+
+// AutoConfirm bypasses all confirmProceed prompts when set to true.
+// Set by the --yes / -y flag on install, update, and uninstall command groups.
+var AutoConfirm bool
+
+// confirmProceed prints the prompt and returns true if the user confirms.
+// When AutoConfirm is true it returns true immediately without prompting.
+func confirmProceed(prompt string) (bool, error) {
+	if AutoConfirm {
+		return true, nil
+	}
+	fmt.Printf("%s [Y/n] ", prompt)
+	scanner := bufio.NewScanner(os.Stdin)
+	if !scanner.Scan() {
+		return false, scanner.Err()
+	}
+	answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+	return answer == "" || answer == "y" || answer == "yes", nil
+}
 
 // killAndWaitProcess kills a process and waits for it to fully exit.
 // proc.Wait() only works for child processes; for external processes on Windows

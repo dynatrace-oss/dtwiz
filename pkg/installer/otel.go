@@ -198,6 +198,15 @@ func createRuntimePlan(proj detectedProject, apiURL, token, envURL, platformToke
 }
 
 func InstallOtelCollector(envURL, token, ingestToken, platformToken string, dryRun bool) error {
+	return InstallOtelCollectorWithProject(envURL, token, ingestToken, platformToken, "", dryRun)
+}
+
+func InstallOtelCollectorWithProject(envURL, token, ingestToken, platformToken, projectPath string, dryRun bool) error {
+	if projectPath != "" {
+		if _, err := os.Stat(projectPath); err != nil {
+			return fmt.Errorf("project path not found: %s", projectPath)
+		}
+	}
 	cyan := color.New(color.FgMagenta)
 
 	fmt.Println()
@@ -215,16 +224,22 @@ func InstallOtelCollector(envURL, token, ingestToken, platformToken string, dryR
 	}
 
 	runtimes := detectAvailableRuntimes()
-	projects := detectAllProjects(runtimes)
 
 	var plan InstrumentationPlan
-	if len(projects) > 0 {
-		cyan.Println("  Detected projects:")
-		fmt.Println("  " + strings.Repeat("─", 50))
-		printProjectList(projects)
+	if projectPath != "" {
+		// --project provided: skip scan, build plan directly from path
+		proj := detectedProject{ScannedProject: ScannedProject{Path: projectPath}, Runtime: "Python"}
+		plan = createRuntimePlan(proj, cp.apiURL, token, envURL, platformToken)
+	} else {
+		projects := detectAllProjects(runtimes)
+		if len(projects) > 0 {
+			cyan.Println("  Detected projects:")
+			fmt.Println("  " + strings.Repeat("─", 50))
+			printProjectList(projects)
 
-		if selected, ok := selectProject(projects); ok {
-			plan = createRuntimePlan(selected, cp.apiURL, token, envURL, platformToken)
+			if selected, ok := selectProject(projects); ok {
+				plan = createRuntimePlan(selected, cp.apiURL, token, envURL, platformToken)
+			}
 		}
 	}
 	fmt.Println()

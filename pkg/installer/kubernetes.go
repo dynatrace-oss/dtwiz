@@ -1,9 +1,8 @@
 package installer
 
 import (
-	_ "embed"
-	"bufio"
 	"bytes"
+	_ "embed"
 	"fmt"
 	"net/url"
 	"os"
@@ -126,7 +125,7 @@ func isOperatorInstalled() bool {
 	return strings.Contains(string(out), "dynatrace-operator")
 }
 
-	// helmOperatorArgs builds the `helm install` argument slice.
+// helmOperatorArgs builds the `helm install` argument slice.
 // Helm v3 uses --atomic; Helm v4+ uses --rollback-on-failure.
 func helmOperatorArgs(helmMajor int) []string {
 	rollbackFlag := "--atomic"
@@ -157,8 +156,6 @@ func helmOperatorUpgradeArgs(helmMajor int) []string {
 	}
 }
 
-
-
 // applyDynakube writes the DynaKube CR YAML to a temp file and runs
 // `kubectl apply -f` on it.
 func applyDynakube(yaml string) error {
@@ -178,7 +175,6 @@ func applyDynakube(yaml string) error {
 
 	return RunCommandQuiet("kubectl", "apply", "-f", tmpFile.Name())
 }
-
 
 // podStatus holds the ready state of a single pod.
 type podStatus struct {
@@ -288,24 +284,13 @@ func fetchClusterName(fallback string) string {
 	return name
 }
 
-// confirmProceed prints the prompt and returns true if the user confirms.
-func confirmProceed(prompt string) (bool, error) {
-	fmt.Printf("%s [Y/n] ", prompt)
-	scanner := bufio.NewScanner(os.Stdin)
-	if !scanner.Scan() {
-		return false, scanner.Err()
-	}
-	answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
-	return answer == "" || answer == "y" || answer == "yes", nil
-}
-
 // InstallKubernetes deploys the Dynatrace Operator on a Kubernetes cluster.
 //
 // Parameters:
 //   - envURL:    Dynatrace environment URL
 //   - token:     data-ingest token (used as dataIngestToken in the Secret)
 //   - apiToken:  Classic Dynatrace access token (dt0c01.*) used as apiToken in the
-//               DynaKube Secret; falls back to token when empty
+//     DynaKube Secret; falls back to token when empty
 //   - name:      DynaKube CR name (auto-derived from envURL if empty)
 //   - dryRun:    when true, only print what would be done
 func InstallKubernetes(envURL, token, apiToken, name string, dryRun bool) error {
