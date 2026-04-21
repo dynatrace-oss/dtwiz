@@ -33,7 +33,7 @@ func detectPython() (string, error) {
 		}
 	}
 	logger.Debug("no usable python 3 interpreter found on PATH")
-	return "", fmt.Errorf("Python 3 interpreter not found: install Python 3 and ensure either `python3` or `python` is in PATH")
+	return "", fmt.Errorf("Python 3 interpreter not found: install Python 3 and ensure either `python3` or `python` is in PATH")  //nolint:ST1005 to keep brand capitalization
 }
 
 func validatePythonPrerequisites() error {

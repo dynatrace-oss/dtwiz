@@ -402,7 +402,7 @@ func InstallKubernetes(envURL, token, apiToken, name string, dryRun bool) error 
 		fmt.Printf("  Installing Dynatrace Operator via Helm (helm v%d)...\n", helmMajor)
 	}
 	if err := RunCommandQuiet("helm", helmArgs...); err != nil {
-		return fmt.Errorf("Helm operator install failed: %w", err)
+		return fmt.Errorf("Helm operator install failed: %w", err)  //nolint:ST1005 to keep brand capitalization
 	}
 	fmt.Println("  Helm chart deployed.")
 

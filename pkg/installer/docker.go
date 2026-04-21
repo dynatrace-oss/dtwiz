@@ -52,7 +52,7 @@ func InstallDocker(envURL, token string, dryRun bool) error {
 	}
 
 	if !isDockerAvailable() {
-		return fmt.Errorf("Docker is not available — install Docker and ensure the daemon is running")
+		return fmt.Errorf("Docker is not available — install Docker and ensure the daemon is running") //nolint:ST1005 to keep brand capitalization
 	}
 
 	// Remove any existing container with the same name.

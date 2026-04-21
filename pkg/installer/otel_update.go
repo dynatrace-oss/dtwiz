@@ -90,11 +90,12 @@ func lcsDP(a, b []string) [][]int {
 	}
 	for i := 1; i <= m; i++ {
 		for j := 1; j <= n; j++ {
-			if a[i-1] == b[j-1] {
+			switch {
+			case a[i-1] == b[j-1]:
 				dp[i][j] = dp[i-1][j-1] + 1
-			} else if dp[i-1][j] > dp[i][j-1] {
+			case dp[i-1][j] > dp[i][j-1]:
 				dp[i][j] = dp[i-1][j]
-			} else {
+			default:
 				dp[i][j] = dp[i][j-1]
 			}
 		}
@@ -373,4 +374,3 @@ func UpdateOtelConfig(configPath, envURL, token, platformToken string, dryRun bo
 	green.Println("  ✓ Collector restarted and verified.")
 	return nil
 }
-
