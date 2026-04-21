@@ -536,10 +536,10 @@ func InstallAWS(envURL, token, platformToken string, dryRun bool, startTime stri
 	// statusCh carries deployment progress messages into the watch display.
 	statusCh := make(chan string, 4)
 
-	// Run CFN deploy and Lambda instrumentation in the background so the
-	// watch can start immediately and show incoming data while AWS provisions.
+	// Start CFN deploy in the background immediately — it takes several minutes
+	// and produces no meaningful intermediate output.
 	var wg sync.WaitGroup
-	var deployErr, lambdaErr error
+	var deployErr error
 
 	wg.Add(1)
 	go func() {
@@ -553,14 +553,16 @@ func InstallAWS(envURL, token, platformToken string, dryRun bool, startTime stri
 		statusCh <- fmt.Sprintf("CloudFormation stack %q deployed successfully.", cfg.StackName)
 	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		lambdaErr = InstallAWSLambda(envURL, token, platformToken, false, false)
-	}()
+	// Run Lambda instrumentation on the main thread — it is quick but produces
+	// a lot of output, so let it finish before handing the terminal to watch.
+	lambdaErr := InstallAWSLambda(envURL, token, platformToken, false, false)
+	if lambdaErr != nil {
+		fmt.Printf("\n  Warning: Lambda instrumentation encountered an error: %s\n", lambdaErr)
+		fmt.Println("  You can retry with: dtwiz install aws-lambda")
+	}
 
-	// Start watch immediately — it will display status messages from the
-	// background deploy as they arrive and keep running after deploy finishes.
+	// Start watch after Lambda output is done — CFN deploy is still running
+	// in the background and will send its result into statusCh.
 	if startTime != "" && platformToken != "" {
 		WatchIngestWithStatus(envURL, platformToken, startTime, statusCh)
 	}
@@ -570,10 +572,6 @@ func InstallAWS(envURL, token, platformToken string, dryRun bool, startTime stri
 
 	if deployErr != nil {
 		return deployErr
-	}
-	if lambdaErr != nil {
-		fmt.Printf("\n  Warning: Lambda instrumentation encountered an error: %s\n", lambdaErr)
-		fmt.Println("  You can retry with: dtwiz install aws-lambda")
 	}
 	return nil
 }
