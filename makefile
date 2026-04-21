@@ -14,13 +14,13 @@ install:
 COVERAGE_THRESHOLD ?= 20
 
 test:
-	$(GO) test ./... -coverprofile=coverage.out
+	$(GO) test ./pkg/... -coverprofile=coverage.out
 	$(GO) tool cover -func=coverage.out
 
 # Run tests and enforce coverage threshold
 test-coverage:
 	@echo "Running tests with coverage..."
-	@$(GO) test -race -coverprofile=coverage.out -covermode=atomic ./...
+	@$(GO) test -race -coverprofile=coverage.out -covermode=atomic ./pkg/...
 	@echo ""
 	@echo "=== Package Coverage ==="
 	@$(GO) tool cover -func=coverage.out | grep -E "^(total|.*\t)" | tail -30

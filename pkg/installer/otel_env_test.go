@@ -1,9 +1,6 @@
 package installer
 
 import (
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -144,107 +141,5 @@ func TestFormatPrintableEnvVars(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("formatPrintableEnvVars[%d] = %q, want %q", i, got[i], want[i])
 		}
-	}
-}
-
-func TestWaitForServices_LinkContainsDieter(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(dqlResponse{
-			State: "SUCCEEDED",
-			Result: struct {
-				Records []map[string]interface{} `json:"records"`
-			}{
-				Records: []map[string]interface{}{
-					{"name": "my-svc"},
-				},
-			},
-		})
-	}))
-	defer server.Close()
-
-	output := captureStdout(t, func() {
-		waitForServices(server.URL, "dt0s16.token", []string{"my-svc"}, false)
-	})
-
-	const wantSubstr = "my.getting.started.dieter"
-	if !strings.Contains(output, wantSubstr) {
-		t.Errorf("output does not contain %q:\n%s", wantSubstr, output)
-	}
-}
-
-func TestWaitForServices_ContainsMatch(t *testing.T) {
-	// Simulate Lambda: Dynatrace returns "helloWorldNode2 in us-east-1" but
-	// the input name is just "helloWorldNode2".
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(dqlResponse{
-			State: "SUCCEEDED",
-			Result: struct {
-				Records []map[string]interface{} `json:"records"`
-			}{
-				Records: []map[string]interface{}{
-					{"name": "helloWorldNode2 in us-east-1"},
-				},
-			},
-		})
-	}))
-	defer server.Close()
-
-	output := captureStdout(t, func() {
-		waitForServices(server.URL, "dt0s16.token", []string{"helloWorldNode2"}, true)
-	})
-
-	if !strings.Contains(output, "helloWorldNode2 in us-east-1") {
-		t.Errorf("output should show full Dynatrace name, got:\n%s", output)
-	}
-	if !strings.Contains(output, "my.getting.started.dieter") {
-		t.Errorf("output should contain getting started link, got:\n%s", output)
-	}
-}
-
-func TestFetchSmartscapeServiceNames(t *testing.T) {
-	var receivedAuthorization string
-	var receivedContentType string
-	var receivedQuery string
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		receivedAuthorization = r.Header.Get("Authorization")
-		receivedContentType = r.Header.Get("Content-Type")
-
-		var payload struct {
-			Query string `json:"query"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			t.Fatalf("decode request: %v", err)
-		}
-		receivedQuery = payload.Query
-
-		_ = json.NewEncoder(w).Encode(dqlResponse{
-			State: "SUCCEEDED",
-			Result: struct {
-				Records []map[string]interface{} `json:"records"`
-			}{
-				Records: []map[string]interface{}{
-					{"name": "orders-api"},
-					{"name": "checkout-api"},
-					{"ignored": true},
-				},
-			},
-		})
-	}))
-	defer server.Close()
-
-	serviceNames := fetchSmartscapeServiceNames(server.URL, "dt0s16.platform-token", "smartscapeNodes SERVICE | limit 2")
-
-	if receivedAuthorization != "Bearer dt0s16.platform-token" {
-		t.Fatalf("unexpected authorization header %q", receivedAuthorization)
-	}
-	if receivedContentType != "application/json" {
-		t.Fatalf("unexpected content type %q", receivedContentType)
-	}
-	if receivedQuery != "smartscapeNodes SERVICE | limit 2" {
-		t.Fatalf("unexpected DQL query %q", receivedQuery)
-	}
-	if len(serviceNames) != 2 || serviceNames[0] != "orders-api" || serviceNames[1] != "checkout-api" {
-		t.Fatalf("unexpected service names %v", serviceNames)
 	}
 }

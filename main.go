@@ -1,9 +1,11 @@
 package main
 
 import (
+	"time"
+
 	"github.com/dynatrace-oss/dtwiz/cmd"
 )
 
 func main() {
-	cmd.Execute()
+	cmd.Execute(time.Now())
 }
