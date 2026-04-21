@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `dtwiz install demo`: new command that downloads and extracts the schnitzel 4-service Python demo app, installs Python if missing (via brew/apt/dnf/winget), and wires it up to Dynatrace OTel monitoring end-to-end
+- `--yes` / `-y` persistent flag on `install`, `update`, and `uninstall` command groups to skip all interactive confirmation prompts
+- `--project <path>` flag on `install otel` and `install otel-python` to pre-select a project directory and skip interactive project scanning
+
+### Changed
+
+- Refactored `confirmProceed()` and shared `AutoConfirm` variable from `pkg/installer/kubernetes.go` into `pkg/installer/installer.go` where other shared utilities live
+
 ## [0.2.14] - 2026-04-17
 
 ### Fixed

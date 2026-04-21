@@ -69,8 +69,19 @@ func buildPythonInstrumentationPlan(proj ScannedProject, apiURL, token, envURL, 
 }
 
 func DetectPythonPlan(apiURL, token string) *PythonInstrumentationPlan {
+	return DetectPythonPlanFromPath("", apiURL, token)
+}
+
+func DetectPythonPlanFromPath(projectPath, apiURL, token string) *PythonInstrumentationPlan {
 	if _, err := detectPython(); err != nil {
 		return nil
+	}
+
+	if projectPath != "" {
+		projects := []ScannedProject{{Path: projectPath}}
+		processes := detectPythonProcesses()
+		matchProcessesToProjects(projects, processes)
+		return buildPythonInstrumentationPlan(projects[0], apiURL, token, "", "")
 	}
 
 	projects, processes := runInParallel(detectPythonProjects, detectPythonProcesses)
@@ -266,7 +277,12 @@ func (p *PythonInstrumentationPlan) Execute() {
 
 }
 
-func InstallOtelPython(envURL, token, platformToken, serviceName string, dryRun bool) error {
+func InstallOtelPython(envURL, token, platformToken, serviceName, projectPath string, dryRun bool) error {
+	if projectPath != "" {
+		if _, err := os.Stat(projectPath); err != nil {
+			return fmt.Errorf("project path not found: %s", projectPath)
+		}
+	}
 	if err := validatePythonPrerequisites(); err != nil {
 		return err
 	}
@@ -300,7 +316,7 @@ func InstallOtelPython(envURL, token, platformToken, serviceName string, dryRun 
 	cyan.Println("  Dynatrace Python Auto-Instrumentation")
 	fmt.Println("  " + sep)
 
-	plan := DetectPythonPlan(apiURL, token)
+	plan := DetectPythonPlanFromPath(projectPath, apiURL, token)
 	if plan == nil {
 		printManualInstructions(envVars)
 		return nil
