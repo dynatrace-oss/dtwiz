@@ -22,8 +22,9 @@
 - [ ] 2.2 Handle download errors: non-200 HTTP status → return error with URL and status code; network errors → return error with URL and error message.
 - [ ] 2.3 Print download progress: `Downloading OpenTelemetry Java agent... done.`
 - [ ] 2.4 Tests in `pkg/installer/otel_java_test.go`:
-  - `TestDownloadJavaAgent_CreatesDirectory` (verify directory creation with temp dir)
-  - `TestDownloadJavaAgent_ErrorOnNon200` (mock HTTP response)
+  - `TestDownloadJavaAgent_CreatesDirectory` — use a temp dir as destination; verify the `~/opentelemetry/java/` directory is created when it does not exist, and the JAR file is written
+  - `TestDownloadJavaAgent_ErrorOnNon200` — mock an HTTP server returning 404; verify the function returns an error containing the URL and the HTTP status code
+  - `TestDownloadJavaAgent_NetworkError` — mock a server that closes the connection immediately; verify the function returns an error containing the URL
 
 ## 3. Java Entrypoint Detection
 
@@ -79,7 +80,7 @@
   11. Print process summary via `PrintProcessSummary`.
   12. Call `updateOtelCollectorIfPresent(envURL, token, dryRun)` — probes `<cwd>/opentelemetry/config.yaml`, patches silently with `PatchConfigFile` if found, skips with no output if not found.
   13. Call `waitForServices()` if at least one process is alive.
-- [ ] 5.5 Use `StartManagedProcess` to launch the instrumented process with log file at `<project-path>/<service-name>.log`. Before building the `exec.Cmd`, add `logger.Debug("launching instrumented java process", "cmd", launchCmd, "dir", proj.Path)` so the full command is visible in debug output.
+- [ ] 5.5 Use `StartManagedProcess` to launch the instrumented process with log file at `<project-path>/<service-name>.log`. Immediately before constructing the `exec.Cmd`, add `logger.Debug("launching instrumented java process", "cmd", launchCmd, "dir", proj.Path)` — this must be the last debug statement before the process starts so the full resolved command is visible when running with `--debug`.
 - [ ] 5.6 Use `PrintProcessSummary` after the settle period; if no alive processes, print "No services are running — check the logs above for errors." and skip `waitForServices`
 - [ ] 5.7 Call `waitForServices(envURL, platformToken, aliveServiceNames)` when at least one process is alive
 - [ ] 5.8 Update `DetectJavaPlan` to build fully executable plans — pass `envURL`, `platformToken`, resolved entrypoint command through the `JavaInstrumentationPlan` struct
@@ -100,7 +101,8 @@
 - [ ] 7.2 Add `TestInstallOtelJava_DryRun` — verify dry-run output includes all expected fields (API URL, service name, agent JAR URL, env vars, `-javaagent` flag)
 - [ ] 7.3 Add `TestInstallOtelJava_JavaNotFound` — verify error message when Java is not on PATH
 - [ ] 7.4 Add `TestJavaInstrumentationPlan_PrintPlanSteps_Updated` — verify plan shows launch command with `-javaagent`, JAR download URL, and OTEL vars
-- [ ] 7.5 Add `TestInstallOtelJava_NoBuildArtifact_NoRunningProcess` — verify that when no JAR exists and no build tool is found, a "no build tool detected" message is printed and no process is started; verify that when a build tool is present but the build fails, `Auto-build failed` is printed
+- [ ] 7.5 Add `TestInstallOtelJava_NoBuildArtifact_NoRunningProcess` — verify that when no JAR exists and no build tool is found, a "no build tool detected" message is printed and no process is started
+- [ ] 7.6 Add `TestInstallOtelJava_AutoBuildFails` — verify that when a build tool wrapper is present but the build command exits non-zero, `Auto-build failed` is printed and no process is started
 
 ## 8. Remove DTWIZ_ALL_RUNTIMES Gate
 
