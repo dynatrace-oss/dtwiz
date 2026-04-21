@@ -55,27 +55,10 @@ var sensitiveHTTPHeaders = map[string]bool{
 // NewHTTPClient builds a Client with a ClassicClient and a PlatformClient.
 // Credentials and the environment URL are read from flags / env vars at call time.
 func NewHTTPClient() (*Client, error) {
-	envURL := environmentHint()
-	if envURL == "" {
-		return nil, fmt.Errorf("no Dynatrace environment URL configured\n\n" +
-			"Set one with --environment or the DT_ENVIRONMENT env var:\n" +
-			"  export DT_ENVIRONMENT=https://<your-env>.dynatracelabs.com/")
+	envURL, aTok, pTok, err := getDtEnvironment()
+	if err != nil {
+		return nil, err
 	}
-
-	aTok := accessToken()
-	if aTok == "" {
-		return nil, fmt.Errorf("no Dynatrace access token configured\n\n" +
-			"Set one with --access-token or the DT_ACCESS_TOKEN env var:\n" +
-			"  export DT_ACCESS_TOKEN=dt0c01.****")
-	}
-
-	pTok := platformToken()
-	if pTok == "" {
-		return nil, fmt.Errorf("no Dynatrace platform token configured\n\n" +
-			"Set one with --platform-token or the DT_PLATFORM_TOKEN env var:\n" +
-			"  export DT_PLATFORM_TOKEN=dt0s16.****")
-	}
-
 	level := verbosityFlag
 	if debugFlag {
 		level = 2
