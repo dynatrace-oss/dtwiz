@@ -123,14 +123,15 @@ var setupCmd = &cobra.Command{
 			}
 			installErr = installer.UpdateOtelConfig(cfgPath, envURL, accessTok, platformTok, setupDryRun)
 		case recommender.MethodAWS:
-			installErr = installer.InstallAWS(envURL, accessTok, platformTok, setupDryRun)
+			installErr = installer.InstallAWS(envURL, accessTok, platformTok, setupDryRun, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
 		default:
 			return fmt.Errorf("unsupported method: %s", selected.Method)
 		}
 		if installErr != nil {
 			return installErr
 		}
-		if !setupDryRun {
+		// AWS watch is started inside InstallAWS (runs in parallel with deploy).
+		if !setupDryRun && selected.Method != recommender.MethodAWS {
 			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
 		}
 		return nil

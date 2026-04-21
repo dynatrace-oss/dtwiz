@@ -413,7 +413,8 @@ func buildDeployArgs(cfg awsStackConfig, templateFile string) []string {
 //   - token:          access token (used as default for prompt pre-fill)
 //   - platformToken:  dt0s16.* token from --platform-token / DT_PLATFORM_TOKEN (used as default for prompts)
 //   - dryRun:         when true, show what would be done without executing
-func InstallAWS(envURL, token, platformToken string, dryRun bool) error {
+//   - startTime:      RFC3339 timestamp used as the from-clause for WatchIngest (empty = skip watch)
+func InstallAWS(envURL, token, platformToken string, dryRun bool, startTime string) error {
 	cyan := color.New(color.FgMagenta)
 	sep := strings.Repeat("─", 60)
 
@@ -523,46 +524,65 @@ func InstallAWS(envURL, token, platformToken string, dryRun bool) error {
 
 	// ── Deploy ────────────────────────────────────────────────────────────────
 
-	// Start Lambda instrumentation concurrently. Only when actually deploying
-	// — dry-run skips this to avoid interleaved output and unnecessary API calls.
-	var wg sync.WaitGroup
-	var lambdaErr error
-	if !dryRun {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			lambdaErr = InstallAWSLambda(envURL, token, platformToken, false, false)
-		}()
-	}
-
 	fmt.Printf("  Downloading CloudFormation template...\n")
 	tmplFile, err := downloadAWSTemplate()
 	if err != nil {
-		wg.Wait()
 		return err
 	}
 	defer os.Remove(tmplFile)
 
 	realArgs := buildDeployArgs(cfg, tmplFile)
 
-	fmt.Printf("  Deploying CloudFormation stack %q...\n", cfg.StackName)
-	fmt.Println("  (This may take a few minutes)")
-	fmt.Println()
+	// statusCh carries deployment progress messages into the watch display.
+	statusCh := make(chan string, 4)
 
-	if err := RunCommand("aws", realArgs...); err != nil {
-		wg.Wait()
-		return fmt.Errorf("CloudFormation deployment failed: %w", err)
+	// Run CFN deploy and Lambda instrumentation in the background so the
+	// watch can start immediately and show incoming data while AWS provisions.
+	var wg sync.WaitGroup
+	var deployErr, lambdaErr error
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		statusCh <- fmt.Sprintf("CloudFormation stack %q deploying... (this may take a few minutes)", cfg.StackName)
+		if err := runCommandSilent("aws", realArgs...); err != nil {
+			deployErr = fmt.Errorf("CloudFormation deployment failed: %w", err)
+			statusCh <- fmt.Sprintf("CloudFormation deployment failed: %s", err)
+			return
+		}
+		statusCh <- fmt.Sprintf("CloudFormation stack %q deployed successfully.", cfg.StackName)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		lambdaErr = InstallAWSLambda(envURL, token, platformToken, false, false)
+	}()
+
+	// Start watch immediately — it will display status messages from the
+	// background deploy as they arrive and keep running after deploy finishes.
+	if startTime != "" && platformToken != "" {
+		WatchIngestWithStatus(envURL, platformToken, startTime, statusCh)
 	}
 
-	fmt.Println()
-	fmt.Printf("  Stack %q deployed successfully.\n", cfg.StackName)
-	fmt.Printf("  View in the AWS Console: https://console.aws.amazon.com/cloudformation/home#/stacks\n")
-
-	// Wait for Lambda instrumentation to finish.
 	wg.Wait()
+	close(statusCh)
+
+	if deployErr != nil {
+		return deployErr
+	}
 	if lambdaErr != nil {
 		fmt.Printf("\n  Warning: Lambda instrumentation encountered an error: %s\n", lambdaErr)
 		fmt.Println("  You can retry with: dtwiz install aws-lambda")
 	}
 	return nil
+}
+
+// runCommandSilent runs a command like RunCommand but discards stdout/stderr
+// output, preventing interleaving with the watch display.
+func runCommandSilent(name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	return cmd.Run()
 }
