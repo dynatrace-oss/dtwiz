@@ -1,3 +1,5 @@
+# Proposal: Ingest Watch
+
 ## Why
 
 After installing a monitoring method, users have no visibility into whether data is actually flowing into Dynatrace. They must manually navigate to multiple Dynatrace apps to check. A live terminal watcher that polls for newly ingested data closes this feedback loop — users see services, cloud resources, Kubernetes entities, logs, requests, and exceptions appear in real time, with direct links to the relevant Dynatrace apps.
@@ -14,6 +16,7 @@ After installing a monitoring method, users have no visibility into whether data
 ## Capabilities
 
 ### New Capabilities
+
 - `ingest-watch`: Live terminal display that polls Dynatrace DQL/Smartscape APIs and shows a summary of newly ingested data with deep links to Dynatrace apps
 
 ### Modified Capabilities
