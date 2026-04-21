@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added `--extensions` switch to `dtwiz status` to test common http client and token usage
+
 ## [0.2.14] - 2026-04-17
 
 ### Fixed
