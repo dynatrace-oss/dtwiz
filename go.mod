@@ -5,8 +5,8 @@ go 1.24
 require (
 	github.com/fatih/color v1.18.0
 	github.com/spf13/cobra v1.8.0
-	golang.org/x/sys v0.43.0
-	golang.org/x/term v0.42.0
+	golang.org/x/sys v0.29.0
+	golang.org/x/term v0.28.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
