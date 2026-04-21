@@ -114,8 +114,8 @@ func newRestyClient(baseURL, authHeader string, verbosityLevel int) *resty.Clien
 			return nil
 		})
 		rc.OnAfterResponse(func(_ *resty.Client, resp *resty.Response) error {
-			fmt.Fprintf(os.Stderr, "===> RESPONSE <===\nSTATUS: %d %s\nTIME: %s\n",
-				resp.StatusCode(), resp.Status(), resp.Time())
+			fmt.Fprintf(os.Stderr, "===> RESPONSE <===\nSTATUS: %s\nTIME: %s\n",
+				resp.Status(), resp.Time())
 			if verbosityLevel >= 2 {
 				fmt.Fprintf(os.Stderr, "BODY:\n%s\n", resp.String())
 			}
