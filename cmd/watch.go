@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var watchFromFlag string
+
 var watchCmd = &cobra.Command{
 	Use:   "watch",
 	Short: "Watch for new data arriving in Dynatrace",
@@ -26,10 +28,16 @@ var watchCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		installer.WatchIngest(envURL, pTok)
+		fromClause := watchFromFlag
+		if fromClause == "" {
+			fromClause = StartTime.UTC().Format("2006-01-02T15:04:05Z")
+		}
+
+		installer.WatchIngest(envURL, pTok, fromClause)
 	},
 }
 
 func init() {
+	watchCmd.Flags().StringVar(&watchFromFlag, "from", "", `start time for queries — RFC3339 (e.g. "2026-04-21T14:30:05Z") or DQL relative (e.g. "now()-1h"); defaults to dtwiz start time`)
 	rootCmd.AddCommand(watchCmd)
 }

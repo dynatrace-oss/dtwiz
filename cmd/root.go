@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/fatih/color"
@@ -11,6 +12,9 @@ import (
 
 // Version is set at build time via -ldflags.
 var Version = "dev"
+
+// StartTime is the time when dtwiz was started.
+var StartTime time.Time
 
 var debugFlag bool
 var verbosityFlag int
@@ -48,7 +52,8 @@ func printBanner() {
 }
 
 // Execute runs the root command.
-func Execute() {
+func Execute(t time.Time) {
+	StartTime = t
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

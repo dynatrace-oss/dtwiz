@@ -131,7 +131,7 @@ var setupCmd = &cobra.Command{
 			return installErr
 		}
 		if !setupDryRun {
-			installer.WatchIngest(envURL, platformTok)
+			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
 		}
 		return nil
 	},

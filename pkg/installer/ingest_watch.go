@@ -45,7 +45,9 @@ type watchState struct {
 
 // WatchIngest polls Dynatrace for newly ingested data and renders a live
 // terminal summary. It blocks until the user presses Ctrl+C.
-func WatchIngest(envURL, pToken string) {
+// fromClause is injected directly into DQL queries — accepts RFC3339 timestamps
+// or DQL relative expressions (e.g. "now()-1h").
+func WatchIngest(envURL, pToken, fromClause string) {
 	if pToken == "" {
 		fmt.Println("  Platform token required for watch. Set --platform-token or DT_PLATFORM_TOKEN.")
 		return
@@ -53,9 +55,8 @@ func WatchIngest(envURL, pToken string) {
 
 	appsURL := AppsURL(envURL)
 	queryURL := appsURL + "/platform/storage/query/v1/query:execute"
-	startTime := time.Now()
+	watchStart := time.Now()
 	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
-
 	// Colors
 	highlight := color.New(color.FgMagenta, color.Bold)
 	dim := color.New(color.Faint)
@@ -97,8 +98,8 @@ func WatchIngest(envURL, pToken string) {
 			}
 		}
 
-		elapsed := time.Since(startTime).Truncate(time.Second)
-		state := pollAll(queryURL, pToken, startTime)
+		elapsed := time.Since(watchStart).Truncate(time.Second)
+		state := pollAll(queryURL, pToken, fromClause)
 
 		var buf strings.Builder
 
@@ -181,8 +182,7 @@ func renderRelationships(buf *strings.Builder, sec watchSection, appsURL string,
 }
 
 // pollAll executes all DQL queries in parallel and returns the aggregated state.
-func pollAll(queryURL, token string, startTime time.Time) watchState {
-	fromClause := startTime.UTC().Format(time.RFC3339)
+func pollAll(queryURL, token string, fromClause string) watchState {
 	var state watchState
 
 	type result struct {
