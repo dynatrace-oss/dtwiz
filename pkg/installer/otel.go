@@ -227,8 +227,10 @@ func InstallOtelCollectorWithProject(envURL, token, ingestToken, platformToken, 
 
 	var plan InstrumentationPlan
 	if projectPath != "" {
-		// --project provided: skip scan, build plan directly from path
-		proj := detectedProject{ScannedProject: ScannedProject{Path: projectPath}, Runtime: "Python"}
+		// --project provided: skip scan, but still detect running processes to stop them.
+		projects := []ScannedProject{{Path: projectPath}}
+		matchProcessesToProjects(projects, detectPythonProcesses())
+		proj := detectedProject{ScannedProject: projects[0], Runtime: "Python"}
 		plan = createRuntimePlan(proj, cp.apiURL, token, envURL, platformToken)
 	} else {
 		projects := detectAllProjects(runtimes)
