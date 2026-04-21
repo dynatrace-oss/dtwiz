@@ -9,6 +9,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func init() {
+	statusCmd.Flags().BoolVar(&clientFlag, "extensions", false, "probe Classic and Platform Extensions APIs using the HTTP client")
+}
+
 var (
 	statusOK    = color.New(color.FgGreen, color.Bold)
 	statusError = color.New(color.FgRed, color.Bold)
@@ -16,6 +20,8 @@ var (
 	statusMuted = color.New()
 	statusHead  = color.New(color.FgMagenta, color.Bold)
 )
+
+var clientFlag bool
 
 var statusCmd = &cobra.Command{
 	Use:   "status",
@@ -60,6 +66,10 @@ var statusCmd = &cobra.Command{
 			fmt.Printf("  %s  %s\n\n", statusLabel.Sprint("Platform Token:"), statusOK.Sprint("✓ configured (skipped validation — no environment URL)"))
 		}
 
+		if clientFlag {
+			printExtensionsStatus()
+		}
+
 		statusHead.Println("  System Analysis")
 		statusMuted.Println("  " + "──────────────────────────────────────────")
 		info, err := analyzer.AnalyzeSystem()
@@ -70,4 +80,41 @@ var statusCmd = &cobra.Command{
 		fmt.Println(info.Summary())
 		return nil
 	},
+}
+
+func printExtensionsStatus() {
+	statusHead.Println("  Extensions API")
+	statusMuted.Println("  " + "──────────────────────────────────────────")
+
+	c, err := NewHTTPClient()
+	if err != nil {
+		fmt.Printf("  %s  %s\n\n", statusLabel.Sprint("Setup:"), statusError.Sprintf("✗ %v", err))
+		return
+	}
+
+	// Classic: GET /api/v2/extensions
+	var classicResp struct {
+		TotalResults int `json:"totalResults"`
+	}
+	resp, err := c.Classic.HTTP().R().SetResult(&classicResp).Get("/api/v2/extensions")
+	if err != nil {
+		fmt.Printf("  %s  %s\n", statusLabel.Sprint("Classic Extensions:"), statusError.Sprintf("✗ %v", err))
+	} else if resp.StatusCode() >= 400 {
+		fmt.Printf("  %s  %s\n", statusLabel.Sprint("Classic Extensions:"), statusError.Sprintf("✗ HTTP %d", resp.StatusCode()))
+	} else {
+		fmt.Printf("  %s  %s\n", statusLabel.Sprint("Classic Extensions:"), statusOK.Sprintf("✓ reachable (%d extensions)", classicResp.TotalResults))
+	}
+
+	// Platform: GET /platform/extensions/v2/extensions
+	var platformResp struct {
+		TotalCount int `json:"totalCount"`
+	}
+	resp, err = c.Platform.HTTP().R().SetResult(&platformResp).Get("/platform/extensions/v2/extensions")
+	if err != nil {
+		fmt.Printf("  %s  %s\n\n", statusLabel.Sprint("Platform Extensions:"), statusError.Sprintf("✗ %v", err))
+	} else if resp.StatusCode() >= 400 {
+		fmt.Printf("  %s  %s\n\n", statusLabel.Sprint("Platform Extensions:"), statusError.Sprintf("✗ HTTP %d", resp.StatusCode()))
+	} else {
+		fmt.Printf("  %s  %s\n\n", statusLabel.Sprint("Platform Extensions:"), statusOK.Sprintf("✓ reachable (%d packages)", platformResp.TotalCount))
+	}
 }
