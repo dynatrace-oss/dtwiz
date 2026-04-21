@@ -783,12 +783,6 @@ func InstallAWSLambda(envURL, token, platformToken string, dryRun, confirm bool)
 		fmt.Printf("  %d functions instrumented successfully\n", succeeded)
 	}
 
-	// ── Wait for services ────────────────────────────────────────────────────
-
-	if succeeded > 0 {
-		fmt.Println()
-		fmt.Println("  Waiting for traffic — invoke your Lambda functions to generate traces.")
-	}
 	return nil
 }
 
