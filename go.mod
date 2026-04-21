@@ -4,13 +4,13 @@ go 1.24.13
 
 require (
 	github.com/fatih/color v1.18.0
+	github.com/go-resty/resty/v2 v2.17.2
 	github.com/spf13/cobra v1.8.0
 	golang.org/x/sys v0.39.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
-	github.com/go-resty/resty/v2 v2.17.2 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
