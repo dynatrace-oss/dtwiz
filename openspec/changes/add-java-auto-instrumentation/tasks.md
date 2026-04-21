@@ -94,7 +94,7 @@
   2. Present project selection menu (with PID annotations where applicable).
   3. Detect entrypoints for the selected project via `detectJavaEntrypoints()`.
   4. If exactly one entrypoint found: auto-select it (no prompt). If multiple entrypoints found: present entrypoint selection menu.
-   5. If no entrypoints found: attempt auto-build via `attemptSingleModuleBuild()`; if build fails or no build tool is present, print an error and exit.
+  5. If no entrypoints found: attempt auto-build via `attemptSingleModuleBuild()`; if build fails or no build tool is present, print an error and exit.
   6. Show plan preview (project path, launch command with `-javaagent`, JAR URL, OTEL vars, PIDs to stop).
   7. Confirm with user via `confirmProceed()` — if matched processes exist, prompt text SHALL name them: `Stop PID 1234 (myapp) and proceed with installation?`; otherwise use `Proceed with installation?`
   8. Download the agent JAR.
