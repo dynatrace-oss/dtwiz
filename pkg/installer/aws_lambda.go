@@ -662,7 +662,7 @@ func InstallAWSLambda(envURL, token, platformToken string, dryRun, confirm bool)
 	// ── Validate ─────────────────────────────────────────────────────────────
 
 	if envURL == "" {
-		return fmt.Errorf("Dynatrace environment URL is required (--environment or DT_ENVIRONMENT)") //nolint:ST1005 to keep brand capitalization
+		return fmt.Errorf("Dynatrace environment URL is required (--environment or DT_ENVIRONMENT)") //nolint:staticcheck // ST1005: keep brand capitalization
 	}
 	if token == "" {
 		return fmt.Errorf("access token is required (--access-token or DT_ACCESS_TOKEN)")

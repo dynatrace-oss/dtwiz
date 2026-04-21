@@ -9,8 +9,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/fatih/color"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 func generateOtelPythonEnvVars(apiURL, token, serviceName string) map[string]string {

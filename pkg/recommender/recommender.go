@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 	"github.com/fatih/color"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 )
 
 // IngestMethod identifies a Dynatrace ingestion approach.

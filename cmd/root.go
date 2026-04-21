@@ -5,9 +5,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 // Version is set at build time via -ldflags.

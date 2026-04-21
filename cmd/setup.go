@@ -6,11 +6,12 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/fatih/color"
+	"github.com/spf13/cobra"
+
 	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/recommender"
-	"github.com/fatih/color"
-	"github.com/spf13/cobra"
 )
 
 var setupDryRun bool

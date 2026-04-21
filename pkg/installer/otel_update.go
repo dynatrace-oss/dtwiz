@@ -6,9 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/fatih/color"
 	"gopkg.in/yaml.v3"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 // exporterSnippet is the YAML block to inject into an existing OTel Collector

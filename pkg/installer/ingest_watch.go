@@ -12,9 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/fatih/color"
 	"golang.org/x/term"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 const watchPollInterval = 5 * time.Second
