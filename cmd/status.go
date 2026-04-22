@@ -86,7 +86,7 @@ func printExtensionsStatus() {
 	statusHead.Println("  Extensions API")
 	statusMuted.Println("  " + "──────────────────────────────────────────")
 
-	c, err := NewHTTPClient()
+	c, err := setupClient()
 	if err != nil {
 		fmt.Printf("  %s  %s\n\n", statusLabel.Sprint("Setup:"), statusError.Sprintf("✗ %v", err))
 		return

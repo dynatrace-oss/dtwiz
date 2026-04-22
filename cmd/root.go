@@ -5,13 +5,13 @@ import (
 	"os"
 	"time"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/client"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
+	"github.com/dynatrace-oss/dtwiz/pkg/version"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
-
-// Version is set at build time via -ldflags.
-var Version = "dev"
 
 // StartTime is the time when dtwiz was started.
 var StartTime time.Time
@@ -47,8 +47,21 @@ func printBanner() {
 	purple.Printf(" |  _ \\ |__   __| \\ \\      / /|_ _||_  /\n")
 	purple.Printf(" | | | |   | |     \\ \\ /\\ / /  | |  / / \n")
 	purple.Printf(" | |_| |   | |      \\ V  V /   | | / /_ \n")
-	purple.Printf(" |____/    |_|       \\_/\\_/   |___|/____| %s\n", Version)
+	purple.Printf(" |____/    |_|       \\_/\\_/   |___|/____| %s\n", version.Version)
 	fmt.Printf("\n HASTA LA VISTA - BLIND SPOTS!\n\n")
+}
+
+// setupClient creates a Dynatrace API client from the current flag/env credentials.
+func setupClient() (*client.Client, error) {
+	envURL, aTok, pTok, err := getDtEnvironment()
+	if err != nil {
+		return nil, err
+	}
+	level := verbosityFlag
+	if debugFlag {
+		level = 2
+	}
+	return client.New(installer.APIURL(envURL), aTok, installer.AppsURL(envURL), pTok, level)
 }
 
 // Execute runs the root command.

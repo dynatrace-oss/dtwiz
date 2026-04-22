@@ -1,4 +1,4 @@
-package cmd
+package client
 
 import (
 	"fmt"
@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/version"
 	"github.com/go-resty/resty/v2"
 )
 
@@ -52,34 +53,31 @@ var sensitiveHTTPHeaders = map[string]bool{
 	"set-cookie":    true,
 }
 
-// NewHTTPClient builds a Client with a ClassicClient and a PlatformClient.
-// Credentials and the environment URL are read from flags / env vars at call time.
-func NewHTTPClient() (*Client, error) {
-	envURL, aTok, pTok, err := getDtEnvironment()
-	if err != nil {
-		return nil, err
+// New builds a Client with a ClassicClient and a PlatformClient.
+// classicURL and platformURL should already be in the correct URL families
+// (use installer.APIURL / installer.AppsURL to convert from the raw env URL).
+func New(classicURL, accessToken, platformURL, platformToken string, verbosityLevel int) (*Client, error) {
+	if classicURL == "" {
+		return nil, fmt.Errorf("classic API URL is required")
 	}
-	level := verbosityFlag
-	if debugFlag {
-		level = 2
+	if platformURL == "" {
+		return nil, fmt.Errorf("platform URL is required")
 	}
 
-	classicURL := installer.APIURL(envURL)
 	classic := &ClassicClient{
 		baseURL: classicURL,
-		http:    newRestyClient(classicURL, installer.AuthHeader(aTok), level),
+		http:    newRestyClient(classicURL, installer.AuthHeader(accessToken), verbosityLevel),
 	}
 
-	appsURL := installer.AppsURL(envURL)
 	platform := &PlatformClient{
-		baseURL: appsURL,
-		http:    newRestyClient(appsURL, "Bearer "+pTok, level),
+		baseURL: platformURL,
+		http:    newRestyClient(platformURL, "Bearer "+platformToken, verbosityLevel),
 	}
 
 	return &Client{Classic: classic, Platform: platform}, nil
 }
 
-// newRestyClient creates a resty client with shared dtctl-equivalent settings.
+// newRestyClient creates a resty client with shared settings.
 func newRestyClient(baseURL, authHeader string, verbosityLevel int) *resty.Client {
 	rc := resty.New().
 		SetBaseURL(baseURL).
@@ -95,7 +93,7 @@ func newRestyClient(baseURL, authHeader string, verbosityLevel int) *resty.Clien
 			return sc == 429 || sc >= 500
 		}).
 		SetTimeout(6 * time.Minute).
-		SetHeader("User-Agent", "dtwiz/"+Version).
+		SetHeader("User-Agent", "dtwiz/"+version.Version).
 		SetHeader("Accept-Encoding", "gzip")
 
 	if verbosityLevel > 0 {

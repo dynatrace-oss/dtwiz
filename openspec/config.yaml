@@ -9,6 +9,9 @@ context: |
   Project structure:
     - main.go → cmd.Execute()
     - cmd/ — Cobra commands (root, analyze, recommend, setup, install, update, uninstall, status, version, auth)
+      - root.go exposes setupClient() — the single entry point for creating an API client
+    - pkg/client/ — dual HTTP client (ClassicClient + PlatformClient); New() takes resolved URLs + tokens
+    - pkg/version/ — Version var injected via ldflags at build time
     - pkg/analyzer/ — system detection (platform, Docker, K8s, OneAgent, OTel, AWS, Azure, services)
     - pkg/recommender/ — priority-ranked ingestion recommendations
     - pkg/installer/ — per-method installers + shared utilities + embedded Go templates
@@ -29,6 +32,7 @@ context: |
     - Two URL families: Classic (no .apps.) with Api-Token, Platform (with .apps.) with Bearer
     - Token prefixes: dt0c01.* = API token, dt0s16.* = Platform token
     - Credentials from flags → env vars (DT_ENVIRONMENT, DT_ACCESS_TOKEN, DT_PLATFORM_TOKEN)
+    - cmd handlers obtain the client via setupClient() in root.go — never construct pkg/client.Client directly in cmd
 
 rules:
   proposal:
