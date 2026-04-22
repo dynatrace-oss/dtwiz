@@ -48,15 +48,16 @@ Update the plan struct and implement `.otel/` directory creation with package in
 - [ ] 3.1 Update `NodeInstrumentationPlan` struct: add `PackageManager string`, `OtelDir string`, `Framework string` (holds `"next"`, `"nuxt"`, or `""`), `PlatformToken string`, `EnvURL string`
 - [ ] 3.2 Update `buildNodeInstrumentationPlan()` signature to accept `envURL, platformToken string`; populate new struct fields including `OtelDir = filepath.Join(proj.Path, ".otel")`, detect package manager via `detectNodePackageManager()`, detect framework via `detectNodeFramework()`
 - [x] 3.3 Implement `createOtelDir(plan *NodeInstrumentationPlan) error` — create `.otel/` directory, write `.otel/package.json` with OTel deps as dependencies
-- [x] 3.4 Implement `generateWrapperJS(framework string, envVars map[string]string) string` — generate wrapper script content that sets `process.env` vars, requires `@opentelemetry/auto-instrumentations-node/register`, and delegates to the framework CLI (`next/dist/bin/next` for Next.js, `nuxt/bin/nuxt.mjs` for Nuxt). Called only for framework projects.
+- [x] 3.4 Implement `generateWrapperJS(framework string, envVars map[string]string) string` — generate CJS wrapper script content that sets `process.env` vars, requires `@opentelemetry/auto-instrumentations-node/register`, and delegates to the Next.js CLI (`next/dist/bin/next`). Called only for Next.js. Implement `generateNuxtBootstrapMJS(otelDir string) string` — generate an ESM bootstrap script (`.mjs`) that uses `module.register()` to install `import-in-the-middle` hooks and loads the OTel CJS register via `createRequire`. Called only for Nuxt (Nuxt bypasses the CLI; the Nitro server is launched directly).
 - [x] 3.5 Implement `installOtelNodeDeps(otelDir string) error` — run `npm install` inside `.otel/` directory using `exec.Command`
 - [x] 3.6 Tests:
   - `TestCreateOtelDir_CreatesPackageJSON`
   - `TestCreateOtelDir_PackageJSONContainsOtelDeps`
   - `TestGenerateWrapperJS_Next_SetsEnvVars`
   - `TestGenerateWrapperJS_Next_DelegatesToNextCLI`
-  - `TestGenerateWrapperJS_Nuxt_SetsEnvVars`
-  - `TestGenerateWrapperJS_Nuxt_DelegatesToNuxtCLI`
+  - `TestGenerateWrapperJS_Nuxt_NoWrapper` (Nuxt passes through `generateWrapperJS` unchanged — it uses `generateNuxtBootstrapMJS` instead)
+  - `TestGenerateNuxtBootstrapMJS_ContainsModuleRegister`
+  - `TestGenerateNuxtBootstrapMJS_UsesOtelDir`
   - `TestBuildNodeInstrumentationPlan_DetectsNextJS`
   - `TestBuildNodeInstrumentationPlan_DetectsNuxt`
   - `TestBuildNodeInstrumentationPlan_DetectsPackageManager`
@@ -71,7 +72,7 @@ Rewrite `Execute()` to perform actual installation, process launch, and Dynatrac
 - [x] 4.1 Rewrite `Execute()`: stop running processes (reuse `stopProcesses()`), call `createOtelDir()`, for Next.js/Nuxt write framework wrapper script, call `installOtelNodeDeps()`, build the run command (regular vs Next.js vs Nuxt), set OTEL\_\* env vars on the process, use `StartManagedProcess()` to launch, use `PrintProcessSummary()` for port detection, use `waitForServices()` for Smartscape polling
 - [x] 4.2 For regular apps: the run command is `node --require @opentelemetry/auto-instrumentations-node/register <entrypoint>` with CWD set to `.otel/` and entrypoint path adjusted to be relative from `.otel/` (e.g., `../server.js`)
 - [x] 4.3 For Next.js apps: the run command is `node otel/next-otel-bootstrap.js start` with CWD set to project root
-- [x] 4.4 For Nuxt apps: the run command is `node otel/nuxt-otel-bootstrap.js start` with CWD set to project root
+- [x] 4.4 For Nuxt apps: the run command is `node --import .otel/nuxt-otel-bootstrap.mjs .output/server/index.mjs` with CWD set to project root (launches the Nitro server directly; Nuxt CLI is not used because it spawns child processes that lose OTel registration)
 - [x] 4.5 Update `PrintPlanSteps()` to show: project path, package manager, framework status (Next.js/Nuxt if applicable), `.otel/` directory creation, `npm install` in `.otel/`, run command
 - [x] 4.6 Update `DetectNodePlan()` to call updated `buildNodeInstrumentationPlan()` with `apiURL, token` (not `envURL, platformToken` — those are set later like Python)
 - [x] 4.7 Tests:
@@ -99,7 +100,7 @@ Add Node.js `.otel/` cleanup to the existing `dtwiz uninstall otel` command.
 **Files:** `pkg/installer/otel_uninstall.go` (modify)
 
 - [ ] 6.1 Add `findNodeOtelDirs() []string` — scan CWD and parent directories for `.otel/` directories that contain a `package.json` with `@opentelemetry` in its content
-- [ ] 6.2 Add `findInstrumentedNodeProcesses() []otelProcessInfo` — detect running `node` processes whose command line contains `@opentelemetry/auto-instrumentations-node/register`, `.otel/next-otel-bootstrap.js`, or `.otel/nuxt-otel-bootstrap.js`
+- [ ] 6.2 Add `findInstrumentedNodeProcesses() []otelProcessInfo` — detect running `node` processes whose command line contains `@opentelemetry/auto-instrumentations-node/register`, `.otel/next-otel-bootstrap.js`, or `.otel/nuxt-otel-bootstrap.mjs`
 - [ ] 6.3 Extend `UninstallOtelCollector()` — after the existing collector preview section, add a "Node.js instrumentation" subsection showing `.otel/` dirs to remove and instrumented node processes to kill. On confirmation, handle Node.js cleanup alongside collector cleanup.
 - [ ] 6.4 Handle the case where only Node.js artifacts exist (no collector) — the "nothing to remove" check must account for Node.js dirs/processes too
 - [ ] 6.5 Tests:
