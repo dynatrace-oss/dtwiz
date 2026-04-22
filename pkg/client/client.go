@@ -7,9 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-resty/resty/v2"
+
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/version"
-	"github.com/go-resty/resty/v2"
 )
 
 // Client is the top-level HTTP client for Dynatrace API calls.
@@ -83,8 +84,8 @@ func newRestyClient(baseURL, authHeader string, verbosityLevel int) *resty.Clien
 		SetBaseURL(baseURL).
 		SetHeader("Authorization", authHeader).
 		SetRetryCount(3).
-		SetRetryWaitTime(1 * time.Second).
-		SetRetryMaxWaitTime(10 * time.Second).
+		SetRetryWaitTime(1*time.Second).
+		SetRetryMaxWaitTime(10*time.Second).
 		AddRetryCondition(func(r *resty.Response, err error) bool {
 			if err != nil {
 				return true
@@ -92,7 +93,7 @@ func newRestyClient(baseURL, authHeader string, verbosityLevel int) *resty.Clien
 			sc := r.StatusCode()
 			return sc == 429 || sc >= 500
 		}).
-		SetTimeout(6 * time.Minute).
+		SetTimeout(6*time.Minute).
 		SetHeader("User-Agent", "dtwiz/"+version.Version).
 		SetHeader("Accept-Encoding", "gzip")
 
