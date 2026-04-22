@@ -11,26 +11,26 @@ const (
 	DividerLineLength int = 42
 )
 
-func Header(message string) {
+func Header(label string, message string) {
 	_, err := ColorHeader.Printf("  %s\n", message)
 	if err != nil {
-		PrintStatusLine("status", fmt.Sprintf("✗ %s", err), ColorError)
+		PrintStatusLine(label, fmt.Sprintf("✗ %s", err), ColorError)
 	}
 
-	PrintSectionDivider()
+	PrintSectionDivider(label)
 }
 
-func PrintSectionDivider() {
+func PrintSectionDivider(label string) {
 	_, err := ColorMuted.Println("  " + strings.Repeat("─", DividerLineLength))
 	if err != nil {
-		PrintStatusLine("status", fmt.Sprintf("✗ %s", err), ColorError)
+		PrintError(label, err)
 	}
 }
 
 func PrintStatusLine(label, message string, colorFunc *color.Color) {
 	_, err := fmt.Fprintf(color.Output, "  %s:  %s\n", ColorLabel.Sprint(label), colorFunc.Sprint(message))
 	if err != nil {
-		fmt.Printf("status: %s\n", ColorError.Sprintf("✗ %s", err))
+		PrintError(label, err)
 	}
 }
 
@@ -39,6 +39,10 @@ func PrintStatusLine(label, message string, colorFunc *color.Color) {
 func PrintFlagLine(label, message string, colorFunc *color.Color) {
 	_, err := fmt.Fprintf(color.Output, "  %s  %s\n", ColorLabel.Sprint(label), colorFunc.Sprint(message))
 	if err != nil {
-		fmt.Printf("status: %s\n", ColorError.Sprintf("✗ %s", err))
+		PrintError(label, err)
 	}
+}
+
+func PrintError(label string, err error) {
+	fmt.Printf("  %s: %s\n", label, ColorError.Sprintf("✗ %s", err))
 }

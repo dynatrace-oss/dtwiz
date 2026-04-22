@@ -2,6 +2,8 @@ package display
 
 import (
 	"bytes"
+	"errors"
+	"os"
 	"strings"
 	"testing"
 
@@ -31,7 +33,7 @@ func captureOutput(t *testing.T, fn func()) string {
 
 func TestHeader_PrintsIndentedTitle(t *testing.T) {
 	got := captureOutput(t, func() {
-		Header("Connection Status")
+		Header("test", "Connection Status")
 	})
 	if !strings.Contains(got, "  Connection Status\n") {
 		t.Errorf("Header() = %q, want output to contain indented title", got)
@@ -43,7 +45,7 @@ func TestHeader_PrintsIndentedTitle(t *testing.T) {
 
 func TestPrintSectionDivider_PrintsIndentedSeparator(t *testing.T) {
 	got := captureOutput(t, func() {
-		PrintSectionDivider()
+		PrintSectionDivider("test")
 	})
 	if !strings.HasPrefix(got, "  ") {
 		t.Errorf("PrintSectionDivider() output missing two-space indent: %q", got)
@@ -93,6 +95,31 @@ func TestPrintFlagLine_NoColonAfterLabel(t *testing.T) {
 	want := "  DTWIZ_ALL_RUNTIMES  ✓ enabled (env)\n"
 	if got != want {
 		t.Errorf("PrintFlagLine() = %q, want %q", got, want)
+	}
+}
+
+func TestPrintError_FormatsLabelAndError(t *testing.T) {
+	// PrintError writes to os.Stdout via fmt.Printf, not color.Output,
+	// so we capture stdout directly.
+	origNoColor := color.NoColor
+	color.NoColor = true
+	t.Cleanup(func() { color.NoColor = origNoColor })
+
+	r, w, _ := os.Pipe()
+	origStdout := os.Stdout
+	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = origStdout })
+
+	PrintError("Setup", errors.New("connection refused"))
+
+	w.Close()
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+
+	got := buf.String()
+	want := "  Setup: ✗ connection refused\n"
+	if got != want {
+		t.Errorf("PrintError() = %q, want %q", got, want)
 	}
 }
 
