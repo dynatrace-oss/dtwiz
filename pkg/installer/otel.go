@@ -9,8 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/fatih/color"
-
+	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -33,13 +32,8 @@ type detectedProject struct {
 	ModuleName string
 }
 
-func allRuntimesEnabled() bool {
-	v := os.Getenv("DTWIZ_ALL_RUNTIMES")
-	return v == "true" || v == "1"
-}
-
 func detectAvailableRuntimes() []runtimeInfo {
-	allEnabled := allRuntimesEnabled()
+	allEnabled := featureflags.IsEnabled(featureflags.AllRuntimes)
 	return []runtimeInfo{
 		{name: "Python", binName: "python3", enabled: true, detect: detectPythonRuntimeProjects},
 		{name: "Java", binName: "java", enabled: allEnabled, detect: detectJavaRuntimeProjects},

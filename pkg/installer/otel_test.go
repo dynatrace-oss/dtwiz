@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 )
 
 func setTestStdin(t *testing.T, input string) {
@@ -32,6 +34,7 @@ func setTestStdin(t *testing.T, input string) {
 }
 
 func TestDetectAvailableRuntimes_DefaultEnabled(t *testing.T) {
+	featureflags.ClearCLIOverrideForTest(t, featureflags.AllRuntimes)
 	t.Setenv("DTWIZ_ALL_RUNTIMES", "")
 
 	runtimes := detectAvailableRuntimes()
@@ -51,7 +54,7 @@ func TestDetectAvailableRuntimes_DefaultEnabled(t *testing.T) {
 }
 
 func TestDetectAvailableRuntimes_UnlockAll(t *testing.T) {
-	t.Setenv("DTWIZ_ALL_RUNTIMES", "true")
+	featureflags.SetCLIOverrideForTest(t, featureflags.AllRuntimes, true)
 
 	runtimes := detectAvailableRuntimes()
 
@@ -65,8 +68,8 @@ func TestDetectAvailableRuntimes_UnlockAll(t *testing.T) {
 func TestDetectAvailableRuntimes_UnlockAll_1(t *testing.T) {
 	t.Setenv("DTWIZ_ALL_RUNTIMES", "1")
 
-	if !allRuntimesEnabled() {
-		t.Error("allRuntimesEnabled() should return true when DTWIZ_ALL_RUNTIMES=1")
+	if !featureflags.IsEnabled(featureflags.AllRuntimes) {
+		t.Error("featureflags.IsEnabled(AllRuntimes) should return true when set via SetCLIOverrideForTest")
 	}
 }
 

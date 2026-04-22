@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fatih/color"
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 )
 
 // runCmd executes a command and returns (success, combined output).
@@ -148,11 +148,6 @@ type SystemInfo struct {
 	Services         []string         `json:"services"`
 }
 
-var (
-	colorHeader = color.New(color.FgMagenta, color.Bold)
-	colorMuted  = color.New(color.Faint)
-)
-
 const (
 	labelWidth = 18
 )
@@ -165,8 +160,8 @@ func label(s string) string {
 func (s *SystemInfo) Summary() string {
 	var sb strings.Builder
 
-	sb.WriteString(colorHeader.Sprint("  System Analysis") + "\n")
-	sb.WriteString(colorMuted.Sprint("  "+strings.Repeat("─", 42)) + "\n")
+	sb.WriteString(display.ColorHeader.Sprint("  System Analysis") + "\n")
+	sb.WriteString(display.ColorMuted.Sprint("  "+strings.Repeat("─", 42)) + "\n")
 
 	osName := map[Platform]string{
 		PlatformLinux:   "Linux",
@@ -190,7 +185,7 @@ func (s *SystemInfo) Summary() string {
 	} else {
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("OpenTelemetry"),
-			colorMuted.Sprint("<none>")))
+			display.ColorMuted.Sprint("<none>")))
 	}
 
 	if s.Docker != nil && s.Docker.Available {
@@ -202,7 +197,7 @@ func (s *SystemInfo) Summary() string {
 	} else {
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("Docker"),
-			colorMuted.Sprint("<none>")))
+			display.ColorMuted.Sprint("<none>")))
 	}
 
 	if s.Kubernetes != nil && s.Kubernetes.Available {
@@ -214,7 +209,7 @@ func (s *SystemInfo) Summary() string {
 	} else {
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("Kubernetes"),
-			colorMuted.Sprint("<none> — connect to a cluster with 'kubectl' to detect it")))
+			display.ColorMuted.Sprint("<none> — connect to a cluster with 'kubectl' to detect it")))
 	}
 
 	if s.AWS != nil && s.AWS.Available {
@@ -233,7 +228,7 @@ func (s *SystemInfo) Summary() string {
 	} else {
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("AWS"),
-			colorMuted.Sprint("<none> — sign in with 'aws configure' to detect your account")))
+			display.ColorMuted.Sprint("<none> — sign in with 'aws configure' to detect your account")))
 	}
 
 	if s.Azure != nil && s.Azure.Available {
@@ -253,7 +248,7 @@ func (s *SystemInfo) Summary() string {
 	} else {
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("Azure"),
-			colorMuted.Sprint("<none> — sign in with 'az login' to detect your subscription")))
+			display.ColorMuted.Sprint("<none> — sign in with 'az login' to detect your subscription")))
 	}
 
 	if s.GCP != nil && s.GCP.Available {
@@ -273,7 +268,7 @@ func (s *SystemInfo) Summary() string {
 	} else {
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("GCP"),
-			colorMuted.Sprint("<none> — sign in with 'gcloud auth login' to detect your project")))
+			display.ColorMuted.Sprint("<none> — sign in with 'gcloud auth login' to detect your project")))
 	}
 
 	switch {
@@ -283,11 +278,11 @@ func (s *SystemInfo) Summary() string {
 	case s.Platform == PlatformDarwin:
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("OneAgent"),
-			colorMuted.Sprint("<none>")+colorMuted.Sprint(" (macOS not supported)")))
-	default:
+			display.ColorMuted.Sprint("<none>")+display.ColorMuted.Sprint(" (macOS not supported)")))
+	} else {
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("OneAgent"),
-			colorMuted.Sprint("<none>")))
+			display.ColorMuted.Sprint("<none>")))
 	}
 
 	if len(s.Services) > 0 {
@@ -297,7 +292,7 @@ func (s *SystemInfo) Summary() string {
 	} else {
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("Services"),
-			colorMuted.Sprint("<none>")))
+			display.ColorMuted.Sprint("<none>")))
 	}
 
 	return strings.TrimRight(sb.String(), "\n")
