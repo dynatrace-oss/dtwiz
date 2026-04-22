@@ -9,7 +9,7 @@
 - `dtwiz uninstall otel` now detects and stops running OTel-instrumented Python processes in addition to the collector.
 - Detection uses the same `detectProcesses("python", excludeTerms)` filter as install-time — necessary because `opentelemetry-instrument` calls `os.execl` on Unix, replacing itself with the `python` process image, so the surviving process is a plain `python` command with no wrapper visible in `ps`.
 - Only processes are stopped — venvs, packages, and config files are left intact for easy re-enablement.
-- Implementation is additive: a standalone `findInstrumentedPythonProcesses()` function and a Python section in the existing preview/confirm/kill flow, following the same per-runtime pattern the `add-java-auto-instrumentation` change uses for Java. No shared abstraction is introduced; future runtimes add their own independent section.
+- A `RuntimeCleaner` interface is introduced so future runtimes register a single implementation and are automatically included in the preview and stop flow — no changes to `UninstallOtelCollector()` needed.
 
 ## Capabilities
 
@@ -23,7 +23,6 @@
 
 ## Impact
 
-- **`pkg/installer/otel_uninstall.go`**: New `findInstrumentedPythonProcesses()`; `UninstallOtelCollector()` extended with Python preview section and stop block.
-- **`pkg/installer/otel_uninstall_python_test.go`**: New test file covering detection, self-exclusion, and preview section presence.
+- **`pkg/installer/otel_uninstall.go`**: New `RuntimeCleaner` interface, `pythonCleaner` implementation, and `runtimeCleaners` registry; `UninstallOtelCollector()` extended to loop over the registry for preview and stop.
+- **`pkg/installer/otel_uninstall_python_test.go`**: New test file covering the cleaner interface, registry, and preview section presence.
 - **CLI**: No new commands or flags; `dtwiz uninstall otel` gains additional behaviour transparently.
-- **Merge safety**: Additive changes confined to new lines in `otel_uninstall.go`; compatible with the Java uninstall branch regardless of merge order.

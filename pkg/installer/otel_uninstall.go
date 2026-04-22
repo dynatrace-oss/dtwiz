@@ -153,6 +153,11 @@ func UninstallOtelCollector(dryRun bool) error {
 	anyRuntimeProcs := false
 	for _, c := range runtimeCleaners {
 		procs := c.DetectProcesses()
+		// Treat nil as an error condition and skip this runtime.
+		if procs == nil {
+			logger.Debug("runtime process scan failed (skipped)", "runtime", c.Label())
+			continue
+		}
 		for _, p := range procs {
 			logger.Debug("instrumented process found", "runtime", c.Label(), "pid", p.PID, "command", p.Command)
 		}
@@ -206,12 +211,9 @@ func UninstallOtelCollector(dryRun bool) error {
 			fmt.Printf("  Instrumented %s processes that will be stopped:\n", r.label)
 			for _, p := range r.procs {
 				fmt.Printf("    ")
-				red.Printf("kill PID %d", p.PID)
+				red.Printf("stop PID %d", p.PID)
 				muted.Printf("  (%s)\n", p.Command)
 			}
-			fmt.Println()
-		} else {
-			muted.Printf("  No instrumented %s processes found.\n", r.label)
 			fmt.Println()
 		}
 	}

@@ -23,8 +23,8 @@
 
 #### Scenario: Process detection fails
 
-- **WHEN** the underlying process scan returns an error (e.g. permission denied)
-- **THEN** the Python section is silently skipped; uninstall continues for other artifacts
+- **WHEN** the underlying process scan returns `nil` (e.g. permission denied or scan error)
+- **THEN** that runtime's section is silently skipped; uninstall continues for other artifacts
 
 ---
 
@@ -80,7 +80,7 @@ When `--dry-run` is passed, `dtwiz uninstall otel` SHALL show the full preview i
 
 - **WHEN** `dtwiz uninstall otel --dry-run` is run and Python processes are detected
 - **THEN** the Python processes appear in the preview
-- **THEN** "[dry-run] No changes made." is printed and no processes are killed
+- **THEN** "[dry-run] No changes made." is printed and no processes are stopped
 
 ---
 
