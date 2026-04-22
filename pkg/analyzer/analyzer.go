@@ -279,7 +279,7 @@ func (s *SystemInfo) Summary() string {
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("OneAgent"),
 			display.ColorMuted.Sprint("<none>")+display.ColorMuted.Sprint(" (macOS not supported)")))
-	} else {
+	default:
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("OneAgent"),
 			display.ColorMuted.Sprint("<none>")))

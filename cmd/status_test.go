@@ -6,9 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fatih/color"
+
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
-	"github.com/fatih/color"
 )
 
 // captureOutput redirects color.Output (the writer used by fatih/color and
