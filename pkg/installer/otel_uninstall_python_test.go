@@ -12,7 +12,10 @@ type testRuntimeCleaner struct {
 	processes []DetectedProcess
 }
 
-func (m *testRuntimeCleaner) Label() string             { return m.label }
+func (m *testRuntimeCleaner) Label() string {
+	return m.label
+}
+
 func (m *testRuntimeCleaner) DetectProcesses() []DetectedProcess {
 	return m.processes
 }
