@@ -3,7 +3,6 @@ package display
 import (
 	"bytes"
 	"errors"
-	"os"
 	"strings"
 	"testing"
 
@@ -99,24 +98,9 @@ func TestPrintFlagLine_NoColonAfterLabel(t *testing.T) {
 }
 
 func TestPrintError_FormatsLabelAndError(t *testing.T) {
-	// PrintError writes to os.Stdout via fmt.Printf, not color.Output,
-	// so we capture stdout directly.
-	origNoColor := color.NoColor
-	color.NoColor = true
-	t.Cleanup(func() { color.NoColor = origNoColor })
-
-	r, w, _ := os.Pipe()
-	origStdout := os.Stdout
-	os.Stdout = w
-	t.Cleanup(func() { os.Stdout = origStdout })
-
-	PrintError("Setup", errors.New("connection refused"))
-
-	w.Close()
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
-
-	got := buf.String()
+	got := captureOutput(t, func() {
+		PrintError("Setup", errors.New("connection refused"))
+	})
 	want := "  Setup: ✗ connection refused\n"
 	if got != want {
 		t.Errorf("PrintError() = %q, want %q", got, want)

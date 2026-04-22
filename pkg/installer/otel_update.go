@@ -139,7 +139,7 @@ func showConfigDiff(origData, updatedData []byte) {
 		case editDel:
 			fmt.Println(display.ColorError.Sprint("- " + e.line))
 		case editKeep:
-			fmt.Println(display.ColorDefault.Sprint("  " + e.line))
+			fmt.Println(display.ColorMuted.Sprint("  " + e.line))
 		}
 	}
 }

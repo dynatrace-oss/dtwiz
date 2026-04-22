@@ -70,7 +70,7 @@ var statusCmd = &cobra.Command{
 			printExtensionsStatus()
 		}
 
-		display.Header("System Analysis")
+		fmt.Println()
 		info, err := analyzer.AnalyzeSystem()
 		if err != nil {
 			fmt.Printf("  %s\n", display.ColorError.Sprintf("✗ system analysis failed: %v", err))
