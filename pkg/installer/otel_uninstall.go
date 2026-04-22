@@ -157,6 +157,10 @@ func findNodeOtelDirs() []string {
 	// /private/tmp/.otel (same directory on macOS) are not listed twice.
 	checkDir := func(dir string) bool {
 		otelDir := filepath.Join(dir, ".otel")
+		// Only bother with dedup and validation if .otel/ actually exists.
+		if _, err := os.Stat(otelDir); err != nil {
+			return false
+		}
 		key := otelDir
 		if resolved, err := filepath.EvalSymlinks(otelDir); err == nil {
 			key = resolved

@@ -48,12 +48,12 @@ Update the plan struct and implement `.otel/` directory creation with package in
 - [ ] 3.1 Update `NodeInstrumentationPlan` struct: add `PackageManager string`, `OtelDir string`, `Framework string` (holds `"next"`, `"nuxt"`, or `""`), `PlatformToken string`, `EnvURL string`
 - [ ] 3.2 Update `buildNodeInstrumentationPlan()` signature to accept `envURL, platformToken string`; populate new struct fields including `OtelDir = filepath.Join(proj.Path, ".otel")`, detect package manager via `detectNodePackageManager()`, detect framework via `detectNodeFramework()`
 - [x] 3.3 Implement `createOtelDir(plan *NodeInstrumentationPlan) error` — create `.otel/` directory, write `.otel/package.json` with OTel deps as dependencies
-- [x] 3.4 Implement `generateWrapperJS(framework string, envVars map[string]string) string` — generate CJS wrapper script content that sets `process.env` vars, requires `@opentelemetry/auto-instrumentations-node/register`, and delegates to the Next.js CLI (`next/dist/bin/next`). Called only for Next.js. Implement `generateNuxtBootstrapMJS(otelDir string) string` — generate an ESM bootstrap script (`.mjs`) that uses `module.register()` to install `import-in-the-middle` hooks and loads the OTel CJS register via `createRequire`. Called only for Nuxt (Nuxt bypasses the CLI; the Nitro server is launched directly).
+- [x] 3.4 Implement `generateWrapperJS(framework string) string` — generate CJS wrapper script content that requires `@opentelemetry/auto-instrumentations-node/register` and delegates to the Next.js CLI (`next/dist/bin/next`). OTEL\_\* env vars are passed via `cmd.Env` at launch time, not embedded in the script. Called only for Next.js. Implement `generateNuxtBootstrapMJS(otelDir string) string` — generate an ESM bootstrap script (`.mjs`) that uses `module.register()` to install `import-in-the-middle` hooks and loads the OTel CJS register via `createRequire`. Called only for Nuxt (Nuxt bypasses the CLI; the Nitro server is launched directly).
 - [x] 3.5 Implement `installOtelNodeDeps(otelDir string) error` — run `npm install` inside `.otel/` directory using `exec.Command`
 - [x] 3.6 Tests:
   - `TestCreateOtelDir_CreatesPackageJSON`
   - `TestCreateOtelDir_PackageJSONContainsOtelDeps`
-  - `TestGenerateWrapperJS_Next_SetsEnvVars`
+  - `TestGenerateWrapperJS_Next_NoEnvVarsEmbedded`
   - `TestGenerateWrapperJS_Next_DelegatesToNextCLI`
   - `TestGenerateWrapperJS_Nuxt_NoWrapper` (Nuxt passes through `generateWrapperJS` unchanged — it uses `generateNuxtBootstrapMJS` instead)
   - `TestGenerateNuxtBootstrapMJS_ContainsModuleRegister`

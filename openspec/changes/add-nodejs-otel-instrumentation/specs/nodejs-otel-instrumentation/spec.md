@@ -63,22 +63,22 @@ The system SHALL generate OTEL\_\* environment variables for Node.js including t
 
 ### Requirement: Framework bootstrap scripts generation
 
-For Next.js and Nuxt projects, the system SHALL generate framework-specific bootstrap scripts in `.otel/`. These scripts set `process.env.OTEL_*` variables and require the auto-instrumentation register module before delegating to the framework.
+For Next.js and Nuxt projects, the system SHALL generate framework-specific bootstrap scripts in `.otel/`. These scripts require the auto-instrumentation register module before delegating to the framework. OTEL\_\* env vars are NOT embedded in the scripts — they are passed via `cmd.Env` at process launch time, which sets `process.env` before any JS code executes. This avoids writing secrets (e.g. API tokens in `OTEL_EXPORTER_OTLP_HEADERS`) to disk. Bootstrap scripts SHALL be written with `0600` permissions (owner-only).
 
 #### Scenario: next-otel-bootstrap.js generated for Next.js
 
 - **GIVEN** a project is identified as Next.js
 - **WHEN** the `.otel/` directory is created
-- **THEN** `.otel/next-otel-bootstrap.js` is written (CommonJS)
-- **AND** it sets `process.env` variables for all OTEL\_\* config
+- **THEN** `.otel/next-otel-bootstrap.js` is written (CommonJS) with `0600` permissions
 - **AND** it requires `@opentelemetry/auto-instrumentations-node/register`
 - **AND** it delegates to `next/dist/bin/next` (Next.js CLI)
+- **AND** it does NOT embed OTEL\_\* env vars (they are passed via process environment at launch time)
 
 #### Scenario: nuxt-otel-bootstrap.mjs generated for Nuxt
 
 - **GIVEN** a project is identified as Nuxt
 - **WHEN** the `.otel/` directory is created
-- **THEN** `.otel/nuxt-otel-bootstrap.mjs` is written (ES Module)
+- **THEN** `.otel/nuxt-otel-bootstrap.mjs` is written (ES Module) with `0600` permissions
 - **AND** it uses `node:module.register()` to install ESM loader hooks (import-in-the-middle)
 - **AND** it requires `@opentelemetry/auto-instrumentations-node/register` via `createRequire()`
 - **AND** it does NOT delegate to the Nuxt CLI (the CLI spawns child processes that lose registration)

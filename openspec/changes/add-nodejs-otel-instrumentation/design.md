@@ -53,7 +53,7 @@ Framework projects need framework-specific launch behavior, so dtwiz generates b
 **Next.js:** dtwiz generates `.otel/next-otel-bootstrap.js` and launches the app with:
 `node .otel/next-otel-bootstrap.js start`
 
-The wrapper sets OTEL\_\* env vars, loads `@opentelemetry/auto-instrumentations-node/register`, then delegates to `next/dist/bin/next`.
+The wrapper loads `@opentelemetry/auto-instrumentations-node/register`, then delegates to `next/dist/bin/next`. OTEL\_\* env vars are passed via `cmd.Env` at launch time — they are not embedded in the script, avoiding writing secrets to disk.
 
 **Nuxt:** dtwiz generates `.otel/nuxt-otel-bootstrap.mjs` and launches the built Nitro server with:
 `node --import .otel/nuxt-otel-bootstrap.mjs .output/server/index.mjs`
@@ -88,9 +88,8 @@ The monorepo root itself is also listed as a project option, giving the user the
 `generateOtelNodeEnvVars()` extends `generateBaseOtelEnvVars()` with:
 
 - `OTEL_NODE_RESOURCE_DETECTORS=all` — recommended by Dynatrace for comprehensive resource detection
-- build process.env.OTEL\_\* map
 
-This function is used for both setting env vars on the spawned process and generating `.otel/register.js` content.
+This function generates the env vars map that is passed to the spawned process via `cmd.Env`.
 
 ### 6. Running regular apps from `.otel/` directory
 

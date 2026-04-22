@@ -2,7 +2,6 @@ package installer
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -377,24 +376,17 @@ func TestCreateOtelDir_PackageJSONContainsOtelDeps(t *testing.T) {
 
 // --- Task 3.4: generateWrapperJS tests ---
 
-func TestGenerateWrapperJS_Next_SetsEnvVars(t *testing.T) {
-	envVars := map[string]string{
-		"OTEL_SERVICE_NAME":            "my-app",
-		"OTEL_EXPORTER_OTLP_ENDPOINT":  "https://tenant.live.dynatrace.com/api/v2/otlp",
-		"OTEL_NODE_RESOURCE_DETECTORS": "all",
-	}
-	content := generateWrapperJS("next", envVars)
+func TestGenerateWrapperJS_Next_NoEnvVarsEmbedded(t *testing.T) {
+	content := generateWrapperJS("next")
 
-	for key, val := range envVars {
-		expected := fmt.Sprintf("process.env[%q] = %q;", key, val)
-		if !strings.Contains(content, expected) {
-			t.Errorf("expected wrapper to contain %q, got:\n%s", expected, content)
-		}
+	// Env vars should NOT be embedded — they are passed via cmd.Env at launch time.
+	if strings.Contains(content, "process.env[") {
+		t.Errorf("expected no process.env assignments in wrapper, got:\n%s", content)
 	}
 }
 
 func TestGenerateWrapperJS_Next_DelegatesToNextCLI(t *testing.T) {
-	content := generateWrapperJS("next", map[string]string{"OTEL_SERVICE_NAME": "app"})
+	content := generateWrapperJS("next")
 
 	if !strings.Contains(content, "require('@opentelemetry/auto-instrumentations-node/register')") {
 		t.Error("expected wrapper to require auto-instrumentations-node/register")
@@ -407,7 +399,7 @@ func TestGenerateWrapperJS_Next_DelegatesToNextCLI(t *testing.T) {
 func TestGenerateWrapperJS_Nuxt_NoWrapper(t *testing.T) {
 	// Nuxt doesn't use generateWrapperJS — it uses generateNuxtBootstrapMJS instead.
 	// generateWrapperJS("nuxt", ...) should not contain any nuxt-specific delegation code.
-	content := generateWrapperJS("nuxt", map[string]string{"OTEL_SERVICE_NAME": "app"})
+	content := generateWrapperJS("nuxt")
 	if strings.Contains(content, "nuxt") {
 		t.Errorf("expected no nuxt references in wrapper, got:\n%s", content)
 	}
