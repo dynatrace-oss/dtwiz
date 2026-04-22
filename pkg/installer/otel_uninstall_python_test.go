@@ -15,65 +15,84 @@ func stripANSI(s string) string {
 	return ansiEscape.ReplaceAllString(s, "")
 }
 
-// TestFindInstrumentedPythonProcesses_NoMatch verifies that processes matching
-// the exclude terms ("pip ", "setup.py", "/bin/dtwiz") are not returned.
-func TestFindInstrumentedPythonProcesses_NoMatch(t *testing.T) {
-	procs := findInstrumentedPythonProcesses()
+// TestPythonCleaner_Label verifies the label is "Python".
+func TestPythonCleaner_Label(t *testing.T) {
+	c := pythonCleaner{}
+	if c.Label() != "Python" {
+		t.Errorf("Label() = %q, want \"Python\"", c.Label())
+	}
+}
+
+// TestPythonCleaner_DetectProcesses_ExcludeTerms verifies that processes
+// matching the exclude terms are not returned.
+func TestPythonCleaner_DetectProcesses_ExcludeTerms(t *testing.T) {
+	c := pythonCleaner{}
+	procs := c.DetectProcesses()
 	for _, p := range procs {
 		if strings.Contains(p.Command, "pip ") {
-			t.Errorf("pip install process should be excluded but was returned: PID=%d cmd=%q", p.PID, p.Command)
+			t.Errorf("pip process should be excluded: PID=%d cmd=%q", p.PID, p.Command)
 		}
 		if strings.Contains(p.Command, "setup.py") {
-			t.Errorf("setup.py process should be excluded but was returned: PID=%d cmd=%q", p.PID, p.Command)
+			t.Errorf("setup.py process should be excluded: PID=%d cmd=%q", p.PID, p.Command)
 		}
 	}
 }
 
-// TestFindInstrumentedPythonProcesses_WithMatch verifies the function returns
-// DetectedProcess values with valid PIDs and that the current process is excluded.
-func TestFindInstrumentedPythonProcesses_WithMatch(t *testing.T) {
+// TestPythonCleaner_DetectProcesses_SelfExcluded verifies the current process
+// is never returned.
+func TestPythonCleaner_DetectProcesses_SelfExcluded(t *testing.T) {
 	selfPID := os.Getpid()
-	procs := findInstrumentedPythonProcesses()
-	for _, p := range procs {
+	c := pythonCleaner{}
+	for _, p := range c.DetectProcesses() {
 		if p.PID == selfPID {
-			t.Errorf("findInstrumentedPythonProcesses returned current process PID %d — self must be excluded", selfPID)
+			t.Errorf("DetectProcesses returned current PID %d — self must be excluded", selfPID)
 		}
 		if p.PID == 0 {
-			t.Errorf("returned DetectedProcess has zero PID: %+v", p)
+			t.Errorf("DetectProcesses returned zero PID: %+v", p)
 		}
 	}
 }
 
-// TestUninstallOtelCollector_PythonSectionAlwaysPresent verifies the Python
-// section header appears in the preview when Python processes are running,
-// and is absent when none are found.
-// Note: lines printed via fatih/color instances (muted.Println) are not captured
-// by os.Pipe stdout redirection; only plain fmt.Println output is asserted here.
+// TestRuntimeCleaners_RegistryContainsPython verifies pythonCleaner is registered.
+func TestRuntimeCleaners_RegistryContainsPython(t *testing.T) {
+	found := false
+	for _, c := range runtimeCleaners {
+		if c.Label() == "Python" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("pythonCleaner not found in runtimeCleaners registry")
+	}
+}
+
+// TestUninstallOtelCollector_PythonSectionAlwaysPresent verifies that the
+// Python section header is printed when Python processes are running, and
+// absent when none are found.
 func TestUninstallOtelCollector_PythonSectionAlwaysPresent(t *testing.T) {
 	output := stripANSI(captureStdout(t, func() {
 		_ = UninstallOtelCollector(true)
 	}))
 
-	pythonProcs := findInstrumentedPythonProcesses()
+	c := pythonCleaner{}
+	pythonProcs := c.DetectProcesses()
 
 	if len(pythonProcs) == 0 {
-		// When no Python processes are running, the section header should be absent.
 		if strings.Contains(output, "Instrumented Python processes that will be stopped:") {
-			t.Errorf("unexpected Python section header in output when no Python procs running\nfull output:\n%s", output)
+			t.Errorf("unexpected Python section header when no Python procs running\nfull output:\n%s", output)
 		}
 	} else {
-		// Python processes running — the section header (plain fmt.Println) must appear.
 		if !strings.Contains(output, "Instrumented Python processes that will be stopped:") {
 			t.Errorf("expected Python section header in preview\nfull output:\n%s", output)
 		}
 	}
 }
 
-// TestUninstallOtelCollector_PythonPIDsInOutput verifies that when Python
-// processes are detected, the section header appears in the preview output.
+// TestUninstallOtelCollector_PythonPIDsInOutput verifies the Python section
+// header appears when processes are detected.
 func TestUninstallOtelCollector_PythonPIDsInOutput(t *testing.T) {
-	pythonProcs := findInstrumentedPythonProcesses()
-	if len(pythonProcs) == 0 {
+	c := pythonCleaner{}
+	if len(c.DetectProcesses()) == 0 {
 		t.Skip("no Python processes running — skipping PID visibility test")
 	}
 
