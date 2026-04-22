@@ -245,6 +245,7 @@ func UninstallOtelCollector(dryRun bool) error {
 		for i, p := range r.procs {
 			pids[i] = p.PID
 		}
+		logger.Debug("stopping runtime processes", "runtime", r.label, "count", len(pids))
 		stopProcesses(pids)
 	}
 
