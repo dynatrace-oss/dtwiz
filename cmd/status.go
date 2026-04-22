@@ -3,11 +3,12 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/spf13/cobra"
+
 	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
-	"github.com/spf13/cobra"
 )
 
 type CredentialToken struct {

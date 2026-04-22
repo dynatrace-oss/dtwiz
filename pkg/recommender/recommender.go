@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 	"github.com/fatih/color"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 )
 
 // IngestMethod identifies a Dynatrace ingestion approach.
@@ -204,20 +205,21 @@ func FormatRecommendations(recs []Recommendation) string {
 
 	n := 0
 	for _, r := range recs {
-		if r.Done {
+		switch {
+		case r.Done:
 			badge := recBadgeDone.Sprint(" ✓ ")
 			title := recTitleDone.Sprint(r.Title)
 			sb.WriteString(fmt.Sprintf("  %s  %s\n", badge, title))
-		} else if r.Method == MethodNotSupported {
+		case r.Method == MethodNotSupported:
 			badge := recBadgeWarn.Sprint(" ! ")
 			title := recTitleWarn.Sprint(r.Title)
 			sb.WriteString(fmt.Sprintf("  %s  %s\n", badge, title))
-		} else if r.ComingSoon {
+		case r.ComingSoon:
 			// Coming-soon items are shown muted without a number.
 			bullet := recMuted.Sprint(" · ")
 			title := recMuted.Sprint(r.Title)
 			sb.WriteString(fmt.Sprintf("  %s  %s\n", bullet, title))
-		} else {
+		default:
 			n++
 			badge := recBadgeNum.Sprintf(" %d ", n)
 			title := recTitleActive.Sprint(r.Title)

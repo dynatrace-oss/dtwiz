@@ -116,5 +116,3 @@ func parseEntrypointFromPyproject(content string) string {
 	}
 	return ""
 }
-
-

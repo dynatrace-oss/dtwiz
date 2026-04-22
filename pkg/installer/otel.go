@@ -9,9 +9,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/fatih/color"
+
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
-	"github.com/fatih/color"
 )
 
 type InstrumentationPlan interface {

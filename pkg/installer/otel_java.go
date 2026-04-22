@@ -30,7 +30,7 @@ func detectJava() (string, error) {
 	path, err := exec.LookPath("java")
 	if err != nil {
 		logger.Debug("java not found on PATH")
-		return "", fmt.Errorf("Java not found — install a JDK/JRE and ensure it is in PATH")
+		return "", fmt.Errorf("Java not found — install a JDK/JRE and ensure it is in PATH") //nolint:staticcheck // ST1005: keep brand capitalization
 	}
 	out, err := exec.Command(path, "-version").CombinedOutput()
 	if err != nil {

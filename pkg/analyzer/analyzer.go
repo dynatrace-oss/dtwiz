@@ -271,14 +271,15 @@ func (s *SystemInfo) Summary() string {
 			display.ColorMuted.Sprint("<none> — sign in with 'gcloud auth login' to detect your project")))
 	}
 
-	if s.OneAgentRunning {
+	switch {
+	case s.OneAgentRunning:
 		sb.WriteString(fmt.Sprintf("  %s running\n",
 			label("OneAgent")))
-	} else if s.Platform == PlatformDarwin {
+	case s.Platform == PlatformDarwin:
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("OneAgent"),
 			display.ColorMuted.Sprint("<none>")+display.ColorMuted.Sprint(" (macOS not supported)")))
-	} else {
+	default:
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("OneAgent"),
 			display.ColorMuted.Sprint("<none>")))

@@ -23,8 +23,9 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/fatih/color"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 //go:embed otel.tmpl
@@ -393,7 +394,8 @@ func waitForLogInDynatrace(envURL, token, searchTerm string, timeout time.Durati
 				body, _ := io.ReadAll(resp.Body)
 				resp.Body.Close()
 
-				if resp.StatusCode/100 == 2 {
+				switch {
+				case resp.StatusCode/100 == 2:
 					// Parse JSON to check for actual log records, matching the
 					// Python implementation: data["result"]["records"] non-empty.
 					var data struct {
@@ -406,7 +408,7 @@ func waitForLogInDynatrace(envURL, token, searchTerm string, timeout time.Durati
 					}
 					// 2xx but no records yet — continue polling.
 					lastErr = ""
-				} else if resp.StatusCode == 401 || resp.StatusCode == 403 {
+				case resp.StatusCode == 401 || resp.StatusCode == 403:
 					// Show token prefix so the user can verify they passed the right one.
 					tokenHint := token
 					if len(tokenHint) > 20 {
@@ -420,7 +422,7 @@ func waitForLogInDynatrace(envURL, token, searchTerm string, timeout time.Durati
 							"  Response:   %s",
 						resp.StatusCode, tokenHint, queryURL, strings.TrimSpace(string(body)),
 					)
-				} else if resp.StatusCode/100 != 2 {
+				default:
 					lastErr = fmt.Sprintf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 				}
 			}

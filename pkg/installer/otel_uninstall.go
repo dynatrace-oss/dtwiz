@@ -10,8 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/fatih/color"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 // otelProcessInfo holds PID + resolved binary path for a running collector.
