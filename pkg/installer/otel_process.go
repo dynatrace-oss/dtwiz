@@ -82,15 +82,16 @@ func (p *ManagedProcess) printLine(listeningPort string) {
 	hasExited, waitErr := p.WaitResult()
 
 	statusLine := fmt.Sprintf("  %s (PID %d)", p.Name, p.PID)
-	if hasExited {
+	switch {
+	case hasExited:
 		if waitErr != nil {
 			statusLine += fmt.Sprintf("  [crashed: %v — check log for details]", waitErr)
 		} else {
 			statusLine += "  [exited cleanly]"
 		}
-	} else if listeningPort != "" {
+	case listeningPort != "":
 		statusLine += fmt.Sprintf(" → http://localhost:%s", listeningPort)
-	} else {
+	default:
 		statusLine += "  [running, port not detected]"
 	}
 	statusLine += fmt.Sprintf("  [log: %s]", p.LogName)

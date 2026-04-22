@@ -18,12 +18,18 @@ func detectKubernetes() *KubernetesInfo {
 
 	var (
 		ctx, cluster, serverURL, ver, nodesOut string
-		wg sync.WaitGroup
+		wg                                     sync.WaitGroup
 	)
 	wg.Add(5)
 	go func() { defer wg.Done(); _, ctx = runCmd("kubectl", "config", "current-context") }()
-	go func() { defer wg.Done(); _, cluster = runCmd("kubectl", "config", "view", "--minify", "-o", "jsonpath={.clusters[0].name}") }()
-	go func() { defer wg.Done(); _, serverURL = runCmd("kubectl", "config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}") }()
+	go func() {
+		defer wg.Done()
+		_, cluster = runCmd("kubectl", "config", "view", "--minify", "-o", "jsonpath={.clusters[0].name}")
+	}()
+	go func() {
+		defer wg.Done()
+		_, serverURL = runCmd("kubectl", "config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
+	}()
 	go func() { defer wg.Done(); _, ver = runCmd("kubectl", "version", "-o", "json") }()
 	go func() { defer wg.Done(); _, nodesOut = runCmd("kubectl", "get", "nodes", "--no-headers", "-o", "name") }()
 	wg.Wait()

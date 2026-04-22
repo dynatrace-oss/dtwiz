@@ -1,8 +1,9 @@
 package cmd
 
 import (
-	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/spf13/cobra"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 )
 
 var updateDryRun bool

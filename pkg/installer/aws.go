@@ -433,7 +433,7 @@ func InstallAWS(envURL, token, platformToken string, dryRun bool, startTime stri
 	stackName := "dynatrace-data-acquisition"
 	dynatraceURL := envURL
 	if dynatraceURL == "" {
-		return fmt.Errorf("Dynatrace environment URL is required (--environment or DT_ENVIRONMENT)")
+		return fmt.Errorf("Dynatrace environment URL is required (--environment or DT_ENVIRONMENT)") //nolint:staticcheck // ST1005: keep brand capitalization
 	}
 
 	if defaultToken == "" {

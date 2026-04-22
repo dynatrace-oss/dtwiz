@@ -3,11 +3,22 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
-	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
+	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 )
+
+type CredentialToken struct {
+	value         string
+	cliName       string
+	envName       string
+	tokenVerifyFn func(envURL, token string) error
+	getUrlFn      func(envURL string) string
+}
 
 func init() {
 	statusCmd.Flags().BoolVar(&clientFlag, "extensions", false, "probe Classic and Platform Extensions APIs using the HTTP client")
@@ -29,42 +40,33 @@ var statusCmd = &cobra.Command{
 	Long:  `Verifies connectivity to Dynatrace and displays the current system analysis.`,
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		statusHead.Println("  Connection Status")
-		statusMuted.Println("  " + "──────────────────────────────────────────")
+		display.Header("Connection Status")
 
 		envURL := environmentHint()
-		aTok := accessToken()
-		pTok := platformToken()
+		accessTok := accessToken()
+		platformTok := platformToken()
 
 		if envURL == "" {
-			fmt.Printf("  %s  %s\n", statusLabel.Sprint("Environment:"), statusError.Sprint("✗ not set (use --environment or DT_ENVIRONMENT)"))
+			display.PrintStatusLine("Environment", "✗ not set (use --environment or DT_ENVIRONMENT)", display.ColorError)
 		} else {
-			fmt.Printf("  %s  %s\n", statusLabel.Sprint("Environment:"), statusOK.Sprintf("✓ %s", envURL))
+			display.PrintStatusLine("Environment", fmt.Sprintf("✓ %s", envURL), display.ColorOK)
 		}
 
-		if aTok == "" {
-			fmt.Printf("  %s  %s\n", statusLabel.Sprint("Access Token:"), statusError.Sprint("✗ not set (use --access-token or DT_ACCESS_TOKEN)"))
-		} else if envURL != "" {
-			if err := checkAccessToken(envURL, aTok); err != nil {
-				fmt.Printf("  %s  %s\n", statusLabel.Sprint("Access Token:"), statusError.Sprintf("✗ %s", err))
-			} else {
-				fmt.Printf("  %s  %s\n", statusLabel.Sprint("Access Token:"), statusOK.Sprintf("✓ valid (%s)", installer.APIURL(envURL)))
-			}
-		} else {
-			fmt.Printf("  %s  %s\n", statusLabel.Sprint("Access Token:"), statusOK.Sprint("✓ configured (skipped validation — no environment URL)"))
-		}
+		printCredentialStatus("Access Token", envURL, CredentialToken{
+			value:         accessTok,
+			cliName:       "access-token",
+			envName:       "DT_ACCESS_TOKEN",
+			tokenVerifyFn: checkAccessToken,
+			getUrlFn:      installer.APIURL,
+		})
 
-		if pTok == "" {
-			fmt.Printf("  %s  %s\n\n", statusLabel.Sprint("Platform Token:"), statusError.Sprint("✗ not set (use --platform-token or DT_PLATFORM_TOKEN)"))
-		} else if envURL != "" {
-			if err := checkPlatformToken(envURL, pTok); err != nil {
-				fmt.Printf("  %s  %s\n\n", statusLabel.Sprint("Platform Token:"), statusError.Sprintf("✗ %s", err))
-			} else {
-				fmt.Printf("  %s  %s\n\n", statusLabel.Sprint("Platform Token:"), statusOK.Sprintf("✓ valid (%s)", installer.AppsURL(envURL)))
-			}
-		} else {
-			fmt.Printf("  %s  %s\n\n", statusLabel.Sprint("Platform Token:"), statusOK.Sprint("✓ configured (skipped validation — no environment URL)"))
-		}
+		printCredentialStatus("Platform Token", envURL, CredentialToken{
+			value:         platformTok,
+			cliName:       "platform-token",
+			envName:       "DT_PLATFORM_TOKEN",
+			tokenVerifyFn: checkPlatformToken,
+			getUrlFn:      installer.AppsURL,
+		})
 
 		if clientFlag {
 			printExtensionsStatus()
@@ -74,10 +76,13 @@ var statusCmd = &cobra.Command{
 		statusMuted.Println("  " + "──────────────────────────────────────────")
 		info, err := analyzer.AnalyzeSystem()
 		if err != nil {
-			fmt.Printf("  %s\n", statusError.Sprintf("✗ system analysis failed: %v", err))
-			return nil
+			fmt.Printf("  %s\n", display.ColorError.Sprintf("✗ system analysis failed: %v", err))
+			return err
 		}
 		fmt.Println(info.Summary())
+
+		printFeatureFlags()
+
 		return nil
 	},
 }
@@ -116,5 +121,37 @@ func printExtensionsStatus() {
 		fmt.Printf("  %s  %s\n\n", statusLabel.Sprint("Platform Extensions:"), statusError.Sprintf("✗ HTTP %d", resp.StatusCode()))
 	} else {
 		fmt.Printf("  %s  %s\n\n", statusLabel.Sprint("Platform Extensions:"), statusOK.Sprintf("✓ reachable (%d packages)", platformResp.TotalCount))
+	}
+}
+
+func printCredentialStatus(label, envURL string, token CredentialToken) {
+	if token.value == "" {
+		display.PrintStatusLine(label, fmt.Sprintf("✗ not set (use --%s or %s)", token.cliName, token.envName), display.ColorError)
+		return
+	}
+	if envURL != "" {
+		if err := token.tokenVerifyFn(envURL, token.value); err != nil {
+			display.PrintStatusLine(label, fmt.Sprintf("✗ %s", err), display.ColorError)
+		} else {
+			display.PrintStatusLine(label, fmt.Sprintf("✓ valid (%s)", token.getUrlFn(envURL)), display.ColorOK)
+		}
+	} else {
+		display.PrintStatusLine(label, "✓ configured (skipped validation — no environment URL)", display.ColorOK)
+	}
+}
+
+func printFeatureFlags() {
+	var enabledFlags []featureflags.FlagState
+	for _, f := range featureflags.List() {
+		if f.Enabled {
+			enabledFlags = append(enabledFlags, f)
+		}
+	}
+	if len(enabledFlags) > 0 {
+		fmt.Println()
+		display.Header("Feature Flags")
+		for _, f := range enabledFlags {
+			display.PrintFlagLine(f.EnvVar, fmt.Sprintf("✓ enabled (%s)", f.Source), display.ColorOK)
+		}
 	}
 }

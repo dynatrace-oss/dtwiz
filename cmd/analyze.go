@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 	"github.com/spf13/cobra"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 )
 
 var analyzeJSON bool
