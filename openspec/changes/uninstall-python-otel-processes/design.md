@@ -1,3 +1,5 @@
+# Design: Uninstall Python OTel Processes
+
 ## Context
 
 `dtwiz uninstall otel` lives in `pkg/installer/otel_uninstall.go`. Before this change it found running `dynatrace-otel-collector` processes, identified candidate install directories, showed a preview, and killed/removed everything after confirmation.
@@ -6,12 +8,14 @@ The process detection infrastructure in `otel_runtime_scan.go` provides `detectP
 
 ## Goals / Non-Goals
 
-**Goals:**
+### Goals
+
 - Detect and stop running Python processes instrumented by dtwiz as part of `dtwiz uninstall otel`.
 - Reuse existing detection and process-stop infrastructure with no new platform-specific code.
 - Introduce a `RuntimeCleaner` interface so future runtimes register a single implementation with no changes to the uninstall flow.
 
-**Non-Goals:**
+### Non-Goals
+
 - Removing Python venvs, OTel packages, or config files.
 - Detecting other runtimes (each registers its own `RuntimeCleaner` when ready).
 

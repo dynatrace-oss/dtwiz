@@ -1,3 +1,5 @@
+# Proposal: Uninstall Python OTel Processes
+
 ## Why
 
 `dtwiz uninstall otel` only killed the OTel Collector process and removed its installation directory. Python apps launched via `opentelemetry-instrument` were left running, forcing users to kill them manually — breaking the zero-config promise and leaving orphaned processes tied to a tenant the user is cleaning up.
