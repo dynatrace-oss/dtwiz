@@ -55,3 +55,6 @@ opentelemetry/config.yaml
 # Copilot skills (local-only)
 .github/skills/dtwiz/
 opentelemetry/*.bak*
+
+# OpenCode tooling
+.opencode/package-lock.json
