@@ -15,7 +15,7 @@
 
 ### New Capabilities
 
-_(none)_
+- None
 
 ### Modified Capabilities
 
