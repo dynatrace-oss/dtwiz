@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added `--extensions` switch to `dtwiz status` to test common http client and token usage
+
 ## [0.2.15] - 2026-04-22
 
 ### Added
@@ -216,7 +220,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.14...HEAD
 [Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.15...HEAD
 [0.2.15]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.14...v0.2.15
 [0.2.14]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.13...v0.2.14

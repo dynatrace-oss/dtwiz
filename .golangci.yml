@@ -34,10 +34,10 @@ linters:
       exclude-functions:
         # Cobra flag registration — panics on error, never fails at runtime
         - "(*github.com/spf13/cobra/Command).MarkFlagRequired"
-        # HTTP response writers — errors are unrecoverable in handlers
-        - "(net/http.ResponseWriter).Write"
-        # JSON encoder — used in test mock servers and HTTP handlers
-        - "(*encoding/json.Encoder).Encode"
+
+    gocritic:
+      disabled-checks:
+        - ifElseChain  # conditions span multiple variables — not convertible to switch
 
   exclusions:
     presets:
@@ -45,39 +45,14 @@ linters:
       - std-error-handling # errcheck: Close, Flush, Remove(All), print/printf/println, Setenv/Unsetenv, stdout/stderr
 
     rules:
-      # Allow unchecked errors in test code (deferred cleanup, test helpers, mock servers)
+      # Allow unchecked errors in test code (deferred cleanup, test helpers)
       - path: _test\.go
         linters:
           - errcheck
-      # Allow unchecked fmt.Fprint* (writing to io.Writer for output)
+      # Allow unchecked color library prints (fatih/color — same semantics as fmt.Print*)
       - linters:
           - errcheck
-        text: "fmt\\.Fprint"
-      # Allow unchecked w.Write / w.Close / buf.ReadFrom (io.Writer/Reader in output code)
-      - linters:
-          - errcheck
-        text: "w\\.Write|w\\.Close|buf\\.ReadFrom"
-      # Allow unchecked error builder methods (fluent API)
-      - linters:
-          - errcheck
-        text: "err\\.Add|err\\.With"
-      # Allow unchecked io.Copy / io.WriteString
-      - linters:
-          - errcheck
-        text: "io\\.Copy|io\\.WriteString"
-      # Allow unchecked clone.Close / listener.Close / resp.Body.Close
-      - linters:
-          - errcheck
-        text: "clone\\.Close|listener\\.Close|resp\\.Body\\.Close"
-      # Allow unchecked MarkFlagRequired (Cobra panics on error, safe to ignore)
-      - linters:
-          - errcheck
-        text: "MarkFlagRequired"
-      # Pre-existing: unused append results in document name collection (cosmetic, not a bug)
-      - linters:
-          - staticcheck
-        text: "SA4010"
-        path: cmd/get_documents\.go
+        text: "\\.Println|\\.Printf|\\.Fprintf|\\.Fprintln|\\.Fprint"
 
 issues:
   max-issues-per-linter: 0
