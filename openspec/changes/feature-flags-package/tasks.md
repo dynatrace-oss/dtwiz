@@ -49,6 +49,16 @@ End-to-end verification of all flows.
 - [x] 5.5 Manual: `export DTWIZ_ALL_RUNTIMES=1` → same result as 5.4
 - [x] 5.6 Manual: `dtwiz install otel --all-runtimes` → shows all runtimes (CLI flag works)
 
+## 7. Standardize output helpers in OTel installers
+
+Reuse standardized `pkg/display` functions (`Header`, `PrintSectionDivider`, `PrintStatusLine`, `PrintFlagLine`) across OTel-related installers (otel.go, otel_python.go, etc.) for consistent output formatting.
+
+**Files:** `pkg/installer/otel.go` (modify), `pkg/installer/otel_python.go` (modify), other OTel installer files as applicable
+
+- [ ] 7.1 Audit all OTel installer files for inline section dividers, ad-hoc status lines, or header formatting that duplicates `Header`, `PrintSectionDivider`, `PrintStatusLine`, or `PrintFlagLine`
+- [ ] 7.2 Replace duplicated formatting code with the appropriate `pkg/display` helpers throughout the OTel installer files
+- [ ] 7.3 Run `make test` and `make lint` — no regressions
+
 ## 6. Evaluate gating other analyzers/recommendations
 
 Manually evaluate whether Docker, Kubernetes, OneAgent, AWS, Azure, and GCP analysis/recommendations should be gated behind feature flags (Platform, OTel, and Services are already GA and excluded from this evaluation).

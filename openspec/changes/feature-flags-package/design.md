@@ -47,7 +47,14 @@ type CLIFeatureFlag struct {
 }
 
 var registry = []CLIFeatureFlag{
-    {AllRuntimes, "all-runtimes", "DTWIZ_ALL_RUNTIMES", false, "enable all runtimes including experimental (Java, Node.js, Go)", false},
+    {
+        AllRuntimes,
+        "all-runtimes",
+        "DTWIZ_ALL_RUNTIMES",
+        false,
+        "enable all runtimes for OTel auto-instrumentation",
+        false,
+    },
 }
 ```
 

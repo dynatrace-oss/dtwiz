@@ -88,9 +88,9 @@ The package SHALL expose `SetCLIOverrideForTest(t testCleaner, flag Flag, val bo
 - **THEN** it returns `true` with source `"cli"`
 - **AND** after the test completes, the override is removed
 
-### Requirement: Zero external dependencies
+### Requirement: Minimal dependencies
 
-The `pkg/featureflags` package SHALL use only Go standard library packages. The cobra integration (`pflag.FlagSet`) is the only non-stdlib dependency, and it is already used throughout the project. The `testing` package SHALL NOT be imported in production code; test helpers use a local `testCleaner` interface instead.
+The `pkg/featureflags` package SHALL use only Go standard library packages and `github.com/spf13/pflag`, which is already used throughout the project (cobra integration via `pflag.FlagSet`). The `testing` package SHALL NOT be imported in production code; test helpers use a local `testCleaner` interface instead.
 
 ### Requirement: Backward compatibility
 

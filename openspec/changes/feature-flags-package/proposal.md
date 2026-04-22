@@ -24,7 +24,7 @@ The CLI uses a raw `os.Getenv("DTWIZ_ALL_RUNTIMES")` call in `pkg/installer/otel
 
 ## Impact
 
-- **New package:** `pkg/featureflags/` — zero external dependencies (stdlib only).
+- **New package:** `pkg/featureflags/` — only depends on `github.com/spf13/pflag` (already used project-wide) plus stdlib.
 - **Modified files:** `pkg/installer/otel.go` (replace `allRuntimesEnabled()` with `featureflags.IsEnabled()`), `pkg/installer/otel_test.go` (update 3 test functions to use new API), `cmd/root.go` (register cobra persistent flags for each feature flag), `cmd/status.go` (feature flag display section).
 - **No breaking changes:** `DTWIZ_ALL_RUNTIMES` env var continues to work identically.
 - **Adding a new flag** requires only a single constant definition + env var mapping in the registry — no changes to consuming code patterns.

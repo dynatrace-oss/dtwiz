@@ -15,13 +15,13 @@
 
 - **GIVEN** `DT_ACCESS_TOKEN` is set and `DT_ENVIRONMENT` resolves to a reachable environment
 - **WHEN** the user runs `dtwiz status`
-- **THEN** the Access Token line shows `✓ valid (https://<env-id>.live.dynatrace.com/api/v2/)` in green bold
+- **THEN** the Access Token line shows `✓ valid (https://<env-id>.example.com)` in green bold
 
 #### Scenario: Platform Token valid
 
 - **GIVEN** `DT_PLATFORM_TOKEN` is set and `DT_ENVIRONMENT` resolves to a reachable environment
 - **WHEN** the user runs `dtwiz status`
-- **THEN** the Platform Token line shows `✓ valid (https://<env-id>.apps.dynatrace.com/)` in green bold
+- **THEN** the Platform Token line shows `✓ valid (https://<env-id>.apps.example.com/)` in green bold
 
 #### Scenario: Token not set
 
