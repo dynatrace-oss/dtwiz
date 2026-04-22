@@ -15,15 +15,12 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
-// otelProcessInfo holds PID + resolved binary path for a running collector.
 type otelProcessInfo struct {
 	pid        int
 	binaryPath string
 	installDir string
 }
 
-// findRunningOtelProcesses returns detailed info for every running
-// dynatrace-otel-collector process, including its install directory.
 func findRunningOtelProcesses() []otelProcessInfo {
 	procs := findRunningOtelCollectors()
 	var infos []otelProcessInfo
@@ -46,8 +43,6 @@ func findRunningOtelProcesses() []otelProcessInfo {
 	return infos
 }
 
-// binaryPathFromPID returns the executable path of a process (first word of
-// its command line), or empty string when it cannot be determined.
 func binaryPathFromPID(pid int) string {
 	pidStr := strconv.Itoa(pid)
 	var out []byte
@@ -63,7 +58,6 @@ func binaryPathFromPID(pid int) string {
 	}
 	result := strings.TrimSpace(string(out))
 	if runtime.GOOS == "windows" {
-		// PowerShell returns the full path as a single line.
 		if result == "" {
 			return ""
 		}
@@ -76,11 +70,6 @@ func binaryPathFromPID(pid int) string {
 	return fields[0]
 }
 
-// candidateOtelDirs returns a deduplicated list of directories that look like
-// they were created by dtwiz's OTel Collector installer:
-//   - install dirs derived from running process binary paths
-//   - ~/opentelemetry  (default when dtwiz was run from $HOME)
-//   - ./opentelemetry  (default when dtwiz was run from CWD)
 func candidateOtelDirs(infos []otelProcessInfo) []string {
 	seen := map[string]bool{}
 	var dirs []string
@@ -88,7 +77,6 @@ func candidateOtelDirs(infos []otelProcessInfo) []string {
 		if d == "" || seen[d] {
 			return
 		}
-		// Only include directories that actually exist on disk.
 		if _, err := os.Stat(d); err == nil {
 			logger.Debug("candidate OTel install dir found", "dir", d)
 			seen[d] = true
@@ -102,7 +90,6 @@ func candidateOtelDirs(infos []otelProcessInfo) []string {
 		add(info.installDir)
 	}
 
-	// Well-known default locations dtwiz uses.
 	if home, err := os.UserHomeDir(); err == nil {
 		add(filepath.Join(home, "opentelemetry"))
 	}
@@ -113,9 +100,6 @@ func candidateOtelDirs(infos []otelProcessInfo) []string {
 	return dirs
 }
 
-// killCollectorProcesses kills every process in procs, prints status lines, and
-// returns the binary path of the first successfully-killed process (useful for
-// restarting). Non-fatal errors are printed as warnings.
 func killCollectorProcesses(procs []otelProcessInfo) string {
 	var restartBinary string
 	for _, p := range procs {
@@ -136,9 +120,6 @@ func killCollectorProcesses(procs []otelProcessInfo) string {
 	return restartBinary
 }
 
-// removeWithRetry attempts os.RemoveAll, retrying a few times with a short
-// delay. On Windows the OS may briefly hold file locks after a process is
-// killed, causing the first attempt to fail with "Access is denied".
 func removeWithRetry(path string) error {
 	const maxAttempts = 5
 	const delay = 500 * time.Millisecond
@@ -156,8 +137,6 @@ func removeWithRetry(path string) error {
 	return err
 }
 
-// UninstallOtelCollector kills all running Dynatrace OTel Collector processes
-// and removes the installation directories created by dtwiz.
 func UninstallOtelCollector(dryRun bool) error {
 	header := color.New(color.FgMagenta, color.Bold)
 	muted := color.New()
@@ -166,12 +145,34 @@ func UninstallOtelCollector(dryRun bool) error {
 	processes := findRunningOtelProcesses()
 	dirs := candidateOtelDirs(processes)
 
-	// ── Preview ──────────────────────────────────────────────────────────────
+	type runtimeResult struct {
+		label string
+		procs []DetectedProcess
+	}
+	var runtimeResults []runtimeResult
+	anyRuntimeProcs := false
+	for _, c := range runtimeCleaners {
+		procs := c.DetectProcesses()
+		// Treat nil as an error condition and skip this runtime.
+		if procs == nil {
+			logger.Debug("runtime process scan failed (skipped)", "runtime", c.Label())
+			continue
+		}
+		for _, p := range procs {
+			logger.Debug("instrumented process found", "runtime", c.Label(), "pid", p.PID, "command", p.Command)
+		}
+		logger.Debug("runtime process scan complete", "runtime", c.Label(), "matched", len(procs))
+		runtimeResults = append(runtimeResults, runtimeResult{c.Label(), procs})
+		if len(procs) > 0 {
+			anyRuntimeProcs = true
+		}
+	}
+
 	header.Println("  Dynatrace OTel Collector Uninstall")
 	muted.Println("  " + strings.Repeat("─", 50))
 	fmt.Println()
 
-	if len(processes) == 0 && len(dirs) == 0 {
+	if len(processes) == 0 && len(dirs) == 0 && !anyRuntimeProcs {
 		muted.Println("  Nothing to remove — no running collector and no install directories found.")
 		return nil
 	}
@@ -205,6 +206,18 @@ func UninstallOtelCollector(dryRun bool) error {
 		fmt.Println()
 	}
 
+	for _, r := range runtimeResults {
+		if len(r.procs) > 0 {
+			fmt.Printf("  Instrumented %s processes that will be stopped:\n", r.label)
+			for _, p := range r.procs {
+				fmt.Printf("    ")
+				red.Printf("stop PID %d", p.PID)
+				muted.Printf("  (%s)\n", p.Command)
+			}
+			fmt.Println()
+		}
+	}
+
 	muted.Println("  " + strings.Repeat("─", 50))
 
 	if dryRun {
@@ -212,7 +225,6 @@ func UninstallOtelCollector(dryRun bool) error {
 		return nil
 	}
 
-	// ── Confirmation ─────────────────────────────────────────────────────────
 	ok, err := confirmProceed("  Proceed with uninstall?")
 	if err != nil {
 		return fmt.Errorf("reading confirmation: %w", err)
@@ -223,10 +235,20 @@ func UninstallOtelCollector(dryRun bool) error {
 	}
 	fmt.Println()
 
-	// ── Kill processes ───────────────────────────────────────────────────────
 	killCollectorProcesses(processes)
 
-	// ── Remove directories ───────────────────────────────────────────────────
+	for _, r := range runtimeResults {
+		if len(r.procs) == 0 {
+			continue
+		}
+		pids := make([]int, len(r.procs))
+		for i, p := range r.procs {
+			pids[i] = p.PID
+		}
+		logger.Debug("stopping runtime processes", "runtime", r.label, "count", len(pids))
+		stopProcesses(pids)
+	}
+
 	for _, d := range dirs {
 		if err := removeWithRetry(d); err != nil {
 			fmt.Printf("  Warning: could not remove %s: %v\n", d, err)
