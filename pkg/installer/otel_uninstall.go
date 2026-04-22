@@ -156,6 +156,17 @@ func removeWithRetry(path string) error {
 	return err
 }
 
+// findInstrumentedPythonProcesses returns running Python processes that are
+// likely OTel-instrumented, using the same filter as install-time detection.
+func findInstrumentedPythonProcesses() []DetectedProcess {
+	procs := detectProcesses("python", []string{"pip ", "setup.py", "/bin/dtwiz"})
+	for _, p := range procs {
+		logger.Debug("instrumented python process found", "pid", p.PID, "command", p.Command)
+	}
+	logger.Debug("python process scan complete", "matched", len(procs))
+	return procs
+}
+
 // UninstallOtelCollector kills all running Dynatrace OTel Collector processes
 // and removes the installation directories created by dtwiz.
 func UninstallOtelCollector(dryRun bool) error {
@@ -165,13 +176,14 @@ func UninstallOtelCollector(dryRun bool) error {
 
 	processes := findRunningOtelProcesses()
 	dirs := candidateOtelDirs(processes)
+	pythonProcs := findInstrumentedPythonProcesses()
 
 	// ── Preview ──────────────────────────────────────────────────────────────
 	header.Println("  Dynatrace OTel Collector Uninstall")
 	muted.Println("  " + strings.Repeat("─", 50))
 	fmt.Println()
 
-	if len(processes) == 0 && len(dirs) == 0 {
+	if len(processes) == 0 && len(dirs) == 0 && len(pythonProcs) == 0 {
 		muted.Println("  Nothing to remove — no running collector and no install directories found.")
 		return nil
 	}
@@ -205,6 +217,19 @@ func UninstallOtelCollector(dryRun bool) error {
 		fmt.Println()
 	}
 
+	if len(pythonProcs) > 0 {
+		fmt.Println("  Instrumented Python processes that will be stopped:")
+		for _, p := range pythonProcs {
+			fmt.Printf("    ")
+			red.Printf("kill PID %d", p.PID)
+			muted.Printf("  (%s)\n", p.Command)
+		}
+		fmt.Println()
+	} else {
+		muted.Println("  No instrumented Python processes found.")
+		fmt.Println()
+	}
+
 	muted.Println("  " + strings.Repeat("─", 50))
 
 	if dryRun {
@@ -225,6 +250,15 @@ func UninstallOtelCollector(dryRun bool) error {
 
 	// ── Kill processes ───────────────────────────────────────────────────────
 	killCollectorProcesses(processes)
+
+	// ── Stop instrumented Python processes ───────────────────────────────────
+	if len(pythonProcs) > 0 {
+		pids := make([]int, len(pythonProcs))
+		for i, p := range pythonProcs {
+			pids[i] = p.PID
+		}
+		stopProcesses(pids)
+	}
 
 	// ── Remove directories ───────────────────────────────────────────────────
 	for _, d := range dirs {
