@@ -72,6 +72,8 @@ var setupCmd = &cobra.Command{
 				fmt.Printf("  %s  %s\n", setupMuted.Sprint(" · "), setupMuted.Sprint(r.Title))
 			}
 		}
+		fmt.Println()
+		fmt.Printf("  %s  %s\n", setupMuted.Sprint("[d]"), setupMuted.Sprint("Install demo app (schnitzel)"))
 		fmt.Printf("  %s  %s\n", setupMuted.Sprint("[0]"), setupMuted.Sprint("Cancel"))
 		fmt.Println()
 		setupPrompt.Print("  Enter number: ")
@@ -85,6 +87,26 @@ var setupCmd = &cobra.Command{
 
 		if input == "" || input == "0" {
 			setupMuted.Println("  Setup cancelled.")
+			return nil
+		}
+
+		if input == "d" {
+			fmt.Println()
+			setupHeader.Println("  Installing: Demo app (schnitzel)")
+			setupMuted.Println("  " + strings.Repeat("─", 42))
+			envURL, accessTok, platformTok, err := getDtEnvironment()
+			if err != nil {
+				return err
+			}
+			if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+				return err
+			}
+			if err := installer.InstallDemo(envURL, accessTok, platformTok, setupDryRun); err != nil {
+				return err
+			}
+			if !setupDryRun {
+				installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
+			}
 			return nil
 		}
 
@@ -123,14 +145,15 @@ var setupCmd = &cobra.Command{
 			}
 			installErr = installer.UpdateOtelConfig(cfgPath, envURL, accessTok, platformTok, setupDryRun)
 		case recommender.MethodAWS:
-			installErr = installer.InstallAWS(envURL, accessTok, platformTok, setupDryRun)
+			installErr = installer.InstallAWS(envURL, accessTok, platformTok, setupDryRun, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
 		default:
 			return fmt.Errorf("unsupported method: %s", selected.Method)
 		}
 		if installErr != nil {
 			return installErr
 		}
-		if !setupDryRun {
+		// AWS watch is started inside InstallAWS (runs in parallel with deploy).
+		if !setupDryRun && selected.Method != recommender.MethodAWS {
 			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
 		}
 		return nil

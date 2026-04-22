@@ -75,6 +75,8 @@ make install
 | `dtwiz install kubernetes` | Deploy Dynatrace Operator on Kubernetes |
 | `dtwiz install docker` | Install OneAgent for Docker |
 | `dtwiz install otel` | Install/configure OpenTelemetry Collector |
+| `dtwiz install otel-python` | Instrument a Python project with OpenTelemetry |
+| `dtwiz install demo` | Download the "schnitzel" demo app and instrument it end-to-end |
 | `dtwiz install aws` | Set up Dynatrace AWS CloudFormation integration |
 | `dtwiz install azure` | Set up Dynatrace Azure Monitor integration *(coming soon)* |
 | `dtwiz install gcp` | Set up Dynatrace Google Cloud Platform integration *(coming soon)* |
@@ -86,6 +88,39 @@ make install
 | `dtwiz update otel` | Patch an existing OTel Collector config with the Dynatrace exporter |
 | `dtwiz watch` | Live-watch for newly ingested data in Dynatrace (services, logs, traces, etc.) |
 | `dtwiz status` | Show Dynatrace connection status and system state |
+
+## Flags
+
+### `--yes` / `-y`
+
+Skip all confirmation prompts and apply changes automatically. Available on all `install`, `update`, and `uninstall` subcommands.
+
+```bash
+dtwiz install otel --yes
+dtwiz uninstall oneagent -y
+```
+
+### `--project <path>`
+
+Point `install otel` or `install otel-python` at a specific project directory instead of scanning interactively.
+
+```bash
+dtwiz install otel --project ./my-service
+dtwiz install otel-python --project ./my-python-app
+```
+
+## Demo
+
+`dtwiz install demo` sets up a complete end-to-end observability demo in one command:
+
+1. Downloads and extracts the [schnitzel](https://github.com/dietermayrhofer/schnitzel) demo app — a 4-service Python application — into `./schnitzel/` in your current directory.
+2. Installs Python if not present (via `brew` on macOS, `apt` on Debian/Ubuntu, `dnf` on RHEL/Fedora, `winget` on Windows).
+3. Instruments the app with OpenTelemetry and starts sending traces, metrics, and logs to your Dynatrace environment.
+
+```bash
+dtwiz install demo          # interactive confirmation before applying
+dtwiz install demo --yes    # skip confirmation
+```
 
 ## Example workflow
 

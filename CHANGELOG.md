@@ -11,6 +11,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added `--extensions` switch to `dtwiz status` to test common http client and token usage
 
+## [0.2.15] - 2026-04-22
+
+### Added
+
+- `dtwiz install demo`: new command that downloads and extracts the schnitzel 4-service Python demo app, installs Python if missing (via brew/apt/dnf/winget), and wires it up to Dynatrace OTel monitoring end-to-end
+- `dtwiz watch`: live polling for new data ingested into Dynatrace, with a `--from` flag for a custom DQL start timestamp
+- Watch started in parallel with AWS CloudFormation deploy
+- `--yes` / `-y` persistent flag on `install`, `update`, and `uninstall` command groups to skip all interactive confirmation prompts
+- `--project <path>` flag on `install otel` and `install otel-python` to pre-select a project directory and skip interactive project scanning
+
+### Changed
+
+- Refactored `confirmProceed()` and shared `AutoConfirm` variable from `pkg/installer/kubernetes.go` into `pkg/installer/installer.go` where other shared utilities live
+- Lambda instrumentation now runs before watch starts
+
+### Fixed
+
+- Quoted absolute timestamps in `watch --from` DQL queries
+- Removed lambda-specific waiting message in favor of `watch`
+
 ## [0.2.14] - 2026-04-17
 
 ### Fixed
@@ -200,7 +220,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.14...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.15...HEAD
+[0.2.15]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.14...v0.2.15
 [0.2.14]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.13...v0.2.14
 [0.2.13]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.12...v0.2.13
 [0.2.12]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.11...v0.2.12

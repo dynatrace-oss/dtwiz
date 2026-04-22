@@ -6,11 +6,15 @@ import (
 )
 
 var installDryRun bool
+var installAutoConfirm bool
 
 var installCmd = &cobra.Command{
 	Use:   "install <method>",
 	Short: "Install a Dynatrace ingestion method",
 	Args:  cobra.MinimumNArgs(1),
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		installer.AutoConfirm = installAutoConfirm
+	},
 }
 
 var installOneAgentCmd = &cobra.Command{
@@ -93,7 +97,7 @@ var installOtelCmd = &cobra.Command{
 		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
 			return err
 		}
-		if err := installer.InstallOtelCollector(envURL, accessTok, accessTok, platformTok, installDryRun); err != nil {
+		if err := installer.InstallOtelCollectorWithProject(envURL, accessTok, accessTok, platformTok, otelProject, installDryRun); err != nil {
 			return err
 		}
 		if !installDryRun {
@@ -125,6 +129,7 @@ var installOtelCollectorCmd = &cobra.Command{
 	},
 }
 
+var otelProject string
 var otelPythonServiceName string
 var installOtelPythonCmd = &cobra.Command{
 	Use:   "otel-python",
@@ -138,7 +143,7 @@ var installOtelPythonCmd = &cobra.Command{
 		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
 			return err
 		}
-		if err := installer.InstallOtelPython(envURL, accessTok, platformTok, otelPythonServiceName, installDryRun); err != nil {
+		if err := installer.InstallOtelPython(envURL, accessTok, platformTok, otelPythonServiceName, otelProject, installDryRun); err != nil {
 			return err
 		}
 		if !installDryRun {
@@ -183,11 +188,8 @@ var installAWSCmd = &cobra.Command{
 		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
 			return err
 		}
-		if err := installer.InstallAWS(envURL, accessTok, platformTok, installDryRun); err != nil {
+		if err := installer.InstallAWS(envURL, accessTok, platformTok, installDryRun, StartTime.UTC().Format("2006-01-02T15:04:05Z")); err != nil {
 			return err
-		}
-		if !installDryRun {
-			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
 		}
 		return nil
 	},
@@ -233,9 +235,34 @@ var installGCPCmd = &cobra.Command{
 	},
 }
 
+var installDemoCmd = &cobra.Command{
+	Use:   "demo",
+	Short: "Install the schnitzel demo app and set up Dynatrace OTel monitoring",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		envURL, accessTok, platformTok, err := getDtEnvironment()
+		if err != nil {
+			return err
+		}
+		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+			return err
+		}
+		if err := installer.InstallDemo(envURL, accessTok, platformTok, installDryRun); err != nil {
+			return err
+		}
+		if !installDryRun {
+			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
+		}
+		return nil
+	},
+}
+
 func init() {
 	installCmd.PersistentFlags().BoolVar(&installDryRun, "dry-run", false, "show what would be done without executing")
+	installCmd.PersistentFlags().BoolVarP(&installAutoConfirm, "yes", "y", false, "skip confirmation prompts")
 
+	installOtelCmd.Flags().StringVar(&otelProject, "project", "", "path to the project to instrument (skips interactive scan)")
+	installOtelPythonCmd.Flags().StringVar(&otelProject, "project", "", "path to the Python project to instrument (skips interactive scan)")
 	installOtelPythonCmd.Flags().StringVar(&otelPythonServiceName, "service-name", "", "OTEL_SERVICE_NAME for the instrumented application (default: my-service)")
 	installOtelJavaCmd.Flags().StringVar(&otelJavaServiceName, "service-name", "", "OTEL_SERVICE_NAME for the instrumented application (default: my-service)")
 
@@ -252,4 +279,5 @@ func init() {
 	installCmd.AddCommand(installAWSLambdaCmd)
 	installCmd.AddCommand(installAzureCmd)
 	installCmd.AddCommand(installGCPCmd)
+	installCmd.AddCommand(installDemoCmd)
 }

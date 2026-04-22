@@ -6,11 +6,15 @@ import (
 )
 
 var uninstallDryRun bool
+var uninstallAutoConfirm bool
 
 var uninstallCmd = &cobra.Command{
 	Use:   "uninstall <method>",
 	Short: "Uninstall a Dynatrace ingestion method",
 	Args:  cobra.MinimumNArgs(1),
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		installer.AutoConfirm = uninstallAutoConfirm
+	},
 }
 
 var uninstallKubernetesCmd = &cobra.Command{
@@ -80,6 +84,7 @@ On Windows, ready-to-paste PowerShell commands are printed instead.`,
 
 func init() {
 	uninstallCmd.PersistentFlags().BoolVar(&uninstallDryRun, "dry-run", false, "show what would be done without making changes")
+	uninstallCmd.PersistentFlags().BoolVarP(&uninstallAutoConfirm, "yes", "y", false, "skip confirmation prompts")
 	uninstallCmd.AddCommand(uninstallKubernetesCmd)
 	uninstallCmd.AddCommand(uninstallOneAgentCmd)
 	uninstallCmd.AddCommand(uninstallAWSCmd)
