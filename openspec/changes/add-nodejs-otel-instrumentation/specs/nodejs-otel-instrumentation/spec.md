@@ -161,7 +161,8 @@ For Nuxt projects, the system SHALL launch the Nitro server directly using `node
 - **GIVEN** a Nuxt project is selected
 - **WHEN** `Execute()` prepares to launch
 - **THEN** it checks for `.output/server/index.mjs` (built Nitro output)
-- **AND** if not found, it prints an error message: "Nuxt build output not found. Run 'npx nuxt build' first, then re-run dtwiz."
+- **AND** if not found, it prints an error indicating that Nuxt build output was not found at the expected path `.output/server/index.mjs`
+- **AND** it instructs the user to run `npx nuxt build` before re-running dtwiz
 - **AND** it exits without launching
 
 #### Scenario: Nuxt app launched via ESM bootstrap
