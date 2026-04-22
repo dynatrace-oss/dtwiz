@@ -11,8 +11,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/fatih/color"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 var otelNodePackages = []string{
@@ -208,6 +209,25 @@ func extractScriptFile(projectPath, script string) string {
 	return ""
 }
 
+// runtimeScriptPrefixes lists package.json script name prefixes that indicate
+// a server/runtime entrypoint (as opposed to build/lint/test tooling). Only
+// scripts matching one of these prefixes are considered when scanning "other
+// scripts" for entrypoints.
+var runtimeScriptPrefixes = []string{"start", "dev", "serve", "server"}
+
+// isRuntimeScript checks if a package.json script name looks like a runtime
+// entrypoint (e.g. "start:api", "dev", "serve:frontend") rather than a
+// build/lint/test script.
+func isRuntimeScript(name string) bool {
+	lower := strings.ToLower(name)
+	for _, prefix := range runtimeScriptPrefixes {
+		if lower == prefix || strings.HasPrefix(lower, prefix+":") {
+			return true
+		}
+	}
+	return false
+}
+
 func detectNodeEntrypoints(projectPath string) []string {
 	// For framework projects, return marker entrypoints.
 	framework := detectNodeFramework(projectPath)
@@ -244,13 +264,17 @@ func detectNodeEntrypoints(projectPath string) []string {
 		}
 	}
 
-	// Scan other scripts entries for "node <file>" patterns (e.g. "start:frontend": "node s-frontend/app.js").
-	// Collect all unique entrypoints from scripts that reference existing files.
+	// Scan runtime-like scripts (start:*, dev:*, serve:*, server:*) for file
+	// references. Non-runtime scripts (build, lint, test, etc.) are skipped to
+	// avoid picking up config files as entrypoints.
 	if len(pkg.Scripts) > 0 {
 		seen := make(map[string]bool)
 		var otherEntrypoints []string
 		for name, script := range pkg.Scripts {
 			if name == "start" || script == "" {
+				continue
+			}
+			if !isRuntimeScript(name) {
 				continue
 			}
 			if found := extractScriptFile(projectPath, script); found != "" && !seen[found] {
@@ -414,8 +438,7 @@ func generateWrapperJS(framework string, envVars map[string]string) string {
 	sb.WriteString("require('@opentelemetry/auto-instrumentations-node/register');\n\n")
 
 	// Delegate to framework CLI
-	switch framework {
-	case "next":
+	if framework == "next" {
 		// Next.js bin is CJS — require() works directly.
 		sb.WriteString("require('next/dist/bin/next');\n")
 	}
@@ -477,6 +500,18 @@ func installOtelNodeDeps(otelDir string) error {
 
 func (p *NodeInstrumentationPlan) Execute() {
 	proj := p.Project
+
+	// Validate prerequisites before doing any work. Nuxt requires a pre-built
+	// Nitro server; fail fast instead of creating .otel/ and running npm install
+	// only to discover the build output is missing.
+	if p.Framework == "nuxt" {
+		nitroEntry := filepath.Join(proj.Path, ".output", "server", "index.mjs")
+		if _, err := os.Stat(nitroEntry); err != nil {
+			fmt.Printf("    Nuxt build output not found at %s\n", nitroEntry)
+			fmt.Println("    Run 'npx nuxt build' first, then re-run dtwiz.")
+			return
+		}
+	}
 
 	if len(proj.RunningProcessIDs) > 0 {
 		fmt.Print("  Stopping running processes... ")
@@ -556,11 +591,6 @@ func (p *NodeInstrumentationPlan) Execute() {
 		// ESM imports like 'node:http'. We run the Nitro server directly with
 		// --import of an ESM bootstrap that uses module.register() for ESM hooks.
 		nitroEntry := filepath.Join(proj.Path, ".output", "server", "index.mjs")
-		if _, err := os.Stat(nitroEntry); err != nil {
-			fmt.Printf("    Nuxt build output not found at %s\n", nitroEntry)
-			fmt.Println("    Run 'npx nuxt build' first, then re-run dtwiz.")
-			return
-		}
 
 		bootstrap := filepath.Join(p.OtelDir, "nuxt-otel-bootstrap.mjs")
 		cmd := exec.Command("node", "--import", bootstrap, nitroEntry)

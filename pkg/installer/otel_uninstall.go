@@ -153,12 +153,18 @@ func findNodeOtelDirs() []string {
 
 	// checkDir tests whether dir contains a .otel/ child that is a valid
 	// Node.js OTel directory. Returns true if found (and appends to dirs).
+	// Deduplication uses the symlink-resolved path so that /tmp/.otel and
+	// /private/tmp/.otel (same directory on macOS) are not listed twice.
 	checkDir := func(dir string) bool {
 		otelDir := filepath.Join(dir, ".otel")
-		if seen[otelDir] {
+		key := otelDir
+		if resolved, err := filepath.EvalSymlinks(otelDir); err == nil {
+			key = resolved
+		}
+		if seen[key] {
 			return false
 		}
-		seen[otelDir] = true
+		seen[key] = true
 		if isNodeOtelDir(otelDir) {
 			logger.Debug("found Node.js .otel/ directory", "dir", otelDir)
 			dirs = append(dirs, otelDir)
@@ -168,15 +174,10 @@ func findNodeOtelDirs() []string {
 	}
 
 	// scanChildren recursively checks dir and its children (skipping the
-	// same ignored directories as scanProjectDirs). Returns how many .otel/
-	// directories were discovered in this subtree.
-	var scanChildren func(dir string) int
-	scanChildren = func(dir string) int {
-		found := 0
+	// same ignored directories as scanProjectDirs).
+	var scanChildren func(dir string)
+	scanChildren = func(dir string) {
 		checkDir(dir) // check this directory itself
-		if len(dirs) > found {
-			found = len(dirs) - found
-		}
 
 		entries, _ := os.ReadDir(dir)
 		for _, entry := range entries {
@@ -191,7 +192,6 @@ func findNodeOtelDirs() []string {
 			}
 			scanChildren(filepath.Join(dir, entry.Name()))
 		}
-		return len(dirs)
 	}
 
 	// 1. Scan CWD and its children.

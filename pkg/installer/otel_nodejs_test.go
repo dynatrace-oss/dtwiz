@@ -822,6 +822,89 @@ func TestDetectNodeEntrypoints_OtherScripts_SkipsMissing(t *testing.T) {
 	}
 }
 
+func TestDetectNodeEntrypoints_IgnoresNonRuntimeScripts(t *testing.T) {
+	dir := t.TempDir()
+	// Only non-runtime scripts reference existing files.
+	// These should NOT be treated as entrypoints.
+	pkgJSON := `{
+		"scripts": {
+			"lint": "eslint --config eslint.config.js src/",
+			"build": "esbuild build.config.ts",
+			"test": "jest jest.config.js",
+			"typecheck": "tsc --project tsconfig.json"
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(pkgJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"eslint.config.js", "build.config.ts", "jest.config.js", "tsconfig.json"} {
+		if err := os.WriteFile(filepath.Join(dir, f), []byte(""), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	eps := detectNodeEntrypoints(dir)
+	if len(eps) != 0 {
+		t.Errorf("expected 0 entrypoints (non-runtime scripts), got %v", eps)
+	}
+}
+
+func TestDetectNodeEntrypoints_RuntimeScriptPrefixes(t *testing.T) {
+	dir := t.TempDir()
+	// All of these script names should be scanned for entrypoints.
+	pkgJSON := `{
+		"scripts": {
+			"dev": "node dev-server.js",
+			"serve:api": "node api.js",
+			"server:worker": "node worker.js"
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(pkgJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"dev-server.js", "api.js", "worker.js"} {
+		if err := os.WriteFile(filepath.Join(dir, f), []byte(""), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	eps := detectNodeEntrypoints(dir)
+	if len(eps) != 3 {
+		t.Fatalf("expected 3 entrypoints, got %v", eps)
+	}
+}
+
+func TestIsRuntimeScript(t *testing.T) {
+	cases := []struct {
+		name string
+		want bool
+	}{
+		{"start", true},
+		{"start:api", true},
+		{"start:frontend", true},
+		{"dev", true},
+		{"dev:watch", true},
+		{"serve", true},
+		{"serve:api", true},
+		{"server", true},
+		{"server:worker", true},
+		{"build", false},
+		{"test", false},
+		{"lint", false},
+		{"typecheck", false},
+		{"format", false},
+		{"prestart", false},
+		{"postinstall", false},
+		{"starting", false},
+		{"developer", false},
+	}
+	for _, tc := range cases {
+		if got := isRuntimeScript(tc.name); got != tc.want {
+			t.Errorf("isRuntimeScript(%q) = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
 // --- Task 2.3: generateOtelNodeEnvVars tests ---
 
 func TestGenerateOtelNodeEnvVars_IncludesResourceDetectors(t *testing.T) {
