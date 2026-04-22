@@ -36,7 +36,7 @@ func pythonInstallPlan() ([]string, error) {
 	switch runtime.GOOS {
 	case "darwin":
 		if _, err := exec.LookPath("brew"); err != nil {
-			return nil, fmt.Errorf("Python 3 is required but not found.\nInstall Homebrew first: https://brew.sh, then re-run this command")
+			return nil, fmt.Errorf("Python 3 is required but not found.\nInstall Homebrew first: https://brew.sh, then re-run this command") //nolint:staticcheck // ST1005: keep brand capitalization
 		}
 		return []string{"brew", "install", "python3"}, nil
 
@@ -54,7 +54,7 @@ func pythonInstallPlan() ([]string, error) {
 		return []string{"winget", "install", "Python.Python.3"}, nil
 
 	default:
-		return nil, fmt.Errorf("Python 3 is required but not found; please install it manually")
+		return nil, fmt.Errorf("Python 3 is required but not found; please install it manually") //nolint:staticcheck // ST1005: keep brand capitalization
 	}
 }
 
@@ -229,7 +229,7 @@ func InstallDemo(envURL, accessTok, platformTok string, dryRun bool) error {
 	if pythonCmd != nil {
 		fmt.Printf("  Installing Python 3 via %s...\n", pythonCmd[0])
 		if err := RunCommand(pythonCmd[0], pythonCmd[1:]...); err != nil {
-			return fmt.Errorf("Python installation failed: %w", err)
+			return fmt.Errorf("Python installation failed: %w", err) //nolint:staticcheck // ST1005: keep brand capitalization
 		}
 		fmt.Println("  Python 3 installed.")
 	}
