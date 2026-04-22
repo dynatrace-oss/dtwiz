@@ -89,7 +89,7 @@ func printExtensionsStatus() {
 
 	c, err := setupClient()
 	if err != nil {
-		display.PrintError(statusLabel, fmt.Errorf("setup: %s", err))
+		display.PrintError("Setup", err)
 		return
 	}
 

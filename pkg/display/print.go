@@ -45,5 +45,5 @@ func PrintFlagLine(label, message string, colorFunc *color.Color) {
 }
 
 func PrintError(label string, err error) {
-	fmt.Printf("  %s: %s\n", label, ColorError.Sprintf("✗ %s", err))
+	_, _ = fmt.Fprintf(color.Output, "  %s: %s\n", ColorDefault.Sprint(label), ColorError.Sprintf("✗ %s", err))
 }
