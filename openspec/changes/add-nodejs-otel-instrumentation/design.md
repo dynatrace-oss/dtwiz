@@ -112,7 +112,7 @@ This runs with `CWD = .otel/` so that `require()` resolves `@opentelemetry/auto-
 Node.js cleanup is added to the existing `UninstallOtelCollector()` rather than creating a separate command. The uninstall flow:
 
 1. Finds `.otel/` directories by scanning CWD and common dev directories for `.otel/package.json` containing `@opentelemetry`
-2. Finds running `node` processes whose command line includes `@opentelemetry/auto-instrumentations-node/register`, `.otel/next-otel-bootstrap.js`, or `.otel/nuxt-otel-bootstrap.js`
+2. Finds running `node` processes whose command line includes `@opentelemetry/auto-instrumentations-node/register`, `.otel/next-otel-bootstrap.js`, or `.otel/nuxt-otel-bootstrap.mjs`
 3. Adds a "Node.js instrumentation" subsection to the existing preview
 4. On confirmation: kills instrumented processes, removes `.otel/` directories
 
