@@ -23,8 +23,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/fatih/color"
-
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -605,11 +604,11 @@ func generateOtelConfig(apiURL, token string) (string, error) {
 
 // printConfigPreview prints the OTel Collector config in the separator+title
 // style consistent with the AWS and Kubernetes install previews.
-func (cp *collectorPlan) printConfigPreview(cyan *color.Color, sep string) {
+func (cp *collectorPlan) printConfigPreview(sep string) {
 	label := filepath.Base(cp.configPath)
 	fmt.Println()
 	fmt.Printf("  %s\n", sep)
-	cyan.Printf("  %s:\n", label)
+	display.ColorMessage.Printf("  %s:\n", label)
 	fmt.Printf("  %s\n", sep)
 	for _, line := range strings.Split(strings.TrimRight(cp.configPreview, "\n"), "\n") {
 		fmt.Printf("    %s\n", line)
@@ -736,7 +735,6 @@ func prepareCollectorPlan(envURL, token, ingestToken string) (*collectorPlan, er
 }
 
 func (cp *collectorPlan) printDryRun(ingestToken string) {
-	cyan := color.New(color.FgMagenta)
 	sep := strings.Repeat("─", 60)
 
 	fmt.Println("[dry-run] Would install Dynatrace OpenTelemetry Collector")
@@ -752,7 +750,7 @@ func (cp *collectorPlan) printDryRun(ingestToken string) {
 		return "(from token)"
 	}())
 
-	cp.printConfigPreview(cyan, sep)
+	cp.printConfigPreview(sep)
 }
 
 // execute downloads, writes config, and starts the collector.
@@ -812,10 +810,8 @@ func (cp *collectorPlan) execute(envURL, platformToken string, skipVerification 
 // InstallOtelCollectorOnly installs the Dynatrace OTel Collector without
 // runtime instrumentation.
 func InstallOtelCollectorOnly(envURL, token, ingestToken, platformToken string, dryRun bool) error {
-	cyan := color.New(color.FgMagenta)
-
 	fmt.Println()
-	cyan.Println("  Dynatrace OpenTelemetry Installation")
+	display.ColorMessage.Println("  Dynatrace OpenTelemetry Installation")
 	fmt.Println()
 
 	cp, err := prepareCollectorPlan(envURL, token, ingestToken)
@@ -842,7 +838,7 @@ func InstallOtelCollectorOnly(envURL, token, ingestToken, platformToken string, 
 		}
 	}
 
-	cp.printConfigPreview(cyan, sep)
+	cp.printConfigPreview(sep)
 
 	fmt.Println()
 	ok, err := confirmProceed("  Proceed with installation?")

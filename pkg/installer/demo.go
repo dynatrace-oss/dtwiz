@@ -11,7 +11,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/fatih/color"
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 )
 
 const (
@@ -171,8 +171,6 @@ func extractZip(zipPath, destDir string) error {
 // 2. Install Python if missing
 // 3. Install OTel Collector + Python auto-instrumentation targeting ./schnitzel
 func InstallDemo(envURL, accessTok, platformTok string, dryRun bool) error {
-	cyan := color.New(color.FgMagenta)
-
 	demoExists := checkDemoExists()
 	pythonCmd, err := pythonInstallPlan()
 	if err != nil {
@@ -181,7 +179,7 @@ func InstallDemo(envURL, accessTok, platformTok string, dryRun bool) error {
 
 	// Build plan lines
 	fmt.Println()
-	cyan.Println("  Dynatrace Demo Installation (schnitzel)")
+	display.ColorMessage.Println("  Dynatrace Demo Installation (schnitzel)")
 	fmt.Println()
 	fmt.Println("  This will:")
 

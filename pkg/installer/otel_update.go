@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fatih/color"
 	"gopkg.in/yaml.v3"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -129,21 +129,17 @@ func diffLines(oldLines, newLines []string) []diffEdit {
 // showConfigDiff prints a coloured line diff to stdout.
 // Added lines are green (+), removed lines are red (-), unchanged lines are dimmed.
 func showConfigDiff(origData, updatedData []byte) {
-	green := color.New(color.FgGreen, color.Bold)
-	red := color.New(color.FgRed)
-	dim := color.New()
-
 	oldLines := strings.Split(strings.TrimRight(string(origData), "\n"), "\n")
 	newLines := strings.Split(strings.TrimRight(string(updatedData), "\n"), "\n")
 
 	for _, e := range diffLines(oldLines, newLines) {
 		switch e.kind {
 		case editAdd:
-			fmt.Println(green.Sprint("+ " + e.line))
+			fmt.Println(display.ColorOK.Sprint("+ " + e.line))
 		case editDel:
-			fmt.Println(red.Sprint("- " + e.line))
+			fmt.Println(display.ColorError.Sprint("- " + e.line))
 		case editKeep:
-			fmt.Println(dim.Sprint("  " + e.line))
+			fmt.Println(display.ColorDefault.Sprint("  " + e.line))
 		}
 	}
 }
@@ -291,37 +287,33 @@ func UpdateOtelConfig(configPath, envURL, token, platformToken string, dryRun bo
 		return fmt.Errorf("serialising preview: %w", err)
 	}
 
-	header := color.New(color.FgMagenta, color.Bold)
-	muted := color.New()
-	bold := color.New(color.FgWhite, color.Bold)
-	green := color.New(color.FgGreen, color.Bold)
+	display.Header(fmt.Sprintf("Preview of changes to %s:", configPath))
+	fmt.Println()
 
-	header.Printf("  Preview of changes to %s:\n", configPath)
-	muted.Println("  " + strings.Repeat("─", 60))
-	fmt.Println()
 	showConfigDiff(origData, updatedData)
+
 	fmt.Println()
-	muted.Println("  " + strings.Repeat("─", 60))
+	display.PrintSectionDivider()
 	fmt.Println()
 
 	// Show restart plan.
 	if len(runningProcs) > 0 {
-		bold.Println("  Running collectors that will be restarted:")
+		display.ColorBold.Println("  Running collectors that will be restarted:")
 		for _, p := range runningProcs {
 			hint := p.binaryPath
 			if hint == "" {
 				hint = "(unknown binary)"
 			}
-			fmt.Printf("    • PID %d  %s\n", p.pid, muted.Sprint(hint))
+			fmt.Printf("    • PID %d  %s\n", p.pid, display.ColorDefault.Sprint(hint))
 		}
 	} else {
-		muted.Println("  No running collector found — config will be updated on disk only.")
+		display.ColorDefault.Println("  No running collector found — config will be updated on disk only.")
 	}
 	fmt.Println()
-	muted.Println("  " + strings.Repeat("─", 60))
+	display.PrintSectionDivider()
 
 	if dryRun {
-		muted.Println("  [dry-run] No changes made.")
+		display.ColorDefault.Println("  [dry-run] No changes made.")
 		return nil
 	}
 
@@ -330,7 +322,7 @@ func UpdateOtelConfig(configPath, envURL, token, platformToken string, dryRun bo
 		return fmt.Errorf("reading confirmation: %w", err)
 	}
 	if !ok {
-		muted.Println("  Cancelled — no changes written.")
+		display.ColorDefault.Println("  Cancelled — no changes written.")
 		return nil
 	}
 	fmt.Println()
@@ -345,7 +337,7 @@ func UpdateOtelConfig(configPath, envURL, token, platformToken string, dryRun bo
 	fmt.Println()
 
 	if len(runningProcs) == 0 {
-		muted.Println("  No running collector to restart.")
+		display.ColorDefault.Println("  No running collector to restart.")
 		return nil
 	}
 
@@ -354,8 +346,8 @@ func UpdateOtelConfig(configPath, envURL, token, platformToken string, dryRun bo
 	fmt.Println()
 
 	if restartBinary == "" {
-		muted.Println("  Could not determine binary path — skipping restart.")
-		muted.Println("  Start the collector manually with the updated config.")
+		display.ColorDefault.Println("  Could not determine binary path — skipping restart.")
+		display.ColorDefault.Println("  Start the collector manually with the updated config.")
 		return nil
 	}
 
@@ -372,6 +364,6 @@ func UpdateOtelConfig(configPath, envURL, token, platformToken string, dryRun bo
 		return nil
 	}
 
-	green.Println("  ✓ Collector restarted and verified.")
+	display.ColorOK.Println("  ✓ Collector restarted and verified.")
 	return nil
 }

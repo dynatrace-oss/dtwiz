@@ -9,8 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/fatih/color"
-
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -310,11 +309,10 @@ func InstallOtelPython(envURL, token, platformToken, serviceName, projectPath st
 		return nil
 	}
 
-	cyan := color.New(color.FgMagenta)
 	sep := strings.Repeat("─", 60)
 
 	fmt.Println()
-	cyan.Println("  Dynatrace Python Auto-Instrumentation")
+	display.ColorMessage.Println("  Dynatrace Python Auto-Instrumentation")
 	fmt.Println("  " + sep)
 
 	plan := DetectPythonPlanFromPath(projectPath, apiURL, token)
@@ -324,7 +322,7 @@ func InstallOtelPython(envURL, token, platformToken, serviceName, projectPath st
 	}
 
 	fmt.Println()
-	cyan.Println("  Steps:")
+	display.ColorMessage.Println("  Steps:")
 	plan.PrintPlanSteps()
 
 	ok, err := confirmProceed("  Proceed with installation?")

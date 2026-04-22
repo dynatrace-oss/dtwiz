@@ -33,7 +33,7 @@ func captureOutput(t *testing.T, fn func()) string {
 
 func TestHeader_PrintsIndentedTitle(t *testing.T) {
 	got := captureOutput(t, func() {
-		Header("test", "Connection Status")
+		Header("Connection Status")
 	})
 	if !strings.Contains(got, "  Connection Status\n") {
 		t.Errorf("Header() = %q, want output to contain indented title", got)
@@ -45,7 +45,7 @@ func TestHeader_PrintsIndentedTitle(t *testing.T) {
 
 func TestPrintSectionDivider_PrintsIndentedSeparator(t *testing.T) {
 	got := captureOutput(t, func() {
-		PrintSectionDivider("test")
+		PrintSectionDivider()
 	})
 	if !strings.HasPrefix(got, "  ") {
 		t.Errorf("PrintSectionDivider() output missing two-space indent: %q", got)

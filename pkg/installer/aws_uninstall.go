@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/fatih/color"
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 )
 
 // deleteDTMonitoringConfig deletes a Dynatrace AWS monitoring configuration
@@ -39,14 +39,12 @@ func deleteDTMonitoringConfig(apiURL, token, objectID string) error {
 //   - token:   access token for Dynatrace API (falls back to DT_ACCESS_TOKEN env var)
 //   - dryRun:  when true, show what would be done without executing
 func UninstallAWS(envURL, token string, dryRun bool) error {
-	cyan := color.New(color.FgMagenta)
-
 	if !isAWSCLIInstalled() {
 		return fmt.Errorf("AWS CLI not found — install it from https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html")
 	}
 
 	fmt.Println()
-	cyan.Println("  Dynatrace AWS Uninstall")
+	display.ColorMessage.Println("  Dynatrace AWS Uninstall")
 	fmt.Println()
 
 	fmt.Printf("  Fetching AWS account info...\n")

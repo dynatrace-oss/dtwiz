@@ -3,7 +3,7 @@ package installer
 import (
 	"fmt"
 
-	"github.com/fatih/color"
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 )
 
 // UninstallKubernetes removes the Dynatrace Operator and all managed resources
@@ -13,10 +13,8 @@ import (
 //  3. Helm uninstall dynatrace-operator
 //  4. Delete the dynatrace namespace
 func UninstallKubernetes() error {
-	cyan := color.New(color.FgMagenta)
-
 	fmt.Println()
-	cyan.Println("  Dynatrace Kubernetes Uninstall")
+	display.ColorMessage.Println("  Dynatrace Kubernetes Uninstall")
 	fmt.Println()
 	fmt.Println("  This will perform the following steps:")
 	fmt.Println("    1. Delete all DynaKube and EdgeConnect custom resources")

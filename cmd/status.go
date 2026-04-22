@@ -38,7 +38,7 @@ var statusCmd = &cobra.Command{
 	Long:  `Verifies connectivity to Dynatrace and displays the current system analysis.`,
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		display.Header(statusLabel, "Connection Status")
+		display.Header("Connection Status")
 
 		envURL := environmentHint()
 		accessTok := accessToken()
@@ -70,7 +70,7 @@ var statusCmd = &cobra.Command{
 			printExtensionsStatus()
 		}
 
-		display.Header(statusLabel, "System Analysis")
+		display.Header("System Analysis")
 		info, err := analyzer.AnalyzeSystem()
 		if err != nil {
 			fmt.Printf("  %s\n", display.ColorError.Sprintf("✗ system analysis failed: %v", err))
@@ -85,11 +85,11 @@ var statusCmd = &cobra.Command{
 }
 
 func printExtensionsStatus() {
-	display.Header(statusLabel, "Extensions API")
+	display.Header("Extensions API")
 
 	c, err := setupClient()
 	if err != nil {
-		display.PrintError("status", fmt.Errorf("setup: %s", err))
+		display.PrintError(statusLabel, fmt.Errorf("setup: %s", err))
 		return
 	}
 
@@ -147,7 +147,7 @@ func printFeatureFlags() {
 	}
 	if len(enabledFlags) > 0 {
 		fmt.Println()
-		display.Header(statusLabel, "Feature Flags")
+		display.Header("Feature Flags")
 		for _, f := range enabledFlags {
 			display.PrintFlagLine(f.EnvVar, fmt.Sprintf("✓ enabled (%s)", f.Source), display.ColorOK)
 		}
