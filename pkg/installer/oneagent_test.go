@@ -23,7 +23,7 @@ func newTestClassicClient(t *testing.T, serverURL string) *client.ClassicClient 
 
 func TestCheckOneAgentConnectivity_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/time" {
+		if r.URL.Path != apiV1TimePath {
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}
 		w.WriteHeader(http.StatusOK)
