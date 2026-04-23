@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -65,6 +66,9 @@ func TestCheckOneAgentConnectivity_UnexpectedStatus(t *testing.T) {
 }
 
 func TestDownloadOneAgentInstaller_WritesContentToDisk(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("OneAgent installer download not supported on macOS")
+	}
 	content := []byte("fake-installer-binary-content")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -88,6 +92,9 @@ func TestDownloadOneAgentInstaller_WritesContentToDisk(t *testing.T) {
 }
 
 func TestDownloadOneAgentInstaller_NonOKStatus(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("OneAgent installer download not supported on macOS")
+	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 	}))
