@@ -64,7 +64,6 @@ func authHeader(token string) string {
 
 // New builds a Client with a ClassicClient and a PlatformClient.
 // classicURL and platformURL should already be in the correct URL families
-// (strip .apps. for classic, add .apps. for platform).
 func New(classicURL, accessToken, platformURL, platformToken string, verbosityLevel int) (*Client, error) {
 	if classicURL == "" {
 		return nil, fmt.Errorf("classic API URL is required")
