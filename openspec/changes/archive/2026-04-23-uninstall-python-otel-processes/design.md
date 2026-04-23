@@ -31,7 +31,7 @@ However, the broad filter alone produces false positives: every Python process o
 
 - **macOS**: `ps eww -p <pid> -o command=` emits the full env block alongside the command; scan the output for the marker var names.
 - **Linux**: Read `/proc/<pid>/environ` (null-delimited key=value pairs); check for marker keys.
-- **Windows**: `Win32_Process` does not expose env vars. Fall back to checking whether `opentelemetry-instrument` appears in the command line (the wrapper may remain visible on Windows before the exec).
+- **Windows**: `Win32_Process` does not expose env vars. dtwiz always launches instrumented Python apps via the virtualenv Python binary (e.g. `.venv\Scripts\python.exe`). The command line is checked for any known venv name followed by `\Scripts\` (using the same `venvNames` slice as the installer). A plain `python script.py` launched by the user will never have this path.
 
 ### `RuntimeCleaner` interface over per-runtime code blocks
 

@@ -8,7 +8,7 @@
 
 1. Broad command-line filter: `detectProcesses("python", []string{"pip ", "setup.py", "/bin/dtwiz"})` — identical to install-time detection. Filtering on `"opentelemetry-instrument"` is explicitly incorrect: `opentelemetry-instrument` uses `os.execl` on Unix (replacing the wrapper process image with `python`) and spawns a `python` child and exits on Windows. In both cases the surviving process appears as a plain `python` command with no wrapper visible in the process list.
 
-2. OTel env var confirmation: each candidate is checked for `OTEL_SERVICE_NAME` or `OTEL_EXPORTER_OTLP_ENDPOINT` in its environment. Only processes with at least one of these vars set are included in the uninstall preview. On macOS, `ps eww -p <pid>` is used; on Linux `/proc/<pid>/environ` is read. On Windows the command line is scanned for `opentelemetry-instrument` as a best-effort fallback.
+2. OTel env var confirmation: each candidate is checked for `OTEL_SERVICE_NAME` or `OTEL_EXPORTER_OTLP_ENDPOINT` in its environment. Only processes with at least one of these vars set are included in the uninstall preview. On macOS, `ps eww -p <pid>` is used; on Linux `/proc/<pid>/environ` is read. On Windows, `Win32_Process` does not expose environment variables — instead the command line is checked for a virtualenv `Scripts\` path (e.g. `.venv\Scripts\`), which is the path dtwiz always uses to launch instrumented Python apps on Windows. A plain `python script.py` will never have this path.
 
 #### Scenario: One instrumented Python process is running
 

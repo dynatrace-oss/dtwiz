@@ -128,18 +128,24 @@ func detectProcessListeningPort(pid int) string {
 // isOtelProcess reports whether the process with the given PID is an
 // OTel-instrumented process.
 //
-// Win32_Process does not expose environment variables, so this falls back to
-// checking whether "opentelemetry-instrument" appears in the command line,
-// which is visible on Windows before the Python child replaces the process.
+// Win32_Process does not expose environment variables. Instead we check whether
+// the command line contains a virtualenv Scripts path (e.g. ".venv\Scripts\"),
+// which is how dtwiz always launches instrumented Python apps on Windows.
+// A plain `python script.py` launched by the user will never have this path.
 func isOtelProcess(pid int) bool {
 	lines, err := winProcessQuery(
 		"$_.ProcessId -eq "+strconv.Itoa(pid),
 		"\"$($_.CommandLine)\"",
 	)
 	if err != nil || len(lines) == 0 {
-		logger.Debug("processHasOtelEnvVars: query failed or no result", "pid", pid, "err", err)
+		logger.Debug("isOtelProcess: query failed or no result", "pid", pid, "err", err)
 		return false
 	}
 	cmdLine := strings.ToLower(lines[0])
-	return strings.Contains(cmdLine, "opentelemetry-instrument")
+	for _, venvName := range venvNames {
+		if strings.Contains(cmdLine, strings.ToLower(venvName+`\scripts\`)) {
+			return true
+		}
+	}
+	return false
 }
