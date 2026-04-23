@@ -29,6 +29,10 @@ const (
 	installerTypeWindows installerType = "windows"
 )
 
+// apiV1TimePath is used for connectivity checks. The /api/v1/time endpoint
+// requires no token scopes, making it safe to probe with any valid token.
+const apiV1TimePath = "/api/v1/time"
+
 // oneAgentInstallerType returns the installer type string for the current
 // OS/architecture combination, to be used in the download URL path.
 func oneAgentInstallerType() (installerType, string, error) {
@@ -63,7 +67,7 @@ func oneAgentInstallerFilename() string {
 // checkOneAgentConnectivity performs a quick connectivity check against the
 // Dynatrace API endpoint.
 func checkOneAgentConnectivity(c *client.ClassicClient) error {
-	resp, err := c.HTTP().R().Get("/api/v1/time")
+	resp, err := c.HTTP().R().Get(apiV1TimePath)
 	if err != nil {
 		return fmt.Errorf("connectivity check failed — cannot reach %s: %w", c.BaseURL(), err)
 	}
