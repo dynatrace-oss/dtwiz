@@ -3,6 +3,7 @@ package installer
 import (
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -67,10 +68,10 @@ func checkOneAgentConnectivity(c *client.ClassicClient) error {
 		return fmt.Errorf("connectivity check failed — cannot reach %s: %w", c.BaseURL(), err)
 	}
 
-	if resp.StatusCode() == 401 {
+	if resp.StatusCode() == http.StatusUnauthorized {
 		return fmt.Errorf("connectivity check failed: invalid credentials (401 Unauthorized)")
 	}
-	if resp.StatusCode() >= 300 {
+	if resp.StatusCode() >= http.StatusMultipleChoices {
 		return fmt.Errorf("connectivity check returned unexpected status %d", resp.StatusCode())
 	}
 	return nil
@@ -97,7 +98,7 @@ func downloadOneAgentInstaller(c *client.ClassicClient) (string, error) {
 	}
 	defer resp.RawBody().Close()
 
-	if resp.StatusCode() != 200 {
+	if resp.StatusCode() != http.StatusOK {
 		return "", fmt.Errorf("installer download failed with status %d", resp.StatusCode())
 	}
 
