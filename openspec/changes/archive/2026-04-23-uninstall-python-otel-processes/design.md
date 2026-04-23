@@ -21,9 +21,16 @@ The process detection infrastructure in `otel_runtime_scan.go` provides `detectP
 
 ## Decisions
 
-### Filter on `"python"`, not `"opentelemetry-instrument"`
+### Filter on `"python"`, then confirm with OTel env vars
 
-`opentelemetry-instrument` calls `os.execl` on Unix, replacing its own process image with the Python interpreter. On Windows it spawns a Python child and exits. In both cases the surviving process appears as a plain `python` command in `ps` — filtering on `"opentelemetry-instrument"` returns nothing. The install-time code already solved this with the `"python"` filter and the same exclude list; uninstall reuses that exact call.
+`opentelemetry-instrument` calls `os.execl` on Unix, replacing its own process image with the Python interpreter. On Windows it spawns a Python child and exits. In both cases the surviving process appears as a plain `python` command in `ps` — filtering on `"opentelemetry-instrument"` returns nothing. The broad `"python"` filter is the correct first pass.
+
+However, the broad filter alone produces false positives: every Python process on the system is listed, not just OTel-instrumented ones. A second pass checks each candidate process for OTel env vars (`OTEL_SERVICE_NAME` or `OTEL_EXPORTER_OTLP_ENDPOINT`). Processes with these vars set were launched under `opentelemetry-instrument` (which injects them) and are the only ones that belong in the uninstall preview.
+
+**Platform implementation:**
+- **macOS**: `ps eww -p <pid> -o command=` emits the full env block alongside the command; scan the output for the marker var names.
+- **Linux**: Read `/proc/<pid>/environ` (null-delimited key=value pairs); check for marker keys.
+- **Windows**: `Win32_Process` does not expose env vars. Fall back to checking whether `opentelemetry-instrument` appears in the command line (the wrapper may remain visible on Windows before the exec).
 
 ### `RuntimeCleaner` interface over per-runtime code blocks
 
@@ -37,7 +44,8 @@ The collector is the telemetry sink; instrumented apps lose their export target 
 
 ## Risks / Trade-offs
 
-- **False positives**: Any `python` process not started by dtwiz will appear in the preview. Mitigation: the preview shows the full command so the user can cancel if something looks unexpected.
+- **False positives reduced but not eliminated**: The env var check eliminates plain Python processes, but a process that happens to have `OTEL_SERVICE_NAME` set for reasons unrelated to dtwiz would still appear. This is an acceptable edge case.
+- **Windows accuracy**: The Windows fallback (command-line check) may miss processes on some configurations. Acceptable given Windows is not the primary target platform.
 
 ## Migration Plan
 

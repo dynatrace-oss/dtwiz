@@ -124,3 +124,22 @@ func detectProcessListeningPort(pid int) string {
 	}
 	return port
 }
+
+// isOtelProcess reports whether the process with the given PID is an
+// OTel-instrumented process.
+//
+// Win32_Process does not expose environment variables, so this falls back to
+// checking whether "opentelemetry-instrument" appears in the command line,
+// which is visible on Windows before the Python child replaces the process.
+func isOtelProcess(pid int) bool {
+	lines, err := winProcessQuery(
+		"$_.ProcessId -eq "+strconv.Itoa(pid),
+		"\"$($_.CommandLine)\"",
+	)
+	if err != nil || len(lines) == 0 {
+		logger.Debug("processHasOtelEnvVars: query failed or no result", "pid", pid, "err", err)
+		return false
+	}
+	cmdLine := strings.ToLower(lines[0])
+	return strings.Contains(cmdLine, "opentelemetry-instrument")
+}

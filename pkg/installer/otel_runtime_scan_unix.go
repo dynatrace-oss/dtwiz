@@ -5,11 +5,61 @@ package installer
 import (
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
+
+var otelEnvVarMarkers = []string{
+	"OTEL_SERVICE_NAME",
+	"OTEL_EXPORTER_OTLP_ENDPOINT",
+}
+
+// isOtelProcess reports whether the process with the given PID is an
+// OTel-instrumented process, determined by checking for OTel env vars.
+//
+// On Linux it reads /proc/<pid>/environ (null-delimited).
+// On macOS it uses "ps eww -p <pid>" which emits env vars inline with the command.
+func isOtelProcess(pid int) bool {
+	if runtime.GOOS == "linux" {
+		return linuxProcessHasOtelEnvVars(pid)
+	}
+	return macosProcessHasOtelEnvVars(pid)
+}
+
+func linuxProcessHasOtelEnvVars(pid int) bool {
+	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/environ")
+	if err != nil {
+		logger.Debug("could not read /proc/environ", "pid", pid, "err", err)
+		return false
+	}
+	// /proc/<pid>/environ is null-delimited key=value pairs.
+	for _, entry := range strings.Split(string(data), "\x00") {
+		for _, marker := range otelEnvVarMarkers {
+			if strings.HasPrefix(entry, marker+"=") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func macosProcessHasOtelEnvVars(pid int) bool {
+	out, err := exec.Command("ps", "eww", "-p", strconv.Itoa(pid), "-o", "command=").Output()
+	if err != nil {
+		logger.Debug("ps eww failed", "pid", pid, "err", err)
+		return false
+	}
+	output := string(out)
+	for _, marker := range otelEnvVarMarkers {
+		if strings.Contains(output, marker+"=") {
+			return true
+		}
+	}
+	return false
+}
 
 func detectProcesses(filterTerm string, excludeTerms []string) []DetectedProcess {
 	output, err := exec.Command("ps", "ax", "-o", "pid=,command=").Output()
