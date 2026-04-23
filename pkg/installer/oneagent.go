@@ -3,11 +3,12 @@ package installer
 import (
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/client"
 )
 
 // InstallMode controls which OneAgent components are installed.
@@ -60,57 +61,44 @@ func oneAgentInstallerFilename() string {
 
 // checkOneAgentConnectivity performs a quick connectivity check against the
 // Dynatrace API endpoint.
-func checkOneAgentConnectivity(apiURL, token string) error {
-	req, err := http.NewRequest(http.MethodGet, apiURL+"/api/v1/time", nil)
+func checkOneAgentConnectivity(c *client.ClassicClient) error {
+	resp, err := c.HTTP().R().Get("/api/v1/time")
 	if err != nil {
-		return fmt.Errorf("building connectivity request: %w", err)
+		return fmt.Errorf("connectivity check failed — cannot reach %s: %w", c.BaseURL(), err)
 	}
-	req.Header.Set("Authorization", AuthHeader(token))
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("connectivity check failed — cannot reach %s: %w", apiURL, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusUnauthorized {
+	if resp.StatusCode() == 401 {
 		return fmt.Errorf("connectivity check failed: invalid credentials (401 Unauthorized)")
 	}
-	if resp.StatusCode >= 300 {
-		return fmt.Errorf("connectivity check returned unexpected status %d", resp.StatusCode)
+	if resp.StatusCode() >= 300 {
+		return fmt.Errorf("connectivity check returned unexpected status %d", resp.StatusCode())
 	}
 	return nil
 }
 
 // downloadOneAgentInstaller downloads the OneAgent installer binary to a
 // temporary file and returns its path.
-func downloadOneAgentInstaller(apiURL, token string) (string, error) {
+func downloadOneAgentInstaller(c *client.ClassicClient) (string, error) {
 	iType, arch, err := oneAgentInstallerType()
 	if err != nil {
 		return "", err
 	}
 
 	// API: GET /api/v1/deployment/installer/agent/{osType}/default/latest?arch={arch}
-	downloadURL := fmt.Sprintf(
-		"%s/api/v1/deployment/installer/agent/%s/default/latest?arch=%s",
-		apiURL, iType, arch,
+	path := fmt.Sprintf(
+		"/api/v1/deployment/installer/agent/%s/default/latest?arch=%s",
+		iType, arch,
 	)
 
-	req, err := http.NewRequest(http.MethodGet, downloadURL, nil)
-	if err != nil {
-		return "", fmt.Errorf("building download request: %w", err)
-	}
-	req.Header.Set("Authorization", AuthHeader(token))
-
-	fmt.Printf("  Downloading OneAgent installer from %s...\n", apiURL)
-	resp, err := http.DefaultClient.Do(req)
+	fmt.Printf("  Downloading OneAgent installer from %s...\n", c.BaseURL())
+	resp, err := c.HTTP().R().SetDoNotParseResponse(true).Get(path)
 	if err != nil {
 		return "", fmt.Errorf("downloading OneAgent installer: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.RawBody().Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("installer download failed with status %d", resp.StatusCode)
+	if resp.StatusCode() != 200 {
+		return "", fmt.Errorf("installer download failed with status %d", resp.StatusCode())
 	}
 
 	tmpFile, err := os.CreateTemp("", oneAgentInstallerFilename())
@@ -119,7 +107,7 @@ func downloadOneAgentInstaller(apiURL, token string) (string, error) {
 	}
 	defer tmpFile.Close()
 
-	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
+	if _, err := io.Copy(tmpFile, resp.RawBody()); err != nil {
 		os.Remove(tmpFile.Name())
 		return "", fmt.Errorf("writing installer to disk: %w", err)
 	}
@@ -138,18 +126,15 @@ func downloadOneAgentInstaller(apiURL, token string) (string, error) {
 // InstallOneAgent installs Dynatrace OneAgent on the current host.
 //
 // Parameters:
-//   - envURL: Dynatrace environment URL (apps or live)
-//   - token:  API token with installation permissions
-//   - dryRun:    when true, only print what would be done
-//   - quiet:     when true, suppress output and skip confirmation
+//   - c:        Dynatrace Classic API client with auth configured
+//   - dryRun:   when true, only print what would be done
+//   - quiet:    when true, suppress output and skip confirmation
 //   - hostGroup: optional host group name (passed as --set-host-group)
-func InstallOneAgent(envURL, token string, dryRun, quiet bool, hostGroup string) error {
-	apiURL := APIURL(envURL)
-
+func InstallOneAgent(c *client.ClassicClient, dryRun, quiet bool, hostGroup string) error {
 	if dryRun {
 		iType, arch, _ := oneAgentInstallerType()
 		fmt.Println("[dry-run] Would install Dynatrace OneAgent")
-		fmt.Printf("  API URL:          %s\n", apiURL)
+		fmt.Printf("  API URL:          %s\n", c.BaseURL())
 		fmt.Printf("  Installer type:   %s / arch: %s\n", iType, arch)
 		fmt.Printf("  Install mode:     %s\n", InstallModeFullStack)
 		if quiet {
@@ -164,17 +149,17 @@ func InstallOneAgent(envURL, token string, dryRun, quiet bool, hostGroup string)
 	if !quiet {
 		fmt.Println("  Checking API connectivity...")
 	}
-	if err := checkOneAgentConnectivity(apiURL, token); err != nil {
+	if err := checkOneAgentConnectivity(c); err != nil {
 		return err
 	}
 
-	installerPath, err := downloadOneAgentInstaller(apiURL, token)
+	installerPath, err := downloadOneAgentInstaller(c)
 	if err != nil {
 		return err
 	}
 	defer os.Remove(installerPath)
 
-	args := buildOneAgentInstallerArgs(installerPath, apiURL, quiet, hostGroup)
+	args := buildOneAgentInstallerArgs(installerPath, c.BaseURL(), quiet, hostGroup)
 
 	if quiet {
 		if err := RunCommandQuiet(args[0], args[1:]...); err != nil {

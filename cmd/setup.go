@@ -129,10 +129,15 @@ var setupCmd = &cobra.Command{
 			return err
 		}
 
+		c, err := setupClient()
+		if err != nil {
+			return err
+		}
+
 		var installErr error
 		switch selected.Method {
 		case recommender.MethodOneAgent:
-			installErr = installer.InstallOneAgent(envURL, accessTok, setupDryRun, false, "")
+			installErr = installer.InstallOneAgent(c.Classic, setupDryRun, false, "")
 		case recommender.MethodKubernetes:
 			installErr = installer.InstallKubernetes(envURL, accessTok, accessTok, "" /* name */, setupDryRun)
 		case recommender.MethodDocker:

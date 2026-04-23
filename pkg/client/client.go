@@ -9,7 +9,6 @@ import (
 
 	"github.com/go-resty/resty/v2"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/version"
 )
 
@@ -54,9 +53,18 @@ var sensitiveHTTPHeaders = map[string]bool{
 	"set-cookie":    true,
 }
 
+// authHeader returns the Authorization header value for a Dynatrace token.
+// dt0c01.* tokens use "Api-Token", all others use "Bearer".
+func authHeader(token string) string {
+	if strings.HasPrefix(token, "dt0c01.") {
+		return "Api-Token " + token
+	}
+	return "Bearer " + token
+}
+
 // New builds a Client with a ClassicClient and a PlatformClient.
 // classicURL and platformURL should already be in the correct URL families
-// (use installer.APIURL / installer.AppsURL to convert from the raw env URL).
+// (strip .apps. for classic, add .apps. for platform).
 func New(classicURL, accessToken, platformURL, platformToken string, verbosityLevel int) (*Client, error) {
 	if classicURL == "" {
 		return nil, fmt.Errorf("classic API URL is required")
@@ -67,7 +75,7 @@ func New(classicURL, accessToken, platformURL, platformToken string, verbosityLe
 
 	classic := &ClassicClient{
 		baseURL: classicURL,
-		http:    newRestyClient(classicURL, installer.AuthHeader(accessToken), verbosityLevel),
+		http:    newRestyClient(classicURL, authHeader(accessToken), verbosityLevel),
 	}
 
 	platform := &PlatformClient{
