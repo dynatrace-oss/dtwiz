@@ -410,11 +410,10 @@ func TestGenerateNuxtBootstrapMJS_ContainsModuleRegister(t *testing.T) {
 
 	checks := []string{
 		"import { register } from 'node:module'",
-		"import { pathToFileURL } from 'node:url'",
 		"import { createRequire } from 'node:module'",
-		"register(pathToFileURL(",
+		"register(hookURL, import.meta.url)",
 		"hook.mjs",
-		"createRequire(pathToFileURL('./'))",
+		"createRequire(import.meta.url)",
 		"register.js",
 	}
 	for _, check := range checks {
@@ -427,11 +426,12 @@ func TestGenerateNuxtBootstrapMJS_ContainsModuleRegister(t *testing.T) {
 func TestGenerateNuxtBootstrapMJS_UsesOtelDir(t *testing.T) {
 	content := generateNuxtBootstrapMJS("/app/.otel")
 
-	if !strings.Contains(content, "/app/.otel/node_modules/@opentelemetry/instrumentation/hook.mjs") {
-		t.Errorf("expected bootstrap to reference hook.mjs in otel dir, got:\n%s", content)
+	// Verify relative paths are used (works on Windows, macOS, and Linux)
+	if !strings.Contains(content, "./node_modules/@opentelemetry/instrumentation/hook.mjs") {
+		t.Errorf("expected bootstrap to reference hook.mjs with relative path, got:\n%s", content)
 	}
-	if !strings.Contains(content, "/app/.otel/node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js") {
-		t.Errorf("expected bootstrap to reference register.js in otel dir, got:\n%s", content)
+	if !strings.Contains(content, "./node_modules/@opentelemetry/auto-instrumentations-node/build/src/register.js") {
+		t.Errorf("expected bootstrap to reference register.js with relative path, got:\n%s", content)
 	}
 }
 
