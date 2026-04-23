@@ -3,6 +3,7 @@
 package installer
 
 import (
+	"os"
 	"os/exec"
 	"testing"
 	"time"
@@ -80,5 +81,37 @@ func TestDetectProcesses_ExcludeTermsCaseInsensitive(t *testing.T) {
 		if p.PID == pid {
 			t.Errorf("detectProcesses excluded \"SLEEP\" but PID %d still appeared — case-insensitive exclude broken", pid)
 		}
+	}
+}
+
+// TestIsOtelProcess_WithOtelVars verifies that isOtelProcess
+// returns true for a process launched with OTel env vars in a terminal session.
+// Since ps eww only exposes env vars for processes in the same session on macOS,
+// we verify the current process (which does have a terminal session) when
+// OTEL_SERVICE_NAME is already set in the environment.
+// This test is skipped if neither OTel marker var is present in the current env.
+func TestIsOtelProcess_WithOtelVars(t *testing.T) {
+	hasMarker := false
+	for _, marker := range otelEnvVarMarkers {
+		if os.Getenv(marker) != "" {
+			hasMarker = true
+			break
+		}
+	}
+	if !hasMarker {
+		t.Skip("no OTel env vars set in current process — skipping (set OTEL_SERVICE_NAME to run)")
+	}
+
+	if !isOtelProcess(os.Getpid()) {
+		t.Error("isOtelProcess returned false for current process with OTel env vars set")
+	}
+}
+
+// TestIsOtelProcess_NoOtelVars verifies that isOtelProcess
+// returns false for a non-existent PID (ps/proc will error and we return false).
+func TestIsOtelProcess_NoOtelVars(t *testing.T) {
+	// PID 0 is never a real user process — ps and /proc will fail.
+	if isOtelProcess(0) {
+		t.Error("isOtelProcess returned true for PID 0")
 	}
 }

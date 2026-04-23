@@ -23,7 +23,14 @@ func detectPythonProjects() []ScannedProject {
 }
 
 func detectPythonProcesses() []DetectedProcess {
-	return detectProcesses("python", []string{"pip ", "setup.py", "/bin/dtwiz"})
+	candidates := detectProcesses("python", []string{"pip ", "setup.py", "/bin/dtwiz"})
+	instrumented := make([]DetectedProcess, 0, len(candidates))
+	for _, p := range candidates {
+		if isOtelProcess(p.PID) {
+			instrumented = append(instrumented, p)
+		}
+	}
+	return instrumented
 }
 
 var commonEntrypoints = []string{
