@@ -28,6 +28,7 @@ The process detection infrastructure in `otel_runtime_scan.go` provides `detectP
 However, the broad filter alone produces false positives: every Python process on the system is listed, not just OTel-instrumented ones. A second pass checks each candidate process for OTel env vars (`OTEL_SERVICE_NAME` or `OTEL_EXPORTER_OTLP_ENDPOINT`). Processes with these vars set were launched under `opentelemetry-instrument` (which injects them) and are the only ones that belong in the uninstall preview.
 
 **Platform implementation:**
+
 - **macOS**: `ps eww -p <pid> -o command=` emits the full env block alongside the command; scan the output for the marker var names.
 - **Linux**: Read `/proc/<pid>/environ` (null-delimited key=value pairs); check for marker keys.
 - **Windows**: `Win32_Process` does not expose env vars. Fall back to checking whether `opentelemetry-instrument` appears in the command line (the wrapper may remain visible on Windows before the exec).
