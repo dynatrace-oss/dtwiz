@@ -4,19 +4,19 @@
 
 ### Requirement: Active feature flags displayed in status output
 
-`dtwiz status` SHALL display a "Feature Flags" section when any feature flag is enabled. The section SHALL be printed using `display.Header("Feature Flags")` and `display.PrintSectionDivider()`, consistent with the Connection Status and System Analysis sections. Each enabled flag SHALL be listed with its env var name, enabled status, and source. When no flags are enabled, the section SHALL be omitted entirely.
+`dtwiz status` SHALL display a "Feature Flags" section when any feature flag is enabled. The section SHALL be printed using `display.Header("Feature Flags")`, consistent with the Connection Status and System Analysis sections. Each enabled flag SHALL be listed with its env var name, enabled status, and source. When no flags are enabled, the section SHALL be omitted entirely.
 
 #### Scenario: One flag enabled via env var
 
 - **GIVEN** `DTWIZ_ALL_RUNTIMES=true` is set in the environment
 - **WHEN** the user runs `dtwiz status`
-- **THEN** the output includes a "Feature Flags" section showing `DTWIZ_ALL_RUNTIMES  enabled (env)`
+- **THEN** the output includes a "Feature Flags" section showing `DTWIZ_ALL_RUNTIMES  ✓ enabled (env)`
 
 #### Scenario: Flag enabled via CLI flag
 
 - **GIVEN** `--all-runtimes` is passed on the command line
 - **WHEN** the user runs `dtwiz status --all-runtimes`
-- **THEN** the output includes a "Feature Flags" section showing `DTWIZ_ALL_RUNTIMES  enabled (cli)`
+- **THEN** the output includes a "Feature Flags" section showing `DTWIZ_ALL_RUNTIMES  ✓ enabled (cli)`
 
 #### Scenario: No flags enabled
 

@@ -40,7 +40,7 @@ Any new color or print need SHALL be evaluated against this palette first. A new
 
 #### Scenario: ColorMuted used for faint/de-emphasized text
 
-- **GIVEN** any CLI command prints de-emphasised text such as hints, cancelled messages, or dry-run notices
+- **GIVEN** any CLI command prints de-emphasized text such as hints, cancelled messages, or dry-run notices
 - **WHEN** it renders that text
 - **THEN** it uses `display.ColorMuted` (faint)
 
