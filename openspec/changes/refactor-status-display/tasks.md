@@ -49,9 +49,9 @@ Reuse standardized `pkg/display` functions (`Header`, `PrintSectionDivider`, `Pr
 
 **Files:** `pkg/installer/otel.go` (modify), `pkg/installer/otel_python.go` (modify), other OTel installer files as applicable
 
-- [ ] 5.1 Audit all OTel installer files for inline section dividers, ad-hoc status lines, or header formatting that duplicates `Header`, `PrintSectionDivider`, `PrintStatusLine`, or `PrintFlagLine`
-- [ ] 5.2 Replace duplicated formatting code with the appropriate `pkg/display` helpers throughout the OTel installer files
-- [ ] 5.3 Run `make test` and `make lint` — no regressions
+- [x] 5.1 Audit all OTel installer files for inline section dividers, ad-hoc status lines, or header formatting that duplicates `Header`, `PrintSectionDivider`, `PrintStatusLine`, or `PrintFlagLine`
+- [x] 5.2 Replace duplicated formatting code with the appropriate `pkg/display` helpers throughout the OTel installer files
+- [x] 5.3 Run `make test` and `make lint` — no regressions
 
 ## 6. Verification
 
