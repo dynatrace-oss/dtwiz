@@ -154,7 +154,7 @@ The installer SHALL emit debug-level log lines throughout the entrypoint detecti
 
 The installer SHALL stop any running instance of the selected project and start the application fresh with the `-javaagent` flag and OTEL_* environment variables configured for Dynatrace.
 
-#### Scenario: Successful instrumented launch from project artifact
+#### Scenario: Successfully instrumented launch from project artifact
 
 - **GIVEN** the user has selected a project and a launch entrypoint and confirmed the plan
 - **WHEN** the installer executes the plan
