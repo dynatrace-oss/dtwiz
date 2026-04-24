@@ -152,6 +152,8 @@ Running process detection via `detectProcesses("java", nil)` serves two purposes
 
 When `jps` (JDK tool) is available in PATH, it provides richer process descriptions (main class / JAR name) stored in the new `DetectedProcess.Description` field (see Decision 4). `jps` is supplemental, never required.
 
+**Alternative considered:** Use `jcmd <pid> VM.command_line` instead of (or alongside) `jps` for process enrichment, motivated by two potential benefits: (1) `jcmd` may be more likely to be present than `jps`; (2) `jcmd` can expose `-javaagent` flags on running JVMs, which could be used to detect already-instrumented processes. Both motivations were investigated and rejected. On availability: `jps` and `jcmd` ship together in the JDK — if one is present, the other is too; if only a JRE is installed, neither is available. The availability profiles are identical. On OTel detection: `ps ax` already captures the full JVM command line including all `-javaagent` flags. Parsing `-javaagent:*opentelemetry*` from `ps ax` output is sufficient to detect already-instrumented processes without invoking `jcmd`. `jcmd` is therefore redundant for both use cases within this spec's scope. Consider using `jcmd` if there are issues with `jps`.
+
 ### 10. OTel Collector config update
 
 After the instrumented Java process is started, the installer calls `updateOtelCollectorIfPresent(envURL, token, dryRun)`. This helper probes the well-known dtwiz collector config path (`<cwd>/opentelemetry/config.yaml`) and patches it silently with `PatchConfigFile` if found. If not found, the step is skipped with no output (see Decision 5).
