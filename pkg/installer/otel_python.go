@@ -164,6 +164,7 @@ func (p *PythonInstrumentationPlan) Execute() {
 			return
 		}
 		venvDir := filepath.Join(proj.Path, ".venv")
+		logger.Debug("creating virtualenv", "python", pythonPath, "venv_dir", venvDir)
 		cmd := exec.Command(pythonPath, "-m", "venv", venvDir)
 		cmd.Dir = proj.Path
 		out, err := cmd.CombinedOutput()
@@ -252,8 +253,10 @@ func (p *PythonInstrumentationPlan) Execute() {
 		// When not found in the venv (bare name), call directly and rely on PATH.
 		var cmd *exec.Cmd
 		if runtime.GOOS == "windows" || !filepath.IsAbs(otelInstrument) {
+			logger.Debug("launching instrumented python process", "instrument", otelInstrument, "python", pythonBin, "entrypoint", ep)
 			cmd = exec.Command(otelInstrument, pythonBin, ep)
 		} else {
+			logger.Debug("launching instrumented python process", "venv_python", venvPython, "instrument", otelInstrument, "python", pythonBin, "entrypoint", ep)
 			cmd = exec.Command(venvPython, otelInstrument, pythonBin, ep)
 		}
 		cmd.Dir = proj.Path
