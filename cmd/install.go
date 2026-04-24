@@ -30,9 +30,13 @@ var installOneAgentCmd = &cobra.Command{
 		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
 			return err
 		}
+		c, err := setupClient()
+		if err != nil {
+			return err
+		}
 		quiet, _ := cmd.Flags().GetBool("quiet")
 		hostGroup, _ := cmd.Flags().GetString("host-group")
-		if err := installer.InstallOneAgent(envURL, accessTok, installDryRun, quiet, hostGroup); err != nil {
+		if err := installer.InstallOneAgent(c.Classic, installDryRun, quiet, hostGroup); err != nil {
 			return err
 		}
 		if !installDryRun {
