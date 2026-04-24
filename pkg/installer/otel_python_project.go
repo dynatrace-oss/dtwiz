@@ -23,11 +23,30 @@ func detectPythonProjects() []ScannedProject {
 }
 
 func detectPythonProcesses() []DetectedProcess {
-	candidates := detectProcesses("python", []string{"pip ", "setup.py", "/bin/dtwiz"})
-	instrumented := make([]DetectedProcess, 0, len(candidates))
-	for _, p := range candidates {
-		if isOtelProcess(p.PID) {
-			instrumented = append(instrumented, p)
+	return detectProcesses("python", []string{"pip ", "setup.py", "/bin/dtwiz"})
+}
+
+// detectInstrumentedPythonProcesses returns only Python processes that belong
+// to a known dtwiz-instrumented project on disk, by cross-referencing process
+// working directories against scanned Python project paths — the same mechanism
+// used at install time via matchProcessesToProjects.
+func detectInstrumentedPythonProcesses() []DetectedProcess {
+	projects, candidates := runInParallel(detectPythonProjects, detectPythonProcesses)
+	matchProcessesToProjects(projects, candidates)
+
+	seen := make(map[int]bool)
+	var instrumented []DetectedProcess
+	for _, proj := range projects {
+		for _, pid := range proj.RunningProcessIDs {
+			if !seen[pid] {
+				seen[pid] = true
+				for _, p := range candidates {
+					if p.PID == pid {
+						instrumented = append(instrumented, p)
+						break
+					}
+				}
+			}
 		}
 	}
 	return instrumented
