@@ -23,11 +23,11 @@
 
 **Files:** `pkg/installer/otel_java.go` (modify)
 
-- [ ] 2.1 Implement `downloadJavaAgent() (string, error)` — download the JAR from `otelJavaAgentURL` to `~/opentelemetry/java/opentelemetry-javaagent.jar`. Create the directory if it does not exist. Use `net/http.Get` + `os.Create` + `io.Copy`. Return the absolute path to the JAR.
+- [ ] 2.1 Implement `downloadJavaAgent() (string, error)` — download the JAR from `otelJavaAgentURL` to `~/.opentelemetry/java/opentelemetry-javaagent.jar`. Create the directory if it does not exist. Use `net/http.Get` + `os.Create` + `io.Copy`. Return the absolute path to the JAR.
 - [ ] 2.2 Handle download errors: non-200 HTTP status → return error with URL and status code; network errors → return error with URL and error message.
-- [ ] 2.3 Print download progress: `Downloading OpenTelemetry Java agent... done.`
+- [ ] 2.3 Output download progress via `display.PrintStatusLine("download", "OpenTelemetry Java agent... done.", display.ColorOK)`
 - [ ] 2.4 Tests in `pkg/installer/otel_java_test.go`:
-  - `TestDownloadJavaAgent_CreatesDirectory` — use a temp dir as destination; verify the `~/opentelemetry/java/` directory is created when it does not exist, and the JAR file is written
+  - `TestDownloadJavaAgent_CreatesDirectory` — use a temp dir as destination; verify the `~/.opentelemetry/java/` directory is created when it does not exist, and the JAR file is written
   - `TestDownloadJavaAgent_ErrorOnNon200` — mock an HTTP server returning 404; verify the function returns an error containing the URL and the HTTP status code
   - `TestDownloadJavaAgent_NetworkError` — mock a server that closes the connection immediately; verify the function returns an error containing the URL
 
@@ -104,7 +104,7 @@
   12. Call `updateOtelCollectorIfPresent(envURL, token, dryRun)` — probes `<cwd>/opentelemetry/config.yaml`, patches silently with `PatchConfigFile` if found, skips with no output if not found.
   13. Call `waitForServices()` if at least one process is alive.
 - [ ] 5.5 Use `StartManagedProcess` to launch the instrumented process with log file at `<project-path>/<service-name>.log`. Immediately before constructing the `exec.Cmd`, add `logger.Debug("launching instrumented java process", "cmd", launchCmd, "dir", proj.Path)` — this must be the last debug statement before the process starts so the full resolved command is visible when running with `--debug`.
-- [ ] 5.6 Use `PrintProcessSummary` after the settle period; if no alive processes, print "No services are running — check the logs above for errors." and skip `waitForServices`
+- [ ] 5.6 Use `PrintProcessSummary` after the settle period; if no alive processes, output via `display.PrintStatusLine("error", "No services are running — check the logs above for errors.", display.ColorError)` and skip `waitForServices`
 - [ ] 5.7 Call `waitForServices(envURL, token, aliveServiceNames)` when at least one process is alive
 - [ ] 5.8 Update `DetectJavaPlan` to build fully executable plans — pass `envURL`, resolved entrypoint command through the `JavaInstrumentationPlan` struct
 - [ ] 5.9 Update `JavaInstrumentationPlan.Execute()` to use the full automated flow (detect entrypoint → stop → download → launch → update collector)
@@ -190,9 +190,9 @@
 
 **Files:** `pkg/installer/otel_uninstall.go` (modify), `pkg/installer/otel_uninstall_test.go` (modify or create)
 
-- [ ] 13.1 Add `findInstrumentedJavaProcesses() []DetectedProcess` in `otel_uninstall.go` — calls `detectJavaProcesses()` + `enrichProcessesWithJPS()`, filters to processes whose `Command` contains the exact dtwiz agent path (`~/opentelemetry/java/opentelemetry-javaagent.jar`)
+- [ ] 13.1 Add `findInstrumentedJavaProcesses() []DetectedProcess` in `otel_uninstall.go` — calls `detectJavaProcesses()` + `enrichProcessesWithJPS()`, filters to processes whose `Command` contains the exact dtwiz agent path (`~/.opentelemetry/java/opentelemetry-javaagent.jar`)
 - [ ] 13.2 Add `javaAgentDir() string` helper — returns `filepath.Dir(javaAgentPath())`
-- [ ] 13.3 Extend `UninstallOtelCollector(dryRun bool) error` to include a Java cleanup section: discover instrumented Java processes and the agent dir, include them in the combined preview alongside existing collector artifacts, and on confirmation stop matched processes then remove `~/opentelemetry/java/` if it exists
+- [ ] 13.3 Extend `UninstallOtelCollector(dryRun bool) error` to include a Java cleanup section: discover instrumented Java processes and the agent dir, include them in the combined preview alongside existing collector artifacts, and on confirmation stop matched processes then remove `~/.opentelemetry/java/` if it exists
 - [ ] 13.4 Tests:
   - `TestFindInstrumentedJavaProcesses_FiltersByAgentFlag` — verify only processes with `opentelemetry-javaagent.jar` in command are returned
   - `TestFindInstrumentedJavaProcesses_NoneMatching` — verify empty result when no processes have the agent flag
@@ -201,5 +201,5 @@
   - `TestUninstallOtelCollector_JavaDryRun_AgentDirExists` — agent dir present, dry-run → dir not removed
 - [ ] 13.5 Manual verification: `dtwiz uninstall otel --dry-run` with a running instrumented Java process — shows Java PID and agent dir in preview, makes no changes
 - [ ] 13.6 Manual verification: `dtwiz uninstall otel` stops only the dtwiz-instrumented Java process, not other Java processes
-- [ ] 13.7 Manual verification: `dtwiz uninstall otel` with no running Java processes but agent JAR present — removes `~/opentelemetry/java/` only
+- [ ] 13.7 Manual verification: `dtwiz uninstall otel` with no running Java processes but agent JAR present — removes `~/.opentelemetry/java/` only
 - [ ] 13.8 Manual verification: `dtwiz uninstall otel` with nothing Java-related to remove — Java section is absent from output; existing collector behavior unchanged

@@ -9,17 +9,17 @@ The `InstallOtelJava()` function SHALL validate prerequisites before proceeding 
 #### Scenario: Java not in PATH
 
 - **WHEN** `java` is not found in PATH
-- **THEN** the installer SHALL exit with a clear error message: "Java not found — install a JDK/JRE and ensure it is in PATH"
+- **THEN** the installer SHALL exit and output via `display.PrintStatusLine("error", "Java not found — install a JDK/JRE and ensure it is in PATH", display.ColorError)`
 
 #### Scenario: Java version cannot be determined
 
 - **WHEN** `java` is found in PATH but `java -version` fails or produces unrecognizable output
-- **THEN** the installer SHALL exit with an error message: "unable to determine Java version"
+- **THEN** the installer SHALL exit and output via `display.PrintStatusLine("error", "unable to determine Java version", display.ColorError)`
 
 #### Scenario: Java version below minimum (< 8)
 
 - **WHEN** `java -version` reports a version lower than 8 (e.g., `java version "1.7.0_80"`)
-- **THEN** the installer SHALL exit with an error message stating the detected version and that the OpenTelemetry Java agent requires Java 8 or later
+- **THEN** the installer SHALL exit and output via `display.PrintStatusLine("error", "Java <n> detected — OpenTelemetry Java agent requires Java 8 or later", display.ColorError)` stating the detected version
 
 #### Scenario: All prerequisites met
 

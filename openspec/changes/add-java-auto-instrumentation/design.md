@@ -92,9 +92,9 @@ Spring Boot detection is done by substring matching (`spring-boot` in pom.xml, `
 
 **Alternative considered:** Offer `./mvnw exec:java` as a generic Maven fallback. Rejected — this command requires `mainClass` to be configured in the exec-maven-plugin POM section, which is absent in the vast majority of projects (including all Spring Boot projects). The result is a cryptic Maven plugin error (`PluginParameterException: mainClass is missing`) with no clear path forward for the user.
 
-### 3. Agent JAR download to `~/opentelemetry/java/opentelemetry-javaagent.jar`
+### 3. Agent JAR download to `~/.opentelemetry/java/opentelemetry-javaagent.jar`
 
-The agent JAR is downloaded from the official GitHub releases URL (`https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar`) to `~/opentelemetry/java/opentelemetry-javaagent.jar`. This location is:
+The agent JAR is downloaded from the official GitHub releases URL (`https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar`) to `~/.opentelemetry/java/opentelemetry-javaagent.jar`. This location is:
 
 - Outside any project directory (the JAR is reusable across projects).
 - Under the user's home directory (no root/sudo required).
@@ -166,13 +166,15 @@ The instrumented launch requires JVM flags (`-javaagent`) that can only be set a
 
 When a running process is matched, the plan preview explicitly lists the PID(s) and process description(s) that will be stopped, and the `confirmProceed()` prompt names the process(es) being stopped — e.g. `Stop PID 1234 (myapp) and proceed with installation?`. When no process is matched, the prompt is the standard `Proceed with installation?`. The user must confirm before any process is stopped.
 
+All status output during stop-and-restart uses `display.PrintStatusLine` from the `pkg/display` package. Section headers (e.g. before listing processes to be stopped) use `display.Header`. Errors use `display.ColorError`, success confirmations use `display.ColorOK`.
+
 ### 12. Reuse `ManagedProcess` and `waitForServices` from existing infrastructure
 
 After launching the instrumented process:
 
 - `StartManagedProcess()` handles the lifecycle (PID tracking, log file, exit detection).
-- `PrintProcessSummary()` shows status after the settle period (crashed / running / port detected).
-- `waitForServices()` polls DQL to verify the service appears in Dynatrace.
+- `PrintProcessSummary()` shows status after the settle period (crashed / running / port detected) using `display.PrintStatusLine` for each process line.
+- `waitForServices()` polls DQL to verify the service appears in Dynatrace; on success outputs via `display.PrintStatusLine("status", "All services are reporting to Dynatrace.", display.ColorOK)`; on timeout via `display.PrintStatusLine("timeout", "...", display.ColorMuted)`.
 
 ### 13. Enable Java by default in `dtwiz install otel`
 
@@ -260,11 +262,11 @@ but this path is only reached in edge cases where the installer cannot auto-dete
 
 Java uninstall logic is folded into the existing `UninstallOtelCollector()` in `otel_uninstall.go`, as an additional cleanup section alongside the OTel Collector and Node.js sections. No separate `dtwiz uninstall otel-java` command is added — this mirrors the pattern established by Node.js uninstall.
 
-Running Java processes are discovered via `detectJavaProcesses()` + `enrichProcessesWithJPS()`. The result is filtered to those whose command line contains the **exact agent JAR path** dtwiz uses: `~/opentelemetry/java/opentelemetry-javaagent.jar` (resolved via `javaAgentPath()`). This is a best-effort heuristic — matching on the full path rather than just the filename makes false positives unlikely, but another process could independently use the same agent location. The preview explicitly notes this and asks the user to verify the list before confirming.
+Running Java processes are discovered via `detectJavaProcesses()` + `enrichProcessesWithJPS()`. The result is filtered to those whose command line contains the **exact agent JAR path** dtwiz uses: `~/.opentelemetry/java/opentelemetry-javaagent.jar` (resolved via `javaAgentPath()`). This is a best-effort heuristic — matching on the full path rather than just the filename makes false positives unlikely, but another process could independently use the same agent location. The preview explicitly notes this and asks the user to verify the list before confirming.
 
-The agent JAR directory (`~/opentelemetry/java/`) is removed unconditionally if it exists, regardless of whether any processes were found. This cleans up the downloaded artifact even when the user stopped the process manually.
+The agent JAR directory (`~/.opentelemetry/java/`) is removed unconditionally if it exists, regardless of whether any processes were found. This cleans up the downloaded artifact even when the user stopped the process manually.
 
-**Flow (within `UninstallOtelCollector`):** discover Java processes + agent dir → include Java section in combined preview → confirm (once, for all sections) → stop Java processes → remove `~/opentelemetry/java/` → proceed with existing collector cleanup.
+**Flow (within `UninstallOtelCollector`):** discover Java processes + agent dir → include Java section in combined preview → confirm (once, for all sections) → stop Java processes → remove `~/.opentelemetry/java/` → proceed with existing collector cleanup.
 
 **Alternative considered:** Keep Java as a standalone `dtwiz uninstall otel-java` subcommand. Rejected — consistency with the Node.js uninstall pattern (which is also folded into `uninstall otel`) is preferred. A single `dtwiz uninstall otel` cleans up all OTel-related instrumentation regardless of runtime.
 
