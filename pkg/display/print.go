@@ -8,13 +8,14 @@ import (
 )
 
 const (
-	DividerLineLength int = 42
+	DividerLineLength int = 50
+	DefaultLabel          = "dtwiz"
 )
 
 func Header(message string) {
 	_, err := ColorHeader.Printf("  %s\n", message)
 	if err != nil {
-		PrintStatusLine("status", fmt.Sprintf("✗ %s", err), ColorError)
+		PrintError(DefaultLabel, err)
 	}
 
 	PrintSectionDivider()
@@ -23,22 +24,26 @@ func Header(message string) {
 func PrintSectionDivider() {
 	_, err := ColorMuted.Println("  " + strings.Repeat("─", DividerLineLength))
 	if err != nil {
-		PrintStatusLine("status", fmt.Sprintf("✗ %s", err), ColorError)
+		PrintError(DefaultLabel, err)
 	}
 }
 
 func PrintStatusLine(label, message string, colorFunc *color.Color) {
-	_, err := fmt.Fprintf(color.Output, "  %s:  %s\n", ColorLabel.Sprint(label), colorFunc.Sprint(message))
+	_, err := fmt.Fprintf(color.Output, "  %s:  %s\n", ColorDefault.Sprint(label), colorFunc.Sprint(message))
 	if err != nil {
-		fmt.Printf("status: %s\n", ColorError.Sprintf("✗ %s", err))
+		PrintError(label, err)
 	}
 }
 
 // PrintFlagLine prints a feature flag line without a colon after the label,
 // producing output like:  DTWIZ_ALL_RUNTIMES  ✓ enabled (env)
 func PrintFlagLine(label, message string, colorFunc *color.Color) {
-	_, err := fmt.Fprintf(color.Output, "  %s  %s\n", ColorLabel.Sprint(label), colorFunc.Sprint(message))
+	_, err := fmt.Fprintf(color.Output, "  %s  %s\n", ColorDefault.Sprint(label), colorFunc.Sprint(message))
 	if err != nil {
-		fmt.Printf("status: %s\n", ColorError.Sprintf("✗ %s", err))
+		PrintError(label, err)
 	}
+}
+
+func PrintError(label string, err error) {
+	_, _ = fmt.Fprintf(color.Output, "  %s: %s\n", ColorDefault.Sprint(label), ColorError.Sprintf("✗ %s", err))
 }

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/fatih/color"
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 )
 
 // awsTemplateURL is the pinned Dynatrace CloudFormation template.
@@ -415,7 +415,6 @@ func buildDeployArgs(cfg awsStackConfig, templateFile string) []string {
 //   - dryRun:         when true, show what would be done without executing
 //   - startTime:      RFC3339 timestamp used as the from-clause for WatchIngest (empty = skip watch)
 func InstallAWS(envURL, token, platformToken string, dryRun bool, startTime string) error {
-	cyan := color.New(color.FgMagenta)
 	sep := strings.Repeat("─", 60)
 
 	// Prefer the explicit platform token; fall back to the access token.
@@ -425,7 +424,7 @@ func InstallAWS(envURL, token, platformToken string, dryRun bool, startTime stri
 	}
 
 	fmt.Println()
-	cyan.Println("  Dynatrace AWS CloudFormation Integration")
+	display.ColorMessage.Println("  Dynatrace AWS CloudFormation Integration")
 	fmt.Println()
 
 	// ── Validate parameters ──────────────────────────────────────────────────
@@ -494,7 +493,7 @@ func InstallAWS(envURL, token, platformToken string, dryRun bool, startTime stri
 
 	fmt.Println()
 	fmt.Printf("  %s\n", sep)
-	cyan.Println("  Command to be executed:")
+	display.ColorMessage.Println("  Command to be executed:")
 	fmt.Printf("  %s\n", sep)
 	fmt.Printf("    aws %s\n", formatDeployCmd(maskTokenArgs(deployArgs)))
 	fmt.Printf("  %s\n\n", sep)

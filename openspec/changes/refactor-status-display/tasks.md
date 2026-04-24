@@ -43,12 +43,22 @@ Add the conditional "Feature Flags" section using `featureflags.List()` and the 
 - [x] 4.2 If any flags are enabled, call `display.Header("Feature Flags")`, `display.PrintSectionDivider()`, then print each flag as its env var name followed by `enabled (<Source>)` indented by two spaces
 - [x] 4.3 If no flags are enabled, omit the section entirely
 
-## 5. Verification
+## 5. Standardize output helpers in OTel installers
 
-- [x] 5.1 Run `make test` — all tests pass
-- [x] 5.2 Run `make lint` — no new lint issues
-- [x] 5.3 Manual: `dtwiz status` with no credentials set — verify Connection Status section renders correctly with `✗` lines
-- [x] 5.4 Manual: `dtwiz status` with valid credentials — verify `✓ valid (<url>)` shows correct URL for each token (API URL for Access Token, Apps URL for Platform Token)
-- [x] 5.5 Manual: `dtwiz status` with `DTWIZ_ALL_RUNTIMES=true` — verify Feature Flags section appears
-- [x] 5.6 Manual: `dtwiz status` with no flags set — verify no Feature Flags section in output
-- [x] 5.7 Manual: simulate system analysis failure — verify command exits non-zero and prints `✗ system analysis failed: ...`
+Reuse standardized `pkg/display` functions (`Header`, `PrintSectionDivider`, `PrintStatusLine`, `PrintFlagLine`) across OTel-related installers (otel.go, otel_python.go, etc.) for consistent output formatting.
+
+**Files:** `pkg/installer/otel.go` (modify), `pkg/installer/otel_python.go` (modify), other OTel installer files as applicable
+
+- [x] 5.1 Audit all OTel installer files for inline section dividers, ad-hoc status lines, or header formatting that duplicates `Header`, `PrintSectionDivider`, `PrintStatusLine`, or `PrintFlagLine`
+- [x] 5.2 Replace duplicated formatting code with the appropriate `pkg/display` helpers throughout the OTel installer files
+- [x] 5.3 Run `make test` and `make lint` — no regressions
+
+## 6. Verification
+
+- [x] 6.1 Run `make test` — all tests pass
+- [x] 6.2 Run `make lint` — no new lint issues
+- [x] 6.3 Manual: `dtwiz status` with no credentials set — verify Connection Status section renders correctly with `✗` lines
+- [x] 6.4 Manual: `dtwiz status` with valid credentials — verify `✓ valid (<url>)` shows correct URL for each token (API URL for Access Token, Apps URL for Platform Token)
+- [x] 6.5 Manual: `dtwiz status` with `DTWIZ_ALL_RUNTIMES=true` — verify Feature Flags section appears
+- [x] 6.6 Manual: `dtwiz status` with no flags set — verify no Feature Flags section in output
+- [x] 6.7 Manual: simulate system analysis failure — verify command exits non-zero and prints `✗ system analysis failed: ...`

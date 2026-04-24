@@ -10,8 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/fatih/color"
-
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -182,10 +181,9 @@ func matchProcessesToProjects(projects []ScannedProject, processes []DetectedPro
 }
 
 func promptProjectSelection(label string, projects []ScannedProject) *ScannedProject {
-	header := color.New(color.FgMagenta)
 	fmt.Println()
-	header.Printf("  %s projects on this machine:\n", label)
-	fmt.Println("  " + strings.Repeat("─", 50))
+	display.ColorHeader.Printf("  %s projects on this machine:\n", label)
+	display.PrintSectionDivider()
 	for i, project := range projects {
 		line := fmt.Sprintf("  [%d]  %s  (%s)", i+1, project.Path, strings.Join(project.Markers, ", "))
 		if len(project.RunningProcessIDs) > 0 {

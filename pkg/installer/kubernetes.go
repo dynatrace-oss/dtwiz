@@ -13,7 +13,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/fatih/color"
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 )
 
 //go:embed dynakube.tmpl
@@ -347,25 +347,24 @@ func InstallKubernetes(envURL, token, apiToken, name string, dryRun bool) error 
 	}
 
 	// --- Preview ---
-	cyan := color.New(color.FgMagenta)
 	sep := strings.Repeat("─", 60)
 
 	fmt.Println()
-	cyan.Println("  Dynatrace Kubernetes Integration")
+	display.ColorMessage.Println("  Dynatrace Kubernetes Integration")
 	fmt.Println()
 	fmt.Printf("  Cluster name:  %s\n", name)
 	fmt.Printf("  API URL:       %s\n\n", apiURL)
 	fmt.Printf("  %s\n", sep)
-	cyan.Println("  dynakube.yaml manifest to be applied:")
+	display.ColorMessage.Println("  dynakube.yaml manifest to be applied:")
 	fmt.Printf("  %s\n", sep)
 	for _, line := range strings.Split(strings.TrimRight(manifest, "\n"), "\n") {
 		fmt.Printf("    %s\n", line)
 	}
 	fmt.Printf("\n  %s\n", sep)
-	cyan.Printf("  Commands to be executed:\n")
+	display.ColorMessage.Printf("  Commands to be executed:\n")
 	fmt.Printf("  %s\n", sep)
-	cyan.Printf("    1. %s\n", helmCmd)
-	cyan.Printf("    2. kubectl apply -f dynakube.yaml  # manifest shown above\n")
+	display.ColorMessage.Printf("    1. %s\n", helmCmd)
+	display.ColorMessage.Printf("    2. kubectl apply -f dynakube.yaml  # manifest shown above\n")
 	fmt.Printf("  %s\n\n", sep)
 
 	// --- Confirm ---

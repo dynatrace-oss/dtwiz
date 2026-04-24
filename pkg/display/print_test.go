@@ -2,6 +2,7 @@ package display
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
@@ -93,6 +94,16 @@ func TestPrintFlagLine_NoColonAfterLabel(t *testing.T) {
 	want := "  DTWIZ_ALL_RUNTIMES  ✓ enabled (env)\n"
 	if got != want {
 		t.Errorf("PrintFlagLine() = %q, want %q", got, want)
+	}
+}
+
+func TestPrintError_FormatsLabelAndError(t *testing.T) {
+	got := captureOutput(t, func() {
+		PrintError("Setup", errors.New("connection refused"))
+	})
+	want := "  Setup: ✗ connection refused\n"
+	if got != want {
+		t.Errorf("PrintError() = %q, want %q", got, want)
 	}
 }
 

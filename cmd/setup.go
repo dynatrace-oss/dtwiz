@@ -6,10 +6,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/recommender"
 )
@@ -27,20 +27,16 @@ var setupCmd = &cobra.Command{
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		printBanner()
-		setupHeader := color.New(color.FgMagenta, color.Bold)
-		setupMuted := color.New()
-		setupPrompt := color.New(color.FgMagenta)
-		setupBadge := color.New(color.FgMagenta, color.Bold)
 
 		if env := environmentHint(); env != "" {
-			setupMuted.Printf(" Environment: %s\n\n", env)
+			display.ColorDefault.Printf(" Environment: %s\n\n", env)
 		} else {
-			setupMuted.Println(" Environment: (not configured)")
+			display.ColorDefault.Println(" Environment: (not configured)")
 			fmt.Println()
 		}
 
-		setupHeader.Println("  Analyzing system...")
-		setupMuted.Println("  " + strings.Repeat("─", 42))
+		display.Header("Analyzing system...")
+
 		info, err := analyzer.AnalyzeSystem()
 		if err != nil {
 			return fmt.Errorf("analysis failed: %w", err)
@@ -48,8 +44,7 @@ var setupCmd = &cobra.Command{
 		fmt.Println(info.Summary())
 
 		fmt.Println()
-		setupHeader.Println("  Recommendations — What do you want to monitor?")
-		setupMuted.Println("  " + strings.Repeat("─", 42))
+		display.Header("Recommendations — What do you want to monitor?")
 		recs := recommender.GenerateRecommendations(info)
 
 		// Collect actionable (non-done, non-not-supported, non-coming-soon) recommendations.
@@ -65,19 +60,19 @@ var setupCmd = &cobra.Command{
 		}
 
 		for i, r := range actionable {
-			fmt.Printf("  %s  %s\n", setupBadge.Sprintf("[%d]", i+1), r.Title)
+			fmt.Printf("  %s  %s\n", display.ColorHeader.Sprintf("[%d]", i+1), r.Title)
 		}
 		// Show coming-soon items (informational only, not selectable).
 		for _, r := range recs {
 			if r.ComingSoon {
-				fmt.Printf("  %s  %s\n", setupMuted.Sprint(" · "), setupMuted.Sprint(r.Title))
+				fmt.Printf("  %s  %s\n", display.ColorDefault.Sprint(" · "), display.ColorDefault.Sprint(r.Title))
 			}
 		}
 		fmt.Println()
-		fmt.Printf("  %s  %s\n", setupMuted.Sprint("[d]"), setupMuted.Sprint("Install demo app (schnitzel)"))
-		fmt.Printf("  %s  %s\n", setupMuted.Sprint("[0]"), setupMuted.Sprint("Cancel"))
+		fmt.Printf("  %s  %s\n", display.ColorDefault.Sprint("[d]"), display.ColorDefault.Sprint("Install demo app (schnitzel)"))
+		fmt.Printf("  %s  %s\n", display.ColorDefault.Sprint("[0]"), display.ColorDefault.Sprint("Cancel"))
 		fmt.Println()
-		setupPrompt.Print("  Enter number: ")
+		display.ColorMessage.Print("  Enter number: ")
 
 		reader := bufio.NewReader(cmd.InOrStdin())
 		input, err := reader.ReadString('\n')
@@ -87,14 +82,14 @@ var setupCmd = &cobra.Command{
 		input = strings.TrimSpace(input)
 
 		if input == "" || input == "0" {
-			setupMuted.Println("  Setup cancelled.")
+			display.ColorDefault.Println("  Setup cancelled.")
 			return nil
 		}
 
 		if input == "d" {
 			fmt.Println()
-			setupHeader.Println("  Installing: Demo app (schnitzel)")
-			setupMuted.Println("  " + strings.Repeat("─", 42))
+			display.Header("Installing: Demo app (schnitzel)")
+
 			envURL, accessTok, platformTok, err := getDtEnvironment()
 			if err != nil {
 				return err
@@ -118,8 +113,7 @@ var setupCmd = &cobra.Command{
 
 		selected := actionable[choice-1]
 		fmt.Println()
-		setupHeader.Printf("  Installing: %s\n", selected.Title)
-		setupMuted.Println("  " + strings.Repeat("─", 42))
+		display.Header(fmt.Sprintf("Installing: %s", selected.Title))
 
 		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {

@@ -9,8 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/fatih/color"
-
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
@@ -204,10 +203,9 @@ func InstallOtelCollectorWithProject(envURL, token, ingestToken, platformToken, 
 			return fmt.Errorf("project path not found: %s", projectPath)
 		}
 	}
-	cyan := color.New(color.FgMagenta)
 
 	fmt.Println()
-	cyan.Println("  Dynatrace OpenTelemetry Installation")
+	display.ColorMessage.Println("  Dynatrace OpenTelemetry Installation")
 	fmt.Println()
 
 	cp, err := prepareCollectorPlan(envURL, token, ingestToken)
@@ -232,8 +230,8 @@ func InstallOtelCollectorWithProject(envURL, token, ingestToken, platformToken, 
 	} else {
 		projects := detectAllProjects(runtimes)
 		if len(projects) > 0 {
-			cyan.Println("  Detected projects:")
-			fmt.Println("  " + strings.Repeat("─", 50))
+			display.ColorMessage.Println("  Detected projects:")
+			display.PrintSectionDivider()
 			printProjectList(projects)
 
 			if selected, ok := selectProject(projects); ok {
@@ -244,11 +242,11 @@ func InstallOtelCollectorWithProject(envURL, token, ingestToken, platformToken, 
 	fmt.Println()
 
 	if plan != nil {
-		cyan.Println("  This will install the OTel Collector and auto-instrument your application.")
+		display.ColorMessage.Println("  This will install the OTel Collector and auto-instrument your application.")
 	}
 	fmt.Println()
 
-	cyan.Println("  1) OTel Collector")
+	display.ColorMessage.Println("  1) OTel Collector")
 	fmt.Printf("     Directory: %s\n", cp.installDir)
 	fmt.Printf("     Binary:    %s\n", cp.binaryPath)
 	if len(cp.runningPIDs) > 0 {
@@ -262,11 +260,11 @@ func InstallOtelCollectorWithProject(envURL, token, ingestToken, platformToken, 
 	}
 
 	sep := strings.Repeat("─", 60)
-	cp.printConfigPreview(cyan, sep)
+	cp.printConfigPreview(sep)
 
 	if plan != nil {
 		fmt.Println()
-		cyan.Printf("  2) %s auto-instrumentation\n", plan.Runtime())
+		display.ColorMessage.Printf("  2) %s auto-instrumentation\n", plan.Runtime())
 		plan.PrintPlanSteps()
 	}
 

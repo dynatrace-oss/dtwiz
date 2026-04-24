@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
@@ -20,19 +19,18 @@ type CredentialToken struct {
 	getUrlFn      func(envURL string) string
 }
 
+var clientFlag bool
+
 func init() {
 	statusCmd.Flags().BoolVar(&clientFlag, "extensions", false, "probe Classic and Platform Extensions APIs using the HTTP client")
 }
 
-var (
-	statusOK    = color.New(color.FgGreen, color.Bold)
-	statusError = color.New(color.FgRed, color.Bold)
-	statusLabel = color.New()
-	statusMuted = color.New()
-	statusHead  = color.New(color.FgMagenta, color.Bold)
+const (
+	statusLabel        = "status"
+	envLabel           = "Environment"
+	classicExtensions  = "Classic Extensions"
+	platformExtensions = "Platform Extensions"
 )
-
-var clientFlag bool
 
 var statusCmd = &cobra.Command{
 	Use:   "status",
@@ -47,9 +45,9 @@ var statusCmd = &cobra.Command{
 		platformTok := platformToken()
 
 		if envURL == "" {
-			display.PrintStatusLine("Environment", "✗ not set (use --environment or DT_ENVIRONMENT)", display.ColorError)
+			display.PrintStatusLine(envLabel, "✗ not set (use --environment or DT_ENVIRONMENT)", display.ColorError)
 		} else {
-			display.PrintStatusLine("Environment", fmt.Sprintf("✓ %s", envURL), display.ColorOK)
+			display.PrintStatusLine(envLabel, fmt.Sprintf("✓ %s", envURL), display.ColorOK)
 		}
 
 		printCredentialStatus("Access Token", envURL, CredentialToken{
@@ -72,8 +70,7 @@ var statusCmd = &cobra.Command{
 			printExtensionsStatus()
 		}
 
-		statusHead.Println("  System Analysis")
-		statusMuted.Println("  " + "──────────────────────────────────────────")
+		fmt.Println()
 		info, err := analyzer.AnalyzeSystem()
 		if err != nil {
 			fmt.Printf("  %s\n", display.ColorError.Sprintf("✗ system analysis failed: %v", err))
@@ -88,12 +85,11 @@ var statusCmd = &cobra.Command{
 }
 
 func printExtensionsStatus() {
-	statusHead.Println("  Extensions API")
-	statusMuted.Println("  " + "──────────────────────────────────────────")
+	display.Header("Extensions API")
 
 	c, err := setupClient()
 	if err != nil {
-		fmt.Printf("  %s  %s\n\n", statusLabel.Sprint("Setup:"), statusError.Sprintf("✗ %v", err))
+		display.PrintError("Setup", err)
 		return
 	}
 
@@ -102,12 +98,13 @@ func printExtensionsStatus() {
 		TotalResults int `json:"totalResults"`
 	}
 	resp, err := c.Classic.HTTP().R().SetResult(&classicResp).Get("/api/v2/extensions")
+
 	if err != nil {
-		fmt.Printf("  %s  %s\n", statusLabel.Sprint("Classic Extensions:"), statusError.Sprintf("✗ %v", err))
+		display.PrintError(classicExtensions, err)
 	} else if resp.StatusCode() >= 400 {
-		fmt.Printf("  %s  %s\n", statusLabel.Sprint("Classic Extensions:"), statusError.Sprintf("✗ HTTP %d", resp.StatusCode()))
+		display.PrintError(classicExtensions, fmt.Errorf("HTTP %d", resp.StatusCode()))
 	} else {
-		fmt.Printf("  %s  %s\n", statusLabel.Sprint("Classic Extensions:"), statusOK.Sprintf("✓ reachable (%d extensions)", classicResp.TotalResults))
+		display.PrintStatusLine(classicExtensions, fmt.Sprintf("✓ reachable (%d extensions)", classicResp.TotalResults), display.ColorOK)
 	}
 
 	// Platform: GET /platform/extensions/v2/extensions
@@ -116,12 +113,13 @@ func printExtensionsStatus() {
 	}
 	resp, err = c.Platform.HTTP().R().SetResult(&platformResp).Get("/platform/extensions/v2/extensions")
 	if err != nil {
-		fmt.Printf("  %s  %s\n\n", statusLabel.Sprint("Platform Extensions:"), statusError.Sprintf("✗ %v", err))
+		display.PrintError(platformExtensions, err)
 	} else if resp.StatusCode() >= 400 {
-		fmt.Printf("  %s  %s\n\n", statusLabel.Sprint("Platform Extensions:"), statusError.Sprintf("✗ HTTP %d", resp.StatusCode()))
+		display.PrintError(platformExtensions, fmt.Errorf("HTTP %d", resp.StatusCode()))
 	} else {
-		fmt.Printf("  %s  %s\n\n", statusLabel.Sprint("Platform Extensions:"), statusOK.Sprintf("✓ reachable (%d packages)", platformResp.TotalCount))
+		display.PrintStatusLine(platformExtensions, fmt.Sprintf("✓ reachable (%d packages)", platformResp.TotalCount), display.ColorOK)
 	}
+	fmt.Println()
 }
 
 func printCredentialStatus(label, envURL string, token CredentialToken) {

@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/fatih/color"
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 )
 
 // ── Data types ───────────────────────────────────────────────────────────────
@@ -415,7 +415,7 @@ func isInstrumented(fn lambdaFunction) bool {
 
 // printLambdaPreviewTable renders the preview table of Lambda functions.
 func printLambdaPreviewTable(functions []lambdaFunction, actions []string) (actionable, skipped int) {
-	cyan := color.New(color.FgMagenta)
+	cyan := display.ColorMessage
 	sep := strings.Repeat("─", 70)
 
 	fmt.Println()
@@ -447,7 +447,7 @@ func printLambdaPreviewTable(functions []lambdaFunction, actions []string) (acti
 
 // printLambdaUninstallPreview renders the preview for uninstallation.
 func printLambdaUninstallPreview(functions []lambdaFunction) {
-	cyan := color.New(color.FgMagenta)
+	cyan := display.ColorMessage
 	sep := strings.Repeat("─", 55)
 
 	fmt.Println()
@@ -653,10 +653,8 @@ func updateFunctionConfig(functionName string, envVars map[string]string, layers
 // before applying changes; when false, changes are applied immediately after
 // the preview (used when called from install aws).
 func InstallAWSLambda(envURL, token, platformToken string, dryRun, confirm bool) error {
-	cyan := color.New(color.FgMagenta)
-
 	fmt.Println()
-	cyan.Println("  Dynatrace AWS Lambda Instrumentation")
+	display.ColorMessage.Println("  Dynatrace AWS Lambda Instrumentation")
 	fmt.Println()
 
 	// ── Validate ─────────────────────────────────────────────────────────────
@@ -789,10 +787,8 @@ func InstallAWSLambda(envURL, token, platformToken string, dryRun, confirm bool)
 // UninstallAWSLambda removes the Dynatrace Lambda Layer and DT_* environment
 // variables from all instrumented functions in the current AWS region.
 func UninstallAWSLambda(dryRun bool) error {
-	cyan := color.New(color.FgMagenta)
-
 	fmt.Println()
-	cyan.Println("  Dynatrace AWS Lambda — Remove Instrumentation")
+	display.ColorMessage.Println("  Dynatrace AWS Lambda — Remove Instrumentation")
 	fmt.Println()
 
 	if !isAWSCLIInstalled() {
