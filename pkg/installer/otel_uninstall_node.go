@@ -41,6 +41,8 @@ func findInstrumentedNodeProcesses() []otelProcessInfo {
 				result = append(result, otelProcessInfo{
 					pid:        p.PID,
 					binaryPath: "",
+					command:    p.Command,
+					workingDir: p.WorkingDirectory,
 				})
 				seen[p.PID] = true
 				break
@@ -53,6 +55,8 @@ func findInstrumentedNodeProcesses() []otelProcessInfo {
 				result = append(result, otelProcessInfo{
 					pid:        p.PID,
 					binaryPath: "",
+					command:    p.Command,
+					workingDir: p.WorkingDirectory,
 				})
 				seen[p.PID] = true
 			}
@@ -76,6 +80,8 @@ func findInstrumentedNodeProcesses() []otelProcessInfo {
 			result = append(result, otelProcessInfo{
 				pid:        p.PID,
 				binaryPath: "",
+				command:    p.Command,
+				workingDir: p.WorkingDirectory,
 			})
 			seen[p.PID] = true
 		}
@@ -95,10 +101,50 @@ func (nodeCleaner) DetectProcesses() []DetectedProcess {
 	infos := findInstrumentedNodeProcesses()
 	procs := make([]DetectedProcess, 0, len(infos))
 	for _, info := range infos {
+		desc := nodeProcessDescription(info)
 		procs = append(procs, DetectedProcess{
 			PID:     info.pid,
-			Command: info.binaryPath,
+			Command: desc,
 		})
 	}
 	return procs
+}
+
+// nodeProcessDescription builds a human-readable label for an instrumented
+// Node.js process, showing the project path and service name.
+func nodeProcessDescription(info otelProcessInfo) string {
+	projectDir := info.workingDir
+	// If the working directory is .otel/, the project is one level up.
+	if filepath.Base(projectDir) == ".otel" {
+		projectDir = filepath.Dir(projectDir)
+	}
+	if projectDir == "" {
+		if info.command != "" {
+			return info.command
+		}
+		return info.binaryPath
+	}
+	svcName := nodeServiceNameFromCommand(projectDir, info.command)
+	return projectDir + "  " + svcName
+}
+
+// nodeServiceNameFromCommand derives the service name from the process command
+// line, mirroring the logic used during install. For regular entrypoints the
+// command looks like "node --require ... ../s-frontend/index.js" and we use
+// serviceNameFromEntrypoint. For framework wrappers (next/nuxt) we fall back
+// to projectServiceName.
+func nodeServiceNameFromCommand(projectDir, command string) string {
+	fields := strings.Fields(command)
+	// Regular entrypoint: last arg is a relative path like ../s-frontend/index.js
+	if len(fields) > 0 {
+		last := fields[len(fields)-1]
+		if strings.HasPrefix(last, ".."+string(filepath.Separator)) || strings.HasPrefix(last, "../") {
+			// Resolve relative to .otel/ → actual entrypoint relative to project.
+			ep := strings.TrimPrefix(last, ".."+string(filepath.Separator))
+			ep = strings.TrimPrefix(ep, "../")
+			return serviceNameFromEntrypoint(projectDir, ep)
+		}
+	}
+	// Framework (next/nuxt) or unrecognized pattern — use project name.
+	return projectServiceName(projectDir)
 }

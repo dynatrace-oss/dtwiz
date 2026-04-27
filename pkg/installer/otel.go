@@ -38,7 +38,7 @@ func detectAvailableRuntimes() []runtimeInfo {
 	return []runtimeInfo{
 		{name: "Python", binName: "python3", enabled: true, detect: detectPythonRuntimeProjects},
 		{name: "Java", binName: "java", enabled: allEnabled, detect: detectJavaRuntimeProjects},
-		{name: "Node.js", binName: "node", enabled: allEnabled, detect: detectNodeRuntimeProjects},
+		{name: "Node.js", binName: "node", enabled: true, detect: detectNodeRuntimeProjects},
 		{name: "Go", binName: "go", enabled: allEnabled, detect: detectGoRuntimeProjects},
 	}
 }

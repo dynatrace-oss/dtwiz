@@ -99,11 +99,12 @@ Add Node.js `.otel/` cleanup to the existing `dtwiz uninstall otel` command.
 
 **Files:** `pkg/installer/otel_uninstall.go` (modify)
 
-- [ ] 6.1 Add `findNodeOtelDirs() []string` — scan CWD and parent directories for `.otel/` directories that contain a `package.json` with `@opentelemetry` in its content
-- [ ] 6.2 Add `findInstrumentedNodeProcesses() []otelProcessInfo` — detect running `node` processes whose command line contains `@opentelemetry/auto-instrumentations-node/register`, `.otel/next-otel-bootstrap.js`, or `.otel/nuxt-otel-bootstrap.mjs`
-- [ ] 6.3 Extend `UninstallOtelCollector()` — after the existing collector preview section, add a "Node.js instrumentation" subsection showing `.otel/` dirs to remove and instrumented node processes to kill. On confirmation, handle Node.js cleanup alongside collector cleanup.
-- [ ] 6.4 Handle the case where only Node.js artifacts exist (no collector) — the "nothing to remove" check must account for Node.js dirs/processes too
-- [ ] 6.5 Tests:
+- [x] 6.1 Add `findNodeOtelDirs() []string` — scan CWD and parent directories for `.otel/` directories that contain a `package.json` with `@opentelemetry` in its content
+- [x] 6.2 Add `findInstrumentedNodeProcesses() []otelProcessInfo` in `otel_uninstall_node.go` — detect running `node` processes whose command line contains `@opentelemetry/auto-instrumentations-node/register`, `next-otel-bootstrap.js`, or `nuxt-otel-bootstrap.mjs`. Preserve `command` and `workingDir` fields for display.
+- [x] 6.3 Implement `nodeCleaner` (in `otel_uninstall_node.go`) implementing `RuntimeCleaner` interface with `DetectProcesses()` that builds display strings showing project path and service name via `nodeProcessDescription()`
+- [x] 6.4 Extend `UninstallOtelCollector()` — after the existing collector preview section, add a "Node.js instrumentation" subsection showing `.otel/` dirs to remove and instrumented node processes to kill (displaying `stop PID <id> <project-path> <service-name>`). On confirmation, handle Node.js cleanup alongside collector cleanup. Use `pkg/display` color constants instead of raw `color.New()`.
+- [x] 6.5 Handle the case where only Node.js artifacts exist (no collector) — the "nothing to remove" check accounts for Node.js dirs/processes too
+- [ ] 6.6 Tests:
   - `TestFindNodeOtelDirs_Found`
   - `TestFindNodeOtelDirs_IgnoresNonOtelDirs`
   - `TestUninstallOtelCollector_IncludesNodeDirs`
@@ -114,8 +115,9 @@ Update the `dtwiz install otel` combined flow to pass required parameters to the
 
 **Files:** `pkg/installer/otel.go` (modify)
 
-- [ ] 7.1 Update `createRuntimePlan()` Node.js branch — pass `envURL` and `platformToken` to `buildNodeInstrumentationPlan()` (currently only passes `apiURL` and `token`)
-- [ ] 7.2 Verify Node.js remains behind `DTWIZ_ALL_RUNTIMES` gate — no change needed, just confirm
+- [x] 7.1 Update `createRuntimePlan()` Node.js branch — pass `envURL` and `platformToken` to `buildNodeInstrumentationPlan()` (currently only passes `apiURL` and `token`)
+- [x] 7.2 Enable Node.js by default — set `enabled: true` in `detectAvailableRuntimes()` instead of gating behind `DTWIZ_ALL_RUNTIMES`
+- [x] 7.3 Update `TestDetectAvailableRuntimes_DefaultEnabled` — Node.js is now expected to be enabled by default alongside Python
 
 ## 8. End-to-end Validation
 
@@ -127,4 +129,4 @@ Update the `dtwiz install otel` combined flow to pass required parameters to the
 - [ ] 8.6 Manual: `dtwiz install otel-node` in a Nuxt project — generates wrapper script, uses Nuxt launch command
 - [ ] 8.7 Manual: `dtwiz install otel-node` in a monorepo — child packages listed individually
 - [ ] 8.8 Manual: `dtwiz uninstall otel` removes `.otel/` dirs and kills instrumented node processes
-- [ ] 8.9 Manual: `dtwiz install otel` with `DTWIZ_ALL_RUNTIMES=true` — Node.js projects appear in list
+- [ ] 8.9 Manual: `dtwiz install otel` — Node.js projects appear in list by default (no feature flag needed)

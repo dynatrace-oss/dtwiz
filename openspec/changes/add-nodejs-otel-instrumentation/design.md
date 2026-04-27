@@ -26,7 +26,7 @@ The existing shared infrastructure (`otel_runtime_scan.go`, `otel_process.go`, `
 - Changing the app's `package.json` or `node_modules`
 - Using `NODE_OPTIONS` environment variable
 - TypeScript-specific runners (`tsx`, `ts-node`) — deferred to follow-up
-- Enabling Node.js by default in the combined `dtwiz install otel` flow
+- Enabling Node.js by default in the combined `dtwiz install otel` flow — **done, Node.js is now enabled by default**
 - A separate `dtwiz uninstall otel-node` command
 
 ## Decisions
@@ -107,7 +107,7 @@ Node.js cleanup is added to the existing `UninstallOtelCollector()` rather than 
 
 1. Finds `.otel/` directories by scanning CWD and common dev directories for `.otel/package.json` containing `@opentelemetry`
 2. Finds running `node` processes whose command line includes `@opentelemetry/auto-instrumentations-node/register`, `.otel/next-otel-bootstrap.js`, or `.otel/nuxt-otel-bootstrap.mjs`
-3. Adds a "Node.js instrumentation" subsection to the existing preview
+3. Adds a "Node.js instrumentation" subsection to the existing preview, showing project path and service name for each instrumented process (derived from the working directory and entrypoint, matching the service name used for log files)
 4. On confirmation: kills instrumented processes, removes `.otel/` directories
 
 The existing collector uninstall stays as-is — Node.js cleanup is additive.
@@ -118,12 +118,13 @@ The existing collector uninstall stays as-is — Node.js cleanup is additive.
 
 ## File Layout
 
-| File                | Responsibility                                                                                                                                                                                                                                                              |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `otel_nodejs.go`    | Project/monorepo/Next.js/Nuxt detection, package manager detection, `NodeInstrumentationPlan`, `buildNodeInstrumentationPlan`, `DetectNodePlan`, `InstallOtelNode`, `Execute`, `PrintPlanSteps`, `.otel/` directory creation, wrapper script generation, env var generation |
-| `otel_uninstall.go` | Extended with `findNodeOtelDirs()`, `findInstrumentedNodeProcesses()`, Node.js section in `UninstallOtelCollector()`                                                                                                                                                        |
-| `otel.go`           | Updated `createRuntimePlan()` Node.js branch to pass `envURL` and `platformToken`                                                                                                                                                                                           |
-| `cmd/install.go`    | `installOtelNodeCmd` registration                                                                                                                                                                                                                                           |
+| File                     | Responsibility                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `otel_nodejs.go`         | Project/monorepo/Next.js/Nuxt detection, package manager detection, `NodeInstrumentationPlan`, `buildNodeInstrumentationPlan`, `DetectNodePlan`, `InstallOtelNode`, `Execute`, `PrintPlanSteps`, `.otel/` directory creation, wrapper script generation, env var generation. Uses `pkg/display` color constants (`display.Header`, `display.ColorMessage`) instead of raw `color.New()`. |
+| `otel_uninstall.go`      | Extended with `findNodeOtelDirs()`, Node.js section in `UninstallOtelCollector()`. Uses `pkg/display` color constants.                                                                                                                                                                                                                                                                   |
+| `otel_uninstall_node.go` | `findInstrumentedNodeProcesses()`, `nodeCleaner` implementing `RuntimeCleaner`, `nodeProcessDescription()` for building display strings with project path and service name.                                                                                                                                                                                                              |
+| `otel.go`                | Updated `createRuntimePlan()` Node.js branch to pass `envURL` and `platformToken`                                                                                                                                                                                                                                                                                                        |
+| `cmd/install.go`         | `installOtelNodeCmd` registration                                                                                                                                                                                                                                                                                                                                                        |
 
 All changes are in the existing `installer` package — no new packages or public API changes beyond `InstallOtelNode()`.
 

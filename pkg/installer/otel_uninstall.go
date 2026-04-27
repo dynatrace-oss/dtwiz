@@ -18,6 +18,8 @@ type otelProcessInfo struct {
 	pid        int
 	binaryPath string
 	installDir string
+	command    string
+	workingDir string
 }
 
 func findRunningOtelProcesses() []otelProcessInfo {
