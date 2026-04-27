@@ -235,9 +235,6 @@ func isNodeOtelDir(dir string) bool {
 // and removes Node.js OTel instrumentation artifacts (.otel/ directories and
 // instrumented Node.js processes).
 func UninstallOtelCollector(dryRun bool) error {
-	header := color.New(color.FgMagenta, color.Bold)
-	muted := color.New()
-	red := color.New(color.FgRed)
 
 	// Collector artifacts.
 	processes := findRunningOtelProcesses()
@@ -270,18 +267,16 @@ func UninstallOtelCollector(dryRun bool) error {
 	}
 
 	// ── Preview ──────────────────────────────────────────────────────────────
-	header.Println("  Dynatrace OTel Uninstall")
-	muted.Println("  " + strings.Repeat("─", 50))
-	fmt.Println()
+	display.Header("Dynatrace OTel Collector Uninstall")
 
 	if len(processes) == 0 && len(dirs) == 0 && !anyRuntimeProcs && len(nodeOtelDirs) == 0 {
-		muted.Println("  Nothing to remove — no running collector, no install directories, and no Node.js instrumentation found.")
+		display.ColorMuted.Println("  Nothing to remove — no running collector, no install directories, and no Node.js instrumentation found.")
 		return nil
 	}
 
 	// ── Collector section ────────────────────────────────────────────────────
 	if len(processes) > 0 || len(dirs) > 0 {
-		header.Println("  OTel Collector")
+		display.Header("  OTel Collector")
 		fmt.Println()
 		if len(processes) > 0 {
 			fmt.Println("  Processes that will be killed:")
@@ -291,12 +286,12 @@ func UninstallOtelCollector(dryRun bool) error {
 					hint = "  (" + p.binaryPath + ")"
 				}
 				fmt.Printf("    ")
-				red.Printf("kill PID %d", p.pid)
-				muted.Printf("%s\n", hint)
+				display.ColorError.Printf("kill PID %d", p.pid)
+				display.ColorMuted.Printf("%s\n", hint)
 			}
 			fmt.Println()
 		} else {
-			muted.Println("  No running collector processes found.")
+			display.ColorMuted.Println("  No running collector processes found.")
 			fmt.Println()
 		}
 
@@ -304,11 +299,11 @@ func UninstallOtelCollector(dryRun bool) error {
 			fmt.Println("  Directories that will be removed:")
 			for _, d := range dirs {
 				fmt.Printf("    ")
-				red.Printf("rm -rf %s\n", d)
+				display.ColorError.Printf("rm -rf %s\n", d)
 			}
 			fmt.Println()
 		} else {
-			muted.Println("  No installation directories found.")
+			display.ColorMuted.Println("  No installation directories found.")
 			fmt.Println()
 		}
 	}
@@ -325,16 +320,18 @@ func UninstallOtelCollector(dryRun bool) error {
 		}
 	}
 
+	display.PrintSectionDivider()
+
 	if len(nodeOtelDirs) > 0 {
 		fmt.Println("  .otel/ directories that will be removed:")
 		for _, d := range nodeOtelDirs {
 			fmt.Printf("    ")
-			red.Printf("rm -rf %s\n", d)
+			display.ColorError.Printf("rm -rf %s\n", d)
 		}
 		fmt.Println()
 	}
 
-	muted.Println("  " + strings.Repeat("─", 50))
+	display.ColorMuted.Println("  " + strings.Repeat("─", 50))
 
 	if dryRun {
 		display.ColorDefault.Println("  [dry-run] No changes made.")
@@ -383,6 +380,6 @@ func UninstallOtelCollector(dryRun bool) error {
 	}
 
 	fmt.Println()
-	color.New(color.FgGreen, color.Bold).Println("  ✓ OTel uninstalled.")
+	display.ColorOK.Println("  ✓ OTel Collector uninstalled.")
 	return nil
 }

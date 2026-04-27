@@ -11,8 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/fatih/color"
-
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -675,12 +674,8 @@ func InstallOtelNode(envURL, token, platformToken, serviceName string, dryRun bo
 		return nil
 	}
 
-	cyan := color.New(color.FgMagenta)
-	sep := strings.Repeat("─", 60)
-
 	fmt.Println()
-	cyan.Println("  Dynatrace Node.js Auto-Instrumentation")
-	fmt.Println("  " + sep)
+	display.Header("Dynatrace Node.js Auto-Instrumentation")
 
 	plan := DetectNodePlan(apiURL, token)
 	if plan == nil {
@@ -691,7 +686,7 @@ func InstallOtelNode(envURL, token, platformToken, serviceName string, dryRun bo
 	}
 
 	fmt.Println()
-	cyan.Println("  Steps:")
+	display.ColorMessage.Println("  Steps:")
 	plan.PrintPlanSteps()
 
 	ok, err := confirmProceed("  Proceed with installation?")
