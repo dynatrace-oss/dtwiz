@@ -8,17 +8,17 @@
 
 1. Broad command-line filter: `detectProcesses("python", []string{"pip ", "setup.py", "/bin/dtwiz"})` — identical to install-time detection. Filtering on `"opentelemetry-instrument"` is explicitly incorrect: `opentelemetry-instrument` uses `os.execl` on Unix (replacing the wrapper process image with `python`) and spawns a `python` child and exits on Windows. In both cases the surviving process appears as a plain `python` command with no wrapper visible in the process list.
 
-2. OTel env var confirmation: each candidate is checked for `OTEL_SERVICE_NAME` or `OTEL_EXPORTER_OTLP_ENDPOINT` in its environment. Only processes with at least one of these vars set are included in the uninstall preview. On macOS, `ps eww -p <pid>` is used; on Linux `/proc/<pid>/environ` is read. On Windows, `Win32_Process` does not expose environment variables — instead the command line is checked for a virtualenv `Scripts\` path (e.g. `.venv\Scripts\`), which is the path dtwiz always uses to launch instrumented Python apps on Windows. A plain `python script.py` will never have this path.
+2. Project directory cross-reference: the filesystem is scanned for Python project directories (identified by markers: `pyproject.toml`, `setup.py`, `setup.cfg`, `requirements.txt`, `Pipfile`, `poetry.lock`, `manage.py`). Each candidate process is matched against the discovered project paths via `matchProcessesToProjects()`: a process is included only if its working directory starts with a known project path, or its command line contains the project path. This is the same mechanism used at install time.
 
 #### Scenario: One instrumented Python process is running
 
-- **WHEN** `dtwiz uninstall otel` is run and one `python` process is found with OTel env vars set
+- **WHEN** `dtwiz uninstall otel` is run and one `python` process is found whose working directory matches a scanned Python project path
 - **THEN** that process is listed in the preview under "Instrumented Python processes that will be stopped"
 
 #### Scenario: Multiple Python processes are running, some uninstrumented
 
-- **WHEN** multiple `python` processes match the broad filter but only some have OTel env vars set
-- **THEN** only the OTel-instrumented processes are listed in the preview
+- **WHEN** multiple `python` processes match the broad filter but only some have working directories that match scanned Python project paths
+- **THEN** only those matching processes are listed in the preview
 
 #### Scenario: No Python processes are running
 
