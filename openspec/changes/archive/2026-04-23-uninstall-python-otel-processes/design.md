@@ -21,17 +21,11 @@ The process detection infrastructure in `otel_runtime_scan.go` provides `detectP
 
 ## Decisions
 
-### Filter on `"python"`, then confirm with OTel env vars
+### Filter on `"python"`, then confirm with project directory cross-reference
 
 `opentelemetry-instrument` calls `os.execl` on Unix, replacing its own process image with the Python interpreter. On Windows it spawns a Python child and exits. In both cases the surviving process appears as a plain `python` command in `ps` — filtering on `"opentelemetry-instrument"` returns nothing. The broad `"python"` filter is the correct first pass.
 
-However, the broad filter alone produces false positives: every Python process on the system is listed, not just OTel-instrumented ones. A second pass checks each candidate process for OTel env vars (`OTEL_SERVICE_NAME` or `OTEL_EXPORTER_OTLP_ENDPOINT`). Processes with these vars set were launched under `opentelemetry-instrument` (which injects them) and are the only ones that belong in the uninstall preview.
-
-**Platform implementation:**
-
-- **macOS**: `ps eww -p <pid> -o command=` emits the full env block alongside the command; scan the output for the marker var names.
-- **Linux**: Read `/proc/<pid>/environ` (null-delimited key=value pairs); check for marker keys.
-- **Windows**: `Win32_Process` does not expose env vars. dtwiz always launches instrumented Python apps via the virtualenv Python binary (e.g. `.venv\Scripts\python.exe`). The command line is checked for any known venv name followed by `\Scripts\` (using the same `venvNames` slice as the installer). A plain `python script.py` launched by the user will never have this path.
+However, the broad filter alone produces false positives: every Python process on the system is listed, not just OTel-instrumented ones. A second pass cross-references each candidate's working directory against Python project directories discovered on disk (`scanProjectDirs` with markers `pyproject.toml`, `setup.py`, `setup.cfg`, `requirements.txt`, `Pipfile`, `poetry.lock`, `manage.py`). A process is included only if its working directory starts with a known project path, or its command line contains the project path. This is the same `matchProcessesToProjects` mechanism used at install time, so the two flows stay consistent.
 
 ### `RuntimeCleaner` interface over per-runtime code blocks
 
@@ -45,8 +39,8 @@ The collector is the telemetry sink; instrumented apps lose their export target 
 
 ## Risks / Trade-offs
 
-- **False positives reduced but not eliminated**: The env var check eliminates plain Python processes, but a process that happens to have `OTEL_SERVICE_NAME` set for reasons unrelated to dtwiz would still appear. This is an acceptable edge case.
-- **Windows accuracy**: The Windows fallback (command-line check) may miss processes on some configurations. Acceptable given Windows is not the primary target platform.
+- **False positives reduced but not eliminated**: The project directory cross-reference eliminates unrelated Python processes, but a process running from inside a Python project directory that is not dtwiz-instrumented would still appear. This is an acceptable edge case.
+- **Misses out-of-tree processes**: A process launched from outside the scanned project directories (e.g. an absolute path launch from a different CWD) will not be detected. Acceptable given dtwiz always starts instrumented apps from within the project directory.
 
 ## Migration Plan
 
