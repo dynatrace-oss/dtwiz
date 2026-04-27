@@ -2,20 +2,20 @@
 
 ## Requirements
 
-### Requirement: Detect running OTel-instrumented Python processes on uninstall
+### Requirement: Detect running Python processes associated with OTel-managed project directories on uninstall
 
-`dtwiz uninstall otel` SHALL detect running Python processes that are actually instrumented with OpenTelemetry. Detection uses a two-pass approach:
+`dtwiz uninstall otel` SHALL detect running Python processes that are associated with a known Python project directory. The mechanism cannot verify that a process is actively instrumented with OpenTelemetry; it identifies processes likely to be part of a managed project based on path correlation. Detection uses a two-pass approach:
 
 1. Broad command-line filter: `detectProcesses("python", []string{"pip ", "setup.py", "/bin/dtwiz"})` — identical to install-time detection. Filtering on `"opentelemetry-instrument"` is explicitly incorrect: `opentelemetry-instrument` uses `os.execl` on Unix (replacing the wrapper process image with `python`) and spawns a `python` child and exits on Windows. In both cases the surviving process appears as a plain `python` command with no wrapper visible in the process list.
 
-2. Project directory cross-reference: the filesystem is scanned for Python project directories (identified by markers: `pyproject.toml`, `setup.py`, `setup.cfg`, `requirements.txt`, `Pipfile`, `poetry.lock`, `manage.py`). Each candidate process is matched against the discovered project paths via `matchProcessesToProjects()`: a process is included only if its working directory starts with a known project path, or its command line contains the project path. This is the same mechanism used at install time.
+2. Project directory cross-reference: `scanProjectDirs` scans for Python project directories starting from the current working directory and a limited number of ancestor directories (not a full-machine filesystem scan). Project directories are identified by the presence of marker files: `pyproject.toml`, `setup.py`, `setup.cfg`, `requirements.txt`, `Pipfile`, `poetry.lock`, `manage.py`. Each candidate process is matched against the discovered project paths via `matchProcessesToProjects()`: a process is included only if its working directory starts with a known project path, or its command line contains the project path. This is the same mechanism used at install time. A process running from a project directory that happens not to be instrumented may still be matched.
 
-#### Scenario: One instrumented Python process is running
+#### Scenario: One Python process associated with a project directory is running
 
 - **WHEN** `dtwiz uninstall otel` is run and one `python` process is found whose working directory matches a scanned Python project path
 - **THEN** that process is listed in the preview under "Instrumented Python processes that will be stopped"
 
-#### Scenario: Multiple Python processes are running, some uninstrumented
+#### Scenario: Multiple Python processes are running, some outside any project directory
 
 - **WHEN** multiple `python` processes match the broad filter but only some have working directories that match scanned Python project paths
 - **THEN** only those matching processes are listed in the preview

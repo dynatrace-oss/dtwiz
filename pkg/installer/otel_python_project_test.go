@@ -304,3 +304,55 @@ func TestMatchProcessesToProjects_UnrelatedProcess(t *testing.T) {
 		t.Fatalf("RunningProcessIDs = %v, want empty", projects[0].RunningProcessIDs)
 	}
 }
+
+func TestFilterMatchedProcesses_ZeroMatches_ReturnsNonNil(t *testing.T) {
+	projects := []ScannedProject{{Path: "/home/user/myapp"}}
+	candidates := []DetectedProcess{
+		{PID: 1, Command: "python /other/app.py", WorkingDirectory: "/other"},
+	}
+	matchProcessesToProjects(projects, candidates)
+	result := filterMatchedProcesses(projects, candidates)
+	if result == nil {
+		t.Fatal("filterMatchedProcesses() = nil, want non-nil empty slice")
+	}
+	if len(result) != 0 {
+		t.Fatalf("filterMatchedProcesses() = %v, want empty", result)
+	}
+}
+
+func TestFilterMatchedProcesses_MultipleProjects(t *testing.T) {
+	projects := []ScannedProject{
+		{Path: "/home/user/app-a", RunningProcessIDs: []int{10}},
+		{Path: "/home/user/app-b", RunningProcessIDs: []int{20}},
+	}
+	candidates := []DetectedProcess{
+		{PID: 10, Command: "python /home/user/app-a/main.py", WorkingDirectory: "/home/user/app-a"},
+		{PID: 20, Command: "python /home/user/app-b/main.py", WorkingDirectory: "/home/user/app-b"},
+		{PID: 30, Command: "python /unrelated/app.py", WorkingDirectory: "/unrelated"},
+	}
+	result := filterMatchedProcesses(projects, candidates)
+	if len(result) != 2 {
+		t.Fatalf("filterMatchedProcesses() = %v (len %d), want 2 entries", result, len(result))
+	}
+	pids := map[int]bool{result[0].PID: true, result[1].PID: true}
+	if !pids[10] || !pids[20] {
+		t.Fatalf("filterMatchedProcesses() PIDs = %v, want {10, 20}", pids)
+	}
+}
+
+func TestFilterMatchedProcesses_DuplicatePIDsAcrossProjects(t *testing.T) {
+	projects := []ScannedProject{
+		{Path: "/home/user/app-a", RunningProcessIDs: []int{42}},
+		{Path: "/home/user/app-b", RunningProcessIDs: []int{42}},
+	}
+	candidates := []DetectedProcess{
+		{PID: 42, Command: "python /home/user/app-a/main.py", WorkingDirectory: "/home/user/app-a"},
+	}
+	result := filterMatchedProcesses(projects, candidates)
+	if len(result) != 1 {
+		t.Fatalf("filterMatchedProcesses() = %v (len %d), want exactly 1 deduplicated entry", result, len(result))
+	}
+	if result[0].PID != 42 {
+		t.Fatalf("filterMatchedProcesses()[0].PID = %d, want 42", result[0].PID)
+	}
+}

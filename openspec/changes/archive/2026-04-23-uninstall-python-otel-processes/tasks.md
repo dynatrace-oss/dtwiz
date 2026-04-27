@@ -4,5 +4,5 @@
 - [x] Add `pythonCleaner` struct implementing `RuntimeCleaner` to `pkg/installer/otel_uninstall_python.go`
 - [x] Update `UninstallOtelCollector` to iterate `runtimeCleaners` for preview and stop
 - [x] Add tests for `pythonCleaner` and uninstall preview in `pkg/installer/otel_uninstall_python_test.go`
-- [x] Add `detectInstrumentedPythonProcesses()` to `otel_python_project.go` — runs `detectPythonProjects` and `detectPythonProcesses` in parallel, cross-references via `matchProcessesToProjects`, and returns only processes whose working directory matches a known project path
-- [x] Update `pythonCleaner.DetectProcesses()` in `otel_uninstall_python.go` to call `detectInstrumentedPythonProcesses()` instead of `detectPythonProcesses()`
+- [x] Add `detectProjectPythonProcesses()` to `otel_python_project.go` — runs `detectPythonProjects` and `detectPythonProcesses` in parallel, cross-references via `matchProcessesToProjects`, and returns only processes whose working directory matches a known project path
+- [x] Update `pythonCleaner.DetectProcesses()` in `otel_uninstall_python.go` to call `detectProjectPythonProcesses()` instead of `detectPythonProcesses()`
