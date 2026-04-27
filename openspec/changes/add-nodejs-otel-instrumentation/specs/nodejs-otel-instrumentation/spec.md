@@ -176,15 +176,16 @@ For Nuxt projects, the system SHALL launch the Nitro server directly using `node
 - **AND** the ESM bootstrap uses `module.register()` to install import-in-the-middle hooks before any code loads
 - **AND** the process is tracked with log file capture
 
-### Requirement: Dynatrace service verification
+### Requirement: Process health check
 
-After launching the instrumented process, the system SHALL poll Dynatrace Smartscape until the service appears, using the existing `waitForServices()` infrastructure.
+After launching the instrumented process, the system SHALL use `PrintProcessSummary()` to verify processes are alive and detect listening ports.
 
-#### Scenario: Service appears in Dynatrace
+#### Scenario: Processes started successfully
 
 - **GIVEN** the instrumented process is running and sending telemetry
-- **WHEN** `PrintProcessSummary()` detects ports and `waitForServices()` polls Smartscape
-- **THEN** it detects the service and prints a confirmation with a link to the Dynatrace UI
+- **WHEN** `PrintProcessSummary()` checks process status
+- **THEN** it reports alive services with detected ports
+- **AND** the user sees "Waiting for traffic — send requests to your services to generate traces and metrics."
 
 #### Scenario: All processes crashed
 

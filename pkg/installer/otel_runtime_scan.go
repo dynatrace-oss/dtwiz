@@ -72,6 +72,46 @@ func runInParallel[A any, B any](left func() A, right func() B) (A, B) {
 	return leftResult, rightResult
 }
 
+// walkCandidateDirs scans root and its descendants, then walks up to
+// parentLevels ancestor directories doing the same scan. visit is called
+// for every candidate directory; returning true means "matched — skip
+// children". shouldSkip decides whether a child entry name is skipped
+// entirely. The parent walk stops as soon as a level produces a match.
+func walkCandidateDirs(root string, parentLevels int, visit func(dir string) bool, shouldSkip func(name string) bool) {
+	var scan func(dir string) bool
+	scan = func(dir string) bool {
+		found := visit(dir)
+		if found {
+			return true
+		}
+		entries, _ := os.ReadDir(dir)
+		for _, entry := range entries {
+			if !entry.IsDir() || shouldSkip(entry.Name()) {
+				continue
+			}
+			if scan(filepath.Join(dir, entry.Name())) {
+				found = true
+			}
+		}
+		return found
+	}
+
+	scan(root)
+
+	currentDir := root
+	for range parentLevels {
+		parentDir := filepath.Dir(currentDir)
+		if parentDir == currentDir {
+			break
+		}
+		logger.Debug("scanning ancestor dir", "path", parentDir)
+		if scan(parentDir) {
+			break
+		}
+		currentDir = parentDir
+	}
+}
+
 func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 	excludedDirNames := make(map[string]bool, len(excludeNames))
 	for _, name := range excludeNames {
@@ -120,43 +160,12 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 		return true
 	}
 
-	var scanChildDirs func(dir string) int
-	scanChildDirs = func(dir string) int {
-		initialCount := len(discoveredProjects)
-		entries, _ := os.ReadDir(dir)
-		for _, entry := range entries {
-			if !entry.IsDir() || shouldSkipDir(entry.Name()) {
-				continue
-			}
-			childDir := filepath.Join(dir, entry.Name())
-			if !dirMatches(childDir) {
-				scanChildDirs(childDir)
-			}
-		}
-		return len(discoveredProjects) - initialCount
-	}
-
 	workingDir, err := os.Getwd()
 	if err != nil {
 		return discoveredProjects
 	}
 
-	if !dirMatches(workingDir) {
-		scanChildDirs(workingDir)
-	}
-
-	currentDir := workingDir
-	for range 2 {
-		parentDir := filepath.Dir(currentDir)
-		if parentDir == currentDir {
-			break
-		}
-		logger.Debug("scanning ancestor dir", "path", parentDir)
-		if scanChildDirs(parentDir) > 0 {
-			break
-		}
-		currentDir = parentDir
-	}
+	walkCandidateDirs(workingDir, 2, dirMatches, shouldSkipDir)
 
 	return discoveredProjects
 }

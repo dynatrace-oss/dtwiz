@@ -69,7 +69,7 @@ Rewrite `Execute()` to perform actual installation, process launch, and Dynatrac
 
 **Files:** `pkg/installer/otel_nodejs.go` (modify), `pkg/installer/otel_nodejs_test.go` (modify)
 
-- [x] 4.1 Rewrite `Execute()`: stop running processes (reuse `stopProcesses()`), call `createOtelDir()`, for Next.js/Nuxt write framework wrapper script, call `installOtelNodeDeps()`, build the run command (regular vs Next.js vs Nuxt), set OTEL\_\* env vars on the process, use `StartManagedProcess()` to launch, use `PrintProcessSummary()` for port detection, use `waitForServices()` for Smartscape polling
+- [x] 4.1 Rewrite `Execute()`: stop running processes (reuse `stopProcesses()`), call `createOtelDir()`, for Next.js/Nuxt write framework wrapper script, call `installOtelNodeDeps()`, build the run command (regular vs Next.js vs Nuxt), set OTEL\_\* env vars on the process, use `StartManagedProcess()` to launch, use `PrintProcessSummary()` for port detection and process health check
 - [x] 4.2 For regular apps: the run command is `node --require @opentelemetry/auto-instrumentations-node/register <entrypoint>` with CWD set to `.otel/` and entrypoint path adjusted to be relative from `.otel/` (e.g., `../server.js`)
 - [x] 4.3 For Next.js apps: the run command is `node otel/next-otel-bootstrap.js start` with CWD set to project root
 - [x] 4.4 For Nuxt apps: the run command is `node --import .otel/nuxt-otel-bootstrap.mjs .output/server/index.mjs` with CWD set to project root (launches the Nitro server directly; Nuxt CLI is not used because it spawns child processes that lose OTel registration)
@@ -99,12 +99,14 @@ Add Node.js `.otel/` cleanup to the existing `dtwiz uninstall otel` command.
 
 **Files:** `pkg/installer/otel_uninstall.go` (modify)
 
-- [x] 6.1 Add `findNodeOtelDirs() []string` — scan CWD and parent directories for `.otel/` directories that contain a `package.json` with `@opentelemetry` in its content
+- [x] 6.1 Add `findNodeOtelDirs() []string` — scan CWD and parent directories using `walkCandidateDirs()` for `.otel/` directories that contain a `package.json` with `@opentelemetry` in its content
 - [x] 6.2 Add `findInstrumentedNodeProcesses() []otelProcessInfo` in `otel_uninstall_node.go` — detect running `node` processes whose command line contains `@opentelemetry/auto-instrumentations-node/register`, `next-otel-bootstrap.js`, or `nuxt-otel-bootstrap.mjs`. Preserve `command` and `workingDir` fields for display.
 - [x] 6.3 Implement `nodeCleaner` (in `otel_uninstall_node.go`) implementing `RuntimeCleaner` interface with `DetectProcesses()` that builds display strings showing project path and service name via `nodeProcessDescription()`
 - [x] 6.4 Extend `UninstallOtelCollector()` — after the existing collector preview section, add a "Node.js instrumentation" subsection showing `.otel/` dirs to remove and instrumented node processes to kill (displaying `stop PID <id> <project-path> <service-name>`). On confirmation, handle Node.js cleanup alongside collector cleanup. Use `pkg/display` color constants instead of raw `color.New()`.
 - [x] 6.5 Handle the case where only Node.js artifacts exist (no collector) — the "nothing to remove" check accounts for Node.js dirs/processes too
-- [ ] 6.6 Tests:
+- [x] 6.6 Extract `walkCandidateDirs()` from `scanProjectDirs()` in `otel_runtime_scan.go` as a shared helper for recursive directory scanning with ancestor walk. Refactor both `scanProjectDirs()` and `findNodeOtelDirs()` to use it.
+- [x] 6.7 Add debug logging throughout `otel_nodejs.go` (package manager detection, workspace resolution, .otel/ creation, npm install, bootstrap script writing, entrypoint launch) and `otel_uninstall_node.go` (next-server process skip reason)
+- [ ] 6.8 Tests:
   - `TestFindNodeOtelDirs_Found`
   - `TestFindNodeOtelDirs_IgnoresNonOtelDirs`
   - `TestUninstallOtelCollector_IncludesNodeDirs`

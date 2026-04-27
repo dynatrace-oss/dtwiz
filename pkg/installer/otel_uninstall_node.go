@@ -84,6 +84,8 @@ func findInstrumentedNodeProcesses() []otelProcessInfo {
 				workingDir: p.WorkingDirectory,
 			})
 			seen[p.PID] = true
+		} else {
+			logger.Debug("next-server process skipped — no valid .otel/ in CWD", "pid", p.PID, "cwd", p.WorkingDirectory)
 		}
 	}
 

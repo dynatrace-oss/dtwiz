@@ -115,14 +115,18 @@ func detectNodeFramework(projectPath string) string {
 // detectNodePackageManager detects the package manager from lockfiles.
 func detectNodePackageManager(projectPath string) string {
 	if _, err := os.Stat(filepath.Join(projectPath, "package-lock.json")); err == nil {
+		logger.Debug("detected package manager", "path", projectPath, "manager", "npm")
 		return "npm"
 	}
 	if _, err := os.Stat(filepath.Join(projectPath, "yarn.lock")); err == nil {
+		logger.Debug("detected package manager", "path", projectPath, "manager", "yarn")
 		return "yarn"
 	}
 	if _, err := os.Stat(filepath.Join(projectPath, "pnpm-lock.yaml")); err == nil {
+		logger.Debug("detected package manager", "path", projectPath, "manager", "pnpm")
 		return "pnpm"
 	}
+	logger.Debug("no lockfile found, defaulting to npm", "path", projectPath)
 	return "npm"
 }
 
@@ -167,12 +171,14 @@ func resolveWorkspaces(projectPath string) []string {
 		if err != nil {
 			continue
 		}
+		logger.Debug("resolved workspace pattern", "pattern", pattern, "matchCount", len(matches))
 		for _, match := range matches {
 			info, err := os.Stat(match)
 			if err != nil || !info.IsDir() {
 				continue
 			}
 			if _, err := os.Stat(filepath.Join(match, "package.json")); err == nil {
+				logger.Debug("workspace dir added", "dir", match)
 				workspaceDirs = append(workspaceDirs, match)
 			}
 		}
@@ -391,6 +397,7 @@ func (p *NodeInstrumentationPlan) PrintPlanSteps() {
 
 // createOtelDir creates the .otel/ directory and writes a package.json with OTel dependencies.
 func createOtelDir(plan *NodeInstrumentationPlan) error {
+	logger.Debug("creating .otel/ directory", "dir", plan.OtelDir)
 	if err := os.MkdirAll(plan.OtelDir, 0755); err != nil {
 		return fmt.Errorf("create .otel/ directory: %w", err)
 	}
@@ -416,6 +423,7 @@ func createOtelDir(plan *NodeInstrumentationPlan) error {
 		return fmt.Errorf("write .otel/package.json: %w", err)
 	}
 
+	logger.Debug("wrote .otel/package.json", "path", filepath.Join(plan.OtelDir, "package.json"))
 	return nil
 }
 
@@ -473,10 +481,12 @@ func installOtelNodeDeps(otelDir string) error {
 	}
 	cmd := exec.Command(npmBin, "install")
 	cmd.Dir = otelDir
+	logger.Debug("running npm install", "dir", otelDir)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("npm install in %s failed: %w\n%s", otelDir, err, string(out))
 	}
+	logger.Debug("npm install completed", "dir", otelDir)
 	return nil
 }
 
@@ -493,6 +503,7 @@ func (p *NodeInstrumentationPlan) Execute() {
 			fmt.Println("    Run 'npx nuxt build' first, then re-run dtwiz.")
 			return
 		}
+		logger.Debug("nuxt build output found", "path", nitroEntry)
 	}
 
 	if len(proj.RunningProcessIDs) > 0 {
@@ -515,6 +526,7 @@ func (p *NodeInstrumentationPlan) Execute() {
 	if p.Framework == "next" {
 		scriptName := "next-otel-bootstrap.js"
 		scriptPath := filepath.Join(p.OtelDir, scriptName)
+		logger.Debug("writing bootstrap script", "path", scriptPath, "framework", p.Framework)
 		fmt.Printf("  Writing %s... ", scriptName)
 		content := generateWrapperJS(p.Framework)
 		if err := os.WriteFile(scriptPath, []byte(content), 0600); err != nil {
@@ -527,6 +539,7 @@ func (p *NodeInstrumentationPlan) Execute() {
 	if p.Framework == "nuxt" {
 		scriptName := "nuxt-otel-bootstrap.mjs"
 		scriptPath := filepath.Join(p.OtelDir, scriptName)
+		logger.Debug("writing bootstrap script", "path", scriptPath, "framework", p.Framework)
 		fmt.Printf("  Writing %s... ", scriptName)
 		content := generateNuxtBootstrapMJS(p.OtelDir)
 		if err := os.WriteFile(scriptPath, []byte(content), 0600); err != nil {
@@ -629,6 +642,7 @@ func copyEnvVars(src map[string]string) map[string]string {
 func launchEntrypoint(svcName, projectPath, entrypoint string, cmd *exec.Cmd) *ManagedProcess {
 	logName := svcName + ".log"
 	logPath := filepath.Join(projectPath, logName)
+	logger.Debug("launching entrypoint", "service", svcName, "entrypoint", entrypoint, "logFile", logPath)
 	logFile, err := os.Create(logPath)
 	if err != nil {
 		fmt.Printf("    Failed to create log file %s: %v\n", logPath, err)

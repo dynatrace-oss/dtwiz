@@ -17,12 +17,12 @@ The existing Node.js OTel stub in `otel_nodejs.go` only prints manual instructio
 ### New Capabilities
 
 - `nodejs-project-detection`: Detect Node.js projects by scanning for `package.json` across CWD and common dev directories. Identify monorepos via `workspaces` field. Detect Next.js via `next.config.*` or `next` in dependencies. Detect Nuxt via `nuxt.config.*` or `nuxt` in dependencies. Auto-detect package manager from lockfiles. Detect running Node.js processes and correlate to project directories.
-- `nodejs-otel-instrumentation`: Pass OTEL\_\* env vars to processes via `cmd.Env` (not embedded in generated scripts). Create a `.otel/` directory inside the project with its own `package.json` and OTel deps. Install packages via `npm install` in `.otel/`. For regular apps, run `node --require @opentelemetry/auto-instrumentations-node/register <entrypoint>` from `.otel/`. For Next.js, generate `.otel/next-otel-bootstrap.js` and run `node .otel/next-otel-bootstrap.js start`. For Nuxt, generate `.otel/nuxt-otel-bootstrap.mjs` and run `node --import .otel/nuxt-otel-bootstrap.mjs .output/server/index.mjs`. Manage processes, detect ports, poll Dynatrace Smartscape.
+- `nodejs-otel-instrumentation`: Pass OTEL\_\* env vars to processes via `cmd.Env` (not embedded in generated scripts). Create a `.otel/` directory inside the project with its own `package.json` and OTel deps. Install packages via `npm install` in `.otel/`. For regular apps, run `node --require @opentelemetry/auto-instrumentations-node/register <entrypoint>` from `.otel/`. For Next.js, generate `.otel/next-otel-bootstrap.js` and run `node .otel/next-otel-bootstrap.js start`. For Nuxt, generate `.otel/nuxt-otel-bootstrap.mjs` and run `node --import .otel/nuxt-otel-bootstrap.mjs .output/server/index.mjs`. Manage processes, detect ports.
 - `nodejs-otel-uninstall`: Extend `dtwiz uninstall otel` to find `.otel/` directories containing OTel packages and running instrumented Node.js processes. Preview removal with project path and service name for each process, confirm, kill processes, delete `.otel/` directories. Uses `pkg/display` color constants for consistent UI output.
 
 ### Modified Capabilities
 
-- `otel-combined-install` (existing `install otel`): The Node.js branch in `createRuntimePlan()` updated to pass `envURL` and `platformToken` for Smartscape polling. Node.js is enabled by default (no longer gated behind `DTWIZ_ALL_RUNTIMES`).
+- `otel-combined-install` (existing `install otel`): The Node.js branch in `createRuntimePlan()` updated to pass `envURL` and `platformToken`. Node.js is enabled by default (no longer gated behind `DTWIZ_ALL_RUNTIMES`).
 
 ## Impact
 

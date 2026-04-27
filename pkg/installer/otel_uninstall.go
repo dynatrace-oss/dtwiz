@@ -180,42 +180,10 @@ func findNodeOtelDirs() []string {
 
 	// scanChildren recursively checks dir and its children (skipping the
 	// same ignored directories as scanProjectDirs).
-	var scanChildren func(dir string)
-	scanChildren = func(dir string) {
-		checkDir(dir) // check this directory itself
-
-		entries, _ := os.ReadDir(dir)
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
-			}
-			name := entry.Name()
-			// Skip the usual ignored directories, but note: .otel/ is
-			// handled by checkDir above — we never recurse INTO .otel/.
-			if isIgnoredDir(name) {
-				continue
-			}
-			scanChildren(filepath.Join(dir, entry.Name()))
-		}
-	}
-
-	// 1. Scan CWD and its children.
-	scanChildren(cwd)
-
-	// 2. Walk up to 2 parent levels (same as scanProjectDirs).
-	currentDir := cwd
-	for range 2 {
-		parentDir := filepath.Dir(currentDir)
-		if parentDir == currentDir {
-			break
-		}
-		before := len(dirs)
-		scanChildren(parentDir)
-		if len(dirs) > before {
-			break // found something at this level, stop climbing
-		}
-		currentDir = parentDir
-	}
+	walkCandidateDirs(cwd, 2, func(dir string) bool {
+		checkDir(dir)
+		return false
+	}, isIgnoredDir)
 
 	return dirs
 }
@@ -244,6 +212,8 @@ func UninstallOtelCollector(dryRun bool) error {
 
 	// Node.js .otel/ directory artifacts.
 	nodeOtelDirs := findNodeOtelDirs()
+
+	logger.Debug("uninstall scan complete", "collectorProcesses", len(processes), "collectorDirs", len(dirs), "nodeOtelDirs", len(nodeOtelDirs))
 
 	type runtimeResult struct {
 		label string
