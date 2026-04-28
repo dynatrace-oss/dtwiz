@@ -25,7 +25,7 @@ The sibling project dtctl uses a similar E2E pattern (build tags, env gating, cl
 
 ### 1. Build tag (`//go:build integration`) for test separation
 
-**Choice:** Compile-time exclusion via build tag.
+**Choice:** Compile-time file gating via build tag — used as an exclusion mechanism for default runs (`go test ./...` skips E2E files) and as an inclusion mechanism for explicit integration runs (`go test -tags integration`). Whether the tag acts as exclusion or inclusion depends on the invocation; both perspectives are valid and the tag enables both.
 
 **Alternatives considered:**
 
@@ -37,14 +37,14 @@ The sibling project dtctl uses a similar E2E pattern (build tags, env gating, cl
 
 ### 2. `TEST_*` env vars with `.env` file support
 
-**Choice:** `TEST_DT_ENVIRONMENT` and `TEST_DT_ACCESS_TOKEN` env vars, loadable from `.env` via Makefile.
+**Choice:** `TEST_DT_ENVIRONMENT` and `TEST_DT_ACCESS_TOKEN` env vars, loadable from `.e2e-tests.env` via Makefile.
 
 **Alternatives considered:**
 
 - *Reusing `DT_ENVIRONMENT`/`DT_ACCESS_TOKEN`* — risk of accidentally running tests against a production tenant configured in the user's shell.
 - *Config file (YAML/JSON)* — over-engineered for two values.
 
-**Rationale:** `TEST_` prefix makes intent explicit and prevents accidental production use. `.env` file avoids repeated exports. Makefile loads it with `include .env` guarded by `ifneq (,$(wildcard .env))`. Missing credentials produce a clear error to stderr and exit non-zero — no silent skip.
+**Rationale:** `TEST_` prefix makes intent explicit and prevents accidental production use. `.e2e-tests.env` file avoids repeated exports. Makefile loads it with `include .e2e-tests.env` guarded by `ifneq (,$(wildcard .e2e-tests.env))`. Missing credentials produce a clear error to stderr and exit non-zero — no silent skip.
 
 ### 3. `NewForTesting()` on `pkg/client/`
 

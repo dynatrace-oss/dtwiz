@@ -4,7 +4,7 @@
 
 ### Requirement: Build tag separation
 
-All E2E test files in `test/e2e/` SHALL use the `//go:build integration` build tag. Running `go test ./...` without `-tags integration` SHALL NOT compile or execute any E2E test.
+All E2E test files in `test/e2e/` SHALL use the `//go:build integration` build tag. The tag acts as a gating mechanism: it excludes E2E files from default builds (`go test ./...` without `-tags integration`) and includes them when explicitly requested (`go test -tags integration`). Whether it operates as exclusion or inclusion depends on the invocation — both are intentional behaviors of the same tag.
 
 #### Scenario: Default test run excludes E2E
 
@@ -37,21 +37,21 @@ The `make test-integration` target SHALL require `TEST_DT_ENVIRONMENT` and `TEST
 
 ### Requirement: .env file loading
 
-The `make test-integration` target SHALL load variables from a `.env` file in the project root if it exists. Shell environment variables SHALL take precedence over `.env` values. The `.env` file SHALL be listed in `.gitignore`.
+The `make test-integration` target SHALL load variables from a `.e2e-tests.env` file in the project root if it exists. Shell environment variables SHALL take precedence over `.e2e-tests.env` values. The `.e2e-tests.env` file SHALL be listed in `.gitignore`. A `.e2e-tests.env.example` file with placeholder values for `TEST_DT_ENVIRONMENT` and `TEST_DT_ACCESS_TOKEN` SHALL be committed to VCS as a reference.
 
-#### Scenario: .env file present
+#### Scenario: .e2e-tests.env file present
 
-- **WHEN** a `.env` file exists with `TEST_DT_ENVIRONMENT` and `TEST_DT_ACCESS_TOKEN`
+- **WHEN** a `.e2e-tests.env` file exists with `TEST_DT_ENVIRONMENT` and `TEST_DT_ACCESS_TOKEN`
 - **THEN** the Makefile loads those values and runs the integration tests
 
-#### Scenario: Shell overrides .env
+#### Scenario: Shell overrides .e2e-tests.env
 
-- **WHEN** `TEST_DT_ENVIRONMENT` is set in the shell and a different value exists in `.env`
+- **WHEN** `TEST_DT_ENVIRONMENT` is set in the shell and a different value exists in `.e2e-tests.env`
 - **THEN** the shell value is used
 
-#### Scenario: No .env file
+#### Scenario: No .e2e-tests.env file
 
-- **WHEN** no `.env` file exists and env vars are set in the shell
+- **WHEN** no `.e2e-tests.env` file exists and env vars are set in the shell
 - **THEN** the Makefile proceeds using shell env vars without error
 
 ### Requirement: Unique test naming

@@ -22,9 +22,10 @@
 
 ## 5. Makefile & Gitignore
 
-- [ ] 5.1 Add `test-integration` target to `Makefile` — loads `.env` if present (`ifneq (,$(wildcard .env))` / `include .env` / `export`), checks `TEST_DT_ENVIRONMENT` and `TEST_DT_ACCESS_TOKEN` are set (prints error to stderr + `exit 1` if missing), runs `go test -v -tags integration -timeout 5m ./test/e2e/...`
-- [ ] 5.2 Add `.env` to `.gitignore`
-- [ ] 5.3 Update `.PHONY` in `Makefile` to include `test-integration`
+- [ ] 5.1 Add `test-integration` target to `Makefile` — loads `.e2e-tests.env` if present (`ifneq (,$(wildcard .e2e-tests.env))` / `include .e2e-tests.env` / `export`), checks `TEST_DT_ENVIRONMENT` and `TEST_DT_ACCESS_TOKEN` are set (prints error to stderr + `exit 1` if missing), runs `go test -v -tags integration -timeout 5m ./test/e2e/...`
+- [ ] 5.2 Add `.e2e-tests.env` to `.gitignore`
+- [ ] 5.3 Add `.e2e-tests.env.example` to the repo — contains the two required env vars (`TEST_DT_ENVIRONMENT` and `TEST_DT_ACCESS_TOKEN`) with placeholder values, committed to VCS as a reference for contributors
+- [ ] 5.4 Update `.PHONY` in `Makefile` to include `test-integration`
 
 ## 6. Verification
 
