@@ -387,7 +387,13 @@ func InstallAWS(c *client.PlatformClient, envURL, token, platformToken string, d
 	settingsToken := defaultToken
 	ingestToken := defaultToken
 
-	// ── Auto-create monitoring configuration ──────────────────────────────────
+	// ── Preflight ─────────────────────────────────────────────────────────────
+
+	if !isAWSCLIInstalled() {
+		return fmt.Errorf("AWS CLI not found — install it from https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html")
+	}
+
+	// ── Render preview ────────────────────────────────────────────────────────
 
 	fmt.Printf("\n  Fetching AWS account info...\n")
 	accountID, region, err := getAWSCallerInfo()
@@ -395,6 +401,50 @@ func InstallAWS(c *client.PlatformClient, envURL, token, platformToken string, d
 		return fmt.Errorf("fetching AWS caller info: %w", err)
 	}
 	fmt.Printf("  AWS account: %s  region: %s\n", accountID, region)
+	fmt.Printf("  Template: %s\n", awsTemplateURL)
+
+	// Monitoring config ID is resolved after confirmation; show placeholder in preview.
+	previewCfg := awsStackConfig{
+		StackName:          stackName,
+		DynatraceURL:       strings.TrimRight(toAppsURL(dynatraceURL), "/"),
+		SettingsToken:      settingsToken,
+		IngestToken:        ingestToken,
+		MonitoringConfigID: "(auto-assigned)",
+		LogsEnabled:        "TRUE",
+		LogsRegions:        region,
+		EventsEnabled:      "TRUE",
+		EventsRegions:      region,
+		EventBridgeBusName: "default",
+		EventSources:       "aws.health",
+		UseCMK:             "FALSE",
+	}
+	deployArgs := buildDeployArgs(previewCfg, "/tmp/da-aws-activation.yaml")
+
+	fmt.Println()
+	fmt.Printf("  %s\n", sep)
+	display.ColorMessage.Println("  Command to be executed:")
+	fmt.Printf("  %s\n", sep)
+	fmt.Printf("    aws %s\n", formatDeployCmd(maskTokenArgs(deployArgs)))
+	fmt.Printf("  %s\n\n", sep)
+
+	if dryRun {
+		fmt.Println("  [dry-run] No changes were made.")
+		return nil
+	}
+
+	// ── Confirm ───────────────────────────────────────────────────────────────
+
+	ok, err := confirmProceed("  Proceed with installation?")
+	if err != nil {
+		return fmt.Errorf("reading confirmation: %w", err)
+	}
+	if !ok {
+		fmt.Println("  Deployment cancelled.")
+		return nil
+	}
+	fmt.Println()
+
+	// ── Dynatrace setup (extension + monitoring config) ───────────────────────
 
 	if err := extensions.InstallExtension(c, daAWSExtension, daAWSExtensionVersion, true); err != nil {
 		return fmt.Errorf("installing extension %s: %w", daAWSExtension, err)
@@ -411,7 +461,6 @@ func InstallAWS(c *client.PlatformClient, envURL, token, platformToken string, d
 		}
 		fmt.Printf("  Monitoring config: created %s\n", monitoringConfigID)
 	}
-	fmt.Printf("  Template: %s\n", awsTemplateURL)
 
 	cfg := awsStackConfig{
 		StackName:          stackName,
@@ -427,42 +476,6 @@ func InstallAWS(c *client.PlatformClient, envURL, token, platformToken string, d
 		EventSources:       "aws.health",
 		UseCMK:             "FALSE",
 	}
-
-	// ── Render preview ────────────────────────────────────────────────────────
-
-	// Use a placeholder path in the preview; the real temp file is created just
-	// before deployment.
-	deployArgs := buildDeployArgs(cfg, "/tmp/da-aws-activation.yaml")
-
-	fmt.Println()
-	fmt.Printf("  %s\n", sep)
-	display.ColorMessage.Println("  Command to be executed:")
-	fmt.Printf("  %s\n", sep)
-	fmt.Printf("    aws %s\n", formatDeployCmd(maskTokenArgs(deployArgs)))
-	fmt.Printf("  %s\n\n", sep)
-
-	if dryRun {
-		fmt.Println("  [dry-run] No changes were made.")
-		return nil
-	}
-
-	// ── Preflight ─────────────────────────────────────────────────────────────
-
-	if !isAWSCLIInstalled() {
-		return fmt.Errorf("AWS CLI not found — install it from https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html")
-	}
-
-	// ── Confirm ───────────────────────────────────────────────────────────────
-
-	ok, err := confirmProceed("  Proceed with installation?")
-	if err != nil {
-		return fmt.Errorf("reading confirmation: %w", err)
-	}
-	if !ok {
-		fmt.Println("  Deployment cancelled.")
-		return nil
-	}
-	fmt.Println()
 
 	// ── Deploy ────────────────────────────────────────────────────────────────
 
