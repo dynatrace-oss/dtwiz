@@ -10,7 +10,7 @@ on:
 # Minimum test coverage percentage required to pass CI.
 # Target: gradually increase to 30 -> 40 -> 50.
 env:
-  COVERAGE_THRESHOLD: 20
+  COVERAGE_THRESHOLD: 30
 
 jobs:
   test:

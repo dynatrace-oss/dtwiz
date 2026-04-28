@@ -1,4 +1,4 @@
-.PHONY: build install test test-coverage test-integration lint clean markdownlint markdownlint-fix
+.PHONY: build install test test-coverage test-integration lint fmt clean markdownlint markdownlint-fix
 
 ifneq (,$(wildcard .e2e.env))
 include .e2e.env
@@ -16,7 +16,7 @@ build:
 install:
 	$(GO) install .
 
-COVERAGE_THRESHOLD ?= 20
+COVERAGE_THRESHOLD ?= 30
 
 test:
 	$(GO) test ./pkg/... -coverprofile=coverage.out
@@ -38,6 +38,10 @@ test-coverage:
 		exit 1; \
 	fi; \
 	echo "OK: Coverage meets threshold"
+
+fmt:
+	@go fmt ./...
+	@goimports -local github.com/dynatrace-oss/dtwiz -w .
 
 lint:
 	golangci-lint run ./...
