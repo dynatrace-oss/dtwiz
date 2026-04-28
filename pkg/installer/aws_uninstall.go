@@ -12,7 +12,7 @@ import (
 // associated Dynatrace monitoring configuration.
 //
 // Parameters:
-//   - c:      Classic API client (used for Extensions API calls)
+//   - c:     Platform API client (used for Extensions API calls)
 //   - envURL: Dynatrace environment URL (used for monitoring config lookup)
 //   - dryRun: when true, show what would be done without executing
 func UninstallAWS(c *client.PlatformClient, envURL string, dryRun bool) error {

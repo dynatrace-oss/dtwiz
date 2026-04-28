@@ -16,7 +16,7 @@ const (
 )
 
 // InstallExtension activates a specific version of a Dynatrace extension.
-// When silent is true, an HTTP 400 response is treated as a no-op rather than an error
+// When silent is true, an HTTP 400 and HTTP 409 response is treated as a no-op rather than an error
 // (useful when the extension may already be installed).
 func InstallExtension(c *client.PlatformClient, extensionName, version string, silent bool) error {
 	path := fmt.Sprintf(extensionPath, extensionName)
@@ -24,7 +24,6 @@ func InstallExtension(c *client.PlatformClient, extensionName, version string, s
 		"extensionName": extensionName,
 		"version":       version,
 	}
-	fmt.Printf("  Installing extension %s version %s...\n", extensionName, version)
 	resp, err := c.HTTP().R().
 		SetHeader("Content-Type", "application/json").
 		SetBody(payload).
@@ -40,7 +39,6 @@ func InstallExtension(c *client.PlatformClient, extensionName, version string, s
 		body := resp.String()
 		return fmt.Errorf("installing extension %s@%s (HTTP %d): %s", extensionName, version, sc, body[:min(len(body), 400)])
 	}
-	fmt.Printf("  Extension %s@%s installed.\n", extensionName, version)
 	return nil
 }
 

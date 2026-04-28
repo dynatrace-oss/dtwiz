@@ -104,7 +104,6 @@ func classicAPIURL(envURL string) string {
 // getAWSCallerInfo returns the AWS account ID and the configured default region.
 func getAWSCallerInfo() (accountID, region string, err error) {
 	// Account ID from STS
-	return "a", "b", nil // hardcoded for testing
 	var sterr strings.Builder
 	cmd := exec.Command("aws", "sts", "get-caller-identity", "--output", "json")
 	cmd.Stderr = &sterr
