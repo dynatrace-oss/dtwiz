@@ -182,6 +182,23 @@ After launching the instrumented process:
 
 In `pkg/installer/otel.go`, `detectAvailableRuntimes()` currently gates Java behind `allRuntimesEnabled()`. Once all other tasks are implemented and verified, the `enabled` field for Java is set to `true` unconditionally — removing the gate is the **last code change** before integration testing.
 
+### 14. Windows wrapper command handling
+
+On Windows, Maven and Gradle ship with `.cmd` / `.bat` wrapper scripts (`mvnw.cmd`, `gradlew.bat`) instead of the Unix shell scripts (`mvnw`, `gradlew`). They cannot be invoked directly via `exec.Command` — the Windows kernel does not execute `.cmd` files natively; they must be passed through `cmd.exe /c`.
+
+The installer uses a `findWrapper(projectPath, unixName, windowsName string) string` helper to locate the correct wrapper file for the current OS. Wrapper commands in `detectJavaEntrypoints` and `attemptSingleModuleBuild` are constructed differently per platform:
+
+| Platform | Display command | `exec.Command` call |
+|---|---|---|
+| Unix | `./mvnw spring-boot:run` | `exec.Command("./mvnw", "spring-boot:run")` |
+| Windows | `mvnw.cmd spring-boot:run` | `exec.Command("cmd", "/c", "mvnw.cmd", "spring-boot:run")` |
+
+`buildInstrumentedCmd` detects `.cmd` / `.bat` wrapper entrypoints by checking the `fields[0]` extension and applies the `cmd /c` prefix automatically, so the stored `Command` string (e.g. `mvnw.cmd spring-boot:run`) can be used for both display and execution without separate tracking.
+
+`javaProjectMarkers` includes both `"gradlew"` (Unix) and `"gradlew.bat"` (Windows) so projects using either wrapper are detected during directory scanning regardless of platform.
+
+**Alternative considered:** Use a platform build tag to select wrapper names at compile time. Rejected — `findWrapper` keeps the logic in one file and is easier to test cross-platform by passing explicit names.
+
 ### 15. File layout
 
 | File | Responsibility |

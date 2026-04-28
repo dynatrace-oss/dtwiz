@@ -18,6 +18,7 @@ type DetectedProcess struct {
 	PID              int
 	Command          string
 	WorkingDirectory string
+	Description      string
 }
 
 type ScannedProject struct {
@@ -201,14 +202,17 @@ func promptProjectSelection(label string, projects []ScannedProject) *ScannedPro
 	answer, _ := reader.ReadString('\n')
 	answer = strings.TrimSpace(answer)
 	if answer == "" {
+		logger.Debug("user skipped project selection")
 		return nil
 	}
 
 	selection, err := strconv.Atoi(answer)
 	if err != nil || selection < 1 || selection > len(projects) {
+		logger.Debug("invalid project selection, skipping", "input", answer)
 		fmt.Println("  Invalid selection, skipping instrumentation.")
 		return nil
 	}
+	logger.Debug("user selected project", "path", projects[selection-1].Path)
 	return &projects[selection-1]
 }
 

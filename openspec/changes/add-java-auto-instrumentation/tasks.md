@@ -4,38 +4,38 @@
 
 **Files:** `pkg/installer/otel_java_process.go` (create), `pkg/installer/otel_java_process_test.go` (create)
 
-- [ ] 1.1 Create `pkg/installer/otel_java_process.go` with `parseJavaVersion(output string) (int, error)` — extract the quoted version string from `java -version` stderr; handle legacy (`1.8.0_382` → 8) and modern (`17.0.1` → 17, `21` → 21) formats
-- [ ] 1.2 Add `validateJavaPrerequisites() (string, error)` — check `java` in PATH via `exec.LookPath`, run `java -version`, parse the output, return error if version < 8. Return the java binary path on success.
-- [ ] 1.2a Add debug logging in `validateJavaPrerequisites` and `parseJavaVersion`:
+- [x] 1.1 Create `pkg/installer/otel_java_process.go` with `parseJavaVersion(output string) (int, error)` — extract the quoted version string from `java -version` stderr; handle legacy (`1.8.0_382` → 8) and modern (`17.0.1` → 17, `21` → 21) formats
+- [x] 1.2 Add `validateJavaPrerequisites() (string, error)` — check `java` in PATH via `exec.LookPath`, run `java -version`, parse the output, return error if version < 8. Return the java binary path on success.
+- [x] 1.2a Add debug logging in `validateJavaPrerequisites` and `parseJavaVersion`:
   - Java binary found: `logger.Debug("java binary found", "path", javaPath)`
   - Version string parsed: `logger.Debug("java version parsed", "raw", rawOutput, "major", major)`
   - Version OK: `logger.Debug("java version OK", "major", major)`
   - Version too old: `logger.Debug("java version too old", "major", major, "minimum", 8)`
-- [ ] 1.3 Tests in `pkg/installer/otel_java_process_test.go`:
-  - `TestParseJavaVersion_Legacy_1_8` (input: `openjdk version "1.8.0_382"` → 8)
-  - `TestParseJavaVersion_Modern_17` (input: `java version "17.0.1" 2021-10-19` → 17)
-  - `TestParseJavaVersion_Short_21` (input: `openjdk version "21" 2023-09-19` → 21)
-  - `TestParseJavaVersion_OpenJDK_11` (input: `openjdk version "11.0.20" 2023-07-18` → 11)
-  - `TestParseJavaVersion_Unrecognized` (input: `not a valid version` → error)
-  - `TestParseJavaVersion_Java7_TooOld` (input: `java version "1.7.0_80"` → 7, then validate rejects it)
+- [x] 1.3 Tests in `pkg/installer/otel_java_process_test.go`:
+  - [x] `TestParseJavaVersion_Legacy_1_8` (input: `openjdk version "1.8.0_382"` → 8)
+  - [x] `TestParseJavaVersion_Modern_17` (input: `java version "17.0.1" 2021-10-19` → 17)
+  - [x] `TestParseJavaVersion_Short_21` (input: `openjdk version "21" 2023-09-19` → 21)
+  - [x] `TestParseJavaVersion_OpenJDK_11` (input: `openjdk version "11.0.20" 2023-07-18` → 11)
+  - [x] `TestParseJavaVersion_Unrecognized` (input: `not a valid version` → error)
+  - [x] `TestParseJavaVersion_Java7_TooOld` (input: `java version "1.7.0_80"` → 7, then validate rejects it)
 
 ## 2. Agent JAR Download
 
 **Files:** `pkg/installer/otel_java.go` (modify)
 
-- [ ] 2.1 Implement `downloadJavaAgent() (string, error)` — download the JAR from `otelJavaAgentURL` to `~/.opentelemetry/java/opentelemetry-javaagent.jar`. Create the directory if it does not exist. Use `net/http.Get` + `os.Create` + `io.Copy`. Return the absolute path to the JAR.
-- [ ] 2.2 Handle download errors: non-200 HTTP status → return error with URL and status code; network errors → return error with URL and error message.
-- [ ] 2.3 Output download progress via `display.PrintStatusLine("download", "OpenTelemetry Java agent... done.", display.ColorOK)`
-- [ ] 2.4 Tests in `pkg/installer/otel_java_test.go`:
-  - `TestDownloadJavaAgent_CreatesDirectory` — use a temp dir as destination; verify the `~/.opentelemetry/java/` directory is created when it does not exist, and the JAR file is written
-  - `TestDownloadJavaAgent_ErrorOnNon200` — mock an HTTP server returning 404; verify the function returns an error containing the URL and the HTTP status code
-  - `TestDownloadJavaAgent_NetworkError` — mock a server that closes the connection immediately; verify the function returns an error containing the URL
+- [x] 2.1 Implement `downloadJavaAgent() (string, error)` — download the JAR from `otelJavaAgentURL` to `~/.opentelemetry/java/opentelemetry-javaagent.jar`. Create the directory if it does not exist. Use `net/http.Get` + `os.Create` + `io.Copy`. Return the absolute path to the JAR.
+- [x] 2.2 Handle download errors: non-200 HTTP status → return error with URL and status code; network errors → return error with URL and error message.
+- [x] 2.3 Output download progress via `display.PrintStatusLine("download", "OpenTelemetry Java agent... done.", display.ColorOK)`
+- [x] 2.4 Tests in `pkg/installer/otel_java_test.go`:
+  - [x] `TestDownloadJavaAgent_CreatesDirectory` — use a temp dir as destination; verify the `~/.opentelemetry/java/` directory is created when it does not exist, and the JAR file is written
+  - [x] `TestDownloadJavaAgent_ErrorOnNon200` — mock an HTTP server returning 404; verify the function returns an error containing the URL and the HTTP status code
+  - [x] `TestDownloadJavaAgent_NetworkError` — mock a server that closes the connection immediately; verify the function returns an error containing the URL
 
 ## 3. Java Entrypoint Detection
 
 **Files:** `pkg/installer/otel_java_process.go` (modify), `pkg/installer/otel_java_process_test.go` (modify)
 
-- [ ] 3.1 Add `detectJavaEntrypoints(projectPath string) []JavaEntrypoint` — scan for runnable artifacts in the project directory. A `JavaEntrypoint` has `Command string` (the full launch command) and `Description string` (shown in the selection menu).
+- [x] 3.1 Add `detectJavaEntrypoints(projectPath string) []JavaEntrypoint` — scan for runnable artifacts in the project directory. A `JavaEntrypoint` has `Command string` (the full launch command) and `Description string` (shown in the selection menu).
   - Scan `target/*.jar` and `build/libs/*.jar` for JARs with a `Main-Class` in `MANIFEST.MF` (use `archive/zip` to read the JAR).
   - If no fat JAR is found, check for build-tool wrappers with the following rules:
     - **Maven:** only offer a wrapper if `pom.xml` references `spring-boot` → `./mvnw spring-boot:run`. `exec:java` is never offered (requires `mainClass` POM config absent in most projects).
@@ -44,8 +44,8 @@
     - **Maven non-Spring Boot with no JAR:** no wrapper offered — fall through to build instructions.
   - Add `isSpringBootMaven(projectPath string) bool` — reads `pom.xml` and checks for `spring-boot` substring.
   - Add `isSpringBootGradle(projectPath string) bool` — reads `build.gradle`/`build.gradle.kts` and checks for `spring-boot` or `springframework.boot` substrings.
-- [ ] 3.2 Add `isExecutableJar(jarPath string) bool` — open the JAR as a ZIP, read `META-INF/MANIFEST.MF`, return true if `Main-Class:` is present.
-- [ ] 3.2a Add debug logging throughout `detectJavaEntrypoints`:
+- [x] 3.2 Add `isExecutableJar(jarPath string) bool` — open the JAR as a ZIP, read `META-INF/MANIFEST.MF`, return true if `Main-Class:` is present.
+- [x] 3.2a Add debug logging throughout `detectJavaEntrypoints`:
   - When `target/` or `build/libs/` does not exist: `logger.Debug("dir not found, skipping JAR scan", "dir", path)`
   - When a JAR is accepted: `logger.Debug("executable JAR found", "jar", jarPath)`
   - When a JAR is rejected (no `Main-Class`): `logger.Debug("skipping JAR — no Main-Class in MANIFEST.MF", "jar", jarPath)`
@@ -53,29 +53,29 @@
   - When a wrapper fallback is chosen: `logger.Debug("no fat JAR found, using wrapper fallback", "command", cmd)`
   - When the result slice is empty: `logger.Debug("no entrypoint found", "project", projectPath, "scanned", scannedList)`
   - When exactly one candidate is auto-selected: `logger.Debug("auto-selected single entrypoint", "command", cmd)`
-- [ ] 3.2b Add debug logging for auto-build in `attemptSingleModuleBuild`:
+- [x] 3.2b Add debug logging for auto-build in `attemptSingleModuleBuild`:
   - Before running the build: `logger.Debug("attempting auto-build", "command", buildCmd, "project", projectPath)`
   - On success: `logger.Debug("auto-build succeeded", "project", projectPath)`
   - On failure: `logger.Debug("auto-build failed", "project", projectPath, "error", err)`
-- [ ] 3.3 Add `promptEntrypointSelection(entrypoints []JavaEntrypoint) *JavaEntrypoint` — when exactly one entrypoint is found, auto-select it (print the selection, no prompt); when multiple are found, present a numbered menu; return nil if user skips.
-- [ ] 3.4 Tests in `pkg/installer/otel_java_process_test.go`:
-  - `TestDetectJavaEntrypoints_MavenFatJar` (temp dir with `target/app.jar` containing `Main-Class` → returns jar candidate)
-  - `TestDetectJavaEntrypoints_GradleFatJar` (temp dir with `build/libs/app-all.jar` → returns jar candidate)
-  - `TestDetectJavaEntrypoints_MavenWrapperSpringBoot` (temp dir with `mvnw` + Spring Boot `pom.xml` → returns `spring-boot:run` candidate)
-  - `TestDetectJavaEntrypoints_MavenWrapperNonSpringBoot` (temp dir with `mvnw` + plain `pom.xml` → returns no entrypoint)
-  - `TestDetectJavaEntrypoints_GradleWrapperSpringBoot` (temp dir with `gradlew` + Spring Boot `build.gradle` → returns `bootRun` candidate)
-  - `TestDetectJavaEntrypoints_GradleWrapperNoJar` (temp dir with `gradlew`, no Spring Boot → returns `run` candidate)
-  - `TestDetectJavaEntrypoints_NoEntrypoint` (empty project dir → returns empty slice)
-  - `TestIsExecutableJar_WithMainClass` (JAR with `Main-Class` → true)
-  - `TestIsExecutableJar_WithoutMainClass` (JAR without `Main-Class` → false)
+- [x] 3.3 Add `promptEntrypointSelection(entrypoints []JavaEntrypoint) *JavaEntrypoint` — when exactly one entrypoint is found, auto-select it (print the selection, no prompt); when multiple are found, present a numbered menu; return nil if user skips.
+- [x] 3.4 Tests in `pkg/installer/otel_java_process_test.go`:
+  - [x] `TestDetectJavaEntrypoints_MavenFatJar` (temp dir with `target/app.jar` containing `Main-Class` → returns jar candidate)
+  - [x] `TestDetectJavaEntrypoints_GradleFatJar` (temp dir with `build/libs/app-all.jar` → returns jar candidate)
+  - [x] `TestDetectJavaEntrypoints_MavenWrapperSpringBoot` (temp dir with `mvnw` + Spring Boot `pom.xml` → returns `spring-boot:run` candidate)
+  - [x] `TestDetectJavaEntrypoints_MavenWrapperNonSpringBoot` (temp dir with `mvnw` + plain `pom.xml` → returns no entrypoint)
+  - [x] `TestDetectJavaEntrypoints_GradleWrapperSpringBoot` (temp dir with `gradlew` + Spring Boot `build.gradle` → returns `bootRun` candidate)
+  - [x] `TestDetectJavaEntrypoints_GradleWrapperNoJar` (temp dir with `gradlew`, no Spring Boot → returns `run` candidate)
+  - [x] `TestDetectJavaEntrypoints_NoEntrypoint` (empty project dir → returns empty slice)
+  - [x] `TestIsExecutableJar_WithMainClass` (JAR with `Main-Class` → true)
+  - [x] `TestIsExecutableJar_WithoutMainClass` (JAR without `Main-Class` → false)
 
 ## 4. Java Process Detection
 
 **Files:** `pkg/installer/otel_runtime_scan.go` (modify), `pkg/installer/otel_java_process.go` (modify), `pkg/installer/otel_java_process_test.go` (modify)
 
-- [ ] 4.0 Add `Description string` field to `DetectedProcess` struct in `otel_runtime_scan.go`
-- [ ] 4.1 Add `enrichProcessesWithJPS(processes []DetectedProcess) []DetectedProcess` — if `jps` is in PATH, run `jps -l`, match output to `ps`-based processes by PID, and populate `DetectedProcess.Description` with the main class or JAR name from `jps`
-- [ ] 4.2 Add debug logging in `detectJavaProcesses` and `enrichProcessesWithJPS`:
+- [x] 4.0 Add `Description string` field to `DetectedProcess` struct in `otel_runtime_scan.go`
+- [x] 4.1 Add `enrichProcessesWithJPS(processes []DetectedProcess) []DetectedProcess` — if `jps` is in PATH, run `jps -l`, match output to `ps`-based processes by PID, and populate `DetectedProcess.Description` with the main class or JAR name from `jps`
+- [x] 4.2 Add debug logging in `detectJavaProcesses` and `enrichProcessesWithJPS`:
   - After raw scan: `logger.Debug("detected java processes", "count", len(processes))`
   - JPS not found: `logger.Debug("jps not found, skipping enrichment")`
   - Per enriched process: `logger.Debug("jps enrichment", "pid", pid, "description", description)`
@@ -86,10 +86,10 @@
 
 **Files:** `pkg/installer/otel_java.go` (modify)
 
-- [ ] 5.1 Update `InstallOtelJava` signature to `InstallOtelJava(envURL, token, serviceName string, dryRun bool) error`
-- [ ] 5.2 Add pre-flight validation call to `validateJavaPrerequisites()` at the top of `InstallOtelJava()`, before any other work
-- [ ] 5.3 Rewrite the dry-run path to include: API URL, service name, agent JAR download URL, environment variables, and the `-javaagent` JVM flag
-- [ ] 5.4 Implement the interactive flow:
+- [x] 5.1 Update `InstallOtelJava` signature to `InstallOtelJava(envURL, token, serviceName string, dryRun bool) error`
+- [x] 5.2 Add pre-flight validation call to `validateJavaPrerequisites()` at the top of `InstallOtelJava()`, before any other work
+- [x] 5.3 Rewrite the dry-run path to include: API URL, service name, agent JAR download URL, environment variables, and the `-javaagent` JVM flag
+- [x] 5.4 Implement the interactive flow:
   1. Detect Java projects via `detectJavaProjects()` and processes via `detectJavaProcesses()`; match processes to projects.
   2. Present project selection menu (with PID annotations where applicable).
   3. Detect entrypoints for the selected project via `detectJavaEntrypoints()`.
@@ -103,38 +103,78 @@
   11. Print process summary via `PrintProcessSummary`.
   12. Call `updateOtelCollectorIfPresent(envURL, token, dryRun)` — probes `<cwd>/opentelemetry/config.yaml`, patches silently with `PatchConfigFile` if found, skips with no output if not found.
   13. Call `waitForServices()` if at least one process is alive.
-- [ ] 5.5 Use `StartManagedProcess` to launch the instrumented process with log file at `<project-path>/<service-name>.log`. Immediately before constructing the `exec.Cmd`, add `logger.Debug("launching instrumented java process", "cmd", launchCmd, "dir", proj.Path)` — this must be the last debug statement before the process starts so the full resolved command is visible when running with `--debug`.
-- [ ] 5.6 Use `PrintProcessSummary` after the settle period; if no alive processes, output via `display.PrintStatusLine("error", "No services are running — check the logs above for errors.", display.ColorError)` and skip `waitForServices`
-- [ ] 5.7 Call `waitForServices(envURL, token, aliveServiceNames)` when at least one process is alive
-- [ ] 5.8 Update `DetectJavaPlan` to build fully executable plans — pass `envURL`, resolved entrypoint command through the `JavaInstrumentationPlan` struct
-- [ ] 5.9 Update `JavaInstrumentationPlan.Execute()` to use the full automated flow (detect entrypoint → stop → download → launch → update collector)
+- [x] 5.5 Use `StartManagedProcess` to launch the instrumented process with log file at `<project-path>/<service-name>.log`. Immediately before constructing the `exec.Cmd`, add `logger.Debug("launching instrumented java process", "cmd", launchCmd, "dir", proj.Path)` — this must be the last debug statement before the process starts so the full resolved command is visible when running with `--debug`.
+- [x] 5.6 Use `PrintProcessSummary` after the settle period; if no alive processes, output via `display.PrintStatusLine("error", "No services are running — check the logs above for errors.", display.ColorError)` and skip `waitForServices`
+- [x] 5.7 Call `waitForServices(envURL, token, aliveServiceNames)` when at least one process is alive
+- [x] 5.8 Update `DetectJavaPlan` to build fully executable plans — pass `envURL`, resolved entrypoint command through the `JavaInstrumentationPlan` struct
+- [x] 5.9 Update `JavaInstrumentationPlan.Execute()` to use the full automated flow (detect entrypoint → stop → download → launch → update collector)
 
 ## 6. Cobra Command Updates
 
 **Files:** `cmd/install.go` (modify), `pkg/installer/otel.go` (modify)
 
-- [ ] 6.1 Update `installOtelJavaCmd` RunE in `cmd/install.go` to pass credentials to `installer.InstallOtelJava(envURL, accessTok, otelJavaServiceName, installDryRun)`
-- [ ] 6.2 Update `createRuntimePlan` for the `"Java"` case to pass `envURL` through to the `JavaInstrumentationPlan`
+- [x] 6.1 Update `installOtelJavaCmd` RunE in `cmd/install.go` to pass credentials to `installer.InstallOtelJava(envURL, accessTok, otelJavaServiceName, installDryRun)`
+- [x] 6.2 Update `createRuntimePlan` for the `"Java"` case to pass `envURL` through to the `JavaInstrumentationPlan`
 
 ## 7. Unit Tests for Full Flow
 
 **Files:** `pkg/installer/otel_java_test.go` (modify)
 
-- [ ] 7.1 Update `TestDetectJavaPlan_FindsProject` to verify the plan includes the new fields (EnvURL, EntrypointCommand)
-- [ ] 7.2 Add `TestInstallOtelJava_DryRun` — verify dry-run output includes all expected fields (API URL, service name, agent JAR URL, env vars, `-javaagent` flag)
-- [ ] 7.3 Add `TestInstallOtelJava_JavaNotFound` — verify error message when Java is not on PATH
-- [ ] 7.4 Add `TestJavaInstrumentationPlan_PrintPlanSteps_Updated` — verify plan shows launch command with `-javaagent`, JAR download URL, and OTEL vars
-- [ ] 7.5 Add `TestInstallOtelJava_NoBuildArtifact_NoRunningProcess` — verify that when no JAR exists and no build tool is found, a "no build tool detected" message is printed and no process is started
-- [ ] 7.6 Add `TestInstallOtelJava_AutoBuildFails` — verify that when a build tool wrapper is present but the build command exits non-zero, `Auto-build failed` is printed and no process is started
+- [x] 7.1 Update `TestDetectJavaPlan_FindsProject` to verify the plan includes the new fields (EnvURL, EntrypointCommand)
+- [x] 7.2 Add `TestInstallOtelJava_DryRun` — verify dry-run output includes all expected fields (API URL, service name, agent JAR URL, env vars, `-javaagent` flag)
+- [x] 7.3 Add `TestInstallOtelJava_JavaNotFound` — verify error message when Java is not on PATH
+- [x] 7.4 Add `TestJavaInstrumentationPlan_PrintPlanSteps_Updated` — verify plan shows launch command with `-javaagent`, JAR download URL, and OTEL vars
+- [x] 7.5 Add `TestInstallOtelJava_NoBuildArtifact_NoRunningProcess` — verify that when no JAR exists and no build tool is found, a "no build tool detected" message is printed and no process is started
+- [x] 7.6 Add `TestInstallOtelJava_AutoBuildFails` — verify that when a build tool wrapper is present but the build command exits non-zero, `Auto-build failed` is printed and no process is started
 
-## 8. Remove DTWIZ_ALL_RUNTIMES Gate
+## 8. Cross-Platform Wrapper Support
 
-**Do this only after all tasks in sections 1–7 are complete and verified.**
+**Files:** `pkg/installer/otel_java_process.go` (modify), `pkg/installer/otel_java.go` (modify), `pkg/installer/otel_java_process_test.go` (modify)
 
-**Files:** `pkg/installer/otel.go` (modify)
+**Context:** On Windows, Maven and Gradle wrappers use `.cmd` / `.bat` extensions (`mvnw.cmd`, `gradlew.bat`) and cannot be invoked with a `./` prefix or via `exec.Command` directly — they require `cmd /c`. The current implementation only handles Unix-style wrappers.
 
-- [ ] 8.1 In `detectAvailableRuntimes()`, set `enabled: true` for Java unconditionally (remove the `allRuntimesEnabled()` gate)
-- [ ] 8.2 Remove the "Coming soon" label from the Java entry in the runtime list (if present in the display output)
+- [ ] 8.1 Add `"gradlew.bat"` and `"mvnw.cmd"` to `javaProjectMarkers` in `otel_java.go` so Windows-style wrapper presence is recognized as a Java project signal during directory scanning.
+- [ ] 8.2 Add `findWrapper(projectPath, unixName, windowsName string) string` in `otel_java_process.go` — returns the wrapper filename (not full path) for the current platform: checks `<projectPath>/<windowsName>` on `runtime.GOOS == "windows"`, `<projectPath>/<unixName>` otherwise. Returns `""` if the file does not exist.
+- [ ] 8.3 Update `detectJavaEntrypoints` to use `findWrapper(projectPath, "mvnw", "mvnw.cmd")` and `findWrapper(projectPath, "gradlew", "gradlew.bat")` instead of hardcoded filenames. Construct platform-correct command strings:
+  - Unix: `./mvnw spring-boot:run`, `./gradlew bootRun`, `./gradlew run`
+  - Windows: `mvnw.cmd spring-boot:run`, `gradlew.bat bootRun`, `gradlew.bat run`
+- [ ] 8.4 Update `attemptSingleModuleBuild` to use `findWrapper` for detection and to construct the exec-ready command:
+  - Unix: `exec.Command("./mvnw", "clean", "package", "-DskipTests")` / `exec.Command("./gradlew", "build", "-x", "test")` with `cmd.Dir = projectPath`
+  - Windows: `exec.Command("cmd", "/c", "mvnw.cmd", "clean", "package", "-DskipTests")` / `exec.Command("cmd", "/c", "gradlew.bat", "build", "-x", "test")` with `cmd.Dir = projectPath`
+- [ ] 8.5 Update `buildInstrumentedCmd` in `otel_java.go` to handle Windows wrapper commands: when `fields[0]` ends in `.cmd` or `.bat`, wrap the execution as `exec.Command("cmd", append([]string{"/c", fields[0]}, fields[1:]...)...)` so the wrapper executes correctly via Windows command processor.
+- [ ] 8.6 Tests in `otel_java_process_test.go`:
+  - [ ] `TestFindWrapper_FoundOnCurrentPlatform` — temp dir with both `mvnw` and `mvnw.cmd` present; verify the correct one is returned for the current `runtime.GOOS`
+  - [ ] `TestFindWrapper_Missing_ReturnsEmpty` — temp dir with no wrapper → returns `""`
+  - [ ] `TestDetectJavaEntrypoints_WindowsWrapperSpringBootMaven` — temp dir with `mvnw.cmd` + Spring Boot `pom.xml`, no JAR → returns candidate whose `Command` starts with `mvnw.cmd` (skip on non-Windows with `t.Skip`)
+  - [ ] `TestDetectJavaEntrypoints_WindowsWrapperSpringBootGradle` — temp dir with `gradlew.bat` + Spring Boot `build.gradle`, no JAR → returns candidate whose `Command` starts with `gradlew.bat` (skip on non-Windows with `t.Skip`)
+
+## 9. Verification
+
+### Automated (run on both platforms)
+
+- [ ] 9.1 Run `make test` on Unix — all existing tests must pass
+- [ ] 9.1a Run `go test ./...` on Windows — all existing tests must pass (Windows-skipped tests are acceptable; no panics or build failures)
+- [ ] 9.2 Run `make lint` — no new lint issues
+
+### Manual — Unix (macOS / Linux)
+
+- [ ] 9.3 `dtwiz install otel-java --dry-run` shows preview with JAR URL, env vars, and `-javaagent` flag
+- [ ] 9.4 `dtwiz install otel-java` with a Java project that has a built fat JAR — JAR is detected as entrypoint, app is launched with instrumentation (no prior running process needed)
+- [ ] 9.5 `dtwiz install otel-java` with no built artifact — installer attempts auto-build via `./mvnw` or `./gradlew`; if build succeeds the app is launched; if build fails a clear error is printed with instructions to fix and re-run
+- [ ] 9.6 Generate some traffic to the instrumented app and verify traces/logs appear in Dynatrace
+- [ ] 9.7 `dtwiz install otel` shows Java projects in the selection menu (requires `DTWIZ_ALL_RUNTIMES=true` until task 14 is complete)
+- [ ] 9.8 "Waiting for traffic" terminates when service appears in Dynatrace (not just on timeout)
+- [ ] 9.9 OTel Collector config is updated after Java instrumentation when a collector config exists on the machine
+
+### Manual — Windows
+
+- [ ] 9.10 `dtwiz install otel-java --dry-run` shows preview with correct Windows paths (backslash separators in agent JAR path; home resolves under `%USERPROFILE%`)
+- [ ] 9.11 `dtwiz install otel-java` with a fat JAR project — JAR detected, instrumented process launched
+- [ ] 9.12 `dtwiz install otel-java` with a Spring Boot Maven project using `mvnw.cmd` — `mvnw.cmd spring-boot:run` offered as entrypoint and executes correctly with `JAVA_TOOL_OPTIONS` set
+- [ ] 9.13 `dtwiz install otel-java` with a Spring Boot Gradle project using `gradlew.bat` — `gradlew.bat bootRun` offered and executes correctly
+- [ ] 9.14 `dtwiz install otel-java` with no built artifact — auto-build via `mvnw.cmd` or `gradlew.bat` is attempted; success launches; failure prints clear error
+- [ ] 9.15 Running Java processes detected and shown in project selection menu with PID annotations
+- [ ] 9.16 `dtwiz uninstall otel` stops the dtwiz-instrumented Java process and removes `%USERPROFILE%\.opentelemetry\java\`
 
 ## 10. Multi-Module Project Detection and Instrumentation
 
@@ -176,16 +216,6 @@
 - [ ] 12.8 `TestNeedsBuild_TrueWhenJarsMissing` — returns true when sub-module has no JAR
 - [ ] 12.9 `TestNeedsBuild_FalseWhenJarsPresent` — returns false when all sub-modules have JARs
 
-- [ ] 9.1 Run `make test` — all existing tests must pass
-- [ ] 9.2 Run `make lint` — no new lint issues
-- [ ] 9.3 Manual verification: `dtwiz install otel-java --dry-run` shows preview with JAR URL, env vars, and `-javaagent` flag
-- [ ] 9.4 Manual verification: `dtwiz install otel-java` with a Java project that has a built fat JAR — JAR is detected as entrypoint, app is launched with instrumentation (no prior running process needed)
-- [ ] 9.5 Manual verification: `dtwiz install otel-java` with no built artifact — installer attempts auto-build; if build succeeds the app is launched; if build fails a clear error is printed with instructions to fix and re-run
-- [ ] 9.6 Manual verification: generate some traffic to the instrumented app and verify traces/logs appear in Dynatrace
-- [ ] 9.7 Manual verification: `dtwiz install otel` shows Java projects in the selection menu (requires `DTWIZ_ALL_RUNTIMES=true` until task 8 is complete)
-- [ ] 9.8 Manual verification: "Waiting for traffic" terminates when service appears in Dynatrace (not just on timeout)
-- [ ] 9.9 Manual verification: OTel Collector config is updated after Java instrumentation when a collector config exists on the machine
-
 ## 13. Extend `uninstall otel` with Java Cleanup
 
 **Files:** `pkg/installer/otel_uninstall.go` (modify), `pkg/installer/otel_uninstall_test.go` (modify or create)
@@ -203,3 +233,12 @@
 - [ ] 13.6 Manual verification: `dtwiz uninstall otel` stops only the dtwiz-instrumented Java process, not other Java processes
 - [ ] 13.7 Manual verification: `dtwiz uninstall otel` with no running Java processes but agent JAR present — removes `~/.opentelemetry/java/` only
 - [ ] 13.8 Manual verification: `dtwiz uninstall otel` with nothing Java-related to remove — Java section is absent from output; existing collector behavior unchanged
+
+## 14. Remove DTWIZ_ALL_RUNTIMES Gate
+
+**Do this only after all other tasks are complete and verified.**
+
+**Files:** `pkg/installer/otel.go` (modify)
+
+- [ ] 14.1 In `detectAvailableRuntimes()`, set `enabled: true` for Java unconditionally (remove the `allRuntimesEnabled()` gate)
+- [ ] 14.2 Remove the "Coming soon" label from the Java entry in the runtime list (if present in the display output)
