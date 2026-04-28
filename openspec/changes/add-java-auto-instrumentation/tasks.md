@@ -64,7 +64,7 @@
   - [x] `TestDetectJavaEntrypoints_MavenWrapperSpringBoot` (temp dir with `mvnw` + Spring Boot `pom.xml` → returns `spring-boot:run` candidate)
   - [x] `TestDetectJavaEntrypoints_MavenWrapperNonSpringBoot` (temp dir with `mvnw` + plain `pom.xml` → returns `exec:java` candidate)
   - [x] `TestDetectJavaEntrypoints_GradleWrapperSpringBoot` (temp dir with `gradlew` + Spring Boot `build.gradle` → returns `bootRun` candidate)
-  - [x] `TestDetectJavaEntrypoints_GradleWrapperNoJar` (temp dir with `gradlew`, no Spring Boot → returns no entrypoint, falls through to auto-build)
+  - [x] `TestDetectJavaEntrypoints_GradleWrapperNoJar` (temp dir with `gradlew`, no Spring Boot → returns `run` candidate)
   - [x] `TestDetectJavaEntrypoints_NoEntrypoint` (empty project dir → returns empty slice)
   - [x] `TestIsExecutableJar_WithMainClass` (JAR with `Main-Class` → true)
   - [x] `TestIsExecutableJar_WithoutMainClass` (JAR without `Main-Class` → false)
