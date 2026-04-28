@@ -116,17 +116,17 @@ E2E tests SHALL use `t.TempDir()` for all fixture app directories. No test artif
 
 ### Requirement: URL family derivation
 
-`NewForTesting` SHALL derive both the Classic URL and Platform URL from the single `TEST_DT_ENVIRONMENT` value, using the existing URL family logic (strip `.apps.` for Classic, insert `.apps.` for Platform).
+`NewForTesting` SHALL derive both the Classic URL and Platform URL from the single `TEST_DT_ENVIRONMENT` value, using the existing URL family logic: `.apps.dynatrace.com` maps to `.live.dynatrace.com` for Classic, `.live.dynatrace.com` maps to `.apps.dynatrace.com` for Platform, `.apps.dynatracelabs.com` maps to `.dynatracelabs.com` for Classic, and `.dynatracelabs.com` maps to `.apps.dynatracelabs.com` for Platform.
 
 #### Scenario: Classic URL input
 
-- **WHEN** `TEST_DT_ENVIRONMENT` is `https://abc123.live.com`
-- **THEN** Classic URL is `https://abc123.live.com` and Platform URL is `https://abc123.apps.com`
+- **WHEN** `TEST_DT_ENVIRONMENT` is `https://abc123.live.dynatrace.com`
+- **THEN** Classic URL is `https://abc123.live.dynatrace.com` and Platform URL is `https://abc123.apps.dynatrace.com`
 
 #### Scenario: Platform URL input
 
-- **WHEN** `TEST_DT_ENVIRONMENT` is `https://abc123.apps.com`
-- **THEN** Classic URL is `https://abc123.live.com` and Platform URL is `https://abc123.apps.com`
+- **WHEN** `TEST_DT_ENVIRONMENT` is `https://abc123.apps.dynatrace.com`
+- **THEN** Classic URL is `https://abc123.live.dynatrace.com` and Platform URL is `https://abc123.apps.dynatrace.com`
 
 ### Requirement: No changes to existing client API
 

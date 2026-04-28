@@ -20,12 +20,12 @@
 - [ ] 4.1 Create `test/e2e/suite_test.go` with `//go:build integration` — shared test helpers: `copyFixture(t, fixtureDir, destDir)` to copy fixture app into temp dir, `startApp(t, dir, port)` to run the instrumented app as a subprocess with `t.Cleanup` kill, `triggerRequest(url)` HTTP GET helper
 - [ ] 4.2 Create `test/e2e/python_test.go` with `//go:build integration` — `TestPythonOTelAutoInstrumentation`: checks `python3` available (skip if not), calls `SetupE2ETest`, copies flask fixture, runs `dtwiz install otel-python` on the temp dir, starts the app with `opentelemetry-instrument`, sends HTTP request, calls `WaitForTraces` with unique service name, asserts trace count > 0
 
-## 5. Makefile & Gitignore
+## 5. makefile & Gitignore
 
-- [ ] 5.1 Add `test-integration` target to `Makefile` — the entire recipe MUST be a single shell invocation with all steps joined by `&&` or `;` so that variable exports persist across checks. Pattern: `[ -f .e2e-tests.env ] && export $$(grep -v '^#' .e2e-tests.env | xargs) || true` then check `TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN` are set (each in its own `[ -z "$$VAR" ]` guard), printing an actionable error with copy-paste setup instructions to stderr and `exit 1` if any is missing; then run `go test -v -tags integration -timeout 5m ./test/e2e/...`. Do NOT use a separate `if [ -f .e2e-tests.env ]; then export ...; fi` block followed by independent `if` checks — the export subshell exits before the checks run, so variables from the file are always lost.
+- [ ] 5.1 Add `test-integration` target to `makefile` — loads `.e2e-tests.env` if present (`ifneq (,$(wildcard .e2e-tests.env))` / `include .e2e-tests.env` / `export`), checks `TEST_DT_ENVIRONMENT` and `TEST_DT_ACCESS_TOKEN` are set (prints error to stderr + `exit 1` if missing), runs `go test -v -tags integration -timeout 5m ./test/e2e/...`
 - [ ] 5.2 Add `.e2e-tests.env` to `.gitignore`
-- [ ] 5.3 Add `.e2e-tests.env.example` to the repo — contains the three required env vars (`TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN`) with placeholder values and a comment instructing contributors to `cp .e2e-tests.env.example .e2e-tests.env` and fill in their credentials; committed to VCS
-- [ ] 5.4 Update `.PHONY` in `Makefile` to include `test-integration`
+- [ ] 5.3 Add `.e2e-tests.env.example` to the repo — contains the two required env vars (`TEST_DT_ENVIRONMENT` and `TEST_DT_ACCESS_TOKEN`) with placeholder values, committed to VCS as a reference for contributors
+- [ ] 5.4 Update `.PHONY` in `makefile` to include `test-integration`
 
 ## 6. Verification
 
