@@ -35,27 +35,34 @@ The sibling project dtctl uses a similar E2E pattern (build tags, env gating, cl
 
 **Rationale:** Build tags are the standard Go idiom. `go test ./...` never touches E2E files. Zero compile overhead. Matches dtctl's proven pattern.
 
-### 2. `TEST_*` env vars with `.env` file support
+### 2. `TEST_*` env vars with `.e2e-tests.env` file support
 
-**Choice:** `TEST_DT_ENVIRONMENT` and `TEST_DT_ACCESS_TOKEN` env vars, loadable from `.e2e-tests.env` via Makefile.
+**Choice:** `TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN` env vars, with two supported loading mechanisms (in precedence order):
+1. Shell environment variables / `make VAR=value` overrides (highest precedence — already present in the recipe subshell before any file is loaded)
+2. `.e2e-tests.env` file in the project root
+
+The Makefile recipe uses a shell-based loader — `[ -f .e2e-tests.env ] && export $(grep -v '^#' .e2e-tests.env | xargs) || true` — chained with `&&` to the credential checks that follow. **All steps in the recipe (file load + credential checks + `go test`) MUST be joined by `&&`/`;` in a single shell invocation.** If the file load lives in a separate `if/fi` block and the checks are independent lines, Make runs each block in its own subshell: the `export` from the file block is discarded when that subshell exits, and the checks always see unset variables. The file is plain `KEY=VALUE` shell syntax so developers can also `source .e2e-tests.env` directly.
+
+Missing credentials produce a clear, actionable error to stderr with copy-paste instructions — no silent skip.
 
 **Alternatives considered:**
 
-- *Reusing `DT_ENVIRONMENT`/`DT_ACCESS_TOKEN`* — risk of accidentally running tests against a production tenant configured in the user's shell.
-- *Config file (YAML/JSON)* — over-engineered for two values.
+- *`include .e2e-tests.env` (Make syntax)* — Make's `include` with `=` assignment overrides shell env vars unless `make -e` is used; `?=` preserves precedence but forces Make syntax into the file, breaking `source .e2e-tests.env` usage.
+- *Reusing `DT_ENVIRONMENT`/`DT_ACCESS_TOKEN`/`DT_PLATFORM_TOKEN`* — risk of accidentally running tests against a production tenant configured in the user's shell.
+- *Config file (YAML/JSON)* — overengineered for three values.
 
-**Rationale:** `TEST_` prefix makes intent explicit and prevents accidental production use. `.e2e-tests.env` file avoids repeated exports. Makefile loads it with `include .e2e-tests.env` guarded by `ifneq (,$(wildcard .e2e-tests.env))`. Missing credentials produce a clear error to stderr and exit non-zero — no silent skip.
+**Rationale:** The shell-based loader keeps `.e2e-tests.env` as plain shell syntax, precedence is correct by default (inherited env wins), and the pattern mirrors dtctl's proven `test-integration` target. All three vars are required: `TEST_DT_ACCESS_TOKEN` (`dt0c01.*`) for Classic API and installer operations; `TEST_DT_PLATFORM_TOKEN` (`dt0s16.*`) for DQL trace queries via `PlatformClient`. A single `TEST_DT_ENVIRONMENT` URL is sufficient — Classic and Platform URLs are both derived from it internally via `APIURL()` and `AppsURL()`.
 
 ### 3. `NewForTesting()` on `pkg/client/`
 
-**Choice:** Add a `NewForTesting(t *testing.T)` constructor that reads `TEST_DT_ENVIRONMENT` and `TEST_DT_ACCESS_TOKEN`, calls `t.Fatal` if missing, and returns a `*Client` with verbosity off.
+**Choice:** Add a `NewForTesting(t *testing.T)` constructor that reads `TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN`, calls `t.Fatal` if any is missing, and returns a `*Client` with verbosity off.
 
 **Alternatives considered:**
 
 - *Separate test client package* — duplicates resty setup, diverges over time.
 - *Calling `New()` directly in tests* — requires tests to replicate URL family logic (Classic vs Platform).
 
-**Rationale:** Keeps the real client as the single source of truth. `NewForTesting` handles URL family derivation internally (test env URL → Classic URL + Platform URL). The `testing.T` parameter makes the intent clear and ensures failures are reported through the test framework.
+**Rationale:** Keeps the real client as the single source of truth. `NewForTesting` handles URL family derivation internally (test env URL → Classic URL + Platform URL) and wires `TEST_DT_ACCESS_TOKEN` to `ClassicClient` and `TEST_DT_PLATFORM_TOKEN` to `PlatformClient`. The `testing.T` parameter makes the intent clear and ensures failures are reported through the test framework.
 
 ### 4. `t.TempDir()` for isolation (no CleanupTracker)
 
@@ -86,7 +93,7 @@ The sibling project dtctl uses a similar E2E pattern (build tags, env gating, cl
 
 ### 7. `make test-integration` fails on missing credentials
 
-**Choice:** Makefile target checks `TEST_DT_ENVIRONMENT` and `TEST_DT_ACCESS_TOKEN` before invoking `go test`. If either is missing, print an error to stderr and `exit 1`.
+**Choice:** Makefile target checks `TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN` before invoking `go test`. If any is missing, print an error to stderr and `exit 1`.
 
 **Alternatives considered:**
 

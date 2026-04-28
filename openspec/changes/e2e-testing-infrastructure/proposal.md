@@ -7,7 +7,7 @@ dtwiz unit tests mock all shell execution (`RunCommand`) and external dependenci
 - Add `test/e2e/` directory with `//go:build integration` build tag for compile-time separation from unit tests
 - Add `test/integration/` with shared setup (env gating, unique naming) and DQL trace polling helper
 - Add `test/fixtures/` with reusable test app scaffolds (starting with a minimal Flask app)
-- Add `NewForTesting()` constructor to `pkg/client/` that reads `TEST_DT_ENVIRONMENT` and `TEST_DT_ACCESS_TOKEN` env vars
+- Add `NewForTesting()` constructor to `pkg/client/` that reads `TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN` env vars
 - Add `make test-integration` Makefile target that loads `.e2e-tests.env` if present and runs integration tests; fails with a descriptive error to stderr if credentials are missing
 - Add `.e2e-tests.env` to `.gitignore`
 - Add `.e2e-tests.env.example` to VCS with `TEST_DT_ENVIRONMENT` and `TEST_DT_ACCESS_TOKEN` placeholder values
@@ -17,7 +17,7 @@ dtwiz unit tests mock all shell execution (`RunCommand`) and external dependenci
 
 ### New Capabilities
 
-- `e2e-test-infra`: Shared E2E test infrastructure — env var gating, unique test naming, `t.TempDir()` isolation, `.e2e-tests.env` loading via Makefile, `make test-integration` target, `NewForTesting()` client constructor, and DQL-based trace polling helper
+- `e2e-test-infra`: Shared E2E test infrastructure — env var gating (`TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, `TEST_DT_PLATFORM_TOKEN`), unique test naming, `t.TempDir()` isolation, `.e2e-tests.env` loading via Makefile, `make test-integration` target, `NewForTesting()` client constructor, and DQL-based trace polling helper
 
 ### Modified Capabilities
 
