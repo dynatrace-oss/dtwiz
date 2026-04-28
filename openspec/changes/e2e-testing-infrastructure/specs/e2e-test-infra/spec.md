@@ -43,6 +43,7 @@ The `make test-integration` target SHALL require `TEST_DT_ENVIRONMENT`, `TEST_DT
 ### Requirement: .e2e-tests.env file loading
 
 The `make test-integration` target SHALL support two credential loading mechanisms, in precedence order:
+
 1. Shell environment variables / `make VAR=value` overrides (highest — already inherited by the recipe subshell)
 2. `.e2e-tests.env` file in the project root, loaded via `[ -f .e2e-tests.env ] && export $(grep -v '^#' .e2e-tests.env | xargs) || true`
 
@@ -55,7 +56,7 @@ If any required variable is missing after loading, the target SHALL print a desc
 #### Scenario: .e2e-tests.env file present, no shell vars
 
 - **WHEN** a `.e2e-tests.env` file exists with all three vars and none are set in the shell
-- **THEN** the Makefile loads those values and runs the integration tests
+- **THEN** the makefile loads those values and runs the integration tests
 
 #### Scenario: Shell vars take precedence over file
 
@@ -65,7 +66,7 @@ If any required variable is missing after loading, the target SHALL print a desc
 #### Scenario: No .e2e-tests.env file, vars set in shell
 
 - **WHEN** no `.e2e-tests.env` file exists and all three vars are set in the shell
-- **THEN** the Makefile proceeds using shell env vars without error
+- **THEN** the makefile proceeds using shell env vars without error
 
 #### Scenario: Missing variable after loading
 

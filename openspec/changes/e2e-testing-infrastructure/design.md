@@ -38,10 +38,11 @@ The sibling project dtctl uses a similar E2E pattern (build tags, env gating, cl
 ### 2. `TEST_*` env vars with `.e2e-tests.env` file support
 
 **Choice:** `TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN` env vars, with two supported loading mechanisms (in precedence order):
+
 1. Shell environment variables / `make VAR=value` overrides (highest precedence — already present in the recipe subshell before any file is loaded)
 2. `.e2e-tests.env` file in the project root
 
-The Makefile recipe uses a shell-based loader — `[ -f .e2e-tests.env ] && export $(grep -v '^#' .e2e-tests.env | xargs) || true` — chained with `&&` to the credential checks that follow. **All steps in the recipe (file load + credential checks + `go test`) MUST be joined by `&&`/`;` in a single shell invocation.** If the file load lives in a separate `if/fi` block and the checks are independent lines, Make runs each block in its own subshell: the `export` from the file block is discarded when that subshell exits, and the checks always see unset variables. The file is plain `KEY=VALUE` shell syntax so developers can also `source .e2e-tests.env` directly.
+The makefile recipe uses a shell-based loader — `[ -f .e2e-tests.env ] && export $(grep -v '^#' .e2e-tests.env | xargs) || true` — chained with `&&` to the credential checks that follow. **All steps in the recipe (file load + credential checks + `go test`) MUST be joined by `&&`/`;` in a single shell invocation.** If the file load lives in a separate `if/fi` block and the checks are independent lines, Make runs each block in its own subshell: the `export` from the file block is discarded when that subshell exits, and the checks always see unset variables. The file is plain `KEY=VALUE` shell syntax so developers can also `source .e2e-tests.env` directly.
 
 Missing credentials produce a clear, actionable error to stderr with copy-paste instructions — no silent skip.
 
@@ -93,7 +94,7 @@ Missing credentials produce a clear, actionable error to stderr with copy-paste 
 
 ### 7. `make test-integration` fails on missing credentials
 
-**Choice:** Makefile target checks `TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN` before invoking `go test`. If any is missing, print an error to stderr and `exit 1`.
+**Choice:** makefile target checks `TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN` before invoking `go test`. If any is missing, print an error to stderr and `exit 1`.
 
 **Alternatives considered:**
 
