@@ -387,4 +387,3 @@ func TestIsSpringBootGradle_Kts(t *testing.T) {
 		t.Fatal("expected isSpringBootGradle to return true for .kts file")
 	}
 }
-
