@@ -12,8 +12,8 @@ import (
 // associated Dynatrace monitoring configuration.
 //
 // Parameters:
-//   - c:     Platform API client (used for Extensions API calls)
-//   - envURL: Dynatrace environment URL (used for monitoring config lookup)
+//   - c:      Platform API client (used for Extensions API calls)
+//   - envURL: Dynatrace environment URL (reserved for future use)
 //   - dryRun: when true, show what would be done without executing
 func UninstallAWS(c *client.PlatformClient, envURL string, dryRun bool) error {
 	if !isAWSCLIInstalled() {
@@ -34,7 +34,10 @@ func UninstallAWS(c *client.PlatformClient, envURL string, dryRun bool) error {
 	stackName := "dynatrace-data-acquisition"
 
 	fmt.Printf("  Looking up Dynatrace AWS monitoring configuration...\n")
-	monitoringConfigID := findExistingMonitoringConfig(c, accountID)
+	monitoringConfigID, err := findExistingMonitoringConfig(c, accountID)
+	if err != nil {
+		return fmt.Errorf("looking up monitoring configuration: %w", err)
+	}
 	if monitoringConfigID != "" {
 		fmt.Printf("  Found monitoring config: %s\n", monitoringConfigID)
 	} else {

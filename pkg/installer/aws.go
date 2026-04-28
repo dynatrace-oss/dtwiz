@@ -178,10 +178,10 @@ type awsMonitoringConfigValue struct {
 
 // findExistingMonitoringConfig returns the objectId of an existing da-aws
 // monitoring configuration for the given AWS account, or "" if none is found.
-func findExistingMonitoringConfig(c *client.PlatformClient, accountID string) string {
+func findExistingMonitoringConfig(c *client.PlatformClient, accountID string) (string, error) {
 	items, err := extensions.ListMonitoringConfigs(c, daAWSExtension)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("listing monitoring configs: %w", err)
 	}
 	for _, item := range items {
 		var v awsMonitoringConfigValue
@@ -190,11 +190,11 @@ func findExistingMonitoringConfig(c *client.PlatformClient, accountID string) st
 		}
 		for _, cred := range v.AWS.Credentials {
 			if cred.AccountID == accountID {
-				return item.ObjectID
+				return item.ObjectID, nil
 			}
 		}
 	}
-	return ""
+	return "", nil
 }
 
 // createDTMonitoringConfig creates a new da-aws monitoring configuration and
@@ -450,7 +450,10 @@ func InstallAWS(c *client.PlatformClient, envURL, token, platformToken string, d
 		return fmt.Errorf("installing extension %s: %w", daAWSExtension, err)
 	}
 
-	monitoringConfigID := findExistingMonitoringConfig(c, accountID)
+	monitoringConfigID, err := findExistingMonitoringConfig(c, accountID)
+	if err != nil {
+		return fmt.Errorf("looking up monitoring configuration: %w", err)
+	}
 	if monitoringConfigID != "" {
 		fmt.Printf("  Monitoring config: found existing %s\n", monitoringConfigID)
 	} else {
