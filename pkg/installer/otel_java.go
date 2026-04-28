@@ -33,16 +33,19 @@ func detectJavaProcesses() []DetectedProcess {
 	return processes
 }
 
-func javaAgentPath() string {
+func javaAgentPath() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return "~/.opentelemetry/java/opentelemetry-javaagent.jar"
+		return "", fmt.Errorf("resolving home directory for agent path: %w", err)
 	}
-	return filepath.Join(homeDir, ".opentelemetry", "java", "opentelemetry-javaagent.jar")
+	return filepath.Join(homeDir, ".opentelemetry", "java", "opentelemetry-javaagent.jar"), nil
 }
 
 func downloadJavaAgent() (string, error) {
-	destPath := javaAgentPath()
+	destPath, err := javaAgentPath()
+	if err != nil {
+		return "", err
+	}
 	logger.Debug("downloading java agent", "url", otelJavaAgentURL, "dest", destPath)
 	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
 		return "", fmt.Errorf("creating agent directory: %w", err)
@@ -146,7 +149,7 @@ func (p *JavaInstrumentationPlan) Runtime() string { return "Java" }
 // the user to select one. Returns nil if no project is selected.
 func DetectJavaPlan(envURL, token string) *JavaInstrumentationPlan {
 	if _, err := exec.LookPath("java"); err != nil {
-		logger.Debug("java not found on PATH", "skipping Java instrumentation")
+		logger.Debug("java not found on PATH, skipping Java instrumentation")
 		return nil
 	}
 
@@ -156,7 +159,7 @@ func DetectJavaPlan(envURL, token string) *JavaInstrumentationPlan {
 	matchProcessesToProjects(projects, processes)
 
 	if len(projects) == 0 {
-		logger.Debug("no Java projects detected", "skipping Java instrumentation")
+		logger.Debug("no Java projects detected, skipping Java instrumentation")
 		return nil
 	}
 
@@ -187,7 +190,10 @@ func DetectJavaPlan(envURL, token string) *JavaInstrumentationPlan {
 }
 
 func (p *JavaInstrumentationPlan) PrintPlanSteps() {
-	agentPath := javaAgentPath()
+	agentPath, err := javaAgentPath()
+	if err != nil {
+		agentPath = "opentelemetry-javaagent.jar"
+	}
 	fmt.Printf("     Project:    %s\n", p.Project.Path)
 	if p.EntrypointCommand != "" {
 		ep := JavaEntrypoint{Command: p.EntrypointCommand}
@@ -309,6 +315,10 @@ func InstallOtelJava(envURL, token, serviceName string, dryRun bool) error {
 	entrypoints := detectJavaEntrypoints(proj.Path)
 	logger.Debug("detected java entrypoints", "count", len(entrypoints), "project", proj.Path)
 	if len(entrypoints) == 0 {
+		if dryRun {
+			display.PrintStatusLine("dry-run", "no runnable entrypoint detected — build the project first", display.ColorMuted)
+			return nil
+		}
 		if err := attemptSingleModuleBuild(proj.Path); err != nil {
 			display.PrintStatusLine("error", "no runnable entrypoint detected — build the project first", display.ColorError)
 			return err
@@ -327,7 +337,10 @@ func InstallOtelJava(envURL, token, serviceName string, dryRun bool) error {
 		return nil
 	}
 
-	agentPath := javaAgentPath()
+	agentPath, err := javaAgentPath()
+	if err != nil {
+		return fmt.Errorf("resolving Java agent path: %w", err)
+	}
 	launchDisplay := displayInstrumentedCmd(*ep, agentPath)
 
 	fmt.Println()

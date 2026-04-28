@@ -30,8 +30,6 @@ func parseJavaVersion(output string) (int, error) {
 		return 0, fmt.Errorf("could not parse Java version from output: %q", output)
 	}
 	versionStr := m[1]
-	logger.Debug("java version parsed", "raw", output, "major", versionStr)
-
 	parts := strings.Split(versionStr, ".")
 	major, err := strconv.Atoi(parts[0])
 	if err != nil {
@@ -44,9 +42,11 @@ func parseJavaVersion(output string) (int, error) {
 		if err != nil {
 			return 0, fmt.Errorf("invalid Java version minor component %q: %w", parts[1], err)
 		}
+		logger.Debug("java version parsed", "raw", versionStr, "major", minor)
 		return minor, nil
 	}
 
+	logger.Debug("java version parsed", "raw", versionStr, "major", major)
 	return major, nil
 }
 
