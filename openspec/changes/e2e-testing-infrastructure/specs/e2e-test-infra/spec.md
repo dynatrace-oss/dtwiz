@@ -91,33 +91,33 @@ E2E tests SHALL use `t.TempDir()` for all fixture app directories. No test artif
 - **WHEN** an E2E test fails mid-execution
 - **THEN** the temp directory and its contents are automatically removed by `t.TempDir()`
 
-### Requirement: NewForTesting constructor
+### Requirement: Client construction via `New()`
 
-`pkg/client/` SHALL expose a `NewForTesting(t *testing.T) *Client` function that creates a fully configured `Client` by reading `TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN` environment variables. `TEST_DT_ACCESS_TOKEN` is wired to `ClassicClient` (Classic API and installer operations); `TEST_DT_PLATFORM_TOKEN` is wired to `PlatformClient` (DQL queries and Platform APIs). Both URLs are derived from the single `TEST_DT_ENVIRONMENT` value.
+`SetupIntegration` SHALL construct the client by calling `client.New()` directly with URLs derived from `TEST_DT_ENVIRONMENT` via the existing `APIURL()`/`AppsURL()` helpers, exercising the same HTTP client used in production. `TEST_DT_ACCESS_TOKEN` is wired to `ClassicClient` (Classic API and installer operations); `TEST_DT_PLATFORM_TOKEN` is wired to `PlatformClient` (DQL queries and Platform APIs).
 
 #### Scenario: Valid credentials
 
 - **WHEN** `TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN` are set
-- **THEN** `NewForTesting` returns a `*Client` with both `ClassicClient` and `PlatformClient` configured
+- **THEN** `SetupIntegration` returns a `TestEnv` with a `*Client` having both `ClassicClient` and `PlatformClient` configured
 
 #### Scenario: Missing environment variable
 
 - **WHEN** `TEST_DT_ENVIRONMENT` is not set
-- **THEN** `NewForTesting` calls `t.Fatal` with a message naming the missing variable
+- **THEN** `SetupIntegration` calls `t.Fatal` with a message naming the missing variable
 
 #### Scenario: Missing access token variable
 
 - **WHEN** `TEST_DT_ACCESS_TOKEN` is not set
-- **THEN** `NewForTesting` calls `t.Fatal` with a message naming the missing variable
+- **THEN** `SetupIntegration` calls `t.Fatal` with a message naming the missing variable
 
 #### Scenario: Missing platform token variable
 
 - **WHEN** `TEST_DT_PLATFORM_TOKEN` is not set
-- **THEN** `NewForTesting` calls `t.Fatal` with a message naming the missing variable
+- **THEN** `SetupIntegration` calls `t.Fatal` with a message naming the missing variable
 
 ### Requirement: URL family derivation
 
-`NewForTesting` SHALL derive both the Classic URL and Platform URL from the single `TEST_DT_ENVIRONMENT` value, using the existing URL family logic: `.apps.dynatrace.com` maps to `.live.dynatrace.com` for Classic, `.live.dynatrace.com` maps to `.apps.dynatrace.com` for Platform, `.apps.dynatracelabs.com` maps to `.dynatracelabs.com` for Classic, and `.dynatracelabs.com` maps to `.apps.dynatracelabs.com` for Platform.
+`SetupIntegration` SHALL derive both the Classic URL and Platform URL from the single `TEST_DT_ENVIRONMENT` value, using the existing URL family helpers (`APIURL()`/`AppsURL()`).
 
 #### Scenario: Classic URL input
 
@@ -128,15 +128,6 @@ E2E tests SHALL use `t.TempDir()` for all fixture app directories. No test artif
 
 - **WHEN** `TEST_DT_ENVIRONMENT` is `https://abc123.apps.dynatrace.com`
 - **THEN** Classic URL is `https://abc123.live.dynatrace.com` and Platform URL is `https://abc123.apps.dynatrace.com`
-
-### Requirement: No changes to existing client API
-
-`NewForTesting` SHALL be an additive function. The existing `New()` constructor and all existing types SHALL remain unchanged.
-
-#### Scenario: Existing code unaffected
-
-- **WHEN** `NewForTesting` is added to `pkg/client/`
-- **THEN** all existing unit tests for `pkg/client/` continue to pass without modification
 
 ### Requirement: DQL trace query
 

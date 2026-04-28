@@ -54,16 +54,16 @@ Missing credentials produce a clear, actionable error to stderr with copy-paste 
 
 **Rationale:** The shell-based loader keeps `.e2e-tests.env` as plain shell syntax, precedence is correct by default (inherited env wins), and the pattern mirrors dtctl's proven `test-integration` target. All three vars are required: `TEST_DT_ACCESS_TOKEN` (`dt0c01.*`) for Classic API and installer operations; `TEST_DT_PLATFORM_TOKEN` (`dt0s16.*`) for DQL trace queries via `PlatformClient`. A single `TEST_DT_ENVIRONMENT` URL is sufficient — Classic and Platform URLs are both derived from it internally via `APIURL()` and `AppsURL()`.
 
-### 3. `NewForTesting()` on `pkg/client/`
+### 3. Use `New()` directly in E2E tests
 
-**Choice:** Add a `NewForTesting(t *testing.T)` constructor that reads `TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN`, calls `t.Fatal` if any is missing, and returns a `*Client` with verbosity off.
+**Choice:** E2E tests call `pkg/client/client.New()` directly, reading `TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN` in `SetupIntegration` and deriving Classic + Platform URLs via the existing `APIURL()`/`AppsURL()` helpers.
 
 **Alternatives considered:**
 
+- *`NewForTesting(t *testing.T)` constructor in `client.go`* — imports `testing` in production code, which is a Go anti-pattern; adds a constructor that exists solely to wrap URL derivation logic already available via helpers.
 - *Separate test client package* — duplicates resty setup, diverges over time.
-- *Calling `New()` directly in tests* — requires tests to replicate URL family logic (Classic vs Platform).
 
-**Rationale:** Keeps the real client as the single source of truth. `NewForTesting` handles URL family derivation internally (test env URL → Classic URL + Platform URL) and wires `TEST_DT_ACCESS_TOKEN` to `ClassicClient` and `TEST_DT_PLATFORM_TOKEN` to `PlatformClient`. The `testing.T` parameter makes the intent clear and ensures failures are reported through the test framework.
+**Rationale:** Using `New()` directly keeps production code free of test-only dependencies and exercises the same HTTP client path used in production, making E2E tests more representative.
 
 ### 4. `t.TempDir()` for isolation (no CleanupTracker)
 
