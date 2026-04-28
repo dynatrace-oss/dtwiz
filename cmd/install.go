@@ -193,7 +193,11 @@ var installAWSCmd = &cobra.Command{
 		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
 			return err
 		}
-		if err := installer.InstallAWS(envURL, accessTok, platformTok, installDryRun, StartTime.UTC().Format("2006-01-02T15:04:05Z")); err != nil {
+		c, err := setupClient()
+		if err != nil {
+			return err
+		}
+		if err := installer.InstallAWS(c.Platform, envURL, accessTok, platformTok, installDryRun, StartTime.UTC().Format("2006-01-02T15:04:05Z")); err != nil {
 			return err
 		}
 		return nil

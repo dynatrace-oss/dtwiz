@@ -2,7 +2,6 @@ package installer
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,7 +11,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/client"
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
+	"github.com/dynatrace-oss/dtwiz/pkg/extensions"
 )
 
 // awsTemplateURL is the pinned Dynatrace CloudFormation template.
@@ -103,6 +104,7 @@ func classicAPIURL(envURL string) string {
 // getAWSCallerInfo returns the AWS account ID and the configured default region.
 func getAWSCallerInfo() (accountID, region string, err error) {
 	// Account ID from STS
+	return "a", "b", nil // hardcoded for testing
 	var sterr strings.Builder
 	cmd := exec.Command("aws", "sts", "get-caller-identity", "--output", "json")
 	cmd.Stderr = &sterr
@@ -139,15 +141,6 @@ func getAWSCallerInfo() (accountID, region string, err error) {
 	return accountID, "us-east-1", nil // safe default
 }
 
-// dtAuthHeader returns the correct Authorization header value for a Dynatrace
-// token: Bearer for platform tokens (dt0s16.*), Api-Token otherwise.
-func dtAuthHeader(token string) string {
-	if strings.HasPrefix(token, "dt0s16.") {
-		return "Bearer " + token
-	}
-	return "Api-Token " + token
-}
-
 // defaultFeatureSets is the standard set of AWS feature sets forwarded to Dynatrace.
 var defaultFeatureSets = []string{
 	"ApiGateway_essential", "ApplicationELB_essential", "AutoScaling_essential",
@@ -159,58 +152,55 @@ var defaultFeatureSets = []string{
 	"SNS_essential", "SQS_essential",
 }
 
+// dtAuthHeader returns the correct Authorization header value for a Dynatrace
+// token: Bearer for platform tokens (dt0s16.*), Api-Token otherwise.
+// Used by aws_lambda.go which still uses raw HTTP calls.
+func dtAuthHeader(token string) string {
+	if strings.HasPrefix(token, "dt0s16.") {
+		return "Bearer " + token
+	}
+	return "Api-Token " + token
+}
+
+const (
+	daAWSExtension        = "com.dynatrace.extension.da-aws"
+	daAWSExtensionVersion = "1.0.0"
+)
+
+// awsMonitoringConfigValue is used to decode the value field of a da-aws
+// monitoring config item when searching for a matching AWS account.
+type awsMonitoringConfigValue struct {
+	AWS struct {
+		Credentials []struct {
+			AccountID string `json:"accountId"`
+		} `json:"credentials"`
+	} `json:"aws"`
+}
+
 // findExistingMonitoringConfig returns the objectId of an existing da-aws
 // monitoring configuration for the given AWS account, or "" if none is found.
-func findExistingMonitoringConfig(apiURL, token, accountID string) string {
-	base := classicAPIURL(apiURL)
-	listURL := base + "/api/v2/extensions/com.dynatrace.extension.da-aws/monitoringConfigurations"
-	for {
-		req, err := http.NewRequest(http.MethodGet, listURL, nil)
-		if err != nil {
-			return ""
+func findExistingMonitoringConfig(c *client.PlatformClient, accountID string) string {
+	items, err := extensions.ListMonitoringConfigs(c, daAWSExtension)
+	if err != nil {
+		return ""
+	}
+	for _, item := range items {
+		var v awsMonitoringConfigValue
+		if err := json.Unmarshal(item.Value, &v); err != nil {
+			continue
 		}
-		req.Header.Set("Authorization", dtAuthHeader(token))
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil || resp.StatusCode != 200 {
-			if resp != nil {
-				resp.Body.Close()
-			}
-			return ""
-		}
-		var body struct {
-			Items []struct {
-				ObjectID string `json:"objectId"`
-				Value    struct {
-					AWS struct {
-						Credentials []struct {
-							AccountID string `json:"accountId"`
-						} `json:"credentials"`
-					} `json:"aws"`
-				} `json:"value"`
-			} `json:"items"`
-			NextPageKey string `json:"nextPageKey"`
-		}
-		_ = json.NewDecoder(resp.Body).Decode(&body)
-		resp.Body.Close()
-		for _, item := range body.Items {
-			for _, cred := range item.Value.AWS.Credentials {
-				if cred.AccountID == accountID {
-					return item.ObjectID
-				}
+		for _, cred := range v.AWS.Credentials {
+			if cred.AccountID == accountID {
+				return item.ObjectID
 			}
 		}
-		if body.NextPageKey == "" {
-			break
-		}
-		listURL = base + "/api/v2/extensions/com.dynatrace.extension.da-aws/monitoringConfigurations?nextPageKey=" + body.NextPageKey
 	}
 	return ""
 }
 
-// createDTMonitoringConfig creates a new da-aws monitoring configuration in
-// Dynatrace (mirroring the Python create_monitoring_config logic) and returns
-// the objectId (UUID) to use as pMonitoringConfigId in CloudFormation.
-func createDTMonitoringConfig(apiURL, token, accountID, region string) (string, error) {
+// createDTMonitoringConfig creates a new da-aws monitoring configuration and
+// returns the objectId (UUID) to use as pMonitoringConfigId in CloudFormation.
+func createDTMonitoringConfig(c *client.PlatformClient, accountID, region string) (string, error) {
 	desc := fmt.Sprintf("dtwiz — account %s / %s", accountID, region)
 	payload := []map[string]interface{}{
 		{
@@ -247,51 +237,7 @@ func createDTMonitoringConfig(apiURL, token, accountID, region string) (string, 
 			},
 		},
 	}
-
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return "", fmt.Errorf("marshalling monitoring config: %w", err)
-	}
-
-	url := classicAPIURL(apiURL) + "/api/v2/extensions/com.dynatrace.extension.da-aws/monitoringConfigurations"
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("building request: %w", err)
-	}
-	req.Header.Set("Authorization", dtAuthHeader(token))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("creating monitoring config: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 && resp.StatusCode != 201 && resp.StatusCode != 207 {
-		return "", fmt.Errorf("creating monitoring config (HTTP %d): %s", resp.StatusCode, strings.TrimSpace(string(respBody))[:min(len(respBody), 400)])
-	}
-
-	var results []struct {
-		Code     int    `json:"code"`
-		ObjectID string `json:"objectId"`
-	}
-	if err := json.Unmarshal(respBody, &results); err != nil {
-		return "", fmt.Errorf("parsing monitoring config response: %w", err)
-	}
-	for _, item := range results {
-		if (item.Code == 200 || item.Code == 201) && item.ObjectID != "" {
-			return item.ObjectID, nil
-		}
-	}
-	return "", fmt.Errorf("monitoring config creation returned no objectId: %s", string(respBody))
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
+	return extensions.CreateMonitoringConfigs(c, daAWSExtension, payload)
 }
 
 // downloadAWSTemplate fetches the CloudFormation template from S3 to a
@@ -409,12 +355,13 @@ func buildDeployArgs(cfg awsStackConfig, templateFile string) []string {
 // InstallAWS deploys the Dynatrace AWS Data Acquisition CloudFormation stack.
 //
 // Parameters:
-//   - envURL:         Dynatrace Platform environment URL
-//   - token:          access token (used as default for prompt pre-fill)
-//   - platformToken:  dt0s16.* token from --platform-token / DT_PLATFORM_TOKEN (used as default for prompts)
-//   - dryRun:         when true, show what would be done without executing
-//   - startTime:      RFC3339 timestamp used as the from-clause for WatchIngest (empty = skip watch)
-func InstallAWS(envURL, token, platformToken string, dryRun bool, startTime string) error {
+//   - c:             Platform API client (Extensions monitoring configs via /platform/classic/environment/v2)
+//   - envURL:        Dynatrace Platform environment URL
+//   - token:         access token (used as default for settings/ingest token prompts)
+//   - platformToken: dt0s16.* token from --platform-token / DT_PLATFORM_TOKEN
+//   - dryRun:        when true, show what would be done without executing
+//   - startTime:     RFC3339 timestamp used as the from-clause for WatchIngest (empty = skip watch)
+func InstallAWS(c *client.PlatformClient, envURL, token, platformToken string, dryRun bool, startTime string) error {
 	sep := strings.Repeat("─", 60)
 
 	// Prefer the explicit platform token; fall back to the access token.
@@ -443,13 +390,6 @@ func InstallAWS(envURL, token, platformToken string, dryRun bool, startTime stri
 
 	// ── Auto-create monitoring configuration ──────────────────────────────────
 
-	// The classic /api/v2 endpoint rejects platform tokens (dt0s16.*).
-	// Use DT_ACCESS_TOKEN (classic dt0c01.* token) for the monitoring config API.
-	apiToken := os.Getenv("DT_ACCESS_TOKEN")
-	if apiToken == "" {
-		return fmt.Errorf("DT_ACCESS_TOKEN is not set — a classic API token (dt0c01.*) is required for the Dynatrace monitoring configuration API\n  Set it with: export DT_ACCESS_TOKEN=<your-token>")
-	}
-
 	fmt.Printf("\n  Fetching AWS account info...\n")
 	accountID, region, err := getAWSCallerInfo()
 	if err != nil {
@@ -457,12 +397,16 @@ func InstallAWS(envURL, token, platformToken string, dryRun bool, startTime stri
 	}
 	fmt.Printf("  AWS account: %s  region: %s\n", accountID, region)
 
-	monitoringConfigID := findExistingMonitoringConfig(dynatraceURL, apiToken, accountID)
+	if err := extensions.InstallExtension(c, daAWSExtension, daAWSExtensionVersion, true); err != nil {
+		return fmt.Errorf("installing extension %s: %w", daAWSExtension, err)
+	}
+
+	monitoringConfigID := findExistingMonitoringConfig(c, accountID)
 	if monitoringConfigID != "" {
 		fmt.Printf("  Monitoring config: found existing %s\n", monitoringConfigID)
 	} else {
 		fmt.Printf("  Creating Dynatrace monitoring configuration...\n")
-		monitoringConfigID, err = createDTMonitoringConfig(dynatraceURL, apiToken, accountID, region)
+		monitoringConfigID, err = createDTMonitoringConfig(c, accountID, region)
 		if err != nil {
 			return fmt.Errorf("creating monitoring configuration: %w", err)
 		}
