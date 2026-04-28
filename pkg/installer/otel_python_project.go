@@ -26,6 +26,43 @@ func detectPythonProcesses() []DetectedProcess {
 	return detectProcesses("python", []string{"pip ", "setup.py", "/bin/dtwiz"})
 }
 
+// detectProjectPythonProcesses returns Python processes whose working directory
+// or command line matches a scanned Python project path. Detection is based on
+// path correlation against generic project markers (pyproject.toml, requirements.txt,
+// etc.); it does not verify that a process is actually instrumented with OpenTelemetry.
+// Returns nil only when the underlying process scan fails; returns an empty (non-nil)
+// slice when the scan succeeds but no processes match any project directory.
+func detectProjectPythonProcesses() []DetectedProcess {
+	projects, candidates := runInParallel(detectPythonProjects, detectPythonProcesses)
+	if candidates == nil {
+		return nil // process scan failed; caller treats nil as error
+	}
+	matchProcessesToProjects(projects, candidates)
+	return filterMatchedProcesses(projects, candidates)
+}
+
+// filterMatchedProcesses returns the subset of candidates whose PID appears in
+// any project's RunningProcessIDs, deduplicating across projects. Always returns
+// a non-nil slice so callers can distinguish "zero matches" from a scan error.
+func filterMatchedProcesses(projects []ScannedProject, candidates []DetectedProcess) []DetectedProcess {
+	seen := make(map[int]bool)
+	matched := make([]DetectedProcess, 0)
+	for _, proj := range projects {
+		for _, pid := range proj.RunningProcessIDs {
+			if !seen[pid] {
+				seen[pid] = true
+				for _, p := range candidates {
+					if p.PID == pid {
+						matched = append(matched, p)
+						break
+					}
+				}
+			}
+		}
+	}
+	return matched
+}
+
 var commonEntrypoints = []string{
 	"main.py",
 	"app.py",

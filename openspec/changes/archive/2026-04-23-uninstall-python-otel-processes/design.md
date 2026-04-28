@@ -10,7 +10,7 @@ The process detection infrastructure in `otel_runtime_scan.go` provides `detectP
 
 ### Goals
 
-- Detect and stop running Python processes instrumented by dtwiz as part of `dtwiz uninstall otel`.
+- Detect and stop running Python processes associated with known project directories as part of `dtwiz uninstall otel`.
 - Reuse existing detection and process-stop infrastructure with no new platform-specific code.
 - Introduce a `RuntimeCleaner` interface so future runtimes register a single implementation with no changes to the uninstall flow.
 
@@ -21,9 +21,11 @@ The process detection infrastructure in `otel_runtime_scan.go` provides `detectP
 
 ## Decisions
 
-### Filter on `"python"`, not `"opentelemetry-instrument"`
+### Filter on `"python"`, then confirm with project directory cross-reference
 
-`opentelemetry-instrument` calls `os.execl` on Unix, replacing its own process image with the Python interpreter. On Windows it spawns a Python child and exits. In both cases the surviving process appears as a plain `python` command in `ps` — filtering on `"opentelemetry-instrument"` returns nothing. The install-time code already solved this with the `"python"` filter and the same exclude list; uninstall reuses that exact call.
+`opentelemetry-instrument` calls `os.execl` on Unix, replacing its own process image with the Python interpreter. On Windows it spawns a Python child and exits. In both cases the surviving process appears as a plain `python` command in `ps` — filtering on `"opentelemetry-instrument"` returns nothing. The broad `"python"` filter is the correct first pass.
+
+However, the broad filter alone produces false positives: every Python process on the system is listed, not just project-associated ones. A second pass cross-references each candidate's working directory against Python project directories discovered on disk (`scanProjectDirs` scans from CWD and a limited number of ancestor directories — not a full-machine scan — looking for markers `pyproject.toml`, `setup.py`, `setup.cfg`, `requirements.txt`, `Pipfile`, `poetry.lock`, `manage.py`). A process is included only if its working directory starts with a known project path, or its command line contains the project path. This is the same `matchProcessesToProjects` mechanism used at install time, so the two flows stay consistent. Note: this does not verify that a matched process is actually instrumented with OpenTelemetry; an uninstrumented process running from within a project directory will also match.
 
 ### `RuntimeCleaner` interface over per-runtime code blocks
 
@@ -37,7 +39,8 @@ The collector is the telemetry sink; instrumented apps lose their export target 
 
 ## Risks / Trade-offs
 
-- **False positives**: Any `python` process not started by dtwiz will appear in the preview. Mitigation: the preview shows the full command so the user can cancel if something looks unexpected.
+- **False positives reduced but not eliminated**: The project directory cross-reference eliminates unrelated Python processes, but a process running from inside a Python project directory that is not dtwiz-instrumented would still appear. This is an acceptable edge case.
+- **Misses out-of-tree processes**: A process launched from outside the scanned project directories (e.g. an absolute path launch from a different CWD) will not be detected. Acceptable given dtwiz always starts instrumented apps from within the project directory.
 
 ## Migration Plan
 
