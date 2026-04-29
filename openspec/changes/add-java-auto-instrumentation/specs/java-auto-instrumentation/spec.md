@@ -43,28 +43,28 @@ The installer SHALL detect runnable entrypoints for the selected Java project wi
 
 #### Scenario: Build-tool wrapper available — Spring Boot Maven project
 
-- **GIVEN** the project has a `mvnw` or `mvn` wrapper but no built JAR artifact
+- **GIVEN** the project has a `mvnw` (Unix) or `mvnw.cmd` (Windows) wrapper but no built JAR artifact
 - **AND** `pom.xml` contains a reference to `spring-boot`
 - **WHEN** the installer scans for entrypoints
-- **THEN** it SHALL offer `./mvnw spring-boot:run` as a candidate
+- **THEN** it SHALL offer `./mvnw spring-boot:run` (Unix) or `mvnw.cmd spring-boot:run` (Windows) as a candidate
 
 #### Scenario: Build-tool wrapper available — Spring Boot Gradle project
 
-- **GIVEN** the project has a `gradlew` or `gradle` wrapper but no built JAR artifact
+- **GIVEN** the project has a `gradlew` (Unix) or `gradlew.bat` (Windows) wrapper but no built JAR artifact
 - **AND** `build.gradle` or `build.gradle.kts` references `springframework.boot` or `spring-boot`
 - **WHEN** the installer scans for entrypoints
-- **THEN** it SHALL offer `./gradlew bootRun` as a candidate
+- **THEN** it SHALL offer `./gradlew bootRun` (Unix) or `gradlew.bat bootRun` (Windows) as a candidate
 
 #### Scenario: Build-tool wrapper available — non-Spring Boot Gradle project
 
-- **GIVEN** the project has a `gradlew` or `gradle` wrapper but no built JAR artifact
+- **GIVEN** the project has a `gradlew` (Unix) or `gradlew.bat` (Windows) wrapper but no built JAR artifact
 - **AND** the Gradle build file does not reference Spring Boot
 - **WHEN** the installer scans for entrypoints
-- **THEN** it SHALL offer `./gradlew run` as a candidate
+- **THEN** it SHALL offer `./gradlew run` (Unix) or `gradlew.bat run` (Windows) as a candidate
 
 #### Scenario: Build-tool wrapper available — non-Spring Boot Maven project
 
-- **GIVEN** the project has a `mvnw` or `mvn` wrapper but no built JAR artifact
+- **GIVEN** the project has a `mvnw` (Unix) or `mvnw.cmd` (Windows) wrapper but no built JAR artifact
 - **AND** `pom.xml` does not reference Spring Boot
 - **WHEN** the installer scans for entrypoints
 - **THEN** NO wrapper candidate SHALL be offered (generic `exec:java` requires `mainClass` POM config absent in most projects)
@@ -87,8 +87,10 @@ The installer SHALL detect runnable entrypoints for the selected Java project wi
 #### Scenario: No entrypoint found — auto-build attempted
 
 - **WHEN** no built JAR with a `Main-Class` and no build-tool wrapper is found in the project
-- **AND** a Maven or Gradle wrapper (`mvnw`, `mvn`, `gradlew`, `gradle`) is present
-- **THEN** the installer SHALL attempt an auto-build (`./mvnw clean package -DskipTests` or `./gradlew build -x test`)
+- **AND** a Maven or Gradle wrapper (`mvnw` / `mvnw.cmd`, `gradlew` / `gradlew.bat`) is present
+- **THEN** the installer SHALL attempt an auto-build:
+  - Unix: `./mvnw clean package -DskipTests` or `./gradlew build -x test`
+  - Windows: `cmd /c mvnw.cmd clean package -DskipTests` or `cmd /c gradlew.bat build -x test`
 - **AND** SHALL print the build command before running it
 - **AND** if the build succeeds SHALL re-scan for entrypoints and continue normally
   - **AND** if the build fails SHALL output `Auto-build failed: <error>` via `display.PrintStatusLine("error", "Auto-build failed: <error>", display.ColorError)` and direct the user to fix the build error and re-run

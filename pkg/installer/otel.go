@@ -173,6 +173,8 @@ func createRuntimePlan(proj detectedProject, apiURL, token, envURL, platformToke
 		return &JavaInstrumentationPlan{
 			Project: proj.ScannedProject,
 			EnvVars: envVars,
+			EnvURL:  envURL,
+			Token:   token,
 		}
 	case "Node.js":
 		plan := buildNodeInstrumentationPlan(proj.ScannedProject, apiURL, token)
@@ -211,11 +213,6 @@ func InstallOtelCollectorWithProject(envURL, token, ingestToken, platformToken, 
 	cp, err := prepareCollectorPlan(envURL, token, ingestToken)
 	if err != nil {
 		return err
-	}
-
-	if dryRun {
-		cp.printDryRun(ingestToken)
-		return nil
 	}
 
 	runtimes := detectAvailableRuntimes()
@@ -269,6 +266,12 @@ func InstallOtelCollectorWithProject(envURL, token, ingestToken, platformToken, 
 	}
 
 	fmt.Println()
+
+	if dryRun {
+		display.PrintStatusLine("dry-run", "no changes made", display.ColorMuted)
+		return nil
+	}
+
 	ok, err := confirmProceed("  Proceed with installation?")
 	if err != nil {
 		return fmt.Errorf("reading confirmation: %w", err)

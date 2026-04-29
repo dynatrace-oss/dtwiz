@@ -22,10 +22,18 @@ type ManagedProcess struct {
 	LogName         string
 	Entrypoint      string // script/entrypoint that was launched, used for process re-discovery on Windows
 	IsExeclLauncher bool   // true when the process is expected to exec-spawn a child and exit (Python on Windows)
+	portDetector    func(pid int) string
 	exitResultCh    chan error
 	hasExited       bool
 	cachedWaitErr   error
 	resultConsumed  bool
+}
+
+func (p *ManagedProcess) detectPort() string {
+	if p.portDetector != nil {
+		return p.portDetector(p.PID)
+	}
+	return detectProcessListeningPort(p.PID)
 }
 
 func StartManagedProcess(name, logName, entrypoint string, cmd *exec.Cmd, logFile *os.File) (*ManagedProcess, error) {
@@ -101,7 +109,7 @@ func (p *ManagedProcess) printLine(listeningPort string) {
 // PrintSummaryLine performs a one-shot port detection. Prefer PrintProcessSummary
 // for multiple processes — it polls in parallel with a retry window.
 func (p *ManagedProcess) PrintSummaryLine() {
-	p.printLine(detectProcessListeningPort(p.PID))
+	p.printLine(p.detectPort())
 }
 
 func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) (aliveNames []string, alivePIDs []int) {
@@ -166,7 +174,7 @@ func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) 
 				wg.Add(1)
 				go func(idx int, proc *ManagedProcess) {
 					defer wg.Done()
-					port := detectProcessListeningPort(proc.PID)
+					port := proc.detectPort()
 					logger.Debug("port probe", "iteration", iteration, "pid", proc.PID, "name", proc.Name, "port", port)
 					if port != "" {
 						mu.Lock()

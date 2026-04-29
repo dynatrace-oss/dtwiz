@@ -1,12 +1,71 @@
 package installer
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// ── test helpers ──────────────────────────────────────────────────────────────
+
+func skipIfNoJava(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("java"); err != nil {
+		t.Skip("java not installed on PATH")
+	}
+}
+
+// redirectAgentDownloadURL points otelJavaAgentURL at srv for the duration of
+// the test and sets HOME to a fresh temp dir so javaAgentPath() is isolated.
+func redirectAgentDownloadURL(t *testing.T, srv *httptest.Server) {
+	t.Helper()
+	orig := otelJavaAgentURL
+	otelJavaAgentURL = srv.URL + "/opentelemetry-javaagent.jar"
+	t.Cleanup(func() { otelJavaAgentURL = orig })
+	t.Setenv("HOME", t.TempDir())
+}
+
+// makeMavenProjectWithFatJar creates a temp Maven project containing a single
+// executable JAR in target/, sets the working directory, and feeds "1\n" to
+// stdin for project selection. Single-entrypoint projects are auto-selected, so
+// no additional stdin input is needed.
+func makeMavenProjectWithFatJar(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte("<project/>"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	targetDir := filepath.Join(dir, "target")
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	makeTestJar(t, targetDir, "app.jar", "Manifest-Version: 1.0\nMain-Class: com.example.App\n")
+	setTestWorkingDir(t, dir)
+	setTestStdin(t, "1\n")
+}
+
+// isolatePathToJava restricts PATH to a temp dir containing only a java
+// symlink. This ensures mvn/gradle are not found while java validation still
+// passes, so tests that expect "no build tool" errors are not short-circuited
+// by a system-installed Maven or Gradle.
+func isolatePathToJava(t *testing.T) {
+	t.Helper()
+	javaPath, err := exec.LookPath("java")
+	if err != nil {
+		t.Skip("java not installed on PATH")
+	}
+	binDir := t.TempDir()
+	if err := os.Symlink(javaPath, filepath.Join(binDir, "java")); err != nil {
+		t.Fatalf("symlinking java: %v", err)
+	}
+	t.Setenv("PATH", binDir)
+}
+
+// ── detectJavaProjects tests ──────────────────────────────────────────────────
 
 func TestDetectJavaProjects_Maven(t *testing.T) {
 	dir := t.TempDir()
@@ -73,21 +132,13 @@ func TestDetectJavaProjects_None(t *testing.T) {
 	setTestWorkingDir(t, dir)
 	projects := detectJavaProjects()
 	for _, p := range projects {
-		// The temp dir itself should not appear (no markers).
 		if p.Path == dir || p.Path == realDir {
 			t.Errorf("unexpected project at %s with no Java markers", dir)
 		}
 	}
 }
 
-func TestDetectJava_NotFound(t *testing.T) {
-	t.Setenv("PATH", "")
-
-	_, err := detectJava()
-	if err == nil {
-		t.Fatal("expected error when java is not on PATH")
-	}
-}
+// ── DetectJavaPlan tests ──────────────────────────────────────────────────────
 
 func TestDetectJavaPlan_NoJavaOnPath(t *testing.T) {
 	t.Setenv("PATH", "")
@@ -99,15 +150,12 @@ func TestDetectJavaPlan_NoJavaOnPath(t *testing.T) {
 }
 
 func TestDetectJavaPlan_FindsProject(t *testing.T) {
-	if _, err := exec.LookPath("java"); err != nil {
-		t.Skip("java not installed on PATH")
-	}
+	skipIfNoJava(t)
 
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte("<project/>"), 0644); err != nil {
 		t.Fatal(err)
 	}
-
 	setTestWorkingDir(t, dir)
 	setTestStdin(t, "1\n")
 
@@ -118,7 +166,31 @@ func TestDetectJavaPlan_FindsProject(t *testing.T) {
 	if plan.Project.Path == "" {
 		t.Fatal("expected selected project path to be set")
 	}
+	if plan.EnvURL == "" {
+		t.Fatal("expected EnvURL to be set in plan")
+	}
+	if plan.Token == "" {
+		t.Fatal("expected Token to be set in plan")
+	}
 }
+
+func TestDetectJavaPlan_FindsProjectWithEntrypoint(t *testing.T) {
+	skipIfNoJava(t)
+	makeMavenProjectWithFatJar(t)
+
+	plan := DetectJavaPlan("https://tenant.live.dynatrace.com", "token")
+	if plan == nil {
+		t.Fatal("expected Java plan")
+	}
+	if plan.EntrypointCommand == "" {
+		t.Fatal("expected EntrypointCommand to be set when fat JAR is present")
+	}
+	if !strings.Contains(plan.EntrypointCommand, "app.jar") {
+		t.Fatalf("expected EntrypointCommand to reference the JAR, got %q", plan.EntrypointCommand)
+	}
+}
+
+// ── JavaInstrumentationPlan tests ─────────────────────────────────────────────
 
 func TestJavaInstrumentationPlan_Runtime(t *testing.T) {
 	plan := &JavaInstrumentationPlan{}
@@ -142,19 +214,236 @@ func TestJavaInstrumentationPlan_PrintPlanSteps(t *testing.T) {
 	}
 }
 
-func TestJavaInstrumentationPlan_Execute(t *testing.T) {
+func TestJavaInstrumentationPlan_PrintPlanSteps_Updated(t *testing.T) {
 	plan := &JavaInstrumentationPlan{
-		EnvVars: map[string]string{"OTEL_SERVICE_NAME": "orders-api"},
+		Project:           ScannedProject{Path: "/tmp/service"},
+		EntrypointCommand: "java -jar /tmp/app.jar",
+		EnvVars: map[string]string{
+			"OTEL_SERVICE_NAME": "my-svc",
+		},
 	}
 
 	output := captureStdout(t, func() {
-		plan.Execute()
+		plan.PrintPlanSteps()
 	})
 
-	checks := []string{"Download the OpenTelemetry Java agent:", otelJavaAgentURL, "export OTEL_SERVICE_NAME=\"orders-api\"", "java -javaagent:opentelemetry-javaagent.jar -jar your_app.jar"}
+	checks := []string{"-javaagent:", otelJavaAgentURL, "OTEL_SERVICE_NAME"}
 	for _, check := range checks {
 		if !strings.Contains(output, check) {
 			t.Fatalf("expected output to contain %q, got:\n%s", check, output)
 		}
 	}
+}
+
+// TestJavaInstrumentationPlan_Execute verifies that Execute() on an empty plan does
+// not panic even though the download will fail (no server reachable).
+func TestJavaInstrumentationPlan_Execute(t *testing.T) {
+	skipIfNoJava(t)
+
+	origURL := otelJavaAgentURL
+	otelJavaAgentURL = "http://127.0.0.1:0/no-such-agent.jar"
+	t.Cleanup(func() { otelJavaAgentURL = origURL })
+
+	plan := &JavaInstrumentationPlan{
+		Project: ScannedProject{Path: t.TempDir()},
+		EnvVars: map[string]string{"OTEL_SERVICE_NAME": "orders-api"},
+	}
+
+	captureStdout(t, func() {
+		plan.Execute()
+	})
+}
+
+// ── Download tests ────────────────────────────────────────────────────────────
+
+func TestDownloadJavaAgent_CreatesDirectory(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("fake-jar-content"))
+	}))
+	defer srv.Close()
+	redirectAgentDownloadURL(t, srv)
+
+	captureStdout(t, func() {
+		path, err := downloadJavaAgent()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if _, statErr := os.Stat(path); statErr != nil {
+			t.Fatalf("expected agent file at %s: %v", path, statErr)
+		}
+		if _, statErr := os.Stat(filepath.Dir(path)); statErr != nil {
+			t.Fatalf("expected directory to exist: %v", statErr)
+		}
+	})
+}
+
+func TestDownloadJavaAgent_ErrorOnNon200(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	redirectAgentDownloadURL(t, srv)
+
+	_, err := downloadJavaAgent()
+	if err == nil {
+		t.Fatal("expected error for non-200 response")
+	}
+	if !strings.Contains(err.Error(), srv.URL) {
+		t.Errorf("expected error to contain URL %q, got: %v", srv.URL, err)
+	}
+	if !strings.Contains(err.Error(), "404") {
+		t.Errorf("expected error to contain status code, got: %v", err)
+	}
+}
+
+func TestDownloadJavaAgent_NetworkError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		conn, _, _ := hj.Hijack()
+		conn.Close()
+	}))
+	defer srv.Close()
+	redirectAgentDownloadURL(t, srv)
+
+	_, err := downloadJavaAgent()
+	if err == nil {
+		t.Fatal("expected error for connection closed by server")
+	}
+}
+
+// ── displayInstrumentedCmd tests ──────────────────────────────────────────────
+
+func TestDisplayInstrumentedCmd_JavaPrefix(t *testing.T) {
+	ep := JavaEntrypoint{Command: "java -jar /tmp/app.jar"}
+	got := displayInstrumentedCmd(ep, "/home/.opentelemetry/java/opentelemetry-javaagent.jar")
+	want := "java -javaagent:/home/.opentelemetry/java/opentelemetry-javaagent.jar -jar /tmp/app.jar"
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestDisplayInstrumentedCmd_WrapperCmd(t *testing.T) {
+	ep := JavaEntrypoint{Command: "./mvnw spring-boot:run"}
+	got := displayInstrumentedCmd(ep, "/agent.jar")
+	want := `JAVA_TOOL_OPTIONS="-javaagent:/agent.jar" ./mvnw spring-boot:run`
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+// ── buildInstrumentedCmd tests ────────────────────────────────────────────────
+
+func TestBuildInstrumentedCmd_JavaPrefix(t *testing.T) {
+	ep := JavaEntrypoint{Command: "java -jar /tmp/app.jar"}
+	cmd := buildInstrumentedCmd(ep, "/agent.jar", "/project", nil)
+	if cmd.Args[0] != "java" {
+		t.Fatalf("expected binary java, got %q", cmd.Args[0])
+	}
+	if cmd.Args[1] != "-javaagent:/agent.jar" {
+		t.Fatalf("expected -javaagent flag as first arg, got %q", cmd.Args[1])
+	}
+	if cmd.Dir != "/project" {
+		t.Fatalf("expected Dir=/project, got %q", cmd.Dir)
+	}
+}
+
+func TestBuildInstrumentedCmd_WrapperCmd(t *testing.T) {
+	ep := JavaEntrypoint{Command: "./gradlew bootRun"}
+	cmd := buildInstrumentedCmd(ep, "/agent.jar", "/project", map[string]string{"OTEL_SERVICE_NAME": "svc"})
+	if cmd.Args[0] != "./gradlew" {
+		t.Fatalf("expected binary ./gradlew, got %q", cmd.Args[0])
+	}
+	found := false
+	for _, e := range cmd.Env {
+		if strings.HasPrefix(e, "JAVA_TOOL_OPTIONS=") && strings.Contains(e, "/agent.jar") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected JAVA_TOOL_OPTIONS with agent path in env, got %v", cmd.Env)
+	}
+}
+
+// ── InstallOtelJava tests ─────────────────────────────────────────────────────
+
+func TestInstallOtelJava_JavaNotFound(t *testing.T) {
+	t.Setenv("PATH", "")
+	err := InstallOtelJava("https://tenant.live.dynatrace.com", "token", "svc", false)
+	if err == nil {
+		t.Fatal("expected error when java is not on PATH")
+	}
+}
+
+func TestInstallOtelJava_DryRun(t *testing.T) {
+	skipIfNoJava(t)
+	makeMavenProjectWithFatJar(t)
+
+	output := captureStdout(t, func() {
+		err := InstallOtelJava("https://tenant.live.dynatrace.com", "tok", "test-svc", true)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	checks := []string{
+		"tenant.live.dynatrace.com",
+		"test-svc",
+		otelJavaAgentURL,
+		"OTEL_SERVICE_NAME",
+		"-javaagent:",
+	}
+	for _, check := range checks {
+		if !strings.Contains(output, check) {
+			t.Errorf("expected dry-run output to contain %q, got:\n%s", check, output)
+		}
+	}
+}
+
+func TestInstallOtelJava_NoBuildArtifact_NoRunningProcess(t *testing.T) {
+	skipIfNoJava(t)
+	isolatePathToJava(t) // exclude system mvn/gradle so no fallback entrypoint is found
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte("<project/>"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	setTestWorkingDir(t, dir)
+	setTestStdin(t, "1\n")
+
+	captureStdout(t, func() {
+		err := InstallOtelJava("https://tenant.live.dynatrace.com", "tok", "", false)
+		if err == nil {
+			t.Fatal("expected error when no build tool is present, got nil")
+		}
+	})
+}
+
+func TestInstallOtelJava_AutoBuildFails(t *testing.T) {
+	skipIfNoJava(t)
+	// mvnw exists but lacks maven-wrapper.jar, and system mvn is excluded from
+	// PATH, so resolveMavenCmd returns "" → detectJavaEntrypoints finds nothing
+	// → attemptSingleModuleBuild reports no build tool available.
+	isolatePathToJava(t)
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "mvnw"), []byte("#!/bin/sh\nexit 1\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte("<project/>"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	setTestWorkingDir(t, dir)
+	setTestStdin(t, "1\n")
+
+	captureStdout(t, func() {
+		err := InstallOtelJava("https://tenant.live.dynatrace.com", "tok", "", false)
+		if err == nil {
+			t.Fatal("expected error when auto-build fails, got nil")
+		}
+	})
 }
