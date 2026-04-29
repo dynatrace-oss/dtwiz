@@ -39,6 +39,7 @@ config.yaml
 
 # Local secrets notepad (never commit)
 .env
+.e2e.env
 
 # Build artifacts
 *.log

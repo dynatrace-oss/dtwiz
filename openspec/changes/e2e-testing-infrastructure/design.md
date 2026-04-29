@@ -35,24 +35,24 @@ The sibling project dtctl uses a similar E2E pattern (build tags, env gating, cl
 
 **Rationale:** Build tags are the standard Go idiom. `go test ./...` never touches E2E files. Zero compile overhead. Matches dtctl's proven pattern.
 
-### 2. `TEST_*` env vars with `.e2e-tests.env` file support
+### 2. `TEST_*` env vars with `.e2e.env` file support
 
 **Choice:** `TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN` env vars, with two supported loading mechanisms (in precedence order):
 
 1. Shell environment variables / `make VAR=value` overrides (highest precedence — already present in the recipe subshell before any file is loaded)
-2. `.e2e-tests.env` file in the project root
+2. `.e2e.env` file in the project root
 
-The makefile recipe uses a shell-based loader — `[ -f .e2e-tests.env ] && export $(grep -v '^#' .e2e-tests.env | xargs) || true` — chained with `&&` to the credential checks that follow. **All steps in the recipe (file load + credential checks + `go test`) MUST be joined by `&&`/`;` in a single shell invocation.** If the file load lives in a separate `if/fi` block and the checks are independent lines, Make runs each block in its own subshell: the `export` from the file block is discarded when that subshell exits, and the checks always see unset variables. The file is plain `KEY=VALUE` shell syntax so developers can also `source .e2e-tests.env` directly.
+The makefile recipe uses a shell-based loader — `[ -f .e2e.env ] && export $(grep -v '^#' .e2e.env | xargs) || true` — chained with `&&` to the credential checks that follow. **All steps in the recipe (file load + credential checks + `go test`) MUST be joined by `&&`/`;` in a single shell invocation.** If the file load lives in a separate `if/fi` block and the checks are independent lines, Make runs each block in its own subshell: the `export` from the file block is discarded when that subshell exits, and the checks always see unset variables. The file is plain `KEY=VALUE` shell syntax so developers can also `source .e2e.env` directly.
 
 Missing credentials produce a clear, actionable error to stderr with copy-paste instructions — no silent skip.
 
 **Alternatives considered:**
 
-- *`include .e2e-tests.env` (Make syntax)* — Make's `include` with `=` assignment overrides shell env vars unless `make -e` is used; `?=` preserves precedence but forces Make syntax into the file, breaking `source .e2e-tests.env` usage.
+- *`include .e2e.env` (Make syntax)* — Make's `include` with `=` assignment overrides shell env vars unless `make -e` is used; `?=` preserves precedence but forces Make syntax into the file, breaking `source .e2e.env` usage.
 - *Reusing `DT_ENVIRONMENT`/`DT_ACCESS_TOKEN`/`DT_PLATFORM_TOKEN`* — risk of accidentally running tests against a production tenant configured in the user's shell.
 - *Config file (YAML/JSON)* — overengineered for three values.
 
-**Rationale:** The shell-based loader keeps `.e2e-tests.env` as plain shell syntax, precedence is correct by default (inherited env wins), and the pattern mirrors dtctl's proven `test-integration` target. All three vars are required: `TEST_DT_ACCESS_TOKEN` (`dt0c01.*`) for Classic API and installer operations; `TEST_DT_PLATFORM_TOKEN` (`dt0s16.*`) for DQL trace queries via `PlatformClient`. A single `TEST_DT_ENVIRONMENT` URL is sufficient — Classic and Platform URLs are both derived from it internally via `APIURL()` and `AppsURL()`.
+**Rationale:** The shell-based loader keeps `.e2e.env` as plain shell syntax, precedence is correct by default (inherited env wins), and the pattern mirrors dtctl's proven `test-integration` target. All three vars are required: `TEST_DT_ACCESS_TOKEN` (`dt0c01.*`) for Classic API and installer operations; `TEST_DT_PLATFORM_TOKEN` (`dt0s16.*`) for DQL trace queries via `PlatformClient`. A single `TEST_DT_ENVIRONMENT` URL is sufficient — Classic and Platform URLs are both derived from it internally via `APIURL()` and `AppsURL()`.
 
 ### 3. Use `New()` directly in E2E tests
 

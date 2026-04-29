@@ -1,4 +1,9 @@
-.PHONY: build install test test-coverage lint clean markdownlint markdownlint-fix
+.PHONY: build install test test-coverage test-integration lint clean markdownlint markdownlint-fix
+
+ifneq (,$(wildcard .e2e.env))
+include .e2e.env
+export
+endif
 
 BINARY := dtwiz
 GO     := go
@@ -36,6 +41,12 @@ test-coverage:
 
 lint:
 	golangci-lint run ./...
+
+test-integration:
+	@if [ -z "$(TEST_DT_ENVIRONMENT)" ]; then echo "ERROR: TEST_DT_ENVIRONMENT is not set" >&2; exit 1; fi
+	@if [ -z "$(TEST_DT_ACCESS_TOKEN)" ]; then echo "ERROR: TEST_DT_ACCESS_TOKEN is not set" >&2; exit 1; fi
+	@if [ -z "$(TEST_DT_PLATFORM_TOKEN)" ]; then echo "ERROR: TEST_DT_PLATFORM_TOKEN is not set" >&2; exit 1; fi
+	$(GO) test -v -tags integration -timeout 5m ./test/e2e/...
 
 clean:
 	rm -f $(BINARY)

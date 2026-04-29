@@ -7,8 +7,8 @@
 
 ## 2. Fixture App (`test/fixtures/`)
 
-- [ ] 2.1 Create `test/fixtures/python-flask/app.py` — minimal Flask app with one GET endpoint (`/`) that returns a simple response; app listens on a configurable port (env var or default 18080)
-- [ ] 2.2 Create `test/fixtures/python-flask/requirements.txt` — contains `flask` (pinned or unpinned, minimal)
+- [x] 2.1 Create `test/fixtures/python-flask/app.py` — minimal Flask app with one GET endpoint (`/`) that returns a simple response; app listens on a configurable port (env var or default 18080)
+- [x] 2.2 Create `test/fixtures/python-flask/requirements.txt` — contains `flask` (pinned or unpinned, minimal)
 
 ## 3. Python E2E Test (`test/e2e/`)
 
@@ -17,10 +17,10 @@
 
 ## 4. makefile & Gitignore
 
-- [ ] 4.1 Add `test-integration` target to `makefile` — loads `.e2e-tests.env` if present (`ifneq (,$(wildcard .e2e-tests.env))` / `include .e2e-tests.env` / `export`), checks `TEST_DT_ENVIRONMENT` and `TEST_DT_ACCESS_TOKEN` are set (prints error to stderr + `exit 1` if missing), runs `go test -v -tags integration -timeout 5m ./test/e2e/...`
-- [ ] 4.2 Add `.e2e-tests.env` to `.gitignore`
-- [ ] 4.3 Add `.e2e-tests.env.example` to the repo — contains the three required env vars (`TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN`) with placeholder values and a comment instructing contributors to `cp .e2e-tests.env.example .e2e-tests.env` and fill in their credentials; committed to VCS
-- [ ] 4.4 Update `.PHONY` in `makefile` to include `test-integration`
+- [x] 4.1 Add `test-integration` target to `makefile` — loads `.e2e.env` if present (`ifneq (,$(wildcard .e2e.env))` / `include .e2e.env` / `export`), checks `TEST_DT_ENVIRONMENT` and `TEST_DT_ACCESS_TOKEN` are set (prints error to stderr + `exit 1` if missing), runs `go test -v -tags integration -timeout 5m ./test/e2e/...`
+- [x] 4.2 Add `.e2e.env` to `.gitignore`
+- [x] 4.3 Add `.e2e.env.example` to the repo — contains the three required env vars (`TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN`) with placeholder values and a comment instructing contributors to `cp .e2e.env.example .e2e.env` and fill in their credentials; committed to VCS
+- [x] 4.4 Update `.PHONY` in `makefile` to include `test-integration`
 
 ## 5. Verification
 
