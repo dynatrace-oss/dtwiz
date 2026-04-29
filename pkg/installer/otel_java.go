@@ -3,15 +3,25 @@ package installer
 import (
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
+
+var httpClient = &http.Client{
+	Transport: &http.Transport{
+		DialContext:           (&net.Dialer{Timeout: 30 * time.Second}).DialContext,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+	},
+}
 
 var otelJavaAgentURL = "https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar"
 
@@ -51,7 +61,7 @@ func downloadJavaAgent() (string, error) {
 		return "", fmt.Errorf("creating agent directory: %w", err)
 	}
 
-	resp, err := http.Get(otelJavaAgentURL) //nolint:noctx
+	resp, err := httpClient.Get(otelJavaAgentURL) //nolint:noctx
 	if err != nil {
 		return "", fmt.Errorf("downloading agent from %s: %w", otelJavaAgentURL, err)
 	}
