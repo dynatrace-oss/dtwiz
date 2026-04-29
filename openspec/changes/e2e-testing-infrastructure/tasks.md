@@ -2,8 +2,8 @@
 
 ## 1. Test Infrastructure (`test/integration/`)
 
-- [ ] 1.1 Create `test/integration/setup.go` — `SetupIntegration(t *testing.T)` function that validates `TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN` are set (calls `t.Fatal` if not), constructs a `*client.Client` via `client.New()` with URLs derived from `TEST_DT_ENVIRONMENT` and tokens from `TEST_DT_ACCESS_TOKEN`/`TEST_DT_PLATFORM_TOKEN`, generates unique test ID `dtwiz-test-{unix-ts}-{random}`, returns a `TestEnv` struct with client, test ID, and temp dir (`t.TempDir()`)
-- [ ] 1.2 Create `test/integration/dtquery.go` — `WaitForTraces(ctx context.Context, client *client.Client, serviceName string, opts ...PollOption) ([]TraceRecord, error)` function that polls DQL endpoint via `PlatformClient` filtering by `service.name`, default 60s timeout / 2s interval, returns traces or timeout error with the queried service name
+- [x] 1.1 Create `test/integration/setup.go` — `SetupIntegration(t *testing.T)` function that validates `TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN` are set (calls `t.Fatal` if not), constructs a `*client.Client` via `client.New()` with URLs derived from `TEST_DT_ENVIRONMENT` and tokens from `TEST_DT_ACCESS_TOKEN`/`TEST_DT_PLATFORM_TOKEN`, generates unique test ID `dtwiz-test-{unix-ts}-{random}`, returns a `TestEnv` struct with client, test ID, and temp dir (`t.TempDir()`)
+- [x] 1.2 Create `test/integration/grail_client.go` — `WaitForTraces(ctx context.Context, client *client.Client, serviceName string, opts ...PollOption) ([]TraceRecord, error)` function that polls DQL endpoint via `PlatformClient` filtering by `service.name`, default 60s timeout / 2s interval, returns traces or timeout error with the queried service name
 
 ## 2. Fixture App (`test/fixtures/`)
 

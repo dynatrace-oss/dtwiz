@@ -36,8 +36,9 @@ func (c *ClassicClient) BaseURL() string { return c.baseURL }
 // PlatformClient calls the Dynatrace Platform API (.apps. URL)
 // authenticated with DT_PLATFORM_TOKEN.
 type PlatformClient struct {
-	http    *resty.Client
-	baseURL string
+	http       *resty.Client
+	baseURL    string
+	authHeader string
 }
 
 // HTTP returns the underlying resty client for direct request building.
@@ -45,6 +46,9 @@ func (c *PlatformClient) HTTP() *resty.Client { return c.http }
 
 // BaseURL returns the Platform API base URL.
 func (c *PlatformClient) BaseURL() string { return c.baseURL }
+
+// AuthHeader returns the Authorization header value used by this client.
+func (c *PlatformClient) AuthHeader() string { return c.authHeader }
 
 var sensitiveHTTPHeaders = map[string]bool{
 	"authorization": true,
@@ -77,9 +81,11 @@ func New(classicURL, accessToken, platformURL, platformToken string, verbosityLe
 		http:    newRestyClient(classicURL, authHeader(accessToken), verbosityLevel),
 	}
 
+	platformAuth := "Bearer " + platformToken
 	platform := &PlatformClient{
-		baseURL: platformURL,
-		http:    newRestyClient(platformURL, "Bearer "+platformToken, verbosityLevel),
+		baseURL:    platformURL,
+		authHeader: platformAuth,
+		http:       newRestyClient(platformURL, platformAuth, verbosityLevel),
 	}
 
 	return &Client{Classic: classic, Platform: platform}, nil
