@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -353,6 +355,78 @@ func TestEnrichProcessesWithJPS_WithJPS(t *testing.T) {
 	result := enrichProcessesWithJPS([]DetectedProcess{})
 	if len(result) != 0 {
 		t.Fatalf("expected empty result for empty input, got %v", result)
+	}
+}
+
+// ── findWrapper tests ─────────────────────────────────────────────────────────
+
+func TestFindWrapper_FoundOnCurrentPlatform(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "mvnw"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "mvnw.cmd"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	got := findWrapper(dir, "mvnw", "mvnw.cmd")
+	if runtime.GOOS == "windows" {
+		if got != "mvnw.cmd" {
+			t.Fatalf("expected mvnw.cmd on Windows, got %q", got)
+		}
+	} else {
+		if got != "mvnw" {
+			t.Fatalf("expected mvnw on Unix, got %q", got)
+		}
+	}
+}
+
+func TestFindWrapper_Missing_ReturnsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	got := findWrapper(dir, "mvnw", "mvnw.cmd")
+	if got != "" {
+		t.Fatalf("expected empty string when wrapper is absent, got %q", got)
+	}
+}
+
+func TestDetectJavaEntrypoints_WindowsWrapperSpringBootMaven(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows-only test")
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "mvnw.cmd"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	pomContent := `<project><parent><artifactId>spring-boot-starter-parent</artifactId></parent></project>`
+	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte(pomContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	entrypoints := detectJavaEntrypoints(dir)
+	if len(entrypoints) == 0 {
+		t.Fatal("expected entrypoint for Windows Maven Spring Boot wrapper")
+	}
+	if !strings.HasPrefix(entrypoints[0].Command, "mvnw.cmd") {
+		t.Fatalf("expected command to start with mvnw.cmd, got %q", entrypoints[0].Command)
+	}
+}
+
+func TestDetectJavaEntrypoints_WindowsWrapperSpringBootGradle(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows-only test")
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "gradlew.bat"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	gradleContent := `plugins { id 'org.springframework.boot' version '3.0.0' }`
+	if err := os.WriteFile(filepath.Join(dir, "build.gradle"), []byte(gradleContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	entrypoints := detectJavaEntrypoints(dir)
+	if len(entrypoints) == 0 {
+		t.Fatal("expected entrypoint for Windows Gradle Spring Boot wrapper")
+	}
+	if !strings.HasPrefix(entrypoints[0].Command, "gradlew.bat") {
+		t.Fatalf("expected command to start with gradlew.bat, got %q", entrypoints[0].Command)
 	}
 }
 

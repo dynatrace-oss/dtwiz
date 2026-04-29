@@ -170,12 +170,7 @@ func createRuntimePlan(proj detectedProject, apiURL, token, envURL, platformToke
 		}
 		return plan
 	case "Java":
-		return &JavaInstrumentationPlan{
-			Project: proj.ScannedProject,
-			EnvVars: envVars,
-			EnvURL:  envURL,
-			Token:   token,
-		}
+		return buildJavaInstrumentationPlan(proj, apiURL, token, envURL)
 	case "Node.js":
 		plan := buildNodeInstrumentationPlan(proj.ScannedProject, apiURL, token)
 		if plan == nil {

@@ -30,6 +30,8 @@ var javaProjectMarkers = []string{
 	"build.gradle",
 	"build.gradle.kts",
 	"gradlew",
+	"gradlew.bat",
+	"mvnw.cmd",
 	".mvn",
 }
 
@@ -127,6 +129,9 @@ func buildInstrumentedCmd(ep JavaEntrypoint, agentPath, projectPath string, envV
 		fields := strings.Fields(ep.Command)
 		if len(fields) == 0 {
 			cmd = exec.Command(ep.Command)
+		} else if strings.HasSuffix(fields[0], ".cmd") || strings.HasSuffix(fields[0], ".bat") {
+			// Windows wrapper: must be invoked via cmd /c.
+			cmd = exec.Command("cmd", append([]string{"/c", fields[0]}, fields[1:]...)...)
 		} else {
 			cmd = exec.Command(fields[0], fields[1:]...)
 		}
@@ -145,12 +150,21 @@ func buildInstrumentedCmd(ep JavaEntrypoint, agentPath, projectPath string, envV
 	return cmd
 }
 
+type SubModulePlan struct {
+	Name          string
+	Path          string
+	LaunchCommand string
+	EnvVars       map[string]string
+}
+
 type JavaInstrumentationPlan struct {
 	Project           ScannedProject
 	EnvVars           map[string]string
 	EnvURL            string
 	Token             string
 	EntrypointCommand string
+	BuildCommand      string
+	SubModules        []SubModulePlan
 }
 
 func (p *JavaInstrumentationPlan) Runtime() string { return "Java" }
@@ -181,6 +195,11 @@ func DetectJavaPlan(envURL, token string) *JavaInstrumentationPlan {
 	svcName := projectServiceName(proj.Path)
 	envVars := generateBaseOtelEnvVars(apiURL, token, svcName)
 
+	if mm := detectMultiModule(proj.Path); mm != nil {
+		logger.Debug("multi-module project detected", "tool", mm.BuildTool)
+		return buildMultiModulePlan(mm, proj, apiURL, token, envURL)
+	}
+
 	var entrypointCmd string
 	entrypoints := detectJavaEntrypoints(proj.Path)
 	if len(entrypoints) > 0 {
@@ -209,7 +228,7 @@ func (p *JavaInstrumentationPlan) PrintPlanSteps() {
 		ep := JavaEntrypoint{Command: p.EntrypointCommand}
 		fmt.Printf("     Launch:     %s\n", displayInstrumentedCmd(ep, agentPath))
 	} else {
-		fmt.Printf("     Launch:     java -javaagent:opentelemetry-javaagent.jar -jar your_app.jar\n")
+		fmt.Printf("     Launch:     (entrypoint will be detected at execution time)\n")
 	}
 	fmt.Printf("     Agent JAR:  %s\n", otelJavaAgentURL)
 	for _, line := range formatPrintableEnvVars(p.EnvVars) {
@@ -217,7 +236,143 @@ func (p *JavaInstrumentationPlan) PrintPlanSteps() {
 	}
 }
 
+func buildJavaInstrumentationPlan(proj detectedProject, apiURL, token, envURL string) InstrumentationPlan {
+	if mm := detectMultiModule(proj.Path); mm != nil {
+		return buildMultiModulePlan(mm, proj.ScannedProject, apiURL, token, envURL)
+	}
+	svcName := projectServiceName(proj.Path)
+	envVars := generateBaseOtelEnvVars(apiURL, token, svcName)
+	entrypoints := detectJavaEntrypoints(proj.Path)
+	var entrypointCmd string
+	if len(entrypoints) > 0 {
+		ep := promptEntrypointSelection(entrypoints)
+		if ep != nil {
+			entrypointCmd = ep.Command
+		}
+	}
+	return &JavaInstrumentationPlan{
+		Project:           proj.ScannedProject,
+		EnvVars:           envVars,
+		EnvURL:            envURL,
+		Token:             token,
+		EntrypointCommand: entrypointCmd,
+	}
+}
+
+// buildMultiModulePlan constructs a JavaInstrumentationPlan for a multi-module project.
+func buildMultiModulePlan(mm *MultiModuleProject, proj ScannedProject, apiURL, token, envURL string) *JavaInstrumentationPlan {
+	logger.Debug("building multi-module plan", "tool", mm.BuildTool, "modules", len(mm.Modules), "build_cmd", mm.BuildCommand)
+	agentPath, err := javaAgentPath()
+	if err != nil {
+		agentPath = "opentelemetry-javaagent.jar"
+	}
+
+	subs := make([]SubModulePlan, len(mm.Modules))
+	for i, mod := range mm.Modules {
+		svcName := mod.Name
+		envVars := generateBaseOtelEnvVars(apiURL, token, svcName)
+
+		var launchCmd string
+		entrypoints := detectJavaEntrypoints(mod.Path)
+		if len(entrypoints) > 0 {
+			launchCmd = displayInstrumentedCmd(entrypoints[0], agentPath)
+		} else {
+			launchCmd = "(will be resolved after build)"
+		}
+
+		subs[i] = SubModulePlan{
+			Name:          svcName,
+			Path:          mod.Path,
+			LaunchCommand: launchCmd,
+			EnvVars:       envVars,
+		}
+	}
+
+	return &JavaInstrumentationPlan{
+		Project:      proj,
+		EnvURL:       envURL,
+		Token:        token,
+		BuildCommand: mm.BuildCommand,
+		SubModules:   subs,
+	}
+}
+
+// executeMultiModule runs the multi-module build (if needed), launches each sub-module,
+// prints a process summary, and updates the OTel Collector config if present.
+func (p *JavaInstrumentationPlan) executeMultiModule() {
+	if p.BuildCommand != "" {
+		display.PrintStatusLine("build", "Running "+p.BuildCommand+"...", display.ColorOK)
+		fields := strings.Fields(p.BuildCommand)
+		var cmd *exec.Cmd
+		if len(fields) > 0 && (strings.HasSuffix(fields[0], ".cmd") || strings.HasSuffix(fields[0], ".bat")) {
+			cmd = exec.Command("cmd", append([]string{"/c", fields[0]}, fields[1:]...)...)
+		} else {
+			cmd = exec.Command(fields[0], fields[1:]...)
+		}
+		cmd.Dir = p.Project.Path
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			display.PrintStatusLine("error", "build failed: "+err.Error(), display.ColorError)
+			return
+		}
+	}
+
+	agentPath, err := downloadJavaAgent()
+	if err != nil {
+		display.PrintStatusLine("error", fmt.Sprintf("failed to download agent: %v", err), display.ColorError)
+		return
+	}
+
+	var procs []*ManagedProcess
+	for i, sub := range p.SubModules {
+		entrypoints := detectJavaEntrypoints(sub.Path)
+		if len(entrypoints) == 0 {
+			display.PrintStatusLine("skip", sub.Name+": no runnable entrypoint found", display.ColorMuted)
+			continue
+		}
+		ep := &entrypoints[0]
+
+		svcName := sub.Name
+		logPath := filepath.Join(sub.Path, svcName+".log")
+		logFile, err := os.Create(logPath)
+		if err != nil {
+			display.PrintStatusLine("error", fmt.Sprintf("failed to create log file for %s: %v", svcName, err), display.ColorError)
+			continue
+		}
+
+		envVars := p.SubModules[i].EnvVars
+		logger.Debug("launching instrumented java process", "cmd", ep.Command, "dir", sub.Path)
+		cmd := buildInstrumentedCmd(*ep, agentPath, sub.Path, envVars)
+
+		proc, err := StartManagedProcess(svcName, svcName+".log", "", cmd, logFile)
+		if err != nil {
+			display.PrintStatusLine("error", fmt.Sprintf("failed to start %s: %v", svcName, err), display.ColorError)
+			continue
+		}
+		procs = append(procs, proc)
+	}
+
+	if len(procs) == 0 {
+		display.PrintStatusLine("error", "No services started.", display.ColorError)
+		return
+	}
+
+	aliveNames, _ := PrintProcessSummary(procs, processSettleDelay)
+	if len(aliveNames) == 0 {
+		display.PrintStatusLine("error", "No services are running — check the logs above for errors.", display.ColorError)
+		return
+	}
+
+	updateOtelCollectorIfPresent(p.EnvURL, p.Token, false)
+}
+
 func (p *JavaInstrumentationPlan) Execute() {
+	if len(p.SubModules) > 0 {
+		p.executeMultiModule()
+		return
+	}
+
 	agentPath, err := downloadJavaAgent()
 	if err != nil {
 		display.PrintStatusLine("error", fmt.Sprintf("failed to download agent: %v", err), display.ColorError)
@@ -322,6 +477,41 @@ func InstallOtelJava(envURL, token, serviceName string, dryRun bool) error {
 	}
 	logger.Debug("java instrumentation target", "project", proj.Path, "service", serviceName)
 	envVars = generateBaseOtelEnvVars(apiURL, token, serviceName)
+
+	if mm := detectMultiModule(proj.Path); mm != nil {
+		logger.Debug("multi-module project detected", "tool", mm.BuildTool)
+		plan := buildMultiModulePlan(mm, proj, apiURL, token, envURL)
+
+		fmt.Println()
+		display.Header("Java multi-module instrumentation plan")
+		fmt.Printf("  Project:       %s\n", proj.Path)
+		if plan.BuildCommand != "" {
+			fmt.Printf("  Build command: %s\n", plan.BuildCommand)
+		}
+		fmt.Println()
+		fmt.Println("  Modules:")
+		for _, sub := range plan.SubModules {
+			fmt.Printf("    [%s]  %s\n", sub.Name, sub.LaunchCommand)
+		}
+		fmt.Println()
+
+		if dryRun {
+			display.PrintStatusLine("dry-run", "no changes made", display.ColorMuted)
+			return nil
+		}
+
+		ok, err := confirmProceed("  Proceed with multi-module instrumentation?")
+		if err != nil {
+			return fmt.Errorf("reading confirmation: %w", err)
+		}
+		if !ok {
+			fmt.Println("  Installation cancelled.")
+			return nil
+		}
+
+		plan.executeMultiModule()
+		return nil
+	}
 
 	entrypoints := detectJavaEntrypoints(proj.Path)
 	logger.Debug("detected java entrypoints", "count", len(entrypoints), "project", proj.Path)

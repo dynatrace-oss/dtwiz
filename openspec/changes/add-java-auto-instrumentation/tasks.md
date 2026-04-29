@@ -107,10 +107,10 @@
   10. Launch instrumented process via `StartManagedProcess`.
   11. Print process summary via `PrintProcessSummary`.
   12. Call `updateOtelCollectorIfPresent(envURL, token, dryRun)` — probes `<cwd>/opentelemetry/config.yaml`, patches silently with `PatchConfigFile` if found, skips with no output if not found.
-  13. Call `waitForServices()` if at least one process is alive.
+  13. Return from `InstallOtelJava()` — `cmd/install.go` calls `WatchIngest` after the installer returns (see task 5.7).
 - [x] 5.5 Use `StartManagedProcess` to launch the instrumented process with log file at `<project-path>/<service-name>.log`. Immediately before constructing the `exec.Cmd`, add `logger.Debug("launching instrumented java process", "cmd", launchCmd, "dir", proj.Path)` — this must be the last debug statement before the process starts so the full resolved command is visible when running with `--debug`.
-- [x] 5.6 Use `PrintProcessSummary` after the settle period; if no alive processes, output via `display.PrintStatusLine("error", "No services are running — check the logs above for errors.", display.ColorError)` and skip `waitForServices`
-- [x] 5.7 Call `waitForServices(envURL, token, aliveServiceNames)` when at least one process is alive
+- [x] 5.6 Use `PrintProcessSummary` after the settle period; if no alive processes, output via `display.PrintStatusLine("error", "No services are running — check the logs above for errors.", display.ColorError)`
+- [x] 5.7 Post-install ingest watch: handled by `WatchIngest` (from the `ingest_watch` feature), called by `cmd/install.go` after `InstallOtelJava()` returns. The installer does not call it — it only starts the process and returns. Same pattern as every other runtime.
 - [x] 5.8 Update `DetectJavaPlan` to build fully executable plans — pass `envURL`, resolved entrypoint command through the `JavaInstrumentationPlan` struct
 - [x] 5.9 Update `JavaInstrumentationPlan.Execute()` to use the full automated flow (detect entrypoint → stop → download → launch → update collector)
 
@@ -138,28 +138,28 @@
 
 **Context:** On Windows, Maven and Gradle wrappers use `.cmd` / `.bat` extensions (`mvnw.cmd`, `gradlew.bat`) and cannot be invoked with a `./` prefix or via `exec.Command` directly — they require `cmd /c`. The current implementation only handles Unix-style wrappers.
 
-- [ ] 8.1 Add `"gradlew.bat"` and `"mvnw.cmd"` to `javaProjectMarkers` in `otel_java.go` so Windows-style wrapper presence is recognized as a Java project signal during directory scanning.
-- [ ] 8.2 Add `findWrapper(projectPath, unixName, windowsName string) string` in `otel_java_process.go` — returns the wrapper filename (not full path) for the current platform: checks `<projectPath>/<windowsName>` on `runtime.GOOS == "windows"`, `<projectPath>/<unixName>` otherwise. Returns `""` if the file does not exist.
-- [ ] 8.3 Update `detectJavaEntrypoints` to use `findWrapper(projectPath, "mvnw", "mvnw.cmd")` and `findWrapper(projectPath, "gradlew", "gradlew.bat")` instead of hardcoded filenames. Construct platform-correct command strings:
+- [x] 8.1 Add `"gradlew.bat"` and `"mvnw.cmd"` to `javaProjectMarkers` in `otel_java.go` so Windows-style wrapper presence is recognized as a Java project signal during directory scanning.
+- [x] 8.2 Add `findWrapper(projectPath, unixName, windowsName string) string` in `otel_java_process.go` — returns the wrapper filename (not full path) for the current platform: checks `<projectPath>/<windowsName>` on `runtime.GOOS == "windows"`, `<projectPath>/<unixName>` otherwise. Returns `""` if the file does not exist.
+- [x] 8.3 Update `detectJavaEntrypoints` to use `findWrapper(projectPath, "mvnw", "mvnw.cmd")` and `findWrapper(projectPath, "gradlew", "gradlew.bat")` instead of hardcoded filenames. Construct platform-correct command strings:
   - Unix: `./mvnw spring-boot:run`, `./gradlew bootRun`, `./gradlew run`
   - Windows: `mvnw.cmd spring-boot:run`, `gradlew.bat bootRun`, `gradlew.bat run`
-- [ ] 8.4 Update `attemptSingleModuleBuild` to use `findWrapper` for detection and to construct the exec-ready command:
+- [x] 8.4 Update `attemptSingleModuleBuild` to use `findWrapper` for detection and to construct the exec-ready command:
   - Unix: `exec.Command("./mvnw", "clean", "package", "-DskipTests")` / `exec.Command("./gradlew", "build", "-x", "test")` with `cmd.Dir = projectPath`
   - Windows: `exec.Command("cmd", "/c", "mvnw.cmd", "clean", "package", "-DskipTests")` / `exec.Command("cmd", "/c", "gradlew.bat", "build", "-x", "test")` with `cmd.Dir = projectPath`
-- [ ] 8.5 Update `buildInstrumentedCmd` in `otel_java.go` to handle Windows wrapper commands: when `fields[0]` ends in `.cmd` or `.bat`, wrap the execution as `exec.Command("cmd", append([]string{"/c", fields[0]}, fields[1:]...)...)` so the wrapper executes correctly via Windows command processor.
-- [ ] 8.6 Tests in `otel_java_process_test.go`:
-  - [ ] `TestFindWrapper_FoundOnCurrentPlatform` — temp dir with both `mvnw` and `mvnw.cmd` present; verify the correct one is returned for the current `runtime.GOOS`
-  - [ ] `TestFindWrapper_Missing_ReturnsEmpty` — temp dir with no wrapper → returns `""`
-  - [ ] `TestDetectJavaEntrypoints_WindowsWrapperSpringBootMaven` — temp dir with `mvnw.cmd` + Spring Boot `pom.xml`, no JAR → returns candidate whose `Command` starts with `mvnw.cmd` (skip on non-Windows with `t.Skip`)
-  - [ ] `TestDetectJavaEntrypoints_WindowsWrapperSpringBootGradle` — temp dir with `gradlew.bat` + Spring Boot `build.gradle`, no JAR → returns candidate whose `Command` starts with `gradlew.bat` (skip on non-Windows with `t.Skip`)
+- [x] 8.5 Update `buildInstrumentedCmd` in `otel_java.go` to handle Windows wrapper commands: when `fields[0]` ends in `.cmd` or `.bat`, wrap the execution as `exec.Command("cmd", append([]string{"/c", fields[0]}, fields[1:]...)...)` so the wrapper executes correctly via Windows command processor.
+- [x] 8.6 Tests in `otel_java_process_test.go`:
+  - [x] `TestFindWrapper_FoundOnCurrentPlatform` — temp dir with both `mvnw` and `mvnw.cmd` present; verify the correct one is returned for the current `runtime.GOOS`
+  - [x] `TestFindWrapper_Missing_ReturnsEmpty` — temp dir with no wrapper → returns `""`
+  - [x] `TestDetectJavaEntrypoints_WindowsWrapperSpringBootMaven` — temp dir with `mvnw.cmd` + Spring Boot `pom.xml`, no JAR → returns candidate whose `Command` starts with `mvnw.cmd` (skip on non-Windows with `t.Skip`)
+  - [x] `TestDetectJavaEntrypoints_WindowsWrapperSpringBootGradle` — temp dir with `gradlew.bat` + Spring Boot `build.gradle`, no JAR → returns candidate whose `Command` starts with `gradlew.bat` (skip on non-Windows with `t.Skip`)
 
 ## 9. Verification
 
 ### Automated (run on both platforms)
 
-- [ ] 9.1 Run `make test` on Unix — all existing tests must pass
+- [x] 9.1 Run `make test` on Unix — all existing tests must pass
 - [ ] 9.1a Run `go test ./...` on Windows — all existing tests must pass (Windows-skipped tests are acceptable; no panics or build failures)
-- [ ] 9.2 Run `make lint` — no new lint issues
+- [x] 9.2 Run `make lint` — no new lint issues
 
 ### Manual — Unix (macOS / Linux)
 
@@ -168,8 +168,9 @@
 - [ ] 9.5 `dtwiz install otel-java` with no built artifact — installer attempts auto-build via `./mvnw` or `./gradlew`; if build succeeds the app is launched; if build fails a clear error is printed with instructions to fix and re-run
 - [ ] 9.6 Generate some traffic to the instrumented app and verify traces/logs appear in Dynatrace
 - [ ] 9.7 `dtwiz install otel` shows Java projects in the selection menu (requires `DTWIZ_ALL_RUNTIMES=true` until task 14 is complete)
-- [ ] 9.8 "Waiting for traffic" terminates when service appears in Dynatrace (not just on timeout)
+- [ ] 9.8 After `dtwiz install otel-java` completes, `WatchIngest` starts automatically and shows ingested data (services, logs, spans) for the instrumented Java app; press Enter to exit the watch
 - [ ] 9.9 OTel Collector config is updated after Java instrumentation when a collector config exists on the machine
+- [ ] 9.9a `dtwiz install otel-java` inside `terra-sample-apps/java-travel-agency` — all 5 services (`s-frontend`, `s-frontend-2`, `s-booking`, `s-transport`, `s-load-balancer`) start, each with a distinct `OTEL_SERVICE_NAME` matching its directory name; zero services start via the root `./mvnw spring-boot:run` command
 
 ### Manual — Windows
 
@@ -185,41 +186,44 @@
 
 **Files:** `pkg/installer/otel_java_process.go` (modify), `pkg/installer/otel_java.go` (modify), `pkg/installer/otel.go` (modify)
 
-- [ ] 10.1 Add `isMavenMultiModule(projectPath string) bool` — parse root `pom.xml` via `encoding/xml` and return true when `<modules>` is non-empty
-- [ ] 10.2 Add `parseMavenModules(projectPath string) ([]string, error)` — extract `<module>` entries from root `pom.xml`; return nil/empty for non-multi-module projects
-- [ ] 10.3 Add `isGradleMultiProject(projectPath string) bool` and `parseGradleSubprojects(projectPath string) ([]string, error)` — regex scan `settings.gradle` / `settings.gradle.kts` for `include` directives; convert colon notation to path separators
-- [ ] 10.4 Add `mavenBuildCommand(projectPath string) string` and `gradleBuildCommand(projectPath string) string` — return the build command based on which wrapper is present, or `""` if none
-- [ ] 10.5 Add `needsBuild(subs []SubModule) bool` — return true when any sub-module is missing a fat JAR in `target/` or `build/libs/`
-- [ ] 10.6 Add `detectMultiModule(projectPath string) *MultiModuleProject` — checks Maven first, then Gradle; returns `nil` for single-module projects
-- [ ] 10.7 Add `SubModulePlan` struct with `Name`, `Path`, `LaunchCommand`, `EnvVars` fields
-- [ ] 10.8 Add `BuildCommand string` and `SubModules []SubModulePlan` fields to `JavaInstrumentationPlan`
-- [ ] 10.9 Add `buildMultiModulePlan(mm *MultiModuleProject, proj ScannedProject, ...) *JavaInstrumentationPlan` — constructs a full plan with per-module env vars and (pre-build) launch commands
-- [ ] 10.10 Add `executeMultiModule()` method — runs build (if `BuildCommand` is set), refreshes launch commands from newly-built JARs, launches each module as a separate `ManagedProcess`, calls `PrintProcessSummary` and `waitForServices` with all alive services
-- [ ] 10.11 Update `DetectJavaPlan()` to call `detectMultiModule()` before single-module entrypoint detection
-- [ ] 10.12 Update `InstallOtelJava()` to call `detectMultiModule()` after project selection; show multi-module plan preview with build command and per-module launch commands
-- [ ] 10.13 Update `createRuntimePlan()` in `otel.go` for the Java case to call `detectMultiModule()` and resolve single-module entrypoints at plan time (not deferred to `Execute()`)
+- [x] 10.1 Add `isMavenMultiModule(projectPath string) bool` — parse root `pom.xml` via `encoding/xml` and return true when `<modules>` is non-empty
+- [x] 10.2 Add `parseMavenModules(projectPath string) ([]string, error)` — extract `<module>` entries from root `pom.xml`; return nil/empty for non-multi-module projects
+- [x] 10.3 Add `isGradleMultiProject(projectPath string) bool` and `parseGradleSubprojects(projectPath string) ([]string, error)` — regex scan `settings.gradle` / `settings.gradle.kts` for `include` directives; convert colon notation to path separators
+- [x] 10.4 Add `mavenBuildCommand(projectPath string) string` and `gradleBuildCommand(projectPath string) string` — return the build command based on which wrapper is present, or `""` if none
+- [x] 10.5 Add `needsBuild(subs []SubModule) bool` — return true when any sub-module is missing a fat JAR in `target/` or `build/libs/`
+- [x] 10.6 Add `detectMultiModule(projectPath string) *MultiModuleProject` — checks Maven first, then Gradle; returns `nil` for single-module projects
+- [x] 10.7 Add `SubModulePlan` struct with `Name`, `Path`, `LaunchCommand`, `EnvVars` fields
+- [x] 10.8 Add `BuildCommand string` and `SubModules []SubModulePlan` fields to `JavaInstrumentationPlan`
+- [x] 10.9 Add `buildMultiModulePlan(mm *MultiModuleProject, proj ScannedProject, ...) *JavaInstrumentationPlan` — constructs a full plan with per-module env vars and (pre-build) launch commands
+- [x] 10.10 Add `executeMultiModule()` method — runs build (if `BuildCommand` is set), refreshes launch commands from newly-built JARs, launches each module as a separate `ManagedProcess`, calls `PrintProcessSummary` with all alive services. Ingest watch is handled by the CLI layer after the installer returns (see task 5.7).
+- [x] 10.11 Update `DetectJavaPlan()` to call `detectMultiModule()` before single-module entrypoint detection
+- [x] 10.12 Update `InstallOtelJava()` to call `detectMultiModule()` after project selection; show multi-module plan preview with build command and per-module launch commands
+- [x] 10.13 Update `createRuntimePlan()` in `otel.go` for the Java case to call `detectMultiModule()` and resolve single-module entrypoints at plan time (not deferred to `Execute()`)
+- [x] 10.14 Ensure `Execute()` dispatches to `executeMultiModule()` when `SubModules` is non-empty — the multi-runtime flow calls `Execute()`, not `executeMultiModule()` directly; without this guard, multi-module plans silently fell through to the single-module path and started only one process
 
 ## 11. Entrypoint Resolution Before Preview
 
 **Files:** `pkg/installer/otel.go` (modify), `pkg/installer/otel_java.go` (modify)
 
-- [ ] 11.1 In `createRuntimePlan()` Java case: call `detectJavaEntrypoints()` + `promptEntrypointSelection()` at plan time and store result in `EntrypointCommand` — the preview SHALL always show the resolved command
-- [ ] 11.2 Update `PrintPlanSteps()` to show `(entrypoint will be detected at execution time)` only as a last-resort fallback, not as the default for unresolved entrypoints
-- [ ] 11.3 Remove all uses of `java -javaagent:... -jar your_app.jar` placeholder text from non-instruction contexts
+- [x] 11.1 In `createRuntimePlan()` Java case: call `detectJavaEntrypoints()` + `promptEntrypointSelection()` at plan time and store result in `EntrypointCommand` — the preview SHALL always show the resolved command
+- [x] 11.2 Update `PrintPlanSteps()` to show `(entrypoint will be detected at execution time)` only as a last-resort fallback, not as the default for unresolved entrypoints
+- [x] 11.3 Remove all uses of `java -javaagent:... -jar your_app.jar` placeholder text from non-instruction contexts
 
 ## 12. Unit Tests for Multi-Module Detection
 
 **Files:** `pkg/installer/otel_java_process_test.go` (modify)
 
-- [ ] 12.1 `TestIsMavenMultiModule_MultiModule` — temp dir with multi-module `pom.xml` → true
-- [ ] 12.2 `TestIsMavenMultiModule_SingleModule` — temp dir with single-module `pom.xml` → false
-- [ ] 12.3 `TestParseMavenModules_ReturnsModuleNames` — verify all `<module>` entries are extracted
-- [ ] 12.4 `TestParseGradleSubprojects_ColonNotation` — `include ':api'` → `["api"]`
-- [ ] 12.5 `TestParseGradleSubprojects_NestedPath` — `include ':ui:web'` → `["ui/web"]`
-- [ ] 12.6 `TestDetectMultiModule_Maven` — returns correct `MultiModuleProject` for Maven multi-module project
-- [ ] 12.7 `TestDetectMultiModule_NilForSingleModule` — returns nil for single-module project
-- [ ] 12.8 `TestNeedsBuild_TrueWhenJarsMissing` — returns true when sub-module has no JAR
-- [ ] 12.9 `TestNeedsBuild_FalseWhenJarsPresent` — returns false when all sub-modules have JARs
+- [x] 12.1 `TestIsMavenMultiModule_MultiModule` — temp dir with multi-module `pom.xml` → true
+- [x] 12.2 `TestIsMavenMultiModule_SingleModule` — temp dir with single-module `pom.xml` → false
+- [x] 12.3 `TestParseMavenModules_ReturnsModuleNames` — verify all `<module>` entries are extracted
+- [x] 12.4 `TestParseGradleSubprojects_ColonNotation` — `include ':api'` → `["api"]`
+- [x] 12.5 `TestParseGradleSubprojects_NestedPath` — `include ':ui:web'` → `["ui/web"]`
+- [x] 12.6 `TestDetectMultiModule_Maven` — returns correct `MultiModuleProject` for Maven multi-module project
+- [x] 12.7 `TestDetectMultiModule_NilForSingleModule` — returns nil for single-module project
+- [x] 12.8 `TestNeedsBuild_TrueWhenJarsMissing` — returns true when sub-module has no JAR
+- [x] 12.9 `TestNeedsBuild_FalseWhenJarsPresent` — returns false when all sub-modules have JARs
+- [x] 12.10 `TestJavaInstrumentationPlan_Execute_MultiModuleDispatch` — plan with `SubModules` set but no JARs in sub-dirs; verifies agent download is attempted (multi-module path taken) and output contains both sub-module names; verifies single-module error message ("no runnable entrypoint detected") is absent
+- [x] 12.11 `TestDetectJavaPlan_MultiModule_HasSubModules` — temp Maven multi-module root (`pom.xml` with two `<module>` entries); verifies `DetectJavaPlan` returns a plan with 2 `SubModules` and no `EntrypointCommand`
 
 ## 13. Extend `uninstall otel` with Java Cleanup
 
