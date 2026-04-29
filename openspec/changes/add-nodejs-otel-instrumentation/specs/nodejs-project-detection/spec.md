@@ -22,7 +22,8 @@ The system SHALL detect Node.js projects by scanning for `package.json` files ac
 
 - **GIVEN** no `package.json` files exist in CWD or scanned directories
 - **WHEN** `DetectNodePlan` runs
-- **THEN** it returns nil and logs a debug message
+- **THEN** it returns `(nil, false)` — nil plan and `userInteracted=false`
+- **AND** the caller shows "No Node.js projects detected" fallback message
 
 ### Requirement: Monorepo detection
 

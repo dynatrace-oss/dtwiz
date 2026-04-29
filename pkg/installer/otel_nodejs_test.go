@@ -164,7 +164,7 @@ func TestBuildNodeInstrumentationPlan(t *testing.T) {
 func TestDetectNodePlan_NoNodeOnPath(t *testing.T) {
 	t.Setenv("PATH", "")
 
-	plan := DetectNodePlan("https://tenant.live.dynatrace.com", "token")
+	plan, _ := DetectNodePlan("https://tenant.live.dynatrace.com", "token")
 	if plan != nil {
 		t.Fatalf("expected nil plan, got %#v", plan)
 	}
@@ -186,7 +186,7 @@ func TestDetectNodePlan_FindsProject(t *testing.T) {
 	setTestWorkingDir(t, dir)
 	setTestStdin(t, "1\n")
 
-	plan := DetectNodePlan("https://tenant.live.dynatrace.com", "token")
+	plan, _ := DetectNodePlan("https://tenant.live.dynatrace.com", "token")
 	if plan == nil {
 		t.Fatal("expected Node.js plan")
 	}

@@ -118,7 +118,11 @@ The system SHALL use the existing `detectNodeEntrypoints` function to resolve th
 - **GIVEN** a project with no `"main"`, no scripts referencing source files, and no conventional files
 - **AND** the project is not Next.js or Nuxt
 - **WHEN** `buildNodeInstrumentationPlan` runs
-- **THEN** the project is skipped with a diagnostic message
+- **THEN** the project is skipped with a message: "This project can't be auto-instrumented."
+- **AND** a link to the Dynatrace manual instrumentation docs is shown: "See Instrument your JavaScript application on Node.js with OpenTelemetry to instrument it manually."
+- **AND** the user is prompted "Select another project? [Y/n]"
+- **AND** if the user confirms, the project list is shown again for re-selection
+- **AND** if the user declines, the flow exits without the "No Node.js projects detected" fallback message
 
 ### Requirement: Regular Node.js app launch
 

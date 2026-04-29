@@ -116,6 +116,22 @@ The existing collector uninstall stays as-is — Node.js cleanup is additive.
 
 `installOtelNodeCmd` is registered under `installCmd` with `Use: "otel-node"` and `Args: cobra.NoArgs`. It gets a `--service-name` flag (same as Python and Java). The parent's `--dry-run` persistent flag is inherited. No separate uninstall command — cleanup is part of `uninstall otel`.
 
+### 9. Non-instrumentable project handling with retry loop
+
+When a user selects a project that can't be auto-instrumented (no entrypoint found and not a known framework), the system shows a user-friendly message instead of a technical diagnostic:
+
+> This project can't be auto-instrumented.
+> See [Instrument your JavaScript application on Node.js with OpenTelemetry](https://docs.dynatrace.com/docs/ingest-from/opentelemetry/walkthroughs/nodejs) to instrument it manually.
+
+The link uses `termLink()` (OSC 8 hyperlinks in supported terminals, fallback to plain URL otherwise).
+
+After this message, the user is prompted "Select another project? [Y/n]". If confirmed, `DetectNodePlan` loops back to show the full project list again. This repeats until the user either selects an instrumentable project (proceeds with normal instrumentation) or declines to select another.
+
+`DetectNodePlan` returns `(*NodeInstrumentationPlan, bool)` where the second value (`userInteracted`) distinguishes:
+
+- `false`: no projects found or node not on PATH → caller shows "No Node.js projects detected" fallback
+- `true`: user interacted with the selection prompt (selected a project, cancelled, or declined retry) → caller suppresses the fallback message
+
 ## File Layout
 
 | File                     | Responsibility                                                                                                                                                                                                                                                                                                                                                                           |

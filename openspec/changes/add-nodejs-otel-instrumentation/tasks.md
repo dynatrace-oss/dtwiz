@@ -46,7 +46,7 @@ Update the plan struct and implement `.otel/` directory creation with package in
 **Files:** `pkg/installer/otel_nodejs.go` (modify), `pkg/installer/otel_nodejs_test.go` (modify)
 
 - [ ] 3.1 Update `NodeInstrumentationPlan` struct: add `PackageManager string`, `OtelDir string`, `Framework string` (holds `"next"`, `"nuxt"`, or `""`), `PlatformToken string`, `EnvURL string`
-- [ ] 3.2 Update `buildNodeInstrumentationPlan()` signature to accept `envURL, platformToken string`; populate new struct fields including `OtelDir = filepath.Join(proj.Path, ".otel")`, detect package manager via `detectNodePackageManager()`, detect framework via `detectNodeFramework()`
+- [x] 3.2 Update `buildNodeInstrumentationPlan()` signature to accept `envURL, platformToken string`; populate new struct fields including `OtelDir = filepath.Join(proj.Path, ".otel")`, detect package manager via `detectNodePackageManager()`, detect framework via `detectNodeFramework()`. When no entrypoint is found and the project is not a known framework, show "This project can't be auto-instrumented" with a link to the Dynatrace manual instrumentation docs and return nil.
 - [x] 3.3 Implement `createOtelDir(plan *NodeInstrumentationPlan) error` — create `.otel/` directory, write `.otel/package.json` with OTel deps as dependencies
 - [x] 3.4 Implement `generateWrapperJS(framework string) string` — generate CJS wrapper script content that requires `@opentelemetry/auto-instrumentations-node/register` and delegates to the Next.js CLI (`next/dist/bin/next`). OTEL\_\* env vars are passed via `cmd.Env` at launch time, not embedded in the script. Called only for Next.js. Implement `generateNuxtBootstrapMJS(otelDir string) string` — generate an ESM bootstrap script (`.mjs`) that uses `module.register()` to install `import-in-the-middle` hooks and loads the OTel CJS register via `createRequire`. Called only for Nuxt (Nuxt bypasses the CLI; the Nitro server is launched directly).
 - [x] 3.5 Implement `installOtelNodeDeps(otelDir string) error` — run `npm install` inside `.otel/` directory using `exec.Command`
@@ -74,7 +74,7 @@ Rewrite `Execute()` to perform actual installation, process launch, and Dynatrac
 - [x] 4.3 For Next.js apps: the run command is `node otel/next-otel-bootstrap.js start` with CWD set to project root
 - [x] 4.4 For Nuxt apps: the run command is `node --import .otel/nuxt-otel-bootstrap.mjs .output/server/index.mjs` with CWD set to project root (launches the Nitro server directly; Nuxt CLI is not used because it spawns child processes that lose OTel registration)
 - [x] 4.5 Update `PrintPlanSteps()` to show: project path, package manager, framework status (Next.js/Nuxt if applicable), `.otel/` directory creation, `npm install` in `.otel/`, run command
-- [x] 4.6 Update `DetectNodePlan()` to call updated `buildNodeInstrumentationPlan()` with `apiURL, token` (not `envURL, platformToken` — those are set later like Python)
+- [x] 4.6 Update `DetectNodePlan()` to return `(*NodeInstrumentationPlan, bool)` — the second value (`userInteracted`) indicates whether the user interacted with the project selection prompt. When `buildNodeInstrumentationPlan` returns nil (non-instrumentable project), prompt "Select another project? [Y/n]" and loop back to show the project list on confirmation. The caller (`InstallOtelNode`) uses `userInteracted` to suppress the "No Node.js projects detected" fallback when the user already saw the project list.
 - [x] 4.7 Tests:
   - `TestNodeInstrumentationPlan_PrintPlanSteps_Regular`
   - `TestNodeInstrumentationPlan_PrintPlanSteps_NextJS`
@@ -87,7 +87,7 @@ Register `dtwiz install otel-node` following existing patterns.
 
 **Files:** `cmd/install.go` (modify), `pkg/installer/otel_nodejs.go` (modify)
 
-- [x] 5.1 Add `InstallOtelNode(envURL, token, platformToken, serviceName string, dryRun bool) error` in `otel_nodejs.go` — validate prerequisites (node + npm on PATH), generate env vars via `generateOtelNodeEnvVars()`, dry-run path (print preview and return), detect projects via `DetectNodePlan()`, print plan steps, confirm, set `EnvURL` and `PlatformToken` on plan, execute
+- [x] 5.1 Add `InstallOtelNode(envURL, token, platformToken, serviceName string, dryRun bool) error` in `otel_nodejs.go` — validate prerequisites (node + npm on PATH), generate env vars via `generateOtelNodeEnvVars()`, dry-run path (print preview and return), detect projects via `DetectNodePlan()`, use `userInteracted` return value to conditionally show "No Node.js projects detected" fallback only when no user interaction occurred, print plan steps, confirm, set `EnvURL` and `PlatformToken` on plan, execute
 - [x] 5.2 Add `var otelNodeServiceName string` and `installOtelNodeCmd` in `cmd/install.go` — `Use: "otel-node"`, `Short: "Set up OpenTelemetry Node.js auto-instrumentation"`, `Args: cobra.NoArgs`. RunE: resolve creds, validate, call `installer.InstallOtelNode()`
 - [x] 5.3 Register `installOtelNodeCmd.Flags().StringVar(&otelNodeServiceName, "service-name", ...)` and add command to `installCmd` in `init()`
 - [x] 5.4 Tests:

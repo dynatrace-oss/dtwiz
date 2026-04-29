@@ -324,9 +324,13 @@ func buildNodeInstrumentationPlan(proj ScannedProject, apiURL, token string) *No
 	framework := detectNodeFramework(proj.Path)
 	entrypoints := detectNodeEntrypoints(proj.Path)
 	if len(entrypoints) == 0 && framework == "" {
-		fmt.Printf("  Skipping %s — no Node.js entrypoint found.\n", proj.Path)
-		fmt.Println("    Looked for: package.json 'main', 'scripts.start', other scripts with file references, or common files (index.js, app.js, server.js and .ts variants).")
-		fmt.Println("    Add one of these and re-run dtwiz.")
+		docLink := termLink(
+			"Instrument your JavaScript application on Node.js with OpenTelemetry",
+			"https://docs.dynatrace.com/docs/ingest-from/opentelemetry/walkthroughs/nodejs",
+		)
+		fmt.Println()
+		fmt.Println("  This project can't be auto-instrumented.")
+		fmt.Printf("  See %s to instrument it manually.\n", docLink)
 		return nil
 	}
 
@@ -345,10 +349,10 @@ func buildNodeInstrumentationPlan(proj ScannedProject, apiURL, token string) *No
 	}
 }
 
-func DetectNodePlan(apiURL, token string) *NodeInstrumentationPlan {
+func DetectNodePlan(apiURL, token string) (*NodeInstrumentationPlan, bool) {
 	if _, err := exec.LookPath("node"); err != nil {
 		logger.Debug("node not found on PATH", "skipping Node.js instrumentation")
-		return nil
+		return nil, false
 	}
 
 	projects, processes := runInParallel(detectNodeProjects, detectNodeProcesses)
@@ -356,15 +360,26 @@ func DetectNodePlan(apiURL, token string) *NodeInstrumentationPlan {
 
 	if len(projects) == 0 {
 		logger.Debug("no Node.js projects detected", "skipping Node.js instrumentation")
-		return nil
+		return nil, false
 	}
 
-	sel := promptProjectSelection("Node.js", projects)
-	if sel == nil {
-		return nil
-	}
+	for {
+		sel := promptProjectSelection("Node.js", projects)
+		if sel == nil {
+			return nil, true
+		}
 
-	return buildNodeInstrumentationPlan(*sel, apiURL, token)
+		plan := buildNodeInstrumentationPlan(*sel, apiURL, token)
+		if plan != nil {
+			return plan, true
+		}
+
+		// Project can't be auto-instrumented; ask if the user wants to try another.
+		ok, err := confirmProceed("  Select another project?")
+		if err != nil || !ok {
+			return nil, true
+		}
+	}
 }
 
 func (p *NodeInstrumentationPlan) PrintPlanSteps() {
@@ -691,11 +706,13 @@ func InstallOtelNode(envURL, token, platformToken, serviceName string, dryRun bo
 	fmt.Println()
 	display.Header("Dynatrace Node.js Auto-Instrumentation")
 
-	plan := DetectNodePlan(apiURL, token)
+	plan, userInteracted := DetectNodePlan(apiURL, token)
 	if plan == nil {
-		fmt.Println()
-		fmt.Println("  No Node.js projects detected. Make sure you are in or near a project directory")
-		fmt.Println("  containing a package.json with a recognizable entrypoint.")
+		if !userInteracted {
+			fmt.Println()
+			fmt.Println("  No Node.js projects detected. Make sure you are in or near a project directory")
+			fmt.Println("  containing a package.json with a recognizable entrypoint.")
+		}
 		return nil
 	}
 
