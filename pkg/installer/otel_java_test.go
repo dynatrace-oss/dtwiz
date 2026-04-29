@@ -48,6 +48,23 @@ func makeMavenProjectWithFatJar(t *testing.T) {
 	setTestStdin(t, "1\n")
 }
 
+// isolatePathToJava restricts PATH to a temp dir containing only a java
+// symlink. This ensures mvn/gradle are not found while java validation still
+// passes, so tests that expect "no build tool" errors are not short-circuited
+// by a system-installed Maven or Gradle.
+func isolatePathToJava(t *testing.T) {
+	t.Helper()
+	javaPath, err := exec.LookPath("java")
+	if err != nil {
+		t.Skip("java not installed on PATH")
+	}
+	binDir := t.TempDir()
+	if err := os.Symlink(javaPath, filepath.Join(binDir, "java")); err != nil {
+		t.Fatalf("symlinking java: %v", err)
+	}
+	t.Setenv("PATH", binDir)
+}
+
 // ── detectJavaProjects tests ──────────────────────────────────────────────────
 
 func TestDetectJavaProjects_Maven(t *testing.T) {
@@ -389,6 +406,7 @@ func TestInstallOtelJava_DryRun(t *testing.T) {
 
 func TestInstallOtelJava_NoBuildArtifact_NoRunningProcess(t *testing.T) {
 	skipIfNoJava(t)
+	isolatePathToJava(t) // exclude system mvn/gradle so no fallback entrypoint is found
 
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte("<project/>"), 0644); err != nil {
@@ -407,6 +425,10 @@ func TestInstallOtelJava_NoBuildArtifact_NoRunningProcess(t *testing.T) {
 
 func TestInstallOtelJava_AutoBuildFails(t *testing.T) {
 	skipIfNoJava(t)
+	// mvnw exists but lacks maven-wrapper.jar, and system mvn is excluded from
+	// PATH, so resolveMavenCmd returns "" → detectJavaEntrypoints finds nothing
+	// → attemptSingleModuleBuild reports no build tool available.
+	isolatePathToJava(t)
 
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "mvnw"), []byte("#!/bin/sh\nexit 1\n"), 0755); err != nil {
