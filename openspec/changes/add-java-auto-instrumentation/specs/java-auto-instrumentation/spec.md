@@ -196,34 +196,28 @@ After launching the instrumented Java process, the installer SHALL update the lo
 - **THEN** the step SHALL be skipped silently with no output
 - **AND** the Java agent SHALL export directly to Dynatrace via OTLP without a local collector
 
-### Requirement: Dynatrace verification via DQL
+### Requirement: Dynatrace ingest watch after installation
 
-After launching the instrumented process, the installer SHALL verify the service appears in Dynatrace.
+After `InstallOtelJava()` returns successfully, the CLI (`cmd/install.go`) SHALL call `WatchIngest(envURL, platformToken, startTime)` to show a live terminal summary of newly ingested data. The installer itself does not call `WatchIngest` — it only starts the process and returns.
 
-#### Scenario: Service appears in Dynatrace
+#### Scenario: Watch starts after successful install
 
-- **GIVEN** an instrumented Java process is running and sending telemetry
-- **WHEN** the installer polls DQL for the service name
-- **THEN** the installer SHALL output a confirmation via `display.PrintStatusLine(<service-name>, "✓ appeared in Dynatrace", display.ColorOK)`
+- **GIVEN** `InstallOtelJava()` returns without error
+- **WHEN** the CLI proceeds to the watch step
+- **THEN** `WatchIngest` SHALL poll Dynatrace every 5 seconds and render ingested services, logs, spans, and exceptions in the terminal
 
-#### Scenario: Service does not appear within timeout
+#### Scenario: Watch uses platform token with Bearer auth
 
-- **GIVEN** an instrumented Java process is running
-- **WHEN** the service does not appear in Dynatrace within 120 seconds
-- **THEN** the installer SHALL output a timeout message via `display.PrintStatusLine("timeout", "service may take more time to appear in Dynatrace", display.ColorMuted)`
+- **GIVEN** the CLI reaches the watch step
+- **WHEN** `WatchIngest` queries the Dynatrace DQL API
+- **THEN** the platform token SHALL be used with Bearer auth for the DQL endpoint
 
-#### Scenario: DQL verification uses access token with Bearer auth
-
-- **GIVEN** the installer reaches the DQL verification step
-- **WHEN** `waitForServices` is called
-- **THEN** the access token SHALL be used with Bearer auth for the DQL endpoint
-
-#### Scenario: All processes crashed
+#### Scenario: All processes crashed — watch is skipped
 
 - **GIVEN** the instrumented process crashed during startup
-- **WHEN** the installer checks for alive processes
-- **THEN** DQL verification SHALL be skipped
-- **AND** the installer SHALL output via `display.PrintStatusLine("error", "No services are running — check the logs above for errors.", display.ColorError)`
+- **WHEN** the installer checks for alive processes via `PrintProcessSummary`
+- **THEN** the installer SHALL output via `display.PrintStatusLine("error", "No services are running — check the logs above for errors.", display.ColorError)` and return an error
+- **AND** `InstallOtelJava()` SHALL return a non-nil error so `cmd/install.go` does not proceed to `WatchIngest`
 
 ### Requirement: Plan preview and confirmation
 
@@ -300,16 +294,15 @@ Each instrumented Java process SHALL have its stdout/stderr redirected to a log 
 - **WHEN** the summary line is displayed
 - **THEN** it SHALL be output via `display.PrintStatusLine(<service-name>, "[log: <filename>]", display.ColorMuted)` so the user knows where to find output
 
-### Requirement: Waiting for traffic terminates on detection
+### Requirement: Ingest watch terminates on user input
 
-The "Waiting for traffic" prompt SHALL terminate when traces/logs land in Dynatrace, not only on timeout.
+The `WatchIngest` terminal view SHALL remain active until the user presses Enter or Ctrl+C.
 
-#### Scenario: Traces detected before timeout
+#### Scenario: User exits the watch
 
-- **GIVEN** the instrumented Java service is sending telemetry
-- **WHEN** `waitForServices()` detects the service in Dynatrace via DQL
-- **THEN** the waiting prompt SHALL terminate immediately
-- **AND** SHALL output via `display.PrintStatusLine("status", "All services are reporting to Dynatrace.", display.ColorOK)`
+- **GIVEN** `WatchIngest` is showing the live ingest summary
+- **WHEN** the user presses Enter or Ctrl+C
+- **THEN** the watch SHALL terminate and return control to the shell
 
 ### Requirement: Multi-module project detection and instrumentation
 

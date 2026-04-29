@@ -22,7 +22,7 @@ Existing infrastructure to reuse:
 
 - `detectProcesses("java", nil)` in `otel_runtime_scan_unix.go` already detects Java processes.
 - `ManagedProcess`, `StartManagedProcess`, `PrintProcessSummary` in `otel_process.go` handle process lifecycle.
-- `waitForServices()` in `otel_env.go` polls DQL for service entities.
+- `WatchIngest()` in `pkg/installer/ingest_watch.go` polls Dynatrace for newly ingested data and renders a live terminal summary — called by `cmd/install.go` after the installer returns, not from within the installer itself.
 - `generateBaseOtelEnvVars()` in `otel_env.go` generates the OTEL_* env vars (already includes `OTEL_EXPORTER_OTLP_PROTOCOL` and `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE`).
 - `scanProjectDirs()` with `javaProjectMarkers` already detects Java projects.
 - `confirmProceed()` for the UX confirmation pattern.
@@ -170,13 +170,13 @@ When a running process is matched, the plan preview explicitly lists the PID(s) 
 
 All status output during stop-and-restart uses `display.PrintStatusLine` from the `pkg/display` package. Section headers (e.g. before listing processes to be stopped) use `display.Header`. Errors use `display.ColorError`, success confirmations use `display.ColorOK`.
 
-### 12. Reuse `ManagedProcess` and `waitForServices` from existing infrastructure
+### 12. Reuse `ManagedProcess` and `WatchIngest` from existing infrastructure
 
 After launching the instrumented process:
 
 - `StartManagedProcess()` handles the lifecycle (PID tracking, log file, exit detection).
 - `PrintProcessSummary()` shows status after the settle period (crashed / running / port detected) using `display.PrintStatusLine` for each process line.
-- `waitForServices()` polls DQL to verify the service appears in Dynatrace; on success outputs via `display.PrintStatusLine("status", "All services are reporting to Dynatrace.", display.ColorOK)`; on timeout via `display.PrintStatusLine("timeout", "...", display.ColorMuted)`.
+- `WatchIngest()` (from `pkg/installer/ingest_watch.go`) polls Dynatrace for newly ingested data across all categories (services, logs, spans, etc.) and renders a live terminal summary. It is called by the CLI command layer (`cmd/install.go`) after `InstallOtelJava()` returns — not from within the installer itself. This is the same pattern used by every other runtime. The Java installer is responsible for starting the process and returning; the CLI is responsible for launching the watch.
 
 ### 13. Enable Java by default in `dtwiz install otel`
 
@@ -240,6 +240,7 @@ All messages use structured key=value pairs consistent with the rest of the code
 - **[Uninstall is best-effort]** → `dtwiz uninstall otel-java` identifies processes by the dtwiz agent JAR path, which is a heuristic — another process could independently use the same path. Mitigation: the preview explicitly asks the user to verify the list before confirming; `--dry-run` is supported.
 - **[Multi-module build output verbosity]** → Running `./mvnw clean package` streams full Maven output to stdout. Mitigation: acceptable — the user needs to see build progress and errors.
 - **[Gradle colon notation]** → Gradle sub-project paths use colon separators (`:api`, `:ui:web`) which are converted to OS filesystem separators. Custom `projectDir` overrides in `settings.gradle` are not supported by the regex parser. Mitigation: the regex handles the common 80% case; projects with custom `projectDir` will have missing modules silently skipped.
+- **[`isSpringBootMaven` false positive on multi-module roots]** → A root `pom.xml` that defines `<spring-boot.version>` as a property contains the substring `spring-boot`, causing `isSpringBootMaven` to return `true`. If `detectMultiModule` fails for any reason (e.g. XML parse error), the single-module fallback path will incorrectly offer `./mvnw spring-boot:run` on the root, starting only one process. Mitigation: `detectMultiModule` is the first check — the `isSpringBootMaven` fallback is only reached when multi-module detection returns `nil`. A future improvement would be to check for `<packaging>pom</packaging>` before applying the Spring Boot wrapper rule.
 
 ### 17. Multi-module project detection
 
@@ -260,6 +261,8 @@ treated as a sub-project.
 **Launch:** After a successful build (or if JARs already exist), each sub-module's fat JAR is launched
 as a separate `ManagedProcess` with `-javaagent` and a distinct `OTEL_SERVICE_NAME` matching the
 sub-module's directory name.
+
+**Execute() dispatch invariant:** `JavaInstrumentationPlan.Execute()` MUST check `len(p.SubModules) > 0` as its first action and route to `executeMultiModule()` if true. The multi-runtime flow (`createRuntimePlan` → `Execute()`) calls `Execute()` directly — it never calls `executeMultiModule()` — so without this guard, multi-module plans silently fall through to single-module entrypoint detection on the root directory, starting at most one process. `InstallOtelJava()` is not affected because it calls `executeMultiModule()` directly after building the plan.
 
 **Alternative considered:** Offer a selection menu for sub-modules (pick which ones to instrument).
 Rejected for the initial implementation — "zero config, all defaults on" means all detected modules
