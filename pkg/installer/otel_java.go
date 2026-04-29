@@ -350,6 +350,7 @@ func (p *JavaInstrumentationPlan) executeMultiModule() {
 			display.PrintStatusLine("error", fmt.Sprintf("failed to start %s: %v", svcName, err), display.ColorError)
 			continue
 		}
+		proc.portDetector = detectJavaListeningPort
 		procs = append(procs, proc)
 	}
 
