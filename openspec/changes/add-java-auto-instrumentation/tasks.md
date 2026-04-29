@@ -37,11 +37,11 @@
 
 - [x] 3.1 Add `detectJavaEntrypoints(projectPath string) []JavaEntrypoint` — scan for runnable artifacts in the project directory. A `JavaEntrypoint` has `Command string` (the full launch command) and `Description string` (shown in the selection menu).
   - Scan `target/*.jar` and `build/libs/*.jar` for JARs with a `Main-Class` in `MANIFEST.MF` (use `archive/zip` to read the JAR).
-  - If no fat JAR is found, check for build-tool wrappers with the following rules:
-    - **Maven:** only offer a wrapper if `pom.xml` references `spring-boot` → `./mvnw spring-boot:run`. `exec:java` is never offered (requires `mainClass` POM config absent in most projects).
-    - **Gradle Spring Boot:** if `build.gradle`/`build.gradle.kts` references `springframework.boot` or `spring-boot` → `./gradlew bootRun`.
-    - **Gradle generic:** `./gradlew run` for non-Spring Boot Gradle projects.
-    - **Maven non-Spring Boot with no JAR:** no wrapper offered — fall through to build instructions.
+  - If no fat JAR is found, resolve the best available build tool via `resolveMavenCmd`/`resolveGradleCmd`. Each resolver checks in order: (1) local wrapper script + bootstrap JAR (`mvnw` + `.mvn/wrapper/maven-wrapper.jar`, `gradlew` + `gradle/wrapper/gradle-wrapper.jar`); (2) system binary in PATH (`mvn`, `gradle`). A wrapper script without its bootstrap JAR is silently skipped and the system binary is tried instead. The resolved command prefix is used for both entrypoint detection and auto-build:
+    - **Maven Spring Boot:** `<mvnCmd> spring-boot:run`
+    - **Maven generic:** `<mvnCmd> exec:java`
+    - **Gradle Spring Boot:** `<gradleCmd> bootRun`
+    - **Gradle generic:** `<gradleCmd> run`
   - Add `isSpringBootMaven(projectPath string) bool` — reads `pom.xml` and checks for `spring-boot` substring.
   - Add `isSpringBootGradle(projectPath string) bool` — reads `build.gradle`/`build.gradle.kts` and checks for `spring-boot` or `springframework.boot` substrings.
 - [x] 3.2 Add `isExecutableJar(jarPath string) bool` — open the JAR as a ZIP, read `META-INF/MANIFEST.MF`, return true if `Main-Class:` is present.
@@ -62,9 +62,9 @@
   - [x] `TestDetectJavaEntrypoints_MavenFatJar` (temp dir with `target/app.jar` containing `Main-Class` → returns jar candidate)
   - [x] `TestDetectJavaEntrypoints_GradleFatJar` (temp dir with `build/libs/app-all.jar` → returns jar candidate)
   - [x] `TestDetectJavaEntrypoints_MavenWrapperSpringBoot` (temp dir with `mvnw` + Spring Boot `pom.xml` → returns `spring-boot:run` candidate)
-  - [x] `TestDetectJavaEntrypoints_MavenWrapperNonSpringBoot` (temp dir with `mvnw` + plain `pom.xml` → returns no entrypoint)
+  - [x] `TestDetectJavaEntrypoints_MavenWrapperNonSpringBoot` (temp dir with `mvnw` + plain `pom.xml` → returns `exec:java` candidate)
   - [x] `TestDetectJavaEntrypoints_GradleWrapperSpringBoot` (temp dir with `gradlew` + Spring Boot `build.gradle` → returns `bootRun` candidate)
-  - [x] `TestDetectJavaEntrypoints_GradleWrapperNoJar` (temp dir with `gradlew`, no Spring Boot → returns `run` candidate)
+  - [x] `TestDetectJavaEntrypoints_GradleWrapperNoJar` (temp dir with `gradlew`, no Spring Boot → returns no entrypoint, falls through to auto-build)
   - [x] `TestDetectJavaEntrypoints_NoEntrypoint` (empty project dir → returns empty slice)
   - [x] `TestIsExecutableJar_WithMainClass` (JAR with `Main-Class` → true)
   - [x] `TestIsExecutableJar_WithoutMainClass` (JAR without `Main-Class` → false)
@@ -81,6 +81,11 @@
   - Per enriched process: `logger.Debug("jps enrichment", "pid", pid, "description", description)`
   - Per matched process: `logger.Debug("matched process to project", "pid", pid, "project", projectPath)`
   - No matches: `logger.Debug("no running java processes matched to any project")`
+- [x] 4.3 Add `detectJavaListeningPort(pid int) string` in `otel_java_process.go` — extends `detectProcessListeningPort` with a `jps -l` fallback that skips build-tool JVMs (`org.gradle.*`, `org.apache.maven.*`, `sun.tools.jps.*`). Needed because Gradle runs the app inside the daemon, which is not a child of the tracked wrapper PID.
+- [x] 4.4 Add `isBuildToolJVM(mainClass string) bool` helper to filter Gradle/Maven/jps infrastructure from the `jps -l` fallback.
+- [x] 4.5 Add `portDetector func(pid int) string` field to `ManagedProcess` (with `detectPort()` method) so Java launches can inject `detectJavaListeningPort` without touching generic process detection.
+- [x] 4.6 Set `proc.portDetector = detectJavaListeningPort` at both Java `StartManagedProcess` call sites in `otel_java.go`.
+- [x] 4.7 Tests: `TestIsBuildToolJVM_*` (6 cases), `TestDetectPort_UsesCustomDetector`, `TestDetectPort_FallsBackWithoutDetector`
 
 ## 5. Full InstallOtelJava Automated Flow
 

@@ -74,8 +74,9 @@ func validateJavaPrerequisites() (string, error) {
 
 	if major < 8 {
 		logger.Debug("java version too old", "major", major, "minimum", 8)
-		display.PrintStatusLine("error", fmt.Sprintf("Java %d is too old — Java 8 or newer is required", major), display.ColorError)
-		return "", fmt.Errorf("Java %d is too old — Java 8 or newer is required", major) //nolint:staticcheck
+		err := fmt.Errorf("Java %d is too old — Java 8 or newer is required", major) //nolint:staticcheck
+		display.PrintStatusLine("error", err.Error(), display.ColorError)
+		return "", err
 	}
 
 	logger.Debug("java version OK", "major", major)
@@ -145,6 +146,42 @@ func isSpringBootGradle(projectPath string) bool {
 	return false
 }
 
+func resolveMavenCmd(projectPath string) (cmd, desc string) {
+	if !fileExists(filepath.Join(projectPath, "pom.xml")) {
+		return "", ""
+	}
+	if fileExists(filepath.Join(projectPath, "mvnw")) &&
+		fileExists(filepath.Join(projectPath, ".mvn", "wrapper", "maven-wrapper.jar")) {
+		return "./mvnw", "Maven"
+	}
+	if _, err := exec.LookPath("mvn"); err == nil {
+		return "mvn", "Maven"
+	}
+	if fileExists(filepath.Join(projectPath, "mvnw")) {
+		display.PrintStatusLine("error", "maven-wrapper.jar not found and 'mvn' is not in PATH — install Maven or run: mvn wrapper:wrapper", display.ColorError)
+	}
+	return "", ""
+}
+
+func resolveGradleCmd(projectPath string) (cmd, desc string) {
+	hasBuildFile := fileExists(filepath.Join(projectPath, "build.gradle")) ||
+		fileExists(filepath.Join(projectPath, "build.gradle.kts"))
+	if !hasBuildFile {
+		return "", ""
+	}
+	if fileExists(filepath.Join(projectPath, "gradlew")) &&
+		fileExists(filepath.Join(projectPath, "gradle", "wrapper", "gradle-wrapper.jar")) {
+		return "./gradlew", "Gradle"
+	}
+	if _, err := exec.LookPath("gradle"); err == nil {
+		return "gradle", "Gradle"
+	}
+	if fileExists(filepath.Join(projectPath, "gradlew")) {
+		display.PrintStatusLine("error", "gradle-wrapper.jar not found and 'gradle' is not in PATH — install Gradle or run: gradle wrapper --gradle-version 8.7", display.ColorError)
+	}
+	return "", ""
+}
+
 func detectJavaEntrypoints(projectPath string) []JavaEntrypoint {
 	var entrypoints []JavaEntrypoint
 	var scanned []string
@@ -190,25 +227,28 @@ func detectJavaEntrypoints(projectPath string) []JavaEntrypoint {
 		return entrypoints
 	}
 
-	hasMvnw := fileExists(filepath.Join(projectPath, "mvnw"))
-	hasGradlew := fileExists(filepath.Join(projectPath, "gradlew"))
+	mvnCmd, mvnDesc := resolveMavenCmd(projectPath)
+	gradleCmd, gradleDesc := resolveGradleCmd(projectPath)
 
-	if hasMvnw {
+	if mvnCmd != "" {
 		if isSpringBootMaven(projectPath) {
-			cmd := "./mvnw spring-boot:run"
-			logger.Debug("no fat JAR found, using wrapper fallback", "command", cmd)
-			entrypoints = append(entrypoints, JavaEntrypoint{Command: cmd, Description: "Maven Spring Boot"})
-		}
-		// Non-Spring Boot Maven with no JAR: no wrapper offered.
-	} else if hasGradlew {
-		if isSpringBootGradle(projectPath) {
-			cmd := "./gradlew bootRun"
-			logger.Debug("no fat JAR found, using wrapper fallback", "command", cmd)
-			entrypoints = append(entrypoints, JavaEntrypoint{Command: cmd, Description: "Gradle Spring Boot"})
+			cmd := mvnCmd + " spring-boot:run"
+			logger.Debug("no fat JAR found, using maven fallback", "command", cmd)
+			entrypoints = append(entrypoints, JavaEntrypoint{Command: cmd, Description: mvnDesc + " Spring Boot"})
 		} else {
-			cmd := "./gradlew run"
-			logger.Debug("no fat JAR found, using wrapper fallback", "command", cmd)
-			entrypoints = append(entrypoints, JavaEntrypoint{Command: cmd, Description: "Gradle run"})
+			cmd := mvnCmd + " exec:java"
+			logger.Debug("no fat JAR found, using maven fallback", "command", cmd)
+			entrypoints = append(entrypoints, JavaEntrypoint{Command: cmd, Description: mvnDesc + " run"})
+		}
+	} else if gradleCmd != "" {
+		if isSpringBootGradle(projectPath) {
+			cmd := gradleCmd + " bootRun"
+			logger.Debug("no fat JAR found, using gradle fallback", "command", cmd)
+			entrypoints = append(entrypoints, JavaEntrypoint{Command: cmd, Description: gradleDesc + " Spring Boot"})
+		} else {
+			cmd := gradleCmd + " run"
+			logger.Debug("no fat JAR found, using gradle fallback", "command", cmd)
+			entrypoints = append(entrypoints, JavaEntrypoint{Command: cmd, Description: gradleDesc + " run"})
 		}
 	}
 
@@ -222,18 +262,18 @@ func detectJavaEntrypoints(projectPath string) []JavaEntrypoint {
 }
 
 func attemptSingleModuleBuild(projectPath string) error {
-	hasMvnw := fileExists(filepath.Join(projectPath, "mvnw"))
-	hasGradlew := fileExists(filepath.Join(projectPath, "gradlew"))
+	mvnCmd, _ := resolveMavenCmd(projectPath)
+	gradleCmd, _ := resolveGradleCmd(projectPath)
 
 	var buildCmd string
 	var args []string
 
 	switch {
-	case hasMvnw:
-		buildCmd = "./mvnw"
+	case mvnCmd != "":
+		buildCmd = mvnCmd
 		args = []string{"clean", "package", "-DskipTests"}
-	case hasGradlew:
-		buildCmd = "./gradlew"
+	case gradleCmd != "":
+		buildCmd = gradleCmd
 		args = []string{"build", "-x", "test"}
 	default:
 		display.PrintStatusLine("error", "no build tool detected — build the project manually and re-run", display.ColorError)
@@ -292,6 +332,53 @@ func promptEntrypointSelection(entrypoints []JavaEntrypoint) *JavaEntrypoint {
 	}
 	logger.Debug("user selected entrypoint", "command", entrypoints[selection-1].Command)
 	return &entrypoints[selection-1]
+}
+
+// detectJavaListeningPort extends detectProcessListeningPort with a jps -l
+// fallback that skips build-tool JVMs. Needed for Gradle, where the app runs
+// inside the daemon rather than the tracked wrapper process.
+func detectJavaListeningPort(pid int) string {
+	if port := detectProcessListeningPort(pid); port != "" {
+		return port
+	}
+	out, err := exec.Command("jps", "-l").Output()
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) < 2 {
+			continue
+		}
+		jvmPID, err := strconv.Atoi(fields[0])
+		if err != nil || jvmPID == pid {
+			continue
+		}
+		if isBuildToolJVM(fields[1]) {
+			logger.Debug("skipping build-tool JVM", "pid", jvmPID, "class", fields[1])
+			continue
+		}
+		if port := detectProcessListeningPort(jvmPID); port != "" {
+			logger.Debug("port found on app JVM", "root_pid", pid, "jvm_pid", jvmPID, "class", fields[1], "port", port)
+			return port
+		}
+	}
+	return ""
+}
+
+// isBuildToolJVM reports whether a JVM main class belongs to a build-tool process.
+func isBuildToolJVM(mainClass string) bool {
+	for _, prefix := range []string{
+		"org.gradle.",
+		"org.apache.maven.",
+		"sun.tools.jps.",
+		"com.sun.tools.jps.",
+	} {
+		if strings.HasPrefix(mainClass, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // enrichProcessesWithJPS uses jps -l to populate Description fields on matching processes.

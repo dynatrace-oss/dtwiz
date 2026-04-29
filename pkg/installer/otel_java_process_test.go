@@ -8,6 +8,28 @@ import (
 	"testing"
 )
 
+func mustCreateFile(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func setupMvnWrapper(t *testing.T, dir string) {
+	t.Helper()
+	mustCreateFile(t, filepath.Join(dir, "mvnw"))
+	mustCreateFile(t, filepath.Join(dir, ".mvn", "wrapper", "maven-wrapper.jar"))
+}
+
+func setupGradleWrapper(t *testing.T, dir string) {
+	t.Helper()
+	mustCreateFile(t, filepath.Join(dir, "gradlew"))
+	mustCreateFile(t, filepath.Join(dir, "gradle", "wrapper", "gradle-wrapper.jar"))
+}
+
 // ── parseJavaVersion tests ─────────────────────────────────────────────────────
 
 func TestParseJavaVersion_Legacy_1_8(t *testing.T) {
@@ -154,9 +176,7 @@ func TestDetectJavaEntrypoints_GradleFatJar(t *testing.T) {
 
 func TestDetectJavaEntrypoints_MavenWrapperSpringBoot(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "mvnw"), []byte(""), 0644); err != nil {
-		t.Fatal(err)
-	}
+	setupMvnWrapper(t, dir)
 	pomContent := `<project>
   <parent>
     <groupId>org.springframework.boot</groupId>
@@ -184,24 +204,29 @@ func TestDetectJavaEntrypoints_MavenWrapperSpringBoot(t *testing.T) {
 
 func TestDetectJavaEntrypoints_MavenWrapperNonSpringBoot(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "mvnw"), []byte(""), 0644); err != nil {
-		t.Fatal(err)
-	}
+	setupMvnWrapper(t, dir)
 	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte("<project/>"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
 	entrypoints := detectJavaEntrypoints(dir)
-	if len(entrypoints) != 0 {
-		t.Fatalf("expected no entrypoints for Maven non-Spring Boot project, got %+v", entrypoints)
+	if len(entrypoints) == 0 {
+		t.Fatal("expected 'exec:java' entrypoint for Maven non-Spring Boot project")
+	}
+	found := false
+	for _, ep := range entrypoints {
+		if ep.Command == "./mvnw exec:java" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected './mvnw exec:java' entrypoint, got %+v", entrypoints)
 	}
 }
 
 func TestDetectJavaEntrypoints_GradleWrapperSpringBoot(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "gradlew"), []byte(""), 0644); err != nil {
-		t.Fatal(err)
-	}
+	setupGradleWrapper(t, dir)
 	gradleContent := `plugins {
     id 'org.springframework.boot' version '3.0.0'
 }`
@@ -226,9 +251,7 @@ func TestDetectJavaEntrypoints_GradleWrapperSpringBoot(t *testing.T) {
 
 func TestDetectJavaEntrypoints_GradleWrapperNoJar(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "gradlew"), []byte(""), 0644); err != nil {
-		t.Fatal(err)
-	}
+	setupGradleWrapper(t, dir)
 	if err := os.WriteFile(filepath.Join(dir, "build.gradle"), []byte("apply plugin: 'java'\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -385,5 +408,80 @@ func TestIsSpringBootGradle_Kts(t *testing.T) {
 	}
 	if !isSpringBootGradle(dir) {
 		t.Fatal("expected isSpringBootGradle to return true for .kts file")
+	}
+}
+
+// ── isBuildToolJVM tests ──────────────────────────────────────────────────────
+
+func TestIsBuildToolJVM_GradleDaemon(t *testing.T) {
+	if !isBuildToolJVM("org.gradle.launcher.daemon.bootstrap.GradleDaemon") {
+		t.Fatal("expected Gradle daemon to be recognized as build-tool JVM")
+	}
+}
+
+func TestIsBuildToolJVM_GradleWrapper(t *testing.T) {
+	if !isBuildToolJVM("org.gradle.wrapper.GradleWrapperMain") {
+		t.Fatal("expected Gradle wrapper to be recognized as build-tool JVM")
+	}
+}
+
+func TestIsBuildToolJVM_Maven(t *testing.T) {
+	if !isBuildToolJVM("org.apache.maven.wrapper.MavenWrapperMain") {
+		t.Fatal("expected Maven wrapper to be recognized as build-tool JVM")
+	}
+}
+
+func TestIsBuildToolJVM_Jps(t *testing.T) {
+	if !isBuildToolJVM("sun.tools.jps.Jps") {
+		t.Fatal("expected jps itself to be recognized as build-tool JVM")
+	}
+}
+
+func TestIsBuildToolJVM_AppClass(t *testing.T) {
+	if isBuildToolJVM("com.example.InventoryApplication") {
+		t.Fatal("expected user app class to not be recognized as build-tool JVM")
+	}
+}
+
+func TestIsBuildToolJVM_Empty(t *testing.T) {
+	if isBuildToolJVM("") {
+		t.Fatal("expected empty main class to not be recognized as build-tool JVM")
+	}
+}
+
+// ── detectJavaListeningPort / portDetector tests ──────────────────────────────
+
+func TestDetectPort_UsesCustomDetector(t *testing.T) {
+	called := false
+	proc := &ManagedProcess{
+		PID: 99999,
+		portDetector: func(pid int) string {
+			called = true
+			if pid != 99999 {
+				t.Errorf("portDetector called with wrong pid: got %d, want 99999", pid)
+			}
+			return "8080"
+		},
+		exitResultCh: make(chan error, 1),
+	}
+	port := proc.detectPort()
+	if !called {
+		t.Fatal("expected custom portDetector to be called")
+	}
+	if port != "8080" {
+		t.Fatalf("expected port 8080, got %q", port)
+	}
+}
+
+func TestDetectPort_FallsBackWithoutDetector(t *testing.T) {
+	proc := &ManagedProcess{
+		PID:          0,
+		exitResultCh: make(chan error, 1),
+	}
+	// PID 0 won't have a listening port; we just verify detectPort doesn't panic
+	// and returns an empty string when no portDetector is set.
+	port := proc.detectPort()
+	if port != "" {
+		t.Fatalf("expected empty port for PID 0, got %q", port)
 	}
 }

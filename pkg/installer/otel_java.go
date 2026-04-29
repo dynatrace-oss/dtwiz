@@ -254,6 +254,7 @@ func (p *JavaInstrumentationPlan) Execute() {
 		display.PrintStatusLine("error", fmt.Sprintf("failed to start process: %v", err), display.ColorError)
 		return
 	}
+	proc.portDetector = detectJavaListeningPort
 
 	aliveNames, _ := PrintProcessSummary([]*ManagedProcess{proc}, processSettleDelay)
 	if len(aliveNames) == 0 {
@@ -404,6 +405,7 @@ func InstallOtelJava(envURL, token, serviceName string, dryRun bool) error {
 	if err != nil {
 		return fmt.Errorf("starting instrumented process: %w", err)
 	}
+	proc.portDetector = detectJavaListeningPort
 
 	aliveNames, _ := PrintProcessSummary([]*ManagedProcess{proc}, processSettleDelay)
 	if len(aliveNames) == 0 {
