@@ -124,15 +124,53 @@ The system SHALL use the existing `detectNodeEntrypoints` function to resolve th
 - **AND** if the user confirms, the project list is shown again for re-selection
 - **AND** if the user declines, the flow exits without the "No Node.js projects detected" fallback message
 
+### Requirement: Project dependency prerequisite check
+
+Before launching, the system SHALL verify that the project's own `node_modules/` directory exists for regular and Next.js apps. If it is missing, the installer SHALL exit with a clear message pointing the user to the right install command. Nuxt is exempt from this check because it runs a pre-compiled `.output/server/index.mjs` that does not require the project's `node_modules/` at runtime.
+
+#### Scenario: node_modules/ missing for regular app
+
+- **GIVEN** a regular Node.js project is selected
+- **AND** the project directory does not contain a `node_modules/` subdirectory
+- **WHEN** `Execute()` prepares to launch
+- **THEN** it prints "Project dependencies are not installed in \<path\>"
+- **AND** it prints "Run '\<packageManager\> install' in that directory first, then re-run dtwiz." using the detected package manager (npm/yarn/pnpm)
+- **AND** it exits without creating `.otel/`, running `npm install`, or launching any process
+
+#### Scenario: node_modules/ missing for Next.js app
+
+- **GIVEN** a Next.js project is selected
+- **AND** the project directory does not contain a `node_modules/` subdirectory
+- **WHEN** `Execute()` prepares to launch
+- **THEN** it prints "Project dependencies are not installed in \<path\>"
+- **AND** it prints "Run '\<packageManager\> install' in that directory first, then re-run dtwiz."
+- **AND** it exits without creating `.otel/`, running `npm install`, or launching any process
+
+#### Scenario: node_modules/ present — proceeds normally
+
+- **GIVEN** a regular or Next.js project is selected
+- **AND** the project directory contains a `node_modules/` subdirectory
+- **WHEN** `Execute()` prepares to launch
+- **THEN** the prerequisite check passes and execution continues normally
+
+#### Scenario: Nuxt skips node_modules/ check
+
+- **GIVEN** a Nuxt project is selected
+- **AND** the project directory does not contain a `node_modules/` subdirectory
+- **BUT** `.output/server/index.mjs` exists
+- **WHEN** `Execute()` prepares to launch
+- **THEN** the `node_modules/` check is NOT performed and execution continues to the Nuxt launch step
+
 ### Requirement: Regular Node.js app launch
 
-For non-Next.js projects, the system SHALL launch the app using `node --require @opentelemetry/auto-instrumentations-node/register <entrypoint>` with CWD set to `.otel/` so that `require()` resolves the OTel module from `.otel/node_modules/`.
+For non-Next.js projects, the system SHALL launch the app using `node --require @opentelemetry/auto-instrumentations-node/register <entrypoint>` with CWD set to `.otel/` so that `require()` resolves the OTel module from `.otel/node_modules/`. The entrypoint path SHALL use forward slashes (e.g. `../server.js`) to ensure compatibility on Windows.
 
 #### Scenario: Regular app launched with auto-instrumentation
 
 - **GIVEN** a regular Node.js project where `detectNodeEntrypoints` resolved entrypoint `server.js`
 - **WHEN** `Execute()` launches the process
 - **THEN** the command is `node --require @opentelemetry/auto-instrumentations-node/register ../server.js`
+- **AND** the entrypoint path uses forward slashes regardless of the host OS
 - **AND** CWD is set to the `.otel/` directory
 - **AND** OTEL\_\* env vars are set on the process
 

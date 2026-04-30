@@ -521,6 +521,19 @@ func (p *NodeInstrumentationPlan) Execute() {
 		logger.Debug("nuxt build output found", "path", nitroEntry)
 	}
 
+	// For regular and Next.js apps, verify that project dependencies are installed.
+	// Nuxt is exempt — it runs a pre-built .output/server/index.mjs and does not
+	// need the project's node_modules/ at runtime.
+	if p.Framework == "" || p.Framework == "next" {
+		nodeModulesDir := filepath.Join(proj.Path, "node_modules")
+		if _, err := os.Stat(nodeModulesDir); os.IsNotExist(err) {
+			fmt.Println()
+			fmt.Printf("    Project dependencies are not installed in %s\n", proj.Path)
+			fmt.Printf("    Run '%s install' in that directory first, then re-run dtwiz.\n", p.PackageManager)
+			return
+		}
+	}
+
 	if len(proj.RunningProcessIDs) > 0 {
 		fmt.Print("  Stopping running processes... ")
 		stopProcesses(proj.RunningProcessIDs)
@@ -620,7 +633,7 @@ func (p *NodeInstrumentationPlan) Execute() {
 			epEnvVars := copyEnvVars(p.EnvVars)
 			epEnvVars["OTEL_SERVICE_NAME"] = svcName
 
-			relEntrypoint := filepath.Join("..", ep)
+			relEntrypoint := "../" + filepath.ToSlash(ep)
 			cmd := exec.Command("node", "--require", "@opentelemetry/auto-instrumentations-node/register", relEntrypoint)
 			cmd.Dir = p.OtelDir
 			cmd.Env = append(os.Environ(), formatEnvVars(epEnvVars)...)

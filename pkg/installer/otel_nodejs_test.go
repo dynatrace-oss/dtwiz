@@ -558,6 +558,59 @@ func TestDetectNodeFramework_Regular(t *testing.T) {
 	}
 }
 
+// --- Prerequisite check: node_modules/ ---
+
+func TestExecute_RegularApp_MissingNodeModules_DoesNotCreateOtelDir(t *testing.T) {
+	dir := t.TempDir()
+	// Project has a package.json and an entrypoint but NO node_modules/.
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name":"myapp"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "index.js"), []byte(`console.log("hi")`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	otelDir := filepath.Join(dir, ".otel")
+	plan := &NodeInstrumentationPlan{
+		Project:        ScannedProject{Path: dir},
+		Entrypoints:    []string{"index.js"},
+		PackageManager: "npm",
+		OtelDir:        otelDir,
+		Framework:      "",
+	}
+
+	plan.Execute()
+
+	if _, err := os.Stat(otelDir); !os.IsNotExist(err) {
+		t.Errorf(".otel/ was created despite missing node_modules/ — expected early exit")
+	}
+}
+
+func TestExecute_NextJSApp_MissingNodeModules_DoesNotCreateOtelDir(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"dependencies":{"next":"14.0.0"}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "next.config.js"), []byte(`module.exports = {}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	otelDir := filepath.Join(dir, ".otel")
+	plan := &NodeInstrumentationPlan{
+		Project:        ScannedProject{Path: dir},
+		Entrypoints:    []string{"next:start"},
+		PackageManager: "npm",
+		OtelDir:        otelDir,
+		Framework:      "next",
+	}
+
+	plan.Execute()
+
+	if _, err := os.Stat(otelDir); !os.IsNotExist(err) {
+		t.Errorf(".otel/ was created despite missing node_modules/ — expected early exit")
+	}
+}
+
 // --- Task 1.2: detectNodePackageManager tests ---
 
 func TestDetectNodePackageManager_NPM(t *testing.T) {
