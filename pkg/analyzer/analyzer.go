@@ -56,6 +56,7 @@ type ContainerRuntime string
 
 const (
 	ContainerRuntimeDocker ContainerRuntime = "docker"
+	ContainerRuntimePodman ContainerRuntime = "podman"
 	ContainerRuntimeNone   ContainerRuntime = "none"
 )
 
@@ -69,6 +70,14 @@ const (
 
 // DockerInfo holds details about a detected Docker installation.
 type DockerInfo struct {
+	Available             bool   `json:"available"`
+	ServerVersion         string `json:"server_version,omitempty"`
+	Variant               string `json:"variant,omitempty"`
+	RunningContainerCount int    `json:"running_containers"`
+}
+
+// PodmanInfo holds details about a detected Podman installation.
+type PodmanInfo struct {
 	Available             bool   `json:"available"`
 	ServerVersion         string `json:"server_version,omitempty"`
 	Variant               string `json:"variant,omitempty"`
@@ -137,6 +146,7 @@ type SystemInfo struct {
 	ContainerRuntime ContainerRuntime `json:"container_runtime"`
 	Orchestrator     Orchestrator     `json:"orchestrator"`
 	Docker           *DockerInfo      `json:"docker,omitempty"`
+	Podman           *PodmanInfo      `json:"podman,omitempty"`
 	Kubernetes       *KubernetesInfo  `json:"kubernetes,omitempty"`
 	OneAgentRunning  bool             `json:"oneagent_running"`
 	OtelCollector    bool             `json:"otel_collector"`
@@ -338,6 +348,17 @@ func AnalyzeSystem() (*SystemInfo, error) {
 		info.Docker = d
 		if d.Available {
 			info.ContainerRuntime = ContainerRuntimeDocker
+		}
+		mu.Unlock()
+		return nil
+	})
+
+	run(func() error {
+		p := detectPodman()
+		mu.Lock()
+		info.Podman = p
+		if p.Available && info.ContainerRuntime != ContainerRuntimeDocker {
+			info.ContainerRuntime = ContainerRuntimePodman
 		}
 		mu.Unlock()
 		return nil
