@@ -18,6 +18,7 @@ const (
 // InstallExtension activates a specific version of a Dynatrace extension.
 // When silent is true, an HTTP 400 and HTTP 409 response is treated as a no-op rather than an error
 // (useful when the extension may already be installed).
+// Required scope: extensions:definitions:write
 func InstallExtension(c *client.PlatformClient, extensionName, version string, silent bool) error {
 	path := fmt.Sprintf(extensionPath, extensionName)
 	payload := map[string]string{
@@ -53,11 +54,6 @@ type monitoringConfigPage struct {
 	NextPageKey string                 `json:"nextPageKey"`
 }
 
-type createResult struct {
-	Code     int    `json:"code"`
-	ObjectID string `json:"objectId"`
-}
-
 // ListMonitoringConfigs returns all monitoring configuration items for the given
 // extension, following pagination automatically.
 func ListMonitoringConfigs(c *client.PlatformClient, extensionName string) ([]MonitoringConfigItem, error) {
@@ -86,31 +82,30 @@ func ListMonitoringConfigs(c *client.PlatformClient, extensionName string) ([]Mo
 	return all, nil
 }
 
-// CreateMonitoringConfigs posts a bulk monitoring configuration request for the
-// given extension and returns the objectId of the first successfully created entry.
-func CreateMonitoringConfigs(c *client.PlatformClient, extensionName string, payload []map[string]interface{}) (string, error) {
+// CreateMonitoringConfig posts a single monitoring configuration for the given
+// extension and returns the objectId of the created entry.
+func CreateMonitoringConfig(c *client.PlatformClient, extensionName string, payload map[string]interface{}) (string, error) {
 	path := fmt.Sprintf(monitoringConfigsPath, extensionName)
-	var results []createResult
+	var result struct {
+		ObjectID string `json:"objectId"`
+	}
 	resp, err := c.HTTP().R().
 		SetHeader("Content-Type", "application/json").
 		SetBody(payload).
-		SetResult(&results).
+		SetResult(&result).
 		Post(path)
 	if err != nil {
 		return "", fmt.Errorf("creating monitoring config for %s: %w", extensionName, err)
 	}
 	sc := resp.StatusCode()
-	if sc != http.StatusOK && sc != http.StatusCreated && sc != http.StatusMultiStatus {
+	if sc != http.StatusOK && sc != http.StatusCreated {
 		body := resp.String()
 		return "", fmt.Errorf("creating monitoring config for %s (HTTP %d): %s", extensionName, sc, body[:min(len(body), 400)])
 	}
-	for _, r := range results {
-		if (r.Code == http.StatusOK || r.Code == http.StatusCreated) && r.ObjectID != "" {
-			return r.ObjectID, nil
-		}
+	if result.ObjectID == "" {
+		return "", fmt.Errorf("monitoring config creation for %s returned no objectId", extensionName)
 	}
-	noIDBody := resp.String()
-	return "", fmt.Errorf("monitoring config creation for %s returned no objectId: %s", extensionName, noIDBody[:min(len(noIDBody), 400)])
+	return result.ObjectID, nil
 }
 
 // DeleteMonitoringConfig deletes a single monitoring configuration by objectId.

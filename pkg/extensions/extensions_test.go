@@ -159,20 +159,20 @@ func TestListMonitoringConfigs_ErrorOnNonOK(t *testing.T) {
 	}
 }
 
-// CreateMonitoringConfigs
+// CreateMonitoringConfig
 
-func TestCreateMonitoringConfigs_ReturnsObjectID(t *testing.T) {
+func TestCreateMonitoringConfig_ReturnsObjectID(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Errorf("method = %q, want POST", r.Method)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode([]createResult{{Code: http.StatusCreated, ObjectID: "new-uuid"}}) //nolint:errcheck
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]string{"objectId": "new-uuid"}) //nolint:errcheck
 	}))
 	defer srv.Close()
 
-	id, err := CreateMonitoringConfigs(newTestPlatformClient(t, srv.URL), "com.example.ext", nil)
+	id, err := CreateMonitoringConfig(newTestPlatformClient(t, srv.URL), "com.example.ext", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -181,13 +181,13 @@ func TestCreateMonitoringConfigs_ReturnsObjectID(t *testing.T) {
 	}
 }
 
-func TestCreateMonitoringConfigs_ErrorOnNonOK(t *testing.T) {
+func TestCreateMonitoringConfig_ErrorOnNonOK(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	defer srv.Close()
 
-	_, err := CreateMonitoringConfigs(newTestPlatformClient(t, srv.URL), "com.example.ext", nil)
+	_, err := CreateMonitoringConfig(newTestPlatformClient(t, srv.URL), "com.example.ext", nil)
 	if err == nil {
 		t.Fatal("expected error for 401, got nil")
 	}

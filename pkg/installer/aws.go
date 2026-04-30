@@ -201,42 +201,40 @@ func findExistingMonitoringConfig(c *client.PlatformClient, accountID string) (s
 // returns the objectId (UUID) to use as pMonitoringConfigId in CloudFormation.
 func createDTMonitoringConfig(c *client.PlatformClient, accountID, region string) (string, error) {
 	desc := fmt.Sprintf("dtwiz — account %s / %s", accountID, region)
-	payload := []map[string]interface{}{
-		{
-			"scope": "integration-aws",
-			"value": map[string]interface{}{
-				"enabled":           false,
-				"description":       desc,
-				"version":           "1.0.0",
-				"featureSets":       defaultFeatureSets,
-				"activationContext": "DATA_ACQUISITION",
-				"aws": map[string]interface{}{
-					"deploymentRegion": region,
-					"credentials": []map[string]interface{}{
-						{
-							"description":  desc,
-							"enabled":      false,
-							"connectionId": "*",
-							"accountId":    accountID,
-						},
+	payload := map[string]interface{}{
+		"scope": "integration-aws",
+		"value": map[string]interface{}{
+			"enabled":           false,
+			"description":       desc,
+			"version":           "1.0.0",
+			"featureSets":       defaultFeatureSets,
+			"activationContext": "DATA_ACQUISITION",
+			"aws": map[string]interface{}{
+				"deploymentRegion": region,
+				"credentials": []map[string]interface{}{
+					{
+						"description":  desc,
+						"enabled":      false,
+						"connectionId": "*",
+						"accountId":    accountID,
 					},
-					"regionFiltering":             []string{region},
-					"tagFiltering":                []interface{}{},
-					"tagEnrichment":               []interface{}{},
-					"smartscapeConfiguration":     map[string]interface{}{"enabled": true},
-					"metricsConfiguration":        map[string]interface{}{"enabled": true, "regions": []string{region}},
-					"cloudWatchLogsConfiguration": map[string]interface{}{"enabled": false, "regions": []string{region}},
-					"namespaces":                  []interface{}{},
-					"configurationMode":           "QUICK_START",
-					"deploymentMode":              "AUTOMATED",
-					"deploymentScope":             "SINGLE_ACCOUNT",
-					"manualDeploymentStatus":      "NA",
-					"automatedDeploymentStatus":   "NA",
 				},
+				"regionFiltering":             []string{region},
+				"tagFiltering":                []interface{}{},
+				"tagEnrichment":               []interface{}{},
+				"smartscapeConfiguration":     map[string]interface{}{"enabled": true},
+				"metricsConfiguration":        map[string]interface{}{"enabled": true, "regions": []string{region}},
+				"cloudWatchLogsConfiguration": map[string]interface{}{"enabled": false, "regions": []string{region}},
+				"namespaces":                  []interface{}{},
+				"configurationMode":           "QUICK_START",
+				"deploymentMode":              "AUTOMATED",
+				"deploymentScope":             "SINGLE_ACCOUNT",
+				"manualDeploymentStatus":      "NA",
+				"automatedDeploymentStatus":   "NA",
 			},
 		},
 	}
-	return extensions.CreateMonitoringConfigs(c, daAWSExtension, payload)
+	return extensions.CreateMonitoringConfig(c, daAWSExtension, payload)
 }
 
 // downloadAWSTemplate fetches the CloudFormation template from S3 to a
@@ -534,11 +532,19 @@ func InstallAWS(c *client.PlatformClient, envURL, token, platformToken string, d
 	return nil
 }
 
-// runCommandSilent runs a command like RunCommand but discards stdout/stderr
-// output, preventing interleaving with the watch display.
+// runCommandSilent runs a command like RunCommand but discards stdout,
+// preventing interleaving with the watch display. Stderr is captured and
+// included in the error message on failure.
 func runCommandSilent(name string, args ...string) error {
+	var stderr strings.Builder
 	cmd := exec.Command(name, args...)
 	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
-	return cmd.Run()
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return fmt.Errorf("%w\n%s", err, msg)
+		}
+		return err
+	}
+	return nil
 }
