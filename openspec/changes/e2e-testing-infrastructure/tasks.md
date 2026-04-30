@@ -12,12 +12,12 @@
 
 ## 3. Python E2E Test (`test/e2e/`)
 
-- [ ] 3.1 Create `test/e2e/suite_test.go` with `//go:build integration` — shared test helpers: `copyFixture(t, fixtureDir, destDir)` to copy fixture app into temp dir, `startApp(t, dir, port)` to run the instrumented app as a subprocess with `t.Cleanup` kill, `triggerRequest(url)` HTTP GET helper
-- [ ] 3.2 Create `test/e2e/python_test.go` with `//go:build integration` — `TestPythonOTelAutoInstrumentation`: checks `python3` available (skip if not), calls `SetupIntegration`, copies flask fixture, runs `dtwiz install otel-python` on the temp dir, starts the app with `opentelemetry-instrument`, sends HTTP request, calls `WaitForTraces` with unique service name, asserts trace count > 0
+- [x] 3.1 Create `test/integration/helpers.go` with `//go:build integration` — exported helpers in package `integration`: `CopyFixture(t, fixtureDir, destDir)` to copy fixture app into temp dir, `StartApp(t, dir, port)` to run the instrumented app as a subprocess with `t.Cleanup` kill, `TriggerRequest(url)` HTTP GET helper
+- [x] 3.2 Create `test/e2e/python_test.go` with `//go:build integration` — `TestPythonOTelAutoInstrumentation`: checks `python3` available (skip if not), calls `SetupIntegration`, copies flask fixture via `integration.CopyFixture`, runs `dtwiz install otel-python` on the temp dir, starts the app with `opentelemetry-instrument` via `integration.StartApp`, sends HTTP request via `integration.TriggerRequest`, calls `WaitForTraces` with unique service name, asserts trace count > 0
 
 ## 4. makefile & Gitignore
 
-- [x] 4.1 Add `test-integration` target to `makefile` — loads `.e2e.env` if present (`ifneq (,$(wildcard .e2e.env))` / `include .e2e.env` / `export`), checks `TEST_DT_ENVIRONMENT` and `TEST_DT_ACCESS_TOKEN` are set (prints error to stderr + `exit 1` if missing), runs `go test -v -tags integration -timeout 5m ./test/e2e/...`
+- [x] 4.1 Add `test-integration` target to `makefile` — loads `.e2e.env` if present (top-level `ifneq (,$(wildcard .e2e.env))` / `include .e2e.env` / `export`), checks `TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN` are set (prints error to stderr + `exit 1` if missing), runs `go test -v -tags integration -timeout 5m ./test/e2e/...`
 - [x] 4.2 Add `.e2e.env` to `.gitignore`
 - [x] 4.3 Add `.e2e.env.example` to the repo — contains the three required env vars (`TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN`) with placeholder values and a comment instructing contributors to `cp .e2e.env.example .e2e.env` and fill in their credentials; committed to VCS
 - [x] 4.4 Update `.PHONY` in `makefile` to include `test-integration`

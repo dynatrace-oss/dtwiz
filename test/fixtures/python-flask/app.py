@@ -10,5 +10,5 @@ def index():
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 18080))
+    port = int(os.environ.get("TEST_FLASK_APP_PORT", 18080))
     app.run(host="0.0.0.0", port=port)

@@ -13,9 +13,12 @@ import (
 
 // TestEnv holds shared state for an integration test run.
 type TestEnv struct {
-	Client  *client.Client
-	TestID  string
-	TempDir string
+	Client        *client.Client
+	TestID        string
+	TempDir       string
+	EnvURL        string
+	AccessToken   string
+	PlatformToken string
 }
 
 // SetupIntegration validates required environment variables, constructs a
@@ -24,12 +27,12 @@ type TestEnv struct {
 func SetupIntegration(t *testing.T) *TestEnv {
 	t.Helper()
 
-	env := requireEnv(t, "TEST_DT_ENVIRONMENT")
+	envUrl := requireEnv(t, "TEST_DT_ENVIRONMENT")
 	accessToken := requireEnv(t, "TEST_DT_ACCESS_TOKEN")
 	platformToken := requireEnv(t, "TEST_DT_PLATFORM_TOKEN")
 
-	classicURL := installer.APIURL(env)
-	platformURL := installer.AppsURL(env)
+	classicURL := installer.APIURL(envUrl)
+	platformURL := installer.AppsURL(envUrl)
 
 	c, err := client.New(classicURL, accessToken, platformURL, platformToken, 0)
 	if err != nil {
@@ -39,9 +42,12 @@ func SetupIntegration(t *testing.T) *TestEnv {
 	testID := fmt.Sprintf("dtwiz-test-%d-%s", time.Now().Unix(), randomString(6))
 
 	return &TestEnv{
-		Client:  c,
-		TestID:  testID,
-		TempDir: t.TempDir(),
+		Client:        c,
+		TestID:        testID,
+		TempDir:       t.TempDir(),
+		EnvURL:        envUrl,
+		AccessToken:   accessToken,
+		PlatformToken: platformToken,
 	}
 }
 
