@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
@@ -75,25 +74,19 @@ func isGradleMultiProject(projectPath string) bool {
 }
 
 func mavenBuildCommand(projectPath string) string {
-	mvnwName := findWrapper(projectPath, "mvnw", "mvnw.cmd")
-	if mvnwName == "" {
+	mvnCmd, _ := resolveMavenCmd(projectPath)
+	if mvnCmd == "" {
 		return ""
 	}
-	if runtime.GOOS == "windows" {
-		return mvnwName + " clean package -DskipTests"
-	}
-	return "./" + mvnwName + " clean package -DskipTests"
+	return mvnCmd + " clean package -DskipTests"
 }
 
 func gradleBuildCommand(projectPath string) string {
-	gradlewName := findWrapper(projectPath, "gradlew", "gradlew.bat")
-	if gradlewName == "" {
+	gradleCmd, _ := resolveGradleCmd(projectPath)
+	if gradleCmd == "" {
 		return ""
 	}
-	if runtime.GOOS == "windows" {
-		return gradlewName + " build -x test"
-	}
-	return "./" + gradlewName + " build -x test"
+	return gradleCmd + " build -x test"
 }
 
 func hasExecutableJar(projectPath string) bool {
