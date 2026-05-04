@@ -34,6 +34,20 @@ func setupGradleWrapper(t *testing.T, dir string) {
 	mustCreateFile(t, filepath.Join(dir, "gradle", "wrapper", "gradle-wrapper.jar"))
 }
 
+func mvnWrapperCmd() string {
+	if runtime.GOOS == "windows" {
+		return "mvnw.cmd"
+	}
+	return "./mvnw"
+}
+
+func gradleWrapperCmd() string {
+	if runtime.GOOS == "windows" {
+		return "gradlew.bat"
+	}
+	return "./gradlew"
+}
+
 // ── parseJavaVersion tests ─────────────────────────────────────────────────────
 
 func TestParseJavaVersion_Legacy_1_8(t *testing.T) {
@@ -195,14 +209,15 @@ func TestDetectJavaEntrypoints_MavenWrapperSpringBoot(t *testing.T) {
 	if len(entrypoints) == 0 {
 		t.Fatal("expected spring-boot:run entrypoint for Maven Spring Boot project")
 	}
+	want := mvnWrapperCmd() + " spring-boot:run"
 	found := false
 	for _, ep := range entrypoints {
-		if ep.Command == "./mvnw spring-boot:run" {
+		if ep.Command == want {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("expected './mvnw spring-boot:run' entrypoint, got %+v", entrypoints)
+		t.Fatalf("expected %q entrypoint, got %+v", want, entrypoints)
 	}
 }
 
@@ -217,14 +232,15 @@ func TestDetectJavaEntrypoints_MavenWrapperNonSpringBoot(t *testing.T) {
 	if len(entrypoints) == 0 {
 		t.Fatal("expected 'exec:java' entrypoint for Maven non-Spring Boot project")
 	}
+	want := mvnWrapperCmd() + " exec:java"
 	found := false
 	for _, ep := range entrypoints {
-		if ep.Command == "./mvnw exec:java" {
+		if ep.Command == want {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("expected './mvnw exec:java' entrypoint, got %+v", entrypoints)
+		t.Fatalf("expected %q entrypoint, got %+v", want, entrypoints)
 	}
 }
 
@@ -242,14 +258,15 @@ func TestDetectJavaEntrypoints_GradleWrapperSpringBoot(t *testing.T) {
 	if len(entrypoints) == 0 {
 		t.Fatal("expected bootRun entrypoint for Gradle Spring Boot project")
 	}
+	want := gradleWrapperCmd() + " bootRun"
 	found := false
 	for _, ep := range entrypoints {
-		if ep.Command == "./gradlew bootRun" {
+		if ep.Command == want {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("expected './gradlew bootRun' entrypoint, got %+v", entrypoints)
+		t.Fatalf("expected %q entrypoint, got %+v", want, entrypoints)
 	}
 }
 
@@ -264,14 +281,15 @@ func TestDetectJavaEntrypoints_GradleWrapperNoJar(t *testing.T) {
 	if len(entrypoints) == 0 {
 		t.Fatal("expected 'gradlew run' entrypoint for non-Spring Boot Gradle project")
 	}
+	want := gradleWrapperCmd() + " run"
 	found := false
 	for _, ep := range entrypoints {
-		if ep.Command == "./gradlew run" {
+		if ep.Command == want {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("expected './gradlew run' entrypoint, got %+v", entrypoints)
+		t.Fatalf("expected %q entrypoint, got %+v", want, entrypoints)
 	}
 }
 
