@@ -11,8 +11,14 @@ import (
 )
 
 const (
-	portPollInterval   = 500 * time.Millisecond
-	portPollTimeout    = 15 * time.Second
+	portPollInterval = 500 * time.Millisecond
+	// portPollTimeout has to outlast Maven compilation + Spring Boot startup
+	// (~20–45s for typical projects). On Windows, each probe iteration also
+	// burns ~10–15s to PowerShell startup, so a tighter window only yields
+	// one iteration and never sees the port get bound. The trade-off: services
+	// that legitimately do not expose a port make the user wait this long
+	// before "port not detected" is shown.
+	portPollTimeout    = 60 * time.Second
 	processSettleDelay = 3 * time.Second
 )
 
