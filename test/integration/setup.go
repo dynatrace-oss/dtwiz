@@ -1,8 +1,9 @@
 package integration
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
-	"math/rand"
 	"os"
 	"testing"
 	"time"
@@ -60,12 +61,10 @@ func requireEnv(t *testing.T, key string) string {
 	return val
 }
 
-func randomString(n int) string {
-	const letters = "abcdefghijklmnopqrstuvwxyz0123456789"
-
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))] //nolint:gosec
+func randomString(length int) string {
+	b := make([]byte, length/2+1)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("%d", time.Now().UnixNano()%1000000)
 	}
-	return string(b)
+	return hex.EncodeToString(b)[:length]
 }

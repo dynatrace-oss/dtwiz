@@ -6,6 +6,8 @@
 
 All E2E test files in `test/e2e/` SHALL use the `//go:build integration` build tag. The tag acts as a gating mechanism: it excludes E2E files from default builds (`go test ./...` without `-tags integration`) and includes them when explicitly requested (`go test -tags integration`). Whether it operates as exclusion or inclusion depends on the invocation — both are intentional behaviors of the same tag.
 
+Helper files in `test/integration/` SHALL NOT carry the build tag. They are pure function definitions with no `init()` side effects; they compile harmlessly in any build and are only reachable from tagged test files in `test/e2e/`. Adding the tag to helpers is unnecessary and would add noise without benefit.
+
 #### Scenario: Default test run excludes E2E
 
 - **WHEN** a developer runs `go test ./...` or `make test`

@@ -35,6 +35,8 @@ The sibling project dtctl uses a similar E2E pattern (build tags, env gating, cl
 
 **Rationale:** Build tags are the standard Go idiom. `go test ./...` never touches E2E files. Zero compile overhead. Matches dtctl's proven pattern.
 
+The tag applies only to files in `test/e2e/`, not to helper packages in `test/integration/`. Helpers are pure function definitions — they compile harmlessly without the tag and are only callable from tagged test files. Tagging them would add noise without enforcing any meaningful constraint.
+
 ### 2. `TEST_*` env vars with `.e2e.env` file support
 
 **Choice:** `TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN` env vars, with two supported loading mechanisms (in precedence order):

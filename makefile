@@ -46,7 +46,7 @@ test-integration:
 	@if [ -z "$(TEST_DT_ENVIRONMENT)" ]; then echo "ERROR: TEST_DT_ENVIRONMENT is not set" >&2; exit 1; fi
 	@if [ -z "$(TEST_DT_ACCESS_TOKEN)" ]; then echo "ERROR: TEST_DT_ACCESS_TOKEN is not set" >&2; exit 1; fi
 	@if [ -z "$(TEST_DT_PLATFORM_TOKEN)" ]; then echo "ERROR: TEST_DT_PLATFORM_TOKEN is not set" >&2; exit 1; fi
-	$(GO) test -v -tags integration -timeout 5m ./test/e2e/...
+	$(GO) test -v -race -tags integration -timeout 5m ./test/e2e/...
 
 clean:
 	rm -f $(BINARY)
