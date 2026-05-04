@@ -120,9 +120,11 @@ The system SHALL use the existing `detectNodeEntrypoints` function to resolve th
 - **WHEN** `buildNodeInstrumentationPlan` runs
 - **THEN** the project is skipped with a message: "This project can't be auto-instrumented."
 - **AND** a link to the Dynatrace manual instrumentation docs is shown: "See Instrument your JavaScript application on Node.js with OpenTelemetry to instrument it manually."
-- **AND** the user is prompted "Select another project? [Y/n]"
+- **AND** the user is immediately prompted "Select another project? [Y/n]"
 - **AND** if the user confirms, the project list is shown again for re-selection
 - **AND** if the user declines, the flow exits without the "No Node.js projects detected" fallback message
+
+This behavior applies in both the standalone `dtwiz install otel-node` flow (via `DetectNodePlan`) and the combined `dtwiz install otel` flow (via `InstallOtelCollectorWithProject`).
 
 ### Requirement: Project dependency prerequisite check
 

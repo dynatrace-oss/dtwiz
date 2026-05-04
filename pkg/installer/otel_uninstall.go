@@ -200,6 +200,42 @@ func isNodeOtelDir(dir string) bool {
 	return strings.Contains(string(data), "@opentelemetry")
 }
 
+func printCollectorUninstallPreview(processes []otelProcessInfo, dirs []string) {
+	if len(processes) == 0 && len(dirs) == 0 {
+		return
+	}
+	display.Header("  OTel Collector")
+	fmt.Println()
+	if len(processes) > 0 {
+		fmt.Println("  Processes that will be killed:")
+		for _, p := range processes {
+			hint := ""
+			if p.binaryPath != "" {
+				hint = "  (" + p.binaryPath + ")"
+			}
+			fmt.Printf("    ")
+			display.ColorError.Printf("kill PID %d", p.pid)
+			display.ColorMuted.Printf("%s\n", hint)
+		}
+		fmt.Println()
+	} else {
+		display.ColorMuted.Println("  No running collector processes found.")
+		fmt.Println()
+	}
+
+	if len(dirs) > 0 {
+		fmt.Println("  Directories that will be removed:")
+		for _, d := range dirs {
+			fmt.Printf("    ")
+			display.ColorError.Printf("rm -rf %s\n", d)
+		}
+		fmt.Println()
+	} else {
+		display.ColorMuted.Println("  No installation directories found.")
+		fmt.Println()
+	}
+}
+
 // UninstallOtelCollector kills all running Dynatrace OTel Collector processes
 // and removes the installation directories created by dtwiz. It also detects
 // and removes Node.js OTel instrumentation artifacts (.otel/ directories and
@@ -238,7 +274,6 @@ func UninstallOtelCollector(dryRun bool) error {
 		}
 	}
 
-	// ── Preview ──────────────────────────────────────────────────────────────
 	display.Header("Dynatrace OTel Collector Uninstall")
 
 	if len(processes) == 0 && len(dirs) == 0 && !anyRuntimeProcs && len(nodeOtelDirs) == 0 {
@@ -246,39 +281,7 @@ func UninstallOtelCollector(dryRun bool) error {
 		return nil
 	}
 
-	// ── Collector section ────────────────────────────────────────────────────
-	if len(processes) > 0 || len(dirs) > 0 {
-		display.Header("  OTel Collector")
-		fmt.Println()
-		if len(processes) > 0 {
-			fmt.Println("  Processes that will be killed:")
-			for _, p := range processes {
-				hint := ""
-				if p.binaryPath != "" {
-					hint = "  (" + p.binaryPath + ")"
-				}
-				fmt.Printf("    ")
-				display.ColorError.Printf("kill PID %d", p.pid)
-				display.ColorMuted.Printf("%s\n", hint)
-			}
-			fmt.Println()
-		} else {
-			display.ColorMuted.Println("  No running collector processes found.")
-			fmt.Println()
-		}
-
-		if len(dirs) > 0 {
-			fmt.Println("  Directories that will be removed:")
-			for _, d := range dirs {
-				fmt.Printf("    ")
-				display.ColorError.Printf("rm -rf %s\n", d)
-			}
-			fmt.Println()
-		} else {
-			display.ColorMuted.Println("  No installation directories found.")
-			fmt.Println()
-		}
-	}
+	printCollectorUninstallPreview(processes, dirs)
 
 	for _, r := range runtimeResults {
 		if len(r.procs) > 0 {

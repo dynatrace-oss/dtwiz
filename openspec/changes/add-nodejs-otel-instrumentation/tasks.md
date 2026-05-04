@@ -6,13 +6,13 @@ Expand Node.js project detection to support monorepos, Next.js, Nuxt, and packag
 
 **Files:** `pkg/installer/otel_nodejs.go` (modify), `pkg/installer/otel_nodejs_test.go` (modify)
 
-- [ ] 1.1a Add `isNextJSProject(projectPath string) bool` — check for `next.config.js`, `next.config.ts`, `next.config.mjs`, or `next` in `package.json` dependencies/devDependencies
-- [ ] 1.1b Extend `detectNodeFramework()` to also detect Nuxt — check for `nuxt.config.js`, `nuxt.config.ts`, `nuxt.config.mjs`, or `nuxt` in `package.json` dependencies/devDependencies → return `"nuxt"`. Next.js check takes precedence (checked first).
-- [ ] 1.2 Add `detectNodePackageManager(projectPath string) string` — check lockfiles: `package-lock.json` → `"npm"`, `yarn.lock` → `"yarn"`, `pnpm-lock.yaml` → `"pnpm"`, fallback → `"npm"`
-- [ ] 1.3 Add monorepo detection — parse `package.json` `"workspaces"` field (array of globs or `{"packages": [...]}` object), resolve workspace directories containing `package.json`, include them as individual `ScannedProject` entries alongside the monorepo root
-- [ ] 1.4 Update `detectNodeEntrypoints()` to handle Next.js — when `isNextJSProject()` is true, return a marker entrypoint (e.g., `"next:start"`) instead of scanning for `.js` files
-- [ ] 1.5 Update `detectNodeEntrypoints()` to handle Nuxt — when `detectNodeFramework()` returns `"nuxt"`, return a marker entrypoint (e.g., `"nuxt:start"`)
-- [ ] 1.6 Tests:
+- [x] 1.1a Add `isNextJSProject(projectPath string) bool` — check for `next.config.js`, `next.config.ts`, `next.config.mjs`, or `next` in `package.json` dependencies/devDependencies
+- [x] 1.1b Extend `detectNodeFramework()` to also detect Nuxt — check for `nuxt.config.js`, `nuxt.config.ts`, `nuxt.config.mjs`, or `nuxt` in `package.json` dependencies/devDependencies → return `"nuxt"`. Next.js check takes precedence (checked first).
+- [x] 1.2 Add `detectNodePackageManager(projectPath string) string` — check lockfiles: `package-lock.json` → `"npm"`, `yarn.lock` → `"yarn"`, `pnpm-lock.yaml` → `"pnpm"`, fallback → `"npm"`
+- [x] 1.3 Add monorepo detection — parse `package.json` `"workspaces"` field (array of globs or `{"packages": [...]}` object), resolve workspace directories containing `package.json`, include them as individual `ScannedProject` entries alongside the monorepo root
+- [x] 1.4 Update `detectNodeEntrypoints()` to handle Next.js — when `isNextJSProject()` is true, return a marker entrypoint (e.g., `"next:start"`) instead of scanning for `.js` files
+- [x] 1.5 Update `detectNodeEntrypoints()` to handle Nuxt — when `detectNodeFramework()` returns `"nuxt"`, return a marker entrypoint (e.g., `"nuxt:start"`)
+- [x] 1.6 Tests:
   - `TestIsNextJSProject_ConfigFile` (next.config.js detected)
   - `TestIsNextJSProject_PackageDep` (next in dependencies)
   - `TestIsNextJSProject_NotNextJS` (regular project)
@@ -33,9 +33,9 @@ Update the OTel Node.js env var generation and package list.
 
 **Files:** `pkg/installer/otel_nodejs.go` (modify), `pkg/installer/otel_nodejs_test.go` (modify)
 
-- [ ] 2.1 Update `otelNodePackages` to include: `@opentelemetry/auto-instrumentations-node`, `@opentelemetry/sdk-node`, `@opentelemetry/exporter-trace-otlp-http`, `@opentelemetry/exporter-metrics-otlp-http`, `@opentelemetry/exporter-logs-otlp-http`
-- [ ] 2.2 Add `generateOtelNodeEnvVars(apiURL, token, serviceName string) map[string]string` — call `generateBaseOtelEnvVars()` and add `OTEL_NODE_RESOURCE_DETECTORS=all`
-- [ ] 2.3 Tests:
+- [x] 2.1 Update `otelNodePackages` to include: `@opentelemetry/auto-instrumentations-node`, `@opentelemetry/sdk-node`, `@opentelemetry/exporter-trace-otlp-http`, `@opentelemetry/exporter-metrics-otlp-http`, `@opentelemetry/exporter-logs-otlp-http`
+- [x] 2.2 Add `generateOtelNodeEnvVars(apiURL, token, serviceName string) map[string]string` — call `generateBaseOtelEnvVars()` and add `OTEL_NODE_RESOURCE_DETECTORS=all`
+- [x] 2.3 Tests:
   - `TestGenerateOtelNodeEnvVars_IncludesResourceDetectors`
   - `TestGenerateOtelNodeEnvVars_IncludesBaseVars`
 
@@ -45,7 +45,7 @@ Update the plan struct and implement `.otel/` directory creation with package in
 
 **Files:** `pkg/installer/otel_nodejs.go` (modify), `pkg/installer/otel_nodejs_test.go` (modify)
 
-- [ ] 3.1 Update `NodeInstrumentationPlan` struct: add `PackageManager string`, `OtelDir string`, `Framework string` (holds `"next"`, `"nuxt"`, or `""`), `PlatformToken string`, `EnvURL string`
+- [x] 3.1 Update `NodeInstrumentationPlan` struct: add `PackageManager string`, `OtelDir string`, `Framework string` (holds `"next"`, `"nuxt"`, or `""`), `PlatformToken string`, `EnvURL string`
 - [x] 3.2 Update `buildNodeInstrumentationPlan()` signature to accept `envURL, platformToken string`; populate new struct fields including `OtelDir = filepath.Join(proj.Path, ".otel")`, detect package manager via `detectNodePackageManager()`, detect framework via `detectNodeFramework()`. When no entrypoint is found and the project is not a known framework, show "This project can't be auto-instrumented" with a link to the Dynatrace manual instrumentation docs and return nil.
 - [x] 3.3 Implement `createOtelDir(plan *NodeInstrumentationPlan) error` — create `.otel/` directory, write `.otel/package.json` with OTel deps as dependencies
 - [x] 3.4 Implement `generateWrapperJS(framework string) string` — generate CJS wrapper script content that requires `@opentelemetry/auto-instrumentations-node/register` and delegates to the Next.js CLI (`next/dist/bin/next`). OTEL\_\* env vars are passed via `cmd.Env` at launch time, not embedded in the script. Called only for Next.js. Implement `generateNuxtBootstrapMJS(otelDir string) string` — generate an ESM bootstrap script (`.mjs`) that uses `module.register()` to install `import-in-the-middle` hooks and loads the OTel CJS register via `createRequire`. Called only for Nuxt (Nuxt bypasses the CLI; the Nitro server is launched directly).
@@ -74,7 +74,7 @@ Rewrite `Execute()` to perform actual installation, process launch, and Dynatrac
 - [x] 4.3 For Next.js apps: the run command is `node otel/next-otel-bootstrap.js start` with CWD set to project root
 - [x] 4.4 For Nuxt apps: the run command is `node --import .otel/nuxt-otel-bootstrap.mjs .output/server/index.mjs` with CWD set to project root (launches the Nitro server directly; Nuxt CLI is not used because it spawns child processes that lose OTel registration)
 - [x] 4.5 Update `PrintPlanSteps()` to show: project path, package manager, framework status (Next.js/Nuxt if applicable), `.otel/` directory creation, `npm install` in `.otel/`, run command
-- [x] 4.6 Update `DetectNodePlan()` to return `(*NodeInstrumentationPlan, bool)` — the second value (`userInteracted`) indicates whether the user interacted with the project selection prompt. When `buildNodeInstrumentationPlan` returns nil (non-instrumentable project), prompt "Select another project? [Y/n]" and loop back to show the project list on confirmation. The caller (`InstallOtelNode`) uses `userInteracted` to suppress the "No Node.js projects detected" fallback when the user already saw the project list.
+- [x] 4.6 Update `DetectNodePlan()` to return `(*NodeInstrumentationPlan, bool)` — the second value (`userInteracted`) indicates whether the user interacted with the project selection prompt. When `buildNodeInstrumentationPlan` returns nil (non-instrumentable project), show "This project can't be auto-instrumented." with a docs link, immediately prompt "Select another project? [Y/n]", and loop back to show the project list on confirmation. The caller (`InstallOtelNode`) uses `userInteracted` to suppress the "No Node.js projects detected" fallback when the user already saw the project list.
 - [x] 4.7 Tests:
   - `TestNodeInstrumentationPlan_PrintPlanSteps_Regular`
   - `TestNodeInstrumentationPlan_PrintPlanSteps_NextJS`
@@ -106,7 +106,7 @@ Add Node.js `.otel/` cleanup to the existing `dtwiz uninstall otel` command.
 - [x] 6.5 Handle the case where only Node.js artifacts exist (no collector) — the "nothing to remove" check accounts for Node.js dirs/processes too
 - [x] 6.6 Extract `walkCandidateDirs()` from `scanProjectDirs()` in `otel_runtime_scan.go` as a shared helper for recursive directory scanning with ancestor walk. Refactor both `scanProjectDirs()` and `findNodeOtelDirs()` to use it.
 - [x] 6.7 Add debug logging throughout `otel_nodejs.go` (package manager detection, workspace resolution, .otel/ creation, npm install, bootstrap script writing, entrypoint launch) and `otel_uninstall_node.go` (next-server process skip reason)
-- [ ] 6.8 Tests:
+- [x] 6.8 Tests:
   - `TestFindNodeOtelDirs_Found`
   - `TestFindNodeOtelDirs_IgnoresNonOtelDirs`
   - `TestUninstallOtelCollector_IncludesNodeDirs`
@@ -120,6 +120,7 @@ Update the `dtwiz install otel` combined flow to pass required parameters to the
 - [x] 7.1 Update `createRuntimePlan()` Node.js branch — pass `envURL` and `platformToken` to `buildNodeInstrumentationPlan()` (currently only passes `apiURL` and `token`)
 - [x] 7.2 Enable Node.js by default — set `enabled: true` in `detectAvailableRuntimes()` instead of gating behind `DTWIZ_ALL_RUNTIMES`
 - [x] 7.3 Update `TestDetectAvailableRuntimes_DefaultEnabled` — Node.js is now expected to be enabled by default alongside Python
+- [x] 7.4 In `InstallOtelCollectorWithProject`, wrap the `selectProject` + `createRuntimePlan` call in a loop: when `createRuntimePlan` returns nil (non-instrumentable project), immediately prompt "Select another project? [Y/n]" and re-show the full project list (header + divider + entries) on confirmation. Mirrors the behavior already present in `DetectNodePlan` for the standalone `dtwiz install otel-node` flow.
 
 ## 8. End-to-end Validation
 

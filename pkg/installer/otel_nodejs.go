@@ -3,6 +3,7 @@ package installer
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -592,7 +593,7 @@ func (p *NodeInstrumentationPlan) Execute() {
 	switch p.Framework {
 	case "next":
 		svcName := projectServiceName(proj.Path)
-		epEnvVars := copyEnvVars(p.EnvVars)
+		epEnvVars := maps.Clone(p.EnvVars)
 		epEnvVars["OTEL_SERVICE_NAME"] = svcName
 
 		cmd := exec.Command("node", filepath.Join(".otel", "next-otel-bootstrap.js"), "start")
@@ -605,7 +606,7 @@ func (p *NodeInstrumentationPlan) Execute() {
 		}
 	case "nuxt":
 		svcName := projectServiceName(proj.Path)
-		epEnvVars := copyEnvVars(p.EnvVars)
+		epEnvVars := maps.Clone(p.EnvVars)
 		epEnvVars["OTEL_SERVICE_NAME"] = svcName
 
 		// Nuxt CLI "preview/start" spawns a child process (via tinyexec) to run
@@ -630,7 +631,7 @@ func (p *NodeInstrumentationPlan) Execute() {
 	default:
 		for _, ep := range p.Entrypoints {
 			svcName := serviceNameFromEntrypoint(proj.Path, ep)
-			epEnvVars := copyEnvVars(p.EnvVars)
+			epEnvVars := maps.Clone(p.EnvVars)
 			epEnvVars["OTEL_SERVICE_NAME"] = svcName
 
 			relEntrypoint := "../" + filepath.ToSlash(ep)
@@ -657,15 +658,7 @@ func (p *NodeInstrumentationPlan) Execute() {
 	fmt.Println("  Waiting for traffic — send requests to your services to generate traces and metrics.")
 }
 
-// copyEnvVars returns a shallow copy of the env vars map.
-func copyEnvVars(src map[string]string) map[string]string {
-	dst := make(map[string]string, len(src))
-	for k, v := range src {
-		dst[k] = v
-	}
-	return dst
-}
-
+// launchEntrypoint
 // launchEntrypoint starts a managed process for a single entrypoint.
 func launchEntrypoint(svcName, projectPath, entrypoint string, cmd *exec.Cmd) *ManagedProcess {
 	logName := svcName + ".log"

@@ -230,12 +230,24 @@ func InstallOtelCollectorWithProject(envURL, token, ingestToken, platformToken, 
 	} else {
 		projects := detectAllProjects(runtimes)
 		if len(projects) > 0 {
-			display.ColorMessage.Println("  Detected projects:")
-			display.PrintSectionDivider()
-			printProjectList(projects)
+			for {
+				display.ColorMessage.Println("  Detected projects:")
+				display.PrintSectionDivider()
+				printProjectList(projects)
 
-			if selected, ok := selectProject(projects); ok {
+				selected, ok := selectProject(projects)
+				if !ok {
+					break
+				}
 				plan = createRuntimePlan(selected, cp.apiURL, token, envURL, platformToken)
+				if plan != nil {
+					break
+				}
+				// Project can't be auto-instrumented; ask if the user wants to try another.
+				again, err := confirmProceed("  Select another project?")
+				if err != nil || !again {
+					break
+				}
 			}
 		}
 	}

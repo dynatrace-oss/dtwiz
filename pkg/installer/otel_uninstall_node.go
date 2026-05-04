@@ -7,28 +7,24 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
-// nodeOtelProcessPatterns lists command-line patterns that identify a Node.js
-// process instrumented by dtwiz. We use short, unique filenames rather than
-// full paths to be robust against path variations (symlinks, /private prefix
-// on macOS, absolute vs relative paths).
+// Short, unique filenames are used rather than full paths to stay robust
+// against path variations (symlinks, /private prefix on macOS, absolute vs
+// relative paths).
 var nodeOtelProcessPatterns = []string{
 	"@opentelemetry/auto-instrumentations-node/register",
 	"next-otel-bootstrap.js",
 	"nuxt-otel-bootstrap.mjs",
 }
 
-// findInstrumentedNodeProcesses detects running node processes whose command
-// line contains OTel instrumentation patterns — regular --require hooks,
-// Next.js bootstrap wrappers, or Nuxt ESM bootstrap scripts.
+// findInstrumentedNodeProcesses detects running node processes instrumented by dtwiz.
 //
-// Next.js is special: it rewrites process.title to "next-server (vX.Y.Z)",
-// erasing the original command line from ps output. We detect these by
-// scanning for "next-server" processes whose CWD contains a valid .otel/ dir.
+// Next.js rewrites process.title to "next-server (vX.Y.Z)", erasing the
+// original command line from ps output. These are detected by scanning for
+// "next-server" processes whose CWD contains a valid .otel/ dir.
 //
-// As a fallback, processes whose working directory IS a valid .otel/ dir
-// (contains package.json with @opentelemetry) are also detected. This catches
-// regular-app processes launched with cmd.Dir = .otel/ even if the command-line
-// pattern is not matched (e.g., due to module path resolution).
+// As a fallback, processes whose CWD IS a valid .otel/ dir are also detected,
+// catching regular-app processes launched with cmd.Dir = .otel/ even if the
+// command-line pattern is not matched.
 func findInstrumentedNodeProcesses() []otelProcessInfo {
 	procs := detectProcesses("node", nil)
 	var result []otelProcessInfo
@@ -48,7 +44,7 @@ func findInstrumentedNodeProcesses() []otelProcessInfo {
 				break
 			}
 		}
-		// Fallback: detect processes whose CWD is a dtwiz .otel/ directory.
+		// Fallback: CWD is a dtwiz .otel/ dir.
 		if !seen[p.PID] && p.WorkingDirectory != "" && filepath.Base(p.WorkingDirectory) == ".otel" {
 			if isNodeOtelDir(p.WorkingDirectory) {
 				logger.Debug("instrumented Node.js process found via CWD", "pid", p.PID, "cwd", p.WorkingDirectory)
@@ -63,8 +59,7 @@ func findInstrumentedNodeProcesses() []otelProcessInfo {
 		}
 	}
 
-	// Next.js rewrites process.title to "next-server (vX.Y.Z)", so it won't
-	// appear in "node" process scans. Detect these separately.
+	// next-server processes don't appear in node scans — detect separately.
 	nextProcs := detectProcesses("next-server", nil)
 	for _, p := range nextProcs {
 		if seen[p.PID] {
@@ -96,9 +91,7 @@ type nodeCleaner struct{}
 
 func (nodeCleaner) Label() string { return "Node.js" }
 
-// DetectProcesses implements RuntimeCleaner. It returns instrumented Node.js
-// processes as DetectedProcess values so they are included in the generic
-// runtime stop flow in UninstallOtelCollector.
+// DetectProcesses implements RuntimeCleaner.
 func (nodeCleaner) DetectProcesses() []DetectedProcess {
 	infos := findInstrumentedNodeProcesses()
 	procs := make([]DetectedProcess, 0, len(infos))
@@ -112,8 +105,6 @@ func (nodeCleaner) DetectProcesses() []DetectedProcess {
 	return procs
 }
 
-// nodeProcessDescription builds a human-readable label for an instrumented
-// Node.js process, showing the project path and service name.
 func nodeProcessDescription(info otelProcessInfo) string {
 	projectDir := info.workingDir
 	// If the working directory is .otel/, the project is one level up.
@@ -131,13 +122,12 @@ func nodeProcessDescription(info otelProcessInfo) string {
 }
 
 // nodeServiceNameFromCommand derives the service name from the process command
-// line, mirroring the logic used during install. For regular entrypoints the
-// command looks like "node --require ... ../s-frontend/index.js" and we use
-// serviceNameFromEntrypoint. For framework wrappers (next/nuxt) we fall back
-// to projectServiceName.
+// line. For regular entrypoints the command ends with a relative path like
+// "../s-frontend/index.js"; for framework wrappers (next/nuxt) it falls back
+// to the project directory name.
 func nodeServiceNameFromCommand(projectDir, command string) string {
 	fields := strings.Fields(command)
-	// Regular entrypoint: last arg is a relative path like ../s-frontend/index.js
+	// Last arg is a relative entrypoint path (e.g. ../s-frontend/index.js).
 	if len(fields) > 0 {
 		last := fields[len(fields)-1]
 		if strings.HasPrefix(last, ".."+string(filepath.Separator)) || strings.HasPrefix(last, "../") {
