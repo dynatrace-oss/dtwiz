@@ -2,8 +2,8 @@
 
 ## 1. Test Infrastructure (`test/integration/`)
 
-- [x] 1.1 Create `test/integration/setup.go` — `SetupIntegration(t *testing.T)` function that validates `TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN` are set (calls `t.Fatal` if not), constructs a `*client.Client` via `client.New()` with URLs derived from `TEST_DT_ENVIRONMENT` and tokens from `TEST_DT_ACCESS_TOKEN`/`TEST_DT_PLATFORM_TOKEN`, generates unique test ID `dtwiz-test-{unix-ts}-{random}`, returns a `TestEnv` struct with client, test ID, and temp dir (`t.TempDir()`)
-- [x] 1.2 Create `test/integration/grail_client.go` — `WaitForTraces(ctx context.Context, client *client.Client, serviceName string, opts ...PollOption) ([]TraceRecord, error)` function that polls DQL endpoint via `PlatformClient` filtering by `service.name`, default 60s timeout / 2s interval, returns traces or timeout error with the queried service name
+- [x] 1.1 Create `test/integration/setup.go` — `SetupIntegration(t *testing.T)` function that validates `TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN` are set (calls `t.Fatal` if not), constructs a `*client.Client` via `client.New()` with URLs derived from `TEST_DT_ENVIRONMENT` and tokens from `TEST_DT_ACCESS_TOKEN`/`TEST_DT_PLATFORM_TOKEN`, generates unique test ID `dtwiz-test-{unix-ts}-{random}` using `crypto/rand`, returns a `TestEnv` struct with client, test ID, temp dir (`t.TempDir()`), and raw credential values (`EnvURL`, `AccessToken`, `PlatformToken`)
+- [x] 1.2 Create `test/integration/grail_client.go` — `WaitForTraces(ctx context.Context, client *client.Client, serviceName string, opts ...PollOption) ([]TraceRecord, error)` that polls the DQL endpoint via `PlatformClient.HTTP()` (resty, no raw token exposure) filtering by `service.name` with `from:now()-30m` scope, default 60s timeout / 2s interval, configurable via `WithTimeout`/`WithInterval` poll options; `RequireTraces` wrapper that fatals on error or empty result
 
 ## 2. Fixture App (`test/fixtures/`)
 
@@ -12,14 +12,14 @@
 
 ## 3. Python E2E Test (`test/e2e/`)
 
-- [x] 3.1 Create `test/integration/helpers.go` with `//go:build integration` — exported helpers in package `integration`: `CopyFixture(t, fixtureDir, destDir)` to copy fixture app into temp dir, `StartApp(t, dir, port)` to run the instrumented app as a subprocess with `t.Cleanup` kill, `TriggerRequest(url)` HTTP GET helper
-- [x] 3.2 Create `test/e2e/python_test.go` with `//go:build integration` — `TestPythonOTelAutoInstrumentation`: checks `python3` available (skip if not), calls `SetupIntegration`, copies flask fixture via `integration.CopyFixture`, runs `dtwiz install otel-python` on the temp dir, starts the app with `opentelemetry-instrument` via `integration.StartApp`, sends HTTP request via `integration.TriggerRequest`, calls `WaitForTraces` with unique service name, asserts trace count > 0
+- [x] 3.1 Create helpers in `test/integration/` (no build tag — pure function definitions, compile harmlessly): `fixture.go` (`PrepareFixture`, `CopyFixture`), `http.go` (`TriggerRequest`, `TriggerRequestOnPort` — uses `http.Client{Timeout: 10s}` with `NewRequestWithContext`), `process.go` (`ServiceName`, `WaitForPort`, `RegisterPortCleanup`, `KillProcessOnPort`)
+- [x] 3.2 Create `test/e2e/otel_test.go` with `//go:build integration` — `TestOTelAutoInstrumentation` with table-driven `otelCase` struct; for Python: checks `python3` available (skip if not), calls `SetupIntegration`, copies flask fixture via `PrepareFixture`, calls `installer.InstallOtelPython` directly (installs packages AND starts the instrumented process), waits for port via `WaitForPort`, sends request via `TriggerRequestOnPort`, calls `RequireTraces` (180s timeout / 5s interval override), logs trace count
 
 ## 4. makefile & Gitignore
 
-- [x] 4.1 Add `test-integration` target to `makefile` — loads `.e2e.env` if present (top-level `ifneq (,$(wildcard .e2e.env))` / `include .e2e.env` / `export`), checks `TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN` are set (prints error to stderr + `exit 1` if missing), runs `go test -v -tags integration -timeout 5m ./test/e2e/...`
+- [x] 4.1 Add `test-integration` target to `makefile` — loads `.e2e.env` if present (top-level `ifneq (,$(wildcard .e2e.env))` / `include .e2e.env` / `export`), checks `TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN` are set (prints error to stderr + `exit 1` if missing), runs `go test -v -race -tags integration -timeout 5m ./test/e2e/...`
 - [x] 4.2 Add `.e2e.env` to `.gitignore`
-- [x] 4.3 Add `.e2e.env.example` to the repo — contains the three required env vars (`TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN`) with placeholder values and a comment instructing contributors to `cp .e2e.env.example .e2e.env` and fill in their credentials; committed to VCS
+- [x] 4.3 Add `.e2e.env.example` to the repo — contains all three required env vars (`TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, `TEST_DT_PLATFORM_TOKEN`) with placeholder values and a comment instructing contributors to `cp .e2e.env.example .e2e.env` and fill in their credentials; committed to VCS
 - [x] 4.4 Update `.PHONY` in `makefile` to include `test-integration`
 
 ## 5. Verification

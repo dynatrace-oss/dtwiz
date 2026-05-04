@@ -1,12 +1,8 @@
 package integration
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"testing"
 	"time"
 
@@ -68,13 +64,12 @@ func WaitForTraces(ctx context.Context, c *client.Client, serviceName string, op
 		option(cfg)
 	}
 
-	queryURL := c.Platform.BaseURL() + grailHTTPPath
 	dql := tracesByServiceQuery(serviceName)
 
 	deadline := time.Now().Add(cfg.timeout)
 	var lastErr error
 	for {
-		records, err := executeDQL(ctx, queryURL, c.Platform.AuthHeader(), dql)
+		records, err := executeDQL(ctx, c.Platform, dql)
 		if err != nil {
 			lastErr = err
 		} else if len(records) > 0 {
@@ -96,38 +91,24 @@ func WaitForTraces(ctx context.Context, c *client.Client, serviceName string, op
 	}
 }
 
-func executeDQL(ctx context.Context, queryURL, token, dql string) ([]TraceRecord, error) {
+func executeDQL(ctx context.Context, platform *client.PlatformClient, dql string) ([]TraceRecord, error) {
 	payload := map[string]interface{}{
 		"query":                      dql,
 		"requestTimeoutMilliseconds": 10000,
 		"maxResultRecords":           200,
 	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, queryURL, bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", token)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		_, _ = io.Copy(io.Discard, resp.Body)
-		return nil, fmt.Errorf("DQL query returned HTTP %d", resp.StatusCode)
-	}
 
 	var result dqlResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	resp, err := platform.HTTP().R().
+		SetContext(ctx).
+		SetBody(payload).
+		SetResult(&result).
+		Post(grailHTTPPath)
+	if err != nil {
 		return nil, err
+	}
+	if !resp.IsSuccess() {
+		return nil, fmt.Errorf("DQL query returned HTTP %d", resp.StatusCode())
 	}
 
 	switch result.State {

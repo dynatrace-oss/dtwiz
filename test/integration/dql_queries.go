@@ -5,7 +5,7 @@ import "fmt"
 // tracesByServiceQuery returns a DQL query that fetches spans for the given service name.
 func tracesByServiceQuery(serviceName string) string {
 	return fmt.Sprintf(
-		`fetch spans | filter service.name == "%s" | fields service.name, span_id, trace_id`,
+		`fetch spans, from:now()-30m | filter service.name == "%s"`,
 		serviceName,
 	)
 }

@@ -61,7 +61,7 @@ func runOTelTest(t *testing.T, tc otelCase) {
 	t.Logf("preparing fixture %q for service %q", tc.fixture, svcName)
 	appDir := integration.PrepareFixture(t, env, tc.fixture, svcName)
 
-	t.Setenv("TEST_FLASK_APP_PORT", strconv.Itoa(tc.port))
+	t.Setenv(tc.portEnv, strconv.Itoa(tc.port))
 
 	t.Logf("installing OTel instrumentation (lang: %s, service: %s)", tc.lang, svcName)
 	if err := tc.install(env, appDir, svcName); err != nil {

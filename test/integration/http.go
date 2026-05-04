@@ -1,11 +1,15 @@
 package integration
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"testing"
+	"time"
 )
+
+var triggerClient = &http.Client{Timeout: 10 * time.Second}
 
 // TriggerRequestOnPort sends a GET to http://localhost:<port>/ and fatals on error.
 func TriggerRequestOnPort(t *testing.T, port int) {
@@ -18,7 +22,12 @@ func TriggerRequestOnPort(t *testing.T, port int) {
 func TriggerRequest(t *testing.T, url string) string {
 	t.Helper()
 
-	resp, err := http.Get(url) //nolint:gosec,noctx
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatalf("TriggerRequest: build request %s: %v", url, err)
+	}
+
+	resp, err := triggerClient.Do(req)
 	if err != nil {
 		t.Fatalf("TriggerRequest: GET %s: %v", url, err)
 	}

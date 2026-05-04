@@ -46,24 +46,32 @@ The `make test-integration` target SHALL require `TEST_DT_ENVIRONMENT`, `TEST_DT
 
 The `make test-integration` target SHALL support two credential loading mechanisms, in precedence order:
 
-1. Shell environment variables / `make VAR=value` overrides (highest — already inherited by the recipe subshell)
-2. `.e2e.env` file in the project root, loaded via `[ -f .e2e.env ] && export $(grep -v '^#' .e2e.env | xargs) || true`
+1. `make VAR=value` command-line overrides (highest — always win in Make regardless of file content)
+2. `.e2e.env` file in the project root, loaded via `include .e2e.env` at Make parse time
+3. Shell environment variables (lowest — overridden by `.e2e.env` assignments)
 
-**Implementation constraint:** The file-load step and all subsequent credential checks MUST be chained in a single shell invocation using `&&` or `;`. Each Make recipe line runs in a separate subshell; if the file-load `if` block is a standalone recipe step, the `export` is discarded when that subshell exits and the variables are invisible to subsequent lines.
+The makefile SHALL conditionally include `.e2e.env` only when the file exists:
 
-The `.e2e.env` file SHALL use plain `KEY=VALUE` shell syntax. It SHALL be listed in `.gitignore`. A `.e2e.env.example` file with placeholder values for all three vars SHALL be committed to VCS, with instructions to `cp .e2e.env.example .e2e.env` and fill in credentials.
+```makefile
+ifneq (,$(wildcard .e2e.env))
+include .e2e.env
+export
+endif
+```
 
-If any required variable is missing after loading, the target SHALL print a descriptive error to stderr — including copy-paste setup instructions — and exit non-zero.
+The `.e2e.env` file SHALL use plain `KEY=VALUE` Make/shell syntax (one var per line, no `export` prefix). It SHALL be listed in `.gitignore`. A `.e2e.env.example` file with placeholder values for all three vars SHALL be committed to VCS, with instructions to `cp .e2e.env.example .e2e.env` and fill in credentials.
+
+If any required variable is missing after loading, the target SHALL print a descriptive error to stderr and exit non-zero.
 
 #### Scenario: .e2e.env file present, no shell vars
 
 - **WHEN** a `.e2e.env` file exists with all three vars and none are set in the shell
 - **THEN** the makefile loads those values and runs the integration tests
 
-#### Scenario: Shell vars take precedence over file
+#### Scenario: .e2e.env file takes precedence over shell vars
 
 - **WHEN** `TEST_DT_ENVIRONMENT` is set in the shell and a different value exists in `.e2e.env`
-- **THEN** the shell value is used, because shell env vars are already present in the recipe subshell and `export` only sets a variable if it is not already set (or the file value is simply ignored for pre-set vars)
+- **THEN** the `.e2e.env` value is used, because `include` assignments override imported shell env vars in Make
 
 #### Scenario: No .e2e.env file, vars set in shell
 
