@@ -383,7 +383,7 @@ func detectJavaListeningPort(pid int, projectDir string) string {
 	out, err := exec.Command("jps", "-l").Output()
 	if err != nil {
 		logger.Debug("jps -l failed", "err", err)
-		return detectJavaPortByTrackedProcess(pid)
+		return detectJavaPortByCommandLine(projectDir)
 	}
 
 	type jvmCandidate struct {

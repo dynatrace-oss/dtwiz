@@ -84,8 +84,8 @@ func lookupProcessWorkingDirectory(pid int) string {
 	return ""
 }
 
-// detectJavaPortByTrackedProcess is a no-op on Unix: jps covers the wrapper→child case.
-func detectJavaPortByTrackedProcess(_ int) string { return "" }
+// detectJavaPortByCommandLine is a no-op on Unix: jps covers the wrapper→child case.
+func detectJavaPortByCommandLine(_ string) string { return "" }
 
 func detectProcessListeningPort(pid int) string {
 	output, err := exec.Command("lsof", "-a", "-i", "TCP", "-sTCP:LISTEN", "-p", strconv.Itoa(pid), "-Fn", "-P").Output()
