@@ -23,12 +23,14 @@ func mustCreateFile(t *testing.T, path string) {
 func setupMvnWrapper(t *testing.T, dir string) {
 	t.Helper()
 	mustCreateFile(t, filepath.Join(dir, "mvnw"))
+	mustCreateFile(t, filepath.Join(dir, "mvnw.cmd"))
 	mustCreateFile(t, filepath.Join(dir, ".mvn", "wrapper", "maven-wrapper.jar"))
 }
 
 func setupGradleWrapper(t *testing.T, dir string) {
 	t.Helper()
 	mustCreateFile(t, filepath.Join(dir, "gradlew"))
+	mustCreateFile(t, filepath.Join(dir, "gradlew.bat"))
 	mustCreateFile(t, filepath.Join(dir, "gradle", "wrapper", "gradle-wrapper.jar"))
 }
 
@@ -393,9 +395,8 @@ func TestDetectJavaEntrypoints_WindowsWrapperSpringBootMaven(t *testing.T) {
 		t.Skip("Windows-only test")
 	}
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "mvnw.cmd"), []byte(""), 0644); err != nil {
-		t.Fatal(err)
-	}
+	mustCreateFile(t, filepath.Join(dir, "mvnw.cmd"))
+	mustCreateFile(t, filepath.Join(dir, ".mvn", "wrapper", "maven-wrapper.jar"))
 	pomContent := `<project><parent><artifactId>spring-boot-starter-parent</artifactId></parent></project>`
 	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte(pomContent), 0644); err != nil {
 		t.Fatal(err)
@@ -414,9 +415,8 @@ func TestDetectJavaEntrypoints_WindowsWrapperSpringBootGradle(t *testing.T) {
 		t.Skip("Windows-only test")
 	}
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "gradlew.bat"), []byte(""), 0644); err != nil {
-		t.Fatal(err)
-	}
+	mustCreateFile(t, filepath.Join(dir, "gradlew.bat"))
+	mustCreateFile(t, filepath.Join(dir, "gradle", "wrapper", "gradle-wrapper.jar"))
 	gradleContent := `plugins { id 'org.springframework.boot' version '3.0.0' }`
 	if err := os.WriteFile(filepath.Join(dir, "build.gradle"), []byte(gradleContent), 0644); err != nil {
 		t.Fatal(err)
