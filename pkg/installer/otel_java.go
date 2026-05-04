@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -132,20 +131,15 @@ func buildInstrumentedCmd(ep JavaEntrypoint, agentPath, projectPath string, envV
 			cmd = exec.Command(ep.Command)
 		} else if strings.HasSuffix(fields[0], ".cmd") || strings.HasSuffix(fields[0], ".bat") {
 			// Windows wrapper: must be invoked via cmd /c.
-			cmd = exec.Command("cmd", append([]string{"/c", fields[0]}, injectPortMarker(fields, projectPath)...)...)
+			cmd = exec.Command("cmd", append([]string{"/c", fields[0]}, fields[1:]...)...)
 		} else {
-			cmd = exec.Command(fields[0], injectPortMarker(fields, projectPath)...)
+			cmd = exec.Command(fields[0], fields[1:]...)
 		}
 		finalEnvVars := make(map[string]string, len(envVars)+1)
 		for k, v := range envVars {
 			finalEnvVars[k] = v
 		}
 		finalEnvVars["JAVA_TOOL_OPTIONS"] = "-javaagent:" + agentPath
-		if runtime.GOOS == "windows" {
-			// Also inject into the build tool's own JVM opts so in-process goals
-			// (exec:java, spring-boot:run fork=false) are identifiable too.
-			finalEnvVars = injectBuildToolOpts(fields[0], finalEnvVars, projectPath)
-		}
 		cmd.Env = append(os.Environ(), formatEnvVars(finalEnvVars)...)
 		cmd.Dir = projectPath
 		return cmd
@@ -154,58 +148,6 @@ func buildInstrumentedCmd(ep JavaEntrypoint, agentPath, projectPath string, envV
 	cmd.Dir = projectPath
 	cmd.Env = append(os.Environ(), formatEnvVars(envVars)...)
 	return cmd
-}
-
-// injectPortMarker adds -Ddtwiz.project=<projectPath> to the build-tool command
-// args on Windows so the spawned JVM's Win32_Process.CommandLine contains the
-// project path and can be matched during port detection.
-//
-// For Maven spring-boot:run: spring-boot.run.jvmArguments is passed by Spring
-// Boot Maven Plugin directly to the forked app JVM as JVM system properties.
-// For Gradle bootRun/run: --args passes application args to the forked process;
-// they appear after the main class in Win32_Process.CommandLine.
-// On non-Windows the args are returned unchanged (port detection works via lsof).
-func injectPortMarker(fields []string, projectPath string) []string {
-	if runtime.GOOS != "windows" || len(fields) == 0 {
-		return fields[1:]
-	}
-	args := fields[1:]
-	marker := "-Ddtwiz.project=" + projectPath
-	lower := strings.ToLower(fields[0])
-	if strings.Contains(lower, "mvn") {
-		return append([]string{"-Dspring-boot.run.jvmArguments=" + marker}, args...)
-	}
-	if strings.Contains(lower, "gradle") {
-		for _, arg := range args {
-			if arg == "bootRun" || arg == "run" {
-				return append(args, "--args="+marker)
-			}
-		}
-	}
-	return args
-}
-
-// injectBuildToolOpts appends the project marker to the build tool's own JVM
-// option env var (MAVEN_OPTS / GRADLE_OPTS) so that in-process goals such as
-// exec:java or spring-boot:run with fork=false are also identifiable.
-func injectBuildToolOpts(binary string, envVars map[string]string, projectPath string) map[string]string {
-	marker := "-Ddtwiz.project=" + projectPath
-	lower := strings.ToLower(binary)
-	var key string
-	if strings.Contains(lower, "mvn") {
-		key = "MAVEN_OPTS"
-	} else if strings.Contains(lower, "gradle") {
-		key = "GRADLE_OPTS"
-	} else {
-		return envVars
-	}
-	existing := os.Getenv(key)
-	if existing != "" {
-		envVars[key] = existing + " " + marker
-	} else {
-		envVars[key] = marker
-	}
-	return envVars
 }
 
 type SubModulePlan struct {

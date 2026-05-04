@@ -130,51 +130,38 @@ func detectProcessListeningPort(pid int) string {
 	return port
 }
 
-// detectJavaPortByCommandLine finds the listening port of a Java process whose
-// Win32_Process.CommandLine contains projectDir. The caller injects
-// -Ddtwiz.project=<projectDir> into the launched command (via
-// spring-boot.run.jvmArguments for Maven, MAVEN_OPTS for in-process goals),
-// so the marker is guaranteed to be in the command line of the right JVM.
-// Matching is done in Go to avoid PowerShell escaping issues with Windows paths.
-func detectJavaPortByCommandLine(projectDir string) string {
+// javaDescendantPort finds the listening port of a java.exe process that is a
+// descendant of wrapperPID. This handles Maven/Gradle wrappers (cmd /c mvn.cmd)
+// which spawn a java.exe child that owns the actual listening port.
+// Walks up to 4 levels of the process tree from wrapperPID, collects all
+// java.exe descendants, then returns the first listening port found among them.
+func javaDescendantPort(wrapperPID int, _ string) string {
+	pidStr := strconv.Itoa(wrapperPID)
 	script := `
-$procs = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue
-$javaPids = @($procs | Where-Object Name -like 'java*' | ForEach-Object ProcessId)
+$all = Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId,Name -ErrorAction SilentlyContinue
+$pids = @(` + pidStr + `)
+1..4 | ForEach-Object {
+    $children = @($all | Where-Object { $pids -contains $_.ParentProcessId -and $_.ProcessId -notin $pids })
+    if ($children.Count -eq 0) { return }
+    $pids = $pids + @($children | ForEach-Object { $_.ProcessId })
+}
+$javaPids = @($all | Where-Object { $pids -contains $_.ProcessId -and $_.Name -match '^java' -and $_.ProcessId -ne ` + pidStr + ` } | ForEach-Object { $_.ProcessId })
 if ($javaPids) {
     Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
         Where-Object { $javaPids -contains $_.OwningProcess -and $_.LocalPort -notin @(4317,4318) } |
-        ForEach-Object {
-            $cmd = ($procs | Where-Object ProcessId -eq $_.OwningProcess | Select-Object -First 1).CommandLine
-            "$($_.OwningProcess)|$($_.LocalPort)|$cmd"
-        }
+        Select-Object -First 1 -ExpandProperty LocalPort
 }`
-	logger.Debug("detectJavaPortByCommandLine: scanning", "project_dir", projectDir)
+	logger.Debug("javaDescendantPort: scanning", "wrapper_pid", wrapperPID)
 	output, err := exec.Command("powershell", "-NoProfile", "-Command", script).Output()
-	if err != nil && len(output) == 0 {
-		logger.Debug("detectJavaPortByCommandLine: query failed", "project_dir", projectDir, "err", err)
+	port := strings.TrimSpace(string(output))
+	if port == "" {
+		if err != nil {
+			logger.Debug("javaDescendantPort: query failed", "wrapper_pid", wrapperPID, "err", err)
+		} else {
+			logger.Debug("javaDescendantPort: no descendant with port found", "wrapper_pid", wrapperPID)
+		}
 		return ""
 	}
-
-	projLower := strings.ToLower(projectDir)
-	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
-		line = strings.TrimRight(line, "\r")
-		// format: <pid>|<port>|<cmdline>  — SplitN(3) keeps | inside cmdline intact
-		parts := strings.SplitN(line, "|", 3)
-		if len(parts) < 3 {
-			continue
-		}
-		pid, port, cmd := parts[0], parts[1], parts[2]
-		logCmd := cmd
-		if len(logCmd) > 200 {
-			logCmd = logCmd[:200] + "…"
-		}
-		logger.Debug("detectJavaPortByCommandLine: listening java process", "pid", pid, "port", port, "cmd", logCmd)
-		if strings.Contains(strings.ToLower(cmd), projLower) {
-			logger.Debug("detectJavaPortByCommandLine: matched", "pid", pid, "port", port)
-			return port
-		}
-	}
-
-	logger.Debug("detectJavaPortByCommandLine: no match", "project_dir", projectDir)
-	return ""
+	logger.Debug("javaDescendantPort: found", "wrapper_pid", wrapperPID, "port", port)
+	return port
 }

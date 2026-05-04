@@ -364,88 +364,16 @@ func promptEntrypointSelection(entrypoints []JavaEntrypoint) *JavaEntrypoint {
 	return &entrypoints[selection-1]
 }
 
-// detectJavaListeningPort extends detectProcessListeningPort with a jps -l
-// fallback that skips build-tool JVMs. Needed when the tracked process is a
-// build-tool wrapper (mvnw spring-boot:run, gradlew bootRun) that forks the
-// app into a separate JVM rather than running it directly.
-//
-// projectDir is used to prefer app JVMs whose working directory is under that
-// path, so that multiple concurrently-running services do not all resolve to
-// the same JVM. If no cwd-matching JVM has an open port the first eligible JVM
-// is tried as a fallback (original behaviour).
+// detectJavaListeningPort returns the listening port of a Java process.
+// Tries the tracked PID directly first (handles direct java -jar launches),
+// then delegates to javaDescendantPort for wrapper launchers (mvn, gradle)
+// that fork the app into a separate JVM.
 func detectJavaListeningPort(pid int, projectDir string) string {
 	if port := detectProcessListeningPort(pid); port != "" {
 		logger.Debug("port found directly on tracked pid", "pid", pid, "port", port)
 		return port
 	}
-	logger.Debug("direct port detection failed, falling back to jps", "pid", pid, "project_dir", projectDir)
-
-	out, err := exec.Command("jps", "-l").Output()
-	if err != nil {
-		logger.Debug("jps -l failed", "err", err)
-		return detectJavaPortByCommandLine(projectDir)
-	}
-
-	type jvmCandidate struct {
-		pid   int
-		class string
-		cwd   string
-	}
-	var candidates []jvmCandidate
-	for _, line := range strings.Split(string(out), "\n") {
-		fields := strings.Fields(strings.TrimSpace(line))
-		if len(fields) < 2 {
-			continue
-		}
-		jvmPID, err := strconv.Atoi(fields[0])
-		if err != nil {
-			continue
-		}
-		if jvmPID == pid {
-			// The tracked process is itself an app JVM (direct java -jar launch).
-			// It hasn't bound its port yet — return "" so the poll loop retries
-			// with direct detection rather than stealing another service's port.
-			if !isBuildToolJVM(fields[1]) {
-				logger.Debug("tracked pid is app JVM, waiting for it to bind", "pid", pid, "class", fields[1])
-				return ""
-			}
-			continue
-		}
-		if isBuildToolJVM(fields[1]) {
-			logger.Debug("skipping build-tool JVM", "pid", jvmPID, "class", fields[1])
-			continue
-		}
-		cwd := lookupProcessWorkingDirectory(jvmPID)
-		logger.Debug("app JVM candidate", "pid", jvmPID, "class", fields[1], "cwd", cwd, "project_dir", projectDir, "cwd_matches", isUnderDir(cwd, projectDir))
-		candidates = append(candidates, jvmCandidate{pid: jvmPID, class: fields[1], cwd: cwd})
-	}
-
-	if len(candidates) == 0 {
-		logger.Debug("no app JVM candidates found via jps", "root_pid", pid)
-		return ""
-	}
-
-	// First pass: prefer JVMs whose working directory is under projectDir.
-	for _, c := range candidates {
-		if !isUnderDir(c.cwd, projectDir) {
-			continue
-		}
-		if port := detectProcessListeningPort(c.pid); port != "" {
-			logger.Debug("port found on app JVM (cwd match)", "root_pid", pid, "jvm_pid", c.pid, "class", c.class, "cwd", c.cwd, "port", port)
-			return port
-		}
-		logger.Debug("cwd-matched JVM has no open port yet", "jvm_pid", c.pid, "class", c.class, "cwd", c.cwd)
-	}
-
-	// Second pass: fall back to the first eligible JVM with an open port.
-	logger.Debug("no cwd-matched JVM had an open port, trying all candidates", "root_pid", pid, "project_dir", projectDir)
-	for _, c := range candidates {
-		if port := detectProcessListeningPort(c.pid); port != "" {
-			logger.Debug("port found on app JVM (no cwd match)", "root_pid", pid, "jvm_pid", c.pid, "class", c.class, "cwd", c.cwd, "port", port)
-			return port
-		}
-	}
-	return ""
+	return javaDescendantPort(pid, projectDir)
 }
 
 // isUnderDir reports whether path equals dir or is directly under it.

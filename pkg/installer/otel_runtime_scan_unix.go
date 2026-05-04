@@ -84,8 +84,68 @@ func lookupProcessWorkingDirectory(pid int) string {
 	return ""
 }
 
-// detectJavaPortByCommandLine is a no-op on Unix: jps covers the wrapper→child case.
-func detectJavaPortByCommandLine(_ string) string { return "" }
+// javaDescendantPort finds the listening port of an app JVM spawned by a
+// build-tool wrapper (mvn spring-boot:run, gradlew bootRun). Uses jps -l to
+// enumerate JVMs, skips build-tool JVMs, and prefers one whose working
+// directory is under projectDir.
+func javaDescendantPort(pid int, projectDir string) string {
+	out, err := exec.Command("jps", "-l").Output()
+	if err != nil {
+		logger.Debug("jps -l failed", "err", err)
+		return ""
+	}
+
+	type jvmCandidate struct {
+		pid   int
+		class string
+		cwd   string
+	}
+	var candidates []jvmCandidate
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) < 2 {
+			continue
+		}
+		jvmPID, err := strconv.Atoi(fields[0])
+		if err != nil {
+			continue
+		}
+		if jvmPID == pid {
+			// Tracked PID is itself an app JVM — it hasn't bound its port yet.
+			// Return "" so the poll loop retries direct detection.
+			if !isBuildToolJVM(fields[1]) {
+				logger.Debug("tracked pid is app JVM, waiting for it to bind", "pid", pid, "class", fields[1])
+				return ""
+			}
+			continue
+		}
+		if isBuildToolJVM(fields[1]) {
+			continue
+		}
+		cwd := lookupProcessWorkingDirectory(jvmPID)
+		candidates = append(candidates, jvmCandidate{pid: jvmPID, class: fields[1], cwd: cwd})
+	}
+
+	// First pass: prefer JVMs whose working directory is under projectDir.
+	for _, c := range candidates {
+		if !isUnderDir(c.cwd, projectDir) {
+			continue
+		}
+		if port := detectProcessListeningPort(c.pid); port != "" {
+			logger.Debug("javaDescendantPort: port found (cwd match)", "wrapper_pid", pid, "jvm_pid", c.pid, "port", port)
+			return port
+		}
+	}
+
+	// Second pass: any eligible JVM with an open port.
+	for _, c := range candidates {
+		if port := detectProcessListeningPort(c.pid); port != "" {
+			logger.Debug("javaDescendantPort: port found (no cwd match)", "wrapper_pid", pid, "jvm_pid", c.pid, "port", port)
+			return port
+		}
+	}
+	return ""
+}
 
 func detectProcessListeningPort(pid int) string {
 	output, err := exec.Command("lsof", "-a", "-i", "TCP", "-sTCP:LISTEN", "-p", strconv.Itoa(pid), "-Fn", "-P").Output()
