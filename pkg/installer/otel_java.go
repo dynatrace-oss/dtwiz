@@ -350,7 +350,7 @@ func (p *JavaInstrumentationPlan) executeMultiModule() {
 			display.PrintStatusLine("error", fmt.Sprintf("failed to start %s: %v", svcName, err), display.ColorError)
 			continue
 		}
-		proc.portDetector = detectJavaListeningPort
+		proc.portDetector = func(pid int) string { return detectJavaListeningPort(pid, sub.Path) }
 		procs = append(procs, proc)
 	}
 
@@ -420,7 +420,7 @@ func (p *JavaInstrumentationPlan) Execute() {
 		display.PrintStatusLine("error", fmt.Sprintf("failed to start process: %v", err), display.ColorError)
 		return
 	}
-	proc.portDetector = detectJavaListeningPort
+	proc.portDetector = func(pid int) string { return detectJavaListeningPort(pid, p.Project.Path) }
 
 	aliveNames, _ := PrintProcessSummary([]*ManagedProcess{proc}, processSettleDelay)
 	if len(aliveNames) == 0 {
@@ -606,7 +606,7 @@ func InstallOtelJava(envURL, token, serviceName string, dryRun bool) error {
 	if err != nil {
 		return fmt.Errorf("starting instrumented process: %w", err)
 	}
-	proc.portDetector = detectJavaListeningPort
+	proc.portDetector = func(pid int) string { return detectJavaListeningPort(pid, proj.Path) }
 
 	aliveNames, _ := PrintProcessSummary([]*ManagedProcess{proc}, processSettleDelay)
 	if len(aliveNames) == 0 {

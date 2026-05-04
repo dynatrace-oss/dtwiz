@@ -523,6 +523,37 @@ func TestIsBuildToolJVM_Empty(t *testing.T) {
 	}
 }
 
+func TestIsBuildToolJVM_MavenDaemon(t *testing.T) {
+	if !isBuildToolJVM("org.mvndaemon.mvnd.daemon.Server") {
+		t.Fatal("expected Maven daemon to be recognized as build-tool JVM")
+	}
+}
+
+// ── isUnderDir tests ──────────────────────────────────────────────────────────
+
+func TestIsUnderDir(t *testing.T) {
+	sep := string(os.PathSeparator)
+	base := sep + "projects" + sep + "app"
+	tests := []struct {
+		path, dir string
+		want      bool
+	}{
+		{base, base, true},                                        // exact match
+		{base + sep + "src", base, true},                         // direct child
+		{base + sep + "src" + sep + "main", base, true},          // deep child
+		{sep + "projects" + sep + "other", base, false},          // sibling
+		{sep + "projects" + sep + "appx", base, false},           // prefix but not a path boundary
+		{"", base, false},                                        // empty path
+		{base, "", false},                                        // empty dir
+	}
+	for _, tt := range tests {
+		got := isUnderDir(tt.path, tt.dir)
+		if got != tt.want {
+			t.Errorf("isUnderDir(%q, %q) = %v, want %v", tt.path, tt.dir, got, tt.want)
+		}
+	}
+}
+
 // ── detectJavaListeningPort / portDetector tests ──────────────────────────────
 
 func TestDetectPort_UsesCustomDetector(t *testing.T) {
