@@ -130,44 +130,62 @@ func detectProcessListeningPort(pid int) string {
 	return port
 }
 
-// detectJavaPortByProjectDir finds an app JVM listening on a port by matching
-// its working directory to projectDir. This replicates the jps-based logic for
-// Windows systems where jps is not available, without relying on parent-child
-// process relationships which are not portable.
-func detectJavaPortByProjectDir(projectDir string) string {
-	lines, err := winProcessQuery(
-		"$_.Name -like 'java*'",
-		"\"$($_.ProcessId)|$($_.WorkingDirectory)|$($_.CommandLine)\"",
-	)
-	if err != nil {
+// detectJavaPortByTrackedProcess finds a listening port among the Java descendants
+// of trackedPID using Win32_Process parent-child relationships.
+//
+// Win32_Process.WorkingDirectory is unreliable on Windows (returns null for many
+// JVM processes), so we use the process tree instead. We know we launched the
+// tracked process, so BFS from its PID to find all java* descendants is the
+// correct and portable-within-Windows approach.
+func detectJavaPortByTrackedProcess(trackedPID int) string {
+	// Output format: line 1 = "name|cmdline" of tracked PID; subsequent lines = "javaPid|port"
+	// for any java descendant that has a non-OTel listening port. Keeping all of this in one
+	// PowerShell call lets us emit diagnostics for the tracked process AND find the port without
+	// a second roundtrip.
+	script := `
+$t = ` + strconv.Itoa(trackedPID) + `
+$procs = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue
+$tracked = $procs | Where-Object ProcessId -eq $t | Select-Object -First 1
+"TRACKED|$($tracked.Name)|$($tracked.CommandLine)"
+
+$pids = ,$t
+do {
+    $next = @($pids + ($procs | Where-Object { $pids -contains $_.ParentProcessId } | ForEach-Object ProcessId)) | Select-Object -Unique
+    $stable = $next.Count -eq $pids.Count
+    $pids = $next
+} while (-not $stable)
+
+$javaPids = $procs | Where-Object { $pids -contains $_.ProcessId -and $_.ProcessId -ne $t -and $_.Name -like 'java*' } | ForEach-Object ProcessId
+"JAVA_DESCENDANTS|$($javaPids -join ',')"
+
+if ($javaPids) {
+    $p = Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
+        Where-Object { $javaPids -contains $_.OwningProcess -and $_.LocalPort -notin @(4317,4318) } |
+        Select-Object -First 1 -ExpandProperty LocalPort
+    if ($p) { "PORT|$p" }
+}`
+	logger.Debug("detectJavaPortByTrackedProcess: scanning process tree", "tracked_pid", trackedPID)
+	output, err := exec.Command("powershell", "-NoProfile", "-Command", script).Output()
+	if err != nil && len(output) == 0 {
+		logger.Debug("detectJavaPortByTrackedProcess: query failed", "tracked_pid", trackedPID, "err", err)
 		return ""
 	}
-	logger.Debug("detectJavaPortByProjectDir: scanning", "java_processes", len(lines), "project_dir", projectDir)
-	for _, line := range lines {
-		parts := strings.SplitN(line, "|", 3)
-		if len(parts) < 3 {
-			logger.Debug("detectJavaPortByProjectDir: skipping malformed line", "line", line)
-			continue
+	var port string
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		line = strings.TrimRight(line, "\r")
+		switch {
+		case strings.HasPrefix(line, "TRACKED|"):
+			logger.Debug("detectJavaPortByTrackedProcess: tracked process info", "tracked_pid", trackedPID, "info", strings.TrimPrefix(line, "TRACKED|"))
+		case strings.HasPrefix(line, "JAVA_DESCENDANTS|"):
+			logger.Debug("detectJavaPortByTrackedProcess: java descendants", "tracked_pid", trackedPID, "pids", strings.TrimPrefix(line, "JAVA_DESCENDANTS|"))
+		case strings.HasPrefix(line, "PORT|"):
+			port = strings.TrimPrefix(line, "PORT|")
 		}
-		pid, err := strconv.Atoi(strings.TrimSpace(parts[0]))
-		if err != nil || pid == 0 {
-			continue
-		}
-		workDir := strings.TrimSpace(parts[1])
-		if !isUnderDir(workDir, projectDir) {
-			logger.Debug("detectJavaPortByProjectDir: skipping JVM (wrong dir)", "pid", pid, "work_dir", workDir, "project_dir", projectDir)
-			continue
-		}
-		// Do not filter by build-tool command line: spring-boot:run runs Spring Boot
-		// in the Maven JVM by default, so the listening process still shows Maven
-		// classes in its command line. The port check is the correct discriminator —
-		// a JVM compiling has no listening port; one running the app does.
-		logger.Debug("detectJavaPortByProjectDir: checking JVM in project dir", "pid", pid, "work_dir", workDir)
-		if port := detectProcessListeningPort(pid); port != "" {
-			logger.Debug("detectJavaPortByProjectDir: found port", "pid", pid, "port", port, "project_dir", projectDir)
-			return port
-		}
-		logger.Debug("detectJavaPortByProjectDir: JVM in project dir has no port yet", "pid", pid, "work_dir", workDir)
 	}
-	return ""
+	if port == "" {
+		logger.Debug("detectJavaPortByTrackedProcess: no java descendant has a port yet", "tracked_pid", trackedPID)
+		return ""
+	}
+	logger.Debug("detectJavaPortByTrackedProcess: found port", "tracked_pid", trackedPID, "port", port)
+	return port
 }
