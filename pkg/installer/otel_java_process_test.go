@@ -538,13 +538,13 @@ func TestIsUnderDir(t *testing.T) {
 		path, dir string
 		want      bool
 	}{
-		{base, base, true},                                        // exact match
-		{base + sep + "src", base, true},                         // direct child
-		{base + sep + "src" + sep + "main", base, true},          // deep child
-		{sep + "projects" + sep + "other", base, false},          // sibling
-		{sep + "projects" + sep + "appx", base, false},           // prefix but not a path boundary
-		{"", base, false},                                        // empty path
-		{base, "", false},                                        // empty dir
+		{base, base, true},                              // exact match
+		{base + sep + "src", base, true},                // direct child
+		{base + sep + "src" + sep + "main", base, true}, // deep child
+		{sep + "projects" + sep + "other", base, false}, // sibling
+		{sep + "projects" + sep + "appx", base, false},  // prefix but not a path boundary
+		{"", base, false},                               // empty path
+		{base, "", false},                               // empty dir
 	}
 	for _, tt := range tests {
 		got := isUnderDir(tt.path, tt.dir)
