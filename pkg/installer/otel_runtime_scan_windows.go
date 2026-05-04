@@ -106,21 +106,77 @@ func lookupProcessWorkingDirectory(pid int) string {
 	return strings.TrimSpace(string(output))
 }
 
-// detectProcessListeningPort returns the first non-OTel TCP port a process is listening on,
-// using Get-NetTCPConnection (available on Windows Server 2012 R2+ / Windows 8.1+).
+// detectProcessListeningPort returns the first non-OTel TCP port a process is
+// listening on, using Get-NetTCPConnection (Windows Server 2012 R2+ / Win 8.1+).
+//
+// Get-NetTCPConnection -OwningProcess exits with code 1 when the process has no
+// connections even with -ErrorAction SilentlyContinue, so we read output
+// regardless of the exit code and treat non-empty output as success.
 func detectProcessListeningPort(pid int) string {
-	output, err := exec.Command(
+	cmd := exec.Command(
 		"powershell", "-NoProfile", "-Command",
 		"Get-NetTCPConnection -State Listen -OwningProcess "+strconv.Itoa(pid)+
 			" -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -notin @(4317,4318) } | Select-Object -First 1 -ExpandProperty LocalPort",
-	).Output()
-	if err != nil {
-		logger.Debug("detectProcessListeningPort: query failed", "pid", pid, "err", err)
+	)
+	output, err := cmd.Output()
+	port := strings.TrimSpace(string(output))
+	if port == "" {
+		if err != nil {
+			logger.Debug("detectProcessListeningPort: query failed", "pid", pid, "err", err)
+		}
 		return ""
 	}
-	port := strings.TrimSpace(string(output))
-	if port != "" {
-		logger.Debug("detectProcessListeningPort: found port", "pid", pid, "port", port)
-	}
+	logger.Debug("detectProcessListeningPort: found port", "pid", pid, "port", port)
 	return port
+}
+
+// detectJavaPortByProjectDir finds an app JVM listening on a port by matching
+// its working directory to projectDir. This replicates the jps-based logic for
+// Windows systems where jps is not available, without relying on parent-child
+// process relationships which are not portable.
+func detectJavaPortByProjectDir(projectDir string) string {
+	lines, err := winProcessQuery(
+		"$_.Name -like 'java*'",
+		"\"$($_.ProcessId)|$($_.WorkingDirectory)|$($_.CommandLine)\"",
+	)
+	if err != nil {
+		return ""
+	}
+	for _, line := range lines {
+		parts := strings.SplitN(line, "|", 3)
+		if len(parts) < 3 {
+			continue
+		}
+		pid, err := strconv.Atoi(strings.TrimSpace(parts[0]))
+		if err != nil || pid == 0 {
+			continue
+		}
+		if !isUnderDir(strings.TrimSpace(parts[1]), projectDir) {
+			continue
+		}
+		if isBuildToolCommandLine(parts[2]) {
+			logger.Debug("detectJavaPortByProjectDir: skipping build-tool JVM", "pid", pid)
+			continue
+		}
+		if port := detectProcessListeningPort(pid); port != "" {
+			logger.Debug("detectJavaPortByProjectDir: found port", "pid", pid, "port", port, "project_dir", projectDir)
+			return port
+		}
+	}
+	return ""
+}
+
+// isBuildToolCommandLine reports whether a Java command line belongs to a
+// build-tool process by checking for known build-tool class name prefixes.
+func isBuildToolCommandLine(cmdLine string) bool {
+	for _, marker := range []string{
+		"org.apache.maven.",
+		"org.gradle.",
+		"org.mvndaemon.mvnd.",
+	} {
+		if strings.Contains(cmdLine, marker) {
+			return true
+		}
+	}
+	return false
 }
