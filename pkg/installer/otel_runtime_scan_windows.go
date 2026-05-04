@@ -142,41 +142,32 @@ func detectJavaPortByProjectDir(projectDir string) string {
 	if err != nil {
 		return ""
 	}
+	logger.Debug("detectJavaPortByProjectDir: scanning", "java_processes", len(lines), "project_dir", projectDir)
 	for _, line := range lines {
 		parts := strings.SplitN(line, "|", 3)
 		if len(parts) < 3 {
+			logger.Debug("detectJavaPortByProjectDir: skipping malformed line", "line", line)
 			continue
 		}
 		pid, err := strconv.Atoi(strings.TrimSpace(parts[0]))
 		if err != nil || pid == 0 {
 			continue
 		}
-		if !isUnderDir(strings.TrimSpace(parts[1]), projectDir) {
+		workDir := strings.TrimSpace(parts[1])
+		if !isUnderDir(workDir, projectDir) {
+			logger.Debug("detectJavaPortByProjectDir: skipping JVM (wrong dir)", "pid", pid, "work_dir", workDir, "project_dir", projectDir)
 			continue
 		}
-		if isBuildToolCommandLine(parts[2]) {
-			logger.Debug("detectJavaPortByProjectDir: skipping build-tool JVM", "pid", pid)
-			continue
-		}
+		// Do not filter by build-tool command line: spring-boot:run runs Spring Boot
+		// in the Maven JVM by default, so the listening process still shows Maven
+		// classes in its command line. The port check is the correct discriminator —
+		// a JVM compiling has no listening port; one running the app does.
+		logger.Debug("detectJavaPortByProjectDir: checking JVM in project dir", "pid", pid, "work_dir", workDir)
 		if port := detectProcessListeningPort(pid); port != "" {
 			logger.Debug("detectJavaPortByProjectDir: found port", "pid", pid, "port", port, "project_dir", projectDir)
 			return port
 		}
+		logger.Debug("detectJavaPortByProjectDir: JVM in project dir has no port yet", "pid", pid, "work_dir", workDir)
 	}
 	return ""
-}
-
-// isBuildToolCommandLine reports whether a Java command line belongs to a
-// build-tool process by checking for known build-tool class name prefixes.
-func isBuildToolCommandLine(cmdLine string) bool {
-	for _, marker := range []string{
-		"org.apache.maven.",
-		"org.gradle.",
-		"org.mvndaemon.mvnd.",
-	} {
-		if strings.Contains(cmdLine, marker) {
-			return true
-		}
-	}
-	return false
 }
