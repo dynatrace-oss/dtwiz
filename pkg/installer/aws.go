@@ -402,7 +402,7 @@ func InstallAWS(c *client.PlatformClient, envURL, token, platformToken string, d
 	fmt.Printf("  Template: %s\n", awsTemplateURL)
 
 	// Monitoring config ID is resolved after confirmation; show placeholder in preview.
-	previewCfg := awsStackConfig{
+	cfg := awsStackConfig{
 		StackName:          stackName,
 		DynatraceURL:       strings.TrimRight(toAppsURL(dynatraceURL), "/"),
 		SettingsToken:      settingsToken,
@@ -416,7 +416,7 @@ func InstallAWS(c *client.PlatformClient, envURL, token, platformToken string, d
 		EventSources:       "aws.health",
 		UseCMK:             "FALSE",
 	}
-	deployArgs := buildDeployArgs(previewCfg, "/tmp/da-aws-activation.yaml")
+	deployArgs := buildDeployArgs(cfg, "/tmp/da-aws-activation.yaml")
 
 	fmt.Println()
 	fmt.Printf("  %s\n", sep)
@@ -463,20 +463,7 @@ func InstallAWS(c *client.PlatformClient, envURL, token, platformToken string, d
 		fmt.Printf("  Monitoring config: created %s\n", monitoringConfigID)
 	}
 
-	cfg := awsStackConfig{
-		StackName:          stackName,
-		DynatraceURL:       strings.TrimRight(toAppsURL(dynatraceURL), "/"),
-		SettingsToken:      settingsToken,
-		IngestToken:        ingestToken,
-		MonitoringConfigID: monitoringConfigID,
-		LogsEnabled:        "TRUE",
-		LogsRegions:        region,
-		EventsEnabled:      "TRUE",
-		EventsRegions:      region,
-		EventBridgeBusName: "default",
-		EventSources:       "aws.health",
-		UseCMK:             "FALSE",
-	}
+	cfg.MonitoringConfigID = monitoringConfigID
 
 	// ── Deploy ────────────────────────────────────────────────────────────────
 
