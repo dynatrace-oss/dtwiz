@@ -99,8 +99,7 @@ func CreateMonitoringConfig(c *client.PlatformClient, extensionName string, payl
 	}
 	sc := resp.StatusCode()
 	if sc != http.StatusOK && sc != http.StatusCreated {
-		body := resp.String()
-		return "", fmt.Errorf("creating monitoring config for %s (HTTP %d): %s", extensionName, sc, body[:min(len(body), 400)])
+		return "", fmt.Errorf("creating monitoring config for %s (HTTP %d)", extensionName, sc)
 	}
 	if result.ObjectID == "" {
 		return "", fmt.Errorf("monitoring config creation for %s returned no objectId", extensionName)
@@ -117,8 +116,7 @@ func DeleteMonitoringConfig(c *client.PlatformClient, extensionName, objectID st
 	}
 	sc := resp.StatusCode()
 	if sc != http.StatusOK && sc != http.StatusNoContent {
-		body := resp.String()
-		return fmt.Errorf("deleting monitoring config %s (HTTP %d): %s", objectID, sc, body[:min(len(body), 400)])
+		return fmt.Errorf("deleting monitoring config %s (HTTP %d)", objectID, sc)
 	}
 	return nil
 }
