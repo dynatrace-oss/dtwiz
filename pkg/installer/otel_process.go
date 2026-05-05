@@ -20,7 +20,7 @@ const (
 	// full timeout before "port not detected" is shown.
 	portPollTimeout    = 3 * time.Minute
 	processSettleDelay = 3 * time.Second
-	slowHintIteration  = 5
+	slowHintDelay      = 10 * time.Second
 )
 
 type ManagedProcess struct {
@@ -161,14 +161,15 @@ func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) 
 		}
 
 		deadline := time.Now().Add(portPollTimeout)
-		iteration := 0
-		slowHintPrinted := false
-		for time.Now().Before(deadline) {
-			iteration++
-			if !slowHintPrinted && iteration == slowHintIteration {
+		hintDone := make(chan struct{})
+		go func() {
+			select {
+			case <-time.After(slowHintDelay):
 				fmt.Println("  Still detecting ports — this may take a while on slow machines.")
-				slowHintPrinted = true
+			case <-hintDone:
 			}
+		}()
+		for time.Now().Before(deadline) {
 			var mu sync.Mutex
 			portsFound := 0
 			remaining := 0
@@ -187,7 +188,7 @@ func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) 
 				go func(idx int, proc *ManagedProcess) {
 					defer wg.Done()
 					port := proc.detectPort()
-					logger.Debug("port probe", "iteration", iteration, "pid", proc.PID, "name", proc.Name, "port", port)
+					logger.Debug("port probe", "pid", proc.PID, "name", proc.Name, "port", port)
 					if port != "" {
 						mu.Lock()
 						ports[idx] = port
@@ -197,13 +198,14 @@ func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) 
 				}(i, p)
 			}
 			wg.Wait()
-			logger.Debug("poll iteration complete", "iteration", iteration, "remaining", remaining, "ports_found", portsFound)
+			logger.Debug("poll iteration complete", "remaining", remaining, "ports_found", portsFound)
 			if remaining == 0 || portsFound == started {
 				logger.Debug("port detection done", "reason", map[bool]string{true: "all exited", false: "all ports found"}[remaining == 0])
 				break
 			}
 			time.Sleep(portPollInterval)
 		}
+		close(hintDone)
 	}
 
 	for i, p := range procs {
