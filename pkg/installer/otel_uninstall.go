@@ -71,6 +71,40 @@ func binaryPathFromPID(pid int) string {
 	return fields[0]
 }
 
+func javaAgentDir() string {
+	agentPath, err := javaAgentPath()
+	if err != nil {
+		return ""
+	}
+	return filepath.Dir(agentPath)
+}
+
+// detectJavaProcessesFunc and enrichProcessesWithJPSFunc are package-level
+// variables to allow overriding in tests.
+var detectJavaProcessesFunc = detectJavaProcesses
+var enrichProcessesWithJPSFunc = enrichProcessesWithJPS
+
+// findInstrumentedJavaProcesses returns running Java processes whose command
+// line contains the exact dtwiz agent JAR path, indicating they were started
+// with dtwiz Java auto-instrumentation.
+func findInstrumentedJavaProcesses() []DetectedProcess {
+	agentPath, err := javaAgentPath()
+	if err != nil {
+		logger.Debug("could not resolve java agent path for process filter", "err", err)
+		return []DetectedProcess{}
+	}
+	processes := detectJavaProcessesFunc()
+	processes = enrichProcessesWithJPSFunc(processes)
+	var instrumented []DetectedProcess
+	for _, p := range processes {
+		if strings.Contains(p.Command, agentPath) {
+			instrumented = append(instrumented, p)
+		}
+	}
+	logger.Debug("findInstrumentedJavaProcesses", "total", len(processes), "instrumented", len(instrumented))
+	return instrumented
+}
+
 func candidateOtelDirs(infos []otelProcessInfo) []string {
 	seen := map[string]bool{}
 	var dirs []string
@@ -274,10 +308,20 @@ func UninstallOtelCollector(dryRun bool) error {
 		}
 	}
 
+	javaProcs := findInstrumentedJavaProcesses()
+	agentDir := javaAgentDir()
+	agentDirExists := false
+	if agentDir != "" {
+		if _, err := os.Stat(agentDir); err == nil {
+			agentDirExists = true
+		}
+	}
+	hasJavaCleanup := len(javaProcs) > 0 || agentDirExists
+
 	display.Header("Dynatrace OTel Collector Uninstall")
 
-	if len(processes) == 0 && len(dirs) == 0 && !anyRuntimeProcs && len(nodeOtelDirs) == 0 {
-		display.ColorMuted.Println("  Nothing to remove — no running collector, no install directories, and no Node.js instrumentation found.")
+	if len(processes) == 0 && len(dirs) == 0 && !anyRuntimeProcs && !hasJavaCleanup && len(nodeOtelDirs) == 0 {
+		display.ColorDefault.Println("  Nothing to remove — no running collector and no install directories found.")
 		return nil
 	}
 
@@ -291,6 +335,28 @@ func UninstallOtelCollector(dryRun bool) error {
 				display.ColorError.Printf("stop PID %d", p.PID)
 				display.ColorDefault.Printf("  (%s)\n", p.Command)
 			}
+			fmt.Println()
+		}
+	}
+
+	if hasJavaCleanup {
+		if len(javaProcs) > 0 {
+			fmt.Println("  Instrumented Java processes that will be stopped:")
+			for _, p := range javaProcs {
+				desc := p.Command
+				if p.Description != "" {
+					desc = p.Description
+				}
+				fmt.Printf("    ")
+				display.ColorError.Printf("stop PID %d", p.PID)
+				display.ColorDefault.Printf("  (%s)\n", desc)
+			}
+			fmt.Println()
+		}
+		if agentDirExists {
+			fmt.Println("  Java agent directory that will be removed:")
+			fmt.Printf("    ")
+			display.ColorError.Printf("rm -rf %s\n", agentDir)
 			fmt.Println()
 		}
 	}
@@ -337,6 +403,15 @@ func UninstallOtelCollector(dryRun bool) error {
 		stopProcesses(pids)
 	}
 
+	if len(javaProcs) > 0 {
+		javaPIDs := make([]int, len(javaProcs))
+		for i, p := range javaProcs {
+			javaPIDs[i] = p.PID
+		}
+		logger.Debug("stopping instrumented java processes", "count", len(javaPIDs))
+		stopProcesses(javaPIDs)
+	}
+
 	for _, d := range dirs {
 		if err := removeWithRetry(d); err != nil {
 			fmt.Printf("  Warning: could not remove %s: %v\n", d, err)
@@ -345,13 +420,19 @@ func UninstallOtelCollector(dryRun bool) error {
 		fmt.Printf("  Removed %s\n", d)
 	}
 
-	// ── Remove .otel/ directories ───────────────────────────────────────────
 	for _, d := range nodeOtelDirs {
 		if err := removeWithRetry(d); err != nil {
 			fmt.Printf("  Warning: could not remove %s: %v\n", d, err)
 			continue
 		}
 		fmt.Printf("  Removed %s\n", d)
+	}
+	if agentDirExists {
+		if err := removeWithRetry(agentDir); err != nil {
+			fmt.Printf("  Warning: could not remove %s: %v\n", agentDir, err)
+		} else {
+			fmt.Printf("  Removed %s\n", agentDir)
+		}
 	}
 
 	fmt.Println()

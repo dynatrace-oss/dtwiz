@@ -162,29 +162,29 @@
 ### Automated (run on both platforms)
 
 - [x] 9.1 Run `make test` on Unix — all existing tests must pass
-- [ ] 9.1a Run `go test ./...` on Windows — all existing tests must pass (Windows-skipped tests are acceptable; no panics or build failures)
+- [x] 9.1a Run `go test ./...` on Windows — all existing tests must pass (Windows-skipped tests are acceptable; no panics or build failures)
 - [x] 9.2 Run `make lint` — no new lint issues
 
 ### Manual — Unix (macOS / Linux)
 
-- [ ] 9.3 `dtwiz install otel-java --dry-run` shows preview with JAR URL, env vars, and `-javaagent` flag
-- [ ] 9.4 `dtwiz install otel-java` with a Java project that has a built fat JAR — JAR is detected as entrypoint, app is launched with instrumentation (no prior running process needed)
-- [ ] 9.5 `dtwiz install otel-java` with no built artifact — installer attempts auto-build via `./mvnw` or `./gradlew`; if build succeeds the app is launched; if build fails a clear error is printed with instructions to fix and re-run
-- [ ] 9.6 Generate some traffic to the instrumented app and verify traces/logs appear in Dynatrace
-- [ ] 9.7 `dtwiz install otel` shows Java projects in the selection menu (requires `DTWIZ_ALL_RUNTIMES=true` until task 14 is complete)
-- [ ] 9.8 After `dtwiz install otel-java` completes, `WatchIngest` starts automatically and shows ingested data (services, logs, spans) for the instrumented Java app; press Enter to exit the watch
-- [ ] 9.9 OTel Collector config is updated after Java instrumentation when a collector config exists on the machine
-- [ ] 9.9a `dtwiz install otel-java` inside `terra-sample-apps/java-travel-agency` — all 5 services (`s-frontend`, `s-frontend-2`, `s-booking`, `s-transport`, `s-load-balancer`) start, each with a distinct `OTEL_SERVICE_NAME` matching its directory name; zero services start via the root `./mvnw spring-boot:run` command
+- [x] 9.3 `dtwiz install otel-java --dry-run` shows preview with JAR URL, env vars, and `-javaagent` flag
+- [x] 9.4 `dtwiz install otel-java` with a Java project that has a built fat JAR — JAR is detected as entrypoint, app is launched with instrumentation (no prior running process needed)
+- [x] 9.5 `dtwiz install otel-java` with no built artifact — installer attempts auto-build via `./mvnw` or `./gradlew`; if build succeeds the app is launched; if build fails a clear error is printed with instructions to fix and re-run
+- [x] 9.6 Generate some traffic to the instrumented app and verify traces/logs appear in Dynatrace
+- [x] 9.7 `dtwiz install otel` shows Java projects in the selection menu (requires `DTWIZ_ALL_RUNTIMES=true` until task 14 is complete)
+- [x] 9.8 After `dtwiz install otel-java` completes, `WatchIngest` starts automatically and shows ingested data (services, logs, spans) for the instrumented Java app; press Enter to exit the watch
+- [x] 9.9 OTel Collector config is updated after Java instrumentation when a collector config exists on the machine
+- [x] 9.9a `dtwiz install otel-java` inside `terra-sample-apps/java-travel-agency` — all 5 services (`s-frontend`, `s-frontend-2`, `s-booking`, `s-transport`, `s-load-balancer`) start, each with a distinct `OTEL_SERVICE_NAME` matching its directory name; zero services start via the root `./mvnw spring-boot:run` command
 
 ### Manual — Windows
 
-- [ ] 9.10 `dtwiz install otel-java --dry-run` shows preview with correct Windows paths (backslash separators in agent JAR path; home resolves under `%USERPROFILE%`)
-- [ ] 9.11 `dtwiz install otel-java` with a fat JAR project — JAR detected, instrumented process launched
-- [ ] 9.12 `dtwiz install otel-java` with a Spring Boot Maven project using `mvnw.cmd` — `mvnw.cmd spring-boot:run` offered as entrypoint and executes correctly with `JAVA_TOOL_OPTIONS` set
-- [ ] 9.13 `dtwiz install otel-java` with a Spring Boot Gradle project using `gradlew.bat` — `gradlew.bat bootRun` offered and executes correctly
-- [ ] 9.14 `dtwiz install otel-java` with no built artifact — auto-build via `mvnw.cmd` or `gradlew.bat` is attempted; success launches; failure prints clear error
-- [ ] 9.15 Running Java processes detected and shown in project selection menu with PID annotations
-- [ ] 9.16 `dtwiz uninstall otel` stops the dtwiz-instrumented Java process and removes `%USERPROFILE%\.opentelemetry\java\`
+- [x] 9.10 `dtwiz install otel-java --dry-run` shows preview with correct Windows paths (backslash separators in agent JAR path; home resolves under `%USERPROFILE%`)
+- [x] 9.11 `dtwiz install otel-java` with a fat JAR project — JAR detected, instrumented process launched
+- [x] 9.12 `dtwiz install otel-java` with a Spring Boot Maven project using `mvnw.cmd` — `mvnw.cmd spring-boot:run` offered as entrypoint and executes correctly with `JAVA_TOOL_OPTIONS` set
+- [x] 9.13 `dtwiz install otel-java` with a Spring Boot Gradle project using `gradlew.bat` — `gradlew.bat bootRun` offered and executes correctly
+- [x] 9.14 `dtwiz install otel-java` with no built artifact — auto-build via `mvnw.cmd` or `gradlew.bat` is attempted; success launches; failure prints clear error
+- [x] 9.15 Running Java processes detected and shown in project selection menu with PID annotations
+- [x] 9.16 `dtwiz uninstall otel` stops the dtwiz-instrumented Java process and removes `%USERPROFILE%\.opentelemetry\java\`
 
 ## 10. Multi-Module Project Detection and Instrumentation
 
@@ -233,19 +233,19 @@
 
 **Files:** `pkg/installer/otel_uninstall.go` (modify), `pkg/installer/otel_uninstall_test.go` (modify or create)
 
-- [ ] 13.1 Add `findInstrumentedJavaProcesses() []DetectedProcess` in `otel_uninstall.go` — calls `detectJavaProcesses()` + `enrichProcessesWithJPS()`, filters to processes whose `Command` contains the exact dtwiz agent path (`~/.opentelemetry/java/opentelemetry-javaagent.jar`)
-- [ ] 13.2 Add `javaAgentDir() string` helper — returns `filepath.Dir(javaAgentPath())`
-- [ ] 13.3 Extend `UninstallOtelCollector(dryRun bool) error` to include a Java cleanup section: discover instrumented Java processes and the agent dir, include them in the combined preview alongside existing collector artifacts, and on confirmation stop matched processes then remove `~/.opentelemetry/java/` if it exists
-- [ ] 13.4 Tests:
+- [x] 13.1 Add `findInstrumentedJavaProcesses() []DetectedProcess` in `otel_uninstall.go` — calls `detectJavaProcesses()` + `enrichProcessesWithJPS()`, filters to processes whose `Command` contains the exact dtwiz agent path (`~/.opentelemetry/java/opentelemetry-javaagent.jar`)
+- [x] 13.2 Add `javaAgentDir() string` helper — returns `filepath.Dir(javaAgentPath())`
+- [x] 13.3 Extend `UninstallOtelCollector(dryRun bool) error` to include a Java cleanup section: discover instrumented Java processes and the agent dir, include them in the combined preview alongside existing collector artifacts, and on confirmation stop matched processes then remove `~/.opentelemetry/java/` if it exists
+- [x] 13.4 Tests:
   - `TestFindInstrumentedJavaProcesses_FiltersByAgentFlag` — verify only processes with `opentelemetry-javaagent.jar` in command are returned
   - `TestFindInstrumentedJavaProcesses_NoneMatching` — verify empty result when no processes have the agent flag
   - `TestJavaAgentDir_ReturnsParentOfJar` — verify the directory name ends in `java`
   - `TestUninstallOtelCollector_JavaDryRun_NothingPresent` — no Java processes, no agent dir → Java section absent from preview
   - `TestUninstallOtelCollector_JavaDryRun_AgentDirExists` — agent dir present, dry-run → dir not removed
-- [ ] 13.5 Manual verification: `dtwiz uninstall otel --dry-run` with a running instrumented Java process — shows Java PID and agent dir in preview, makes no changes
-- [ ] 13.6 Manual verification: `dtwiz uninstall otel` stops only the dtwiz-instrumented Java process, not other Java processes
-- [ ] 13.7 Manual verification: `dtwiz uninstall otel` with no running Java processes but agent JAR present — removes `~/.opentelemetry/java/` only
-- [ ] 13.8 Manual verification: `dtwiz uninstall otel` with nothing Java-related to remove — Java section is absent from output; existing collector behavior unchanged
+- [x] 13.5 Manual verification: `dtwiz uninstall otel --dry-run` with a running instrumented Java process — shows Java PID and agent dir in preview, makes no changes
+- [x] 13.6 Manual verification: `dtwiz uninstall otel` stops only the dtwiz-instrumented Java process, not other Java processes
+- [x] 13.7 Manual verification: `dtwiz uninstall otel` with no running Java processes but agent JAR present — removes `~/.opentelemetry/java/` only
+- [x] 13.8 Manual verification: `dtwiz uninstall otel` with nothing Java-related to remove — Java section is absent from output; existing collector behavior unchanged
 
 ## 14. Remove DTWIZ_ALL_RUNTIMES Gate
 
@@ -253,5 +253,5 @@
 
 **Files:** `pkg/installer/otel.go` (modify)
 
-- [ ] 14.1 In `detectAvailableRuntimes()`, set `enabled: true` for Java unconditionally (remove the `allRuntimesEnabled()` gate)
-- [ ] 14.2 Remove the "Coming soon" label from the Java entry in the runtime list (if present in the display output)
+- [x] 14.1 In `detectAvailableRuntimes()`, set `enabled: true` for Java unconditionally (remove the `allRuntimesEnabled()` gate)
+- [x] 14.2 Remove the "Coming soon" label from the Java entry in the runtime list (if present in the display output)

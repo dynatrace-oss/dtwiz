@@ -37,7 +37,7 @@ func detectAvailableRuntimes() []runtimeInfo {
 	allEnabled := featureflags.IsEnabled(featureflags.AllRuntimes)
 	return []runtimeInfo{
 		{name: "Python", binName: "python3", enabled: true, detect: detectPythonRuntimeProjects},
-		{name: "Java", binName: "java", enabled: allEnabled, detect: detectJavaRuntimeProjects},
+		{name: "Java", binName: "java", enabled: true, detect: detectJavaRuntimeProjects},
 		{name: "Node.js", binName: "node", enabled: true, detect: detectNodeRuntimeProjects},
 		{name: "Go", binName: "go", enabled: allEnabled, detect: detectGoRuntimeProjects},
 	}

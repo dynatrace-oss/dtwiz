@@ -227,6 +227,11 @@ func buildJavaInstrumentationPlan(proj detectedProject, apiURL, token, envURL st
 
 func (p *JavaInstrumentationPlan) Execute() {
 	if len(p.SubModules) > 0 {
+		if len(p.Project.RunningProcessIDs) > 0 {
+			fmt.Print("  Stopping running processes... ")
+			stopProcesses(p.Project.RunningProcessIDs)
+			fmt.Println("done.")
+		}
 		if err := p.executeMultiModule(); err != nil {
 			logger.Debug("multi-module execution failed", "error", err)
 		}
@@ -353,6 +358,11 @@ func InstallOtelJava(envURL, token, serviceName string, dryRun bool) error {
 		if !ok {
 			fmt.Println("  Installation cancelled.")
 			return nil
+		}
+
+		if len(proj.RunningProcessIDs) > 0 {
+			logger.Debug("stopping running java processes", "pids", proj.RunningProcessIDs)
+			stopProcesses(proj.RunningProcessIDs)
 		}
 
 		if err := plan.executeMultiModule(); err != nil {
