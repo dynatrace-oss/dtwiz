@@ -71,7 +71,7 @@
 
 ## 4. Java Process Detection
 
-**Files:** `pkg/installer/otel_runtime_scan.go` (modify), `pkg/installer/otel_java_process.go` (modify), `pkg/installer/otel_java_process_test.go` (modify)
+**Files:** `pkg/installer/otel_runtime_scan.go` (modify), `pkg/installer/otel_runtime_scan_unix.go` (modify), `pkg/installer/otel_runtime_scan_windows.go` (modify), `pkg/installer/otel_java_process.go` (modify), `pkg/installer/otel_java_process_test.go` (modify)
 
 - [x] 4.0 Add `Description string` field to `DetectedProcess` struct in `otel_runtime_scan.go`
 - [x] 4.1 Add `enrichProcessesWithJPS(processes []DetectedProcess) []DetectedProcess` — if `jps` is in PATH, run `jps -l`, match output to `ps`-based processes by PID, and populate `DetectedProcess.Description` with the main class or JAR name from `jps`
@@ -81,11 +81,15 @@
   - Per enriched process: `logger.Debug("jps enrichment", "pid", pid, "description", description)`
   - Per matched process: `logger.Debug("matched process to project", "pid", pid, "project", projectPath)`
   - No matches: `logger.Debug("no running java processes matched to any project")`
-- [x] 4.3 Add `detectJavaListeningPort(pid int) string` in `otel_java_process.go` — extends `detectProcessListeningPort` with a `jps -l` fallback that skips build-tool JVMs (`org.gradle.*`, `org.apache.maven.*`, `sun.tools.jps.*`). Needed because Gradle runs the app inside the daemon, which is not a child of the tracked wrapper PID.
+- [x] 4.3 Add `detectJavaListeningPort(pid int, projectDir string) string` in `otel_java_process.go` — tries `detectProcessListeningPort(pid)` directly first (handles direct `java -jar` launches); on failure delegates to `javaDescendantPort(pid, projectDir)` for wrapper launchers (mvn, gradle) that fork the app into a separate JVM.
+- [x] 4.3a Add `javaDescendantPort(pid int, projectDir string) string` as a platform-specific function in `otel_runtime_scan_unix.go` / `otel_runtime_scan_windows.go`:
+  - **Unix**: runs `jps -l`, skips build-tool JVMs via `isBuildToolJVM`, prefers JVMs whose working directory (via `/proc/<pid>/cwd`) is under `projectDir`, falls back to any eligible JVM with an open port.
+  - **Windows**: uses WMI to find a `java.exe` child/descendant of the wrapper PID with a listening port.
+- [x] 4.3b Add `isUnderDir(path, dir string) bool` helper in `otel_java_process.go` — returns true when `path` equals `dir` or is directly under it (used by the Unix `javaDescendantPort` to prefer cwd-matching JVMs).
 - [x] 4.4 Add `isBuildToolJVM(mainClass string) bool` helper to filter Gradle/Maven/jps infrastructure from the `jps -l` fallback.
 - [x] 4.5 Add `portDetector func(pid int) string` field to `ManagedProcess` (with `detectPort()` method) so Java launches can inject `detectJavaListeningPort` without touching generic process detection.
-- [x] 4.6 Set `proc.portDetector = detectJavaListeningPort` at both Java `StartManagedProcess` call sites in `otel_java.go`.
-- [x] 4.7 Tests: `TestIsBuildToolJVM_*` (6 cases), `TestDetectPort_UsesCustomDetector`, `TestDetectPort_FallsBackWithoutDetector`
+- [x] 4.6 Set `proc.portDetector` as a closure `func(pid int) string { return detectJavaListeningPort(pid, path) }` at all three Java `StartManagedProcess` call sites in `otel_java.go` (single-module flow, multi-module `executeMultiModule`, and `InstallOtelJava`).
+- [x] 4.7 Tests: `TestIsBuildToolJVM_*` (6 cases), `TestDetectPort_UsesCustomDetector`, `TestDetectPort_FallsBackWithoutDetector`, `TestIsUnderDir` (table-driven, covers equal paths, subdirectories, partial prefix matches, and empty inputs)
 
 ## 5. Full InstallOtelJava Automated Flow
 

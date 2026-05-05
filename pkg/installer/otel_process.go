@@ -20,6 +20,7 @@ const (
 	// full timeout before "port not detected" is shown.
 	portPollTimeout    = 3 * time.Minute
 	processSettleDelay = 3 * time.Second
+	slowHintIteration  = 20 // ~10s at portPollInterval
 )
 
 type ManagedProcess struct {
@@ -161,8 +162,13 @@ func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) 
 
 		deadline := time.Now().Add(portPollTimeout)
 		iteration := 0
+		slowHintPrinted := false
 		for time.Now().Before(deadline) {
 			iteration++
+			if !slowHintPrinted && iteration == slowHintIteration {
+				fmt.Println("  Still detecting ports — this may take a while on slow machines.")
+				slowHintPrinted = true
+			}
 			var mu sync.Mutex
 			portsFound := 0
 			remaining := 0

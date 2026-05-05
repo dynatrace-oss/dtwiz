@@ -143,7 +143,7 @@ This handles all common JDK distributions (Oracle, OpenJDK, Adoptium, Amazon Cor
 
 **Alternative considered:** Using `java --version` (double dash). Rejected because `--version` was introduced in Java 9 and fails on Java 8, which we need to support.
 
-### 9. Process detection: enrichment and stop signal
+### 9. Process detection: enrichment, stop signal, and port tracking
 
 Running process detection via `detectProcesses("java", nil)` serves two purposes:
 
@@ -151,6 +151,13 @@ Running process detection via `detectProcesses("java", nil)` serves two purposes
 2. **Stop before launch:** When executing the plan, any PIDs matched to the selected project are stopped (SIGINT → SIGKILL fallback) before the instrumented process is started.
 
 When `jps` (JDK tool) is available in PATH, it provides richer process descriptions (main class / JAR name) stored in the new `DetectedProcess.Description` field (see Decision 4). `jps` is supplemental, never required.
+
+**Port detection for wrapper launchers:** `detectJavaListeningPort(pid int, projectDir string)` is the port-detection function injected into every Java `ManagedProcess` via `proc.portDetector`. It first tries `detectProcessListeningPort(pid)` directly (handles `java -jar` launches). If no port is found on the tracked PID, it delegates to the platform-specific `javaDescendantPort(pid, projectDir)` helper (in `otel_runtime_scan_unix.go` / `otel_runtime_scan_windows.go`):
+
+- **Unix (`otel_runtime_scan_unix.go`):** Calls `jps -l` to enumerate all JVMs, skips build-tool JVMs (`org.gradle.*`, `org.apache.maven.*`, `sun.tools.jps.*`) via `isBuildToolJVM`, then looks for listening ports. Prefers JVMs whose working directory (read via `/proc/<pid>/cwd` symlink) is under `projectDir` so that multiple concurrently-running services do not resolve to the same port. Falls back to any eligible JVM with an open port.
+- **Windows (`otel_runtime_scan_windows.go`):** Uses WMI to walk the process tree from the wrapper PID and find a `java.exe` descendant with a listening port.
+
+This replaces the simpler approach of embedding the jps loop inside `otel_java_process.go` and allows platform-specific port-detection strategies without platform build tags in the shared file.
 
 **Alternative considered:** Use `jcmd <pid> VM.command_line` instead of (or alongside) `jps` for process enrichment, motivated by two potential benefits: (1) `jcmd` may be more likely to be present than `jps`; (2) `jcmd` can expose `-javaagent` flags on running JVMs, which could be used to detect already-instrumented processes. Both motivations were investigated and rejected. On availability: `jps` and `jcmd` ship together in the JDK — if one is present, the other is too; if only a JRE is installed, neither is available. The availability profiles are identical. On OTel detection: `ps ax` already captures the full JVM command line including all `-javaagent` flags. Parsing `-javaagent:*opentelemetry*` from `ps ax` output is sufficient to detect already-instrumented processes without invoking `jcmd`. `jcmd` is therefore redundant for both use cases within this spec's scope. Consider using `jcmd` if there are issues with `jps`.
 
@@ -203,12 +210,16 @@ The installer uses a `findWrapper(projectPath, unixName, windowsName string) str
 
 | File | Responsibility |
 |---|---|
-| `otel_java.go` | `InstallOtelJava`, `DetectJavaPlan`, `JavaInstrumentationPlan`, plan/execute flow, JAR download, env var generation, `updateOtelCollectorIfPresent` |
-| `otel_java_process.go` (new) | `parseJavaVersion`, `validateJavaPrerequisites`, Java entrypoint detection (`detectJavaEntrypoints`, `isExecutableJar`), process detection/enrichment via `jps` |
+| `otel_java.go` | `InstallOtelJava`, `DetectJavaPlan`, `JavaInstrumentationPlan`, plan/execute flow, JAR download, env var generation, `updateOtelCollectorIfPresent`, `buildInstrumentedCmd` |
+| `otel_java_multimodule.go` (new) | Multi-module detection (`detectMultiModule`, `isMavenMultiModule`, `parseMavenModules`, `isGradleMultiProject`, `parseGradleSubprojects`), `buildMultiModulePlan`, `executeMultiModule` |
+| `otel_java_process.go` (new) | `parseJavaVersion`, `validateJavaPrerequisites`, Java entrypoint detection (`detectJavaEntrypoints`, `isExecutableJar`, `promptEntrypointSelection`, `findWrapper`), `detectJavaListeningPort`, `isBuildToolJVM`, `isUnderDir`, process enrichment via `jps` (`enrichProcessesWithJPS`) |
+| `otel_runtime_scan_unix.go` | Extended with `javaDescendantPort(pid, projectDir)` — jps-based port detection for wrapper-launched JVMs on Unix, with cwd-preference for multi-service disambiguation |
+| `otel_runtime_scan_windows.go` | Extended with `javaDescendantPort(wrapperPID, _)` — WMI-based port detection for wrapper-launched JVMs on Windows |
 | `otel_uninstall.go` | Extended `UninstallOtelCollector` — adds Java process discovery (`findInstrumentedJavaProcesses`) and agent-dir removal as a cleanup section |
 | `otel_runtime_scan.go` | `DetectedProcess` struct — add `Description string` field for JPS enrichment |
-| `otel_java_test.go` | Tests for project detection, plan detection (existing + new) |
-| `otel_java_process_test.go` (new) | Tests for version parsing, entrypoint detection, process detection |
+| `otel_java_test.go` | Tests for project detection, plan detection, download, multi-module dispatch |
+| `otel_java_process_test.go` (new) | Tests for version parsing, entrypoint detection, wrapper detection, `isBuildToolJVM`, `isUnderDir`, `TestDetectPort_*` |
+| `otel_java_multimodule_test.go` (new) | Tests for Maven/Gradle multi-module detection, `SubModulePlan`, `needsBuild`, `executeMultiModule` dispatch |
 
 ### 16. Debug logging for entrypoint detection
 
