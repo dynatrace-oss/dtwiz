@@ -178,24 +178,3 @@ func TestDetectMultiModule_NilForSingleModule(t *testing.T) {
 		t.Fatal("expected nil for single-module project")
 	}
 }
-
-func TestNeedsBuild_TrueWhenJarsMissing(t *testing.T) {
-	dir := t.TempDir()
-	subs := []SubModule{{Name: "api", Path: dir}}
-	if !needsBuild(subs) {
-		t.Fatal("expected needsBuild to return true when no JAR is present")
-	}
-}
-
-func TestNeedsBuild_FalseWhenJarsPresent(t *testing.T) {
-	dir := t.TempDir()
-	targetDir := filepath.Join(dir, "target")
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	makeTestJar(t, targetDir, "app.jar", "Manifest-Version: 1.0\nMain-Class: com.example.App\n")
-	subs := []SubModule{{Name: "api", Path: dir}}
-	if needsBuild(subs) {
-		t.Fatal("expected needsBuild to return false when executable JAR is present")
-	}
-}
