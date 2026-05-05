@@ -41,11 +41,11 @@ func TestDetectAvailableRuntimes_DefaultEnabled(t *testing.T) {
 
 	for _, rt := range runtimes {
 		switch rt.name {
-		case "Python", "Node.js":
+		case "Python", "Node.js", "Java":
 			if !rt.enabled {
 				t.Errorf("%s should be enabled by default, got enabled=false", rt.name)
 			}
-		case "Java", "Go":
+		case "Go":
 			if rt.enabled {
 				t.Errorf("%s should be disabled by default, got enabled=true", rt.name)
 			}
