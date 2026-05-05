@@ -3,6 +3,7 @@ package installer
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -395,3 +396,28 @@ func UpdateOtelConfig(configPath, envURL, token, platformToken string, dryRun bo
 	display.ColorOK.Println("  ✓ Collector restarted and verified.")
 	return nil
 }
+
+// updateOtelCollectorIfPresent checks for a dtwiz-managed OTel Collector config
+// at the well-known path (<cwd>/opentelemetry/config.yaml) and silently patches
+// it with the Dynatrace exporter if found. No output if the file is absent.
+func updateOtelCollectorIfPresent(envURL, token string, dryRun bool) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	configPath := filepath.Join(cwd, "opentelemetry", "config.yaml")
+	if !fileExists(configPath) {
+		logger.Debug("otel collector config not found, skipping update", "path", configPath)
+		return
+	}
+	if dryRun {
+		return
+	}
+	_, err = PatchConfigFile(configPath, APIURL(envURL), token)
+	if err != nil {
+		logger.Debug("failed to update OTel Collector config", "path", configPath, "error", err)
+		return
+	}
+	display.PrintStatusLine("collector", "config updated", display.ColorOK)
+}
+

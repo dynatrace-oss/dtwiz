@@ -45,6 +45,15 @@ func detectJavaProcesses() []DetectedProcess {
 	return processes
 }
 
+// scanJavaProjects scans for Java projects, enriches process data, and matches
+// running processes to their projects. Returns the list of detected projects.
+func scanJavaProjects() []ScannedProject {
+	projects, processes := runInParallel(detectJavaProjects, detectJavaProcesses)
+	processes = enrichProcessesWithJPS(processes)
+	matchProcessesToProjects(projects, processes)
+	return projects
+}
+
 func javaAgentPath() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -86,27 +95,6 @@ func downloadJavaAgent() (string, error) {
 
 	display.PrintStatusLine("download", "OpenTelemetry Java agent... done.", display.ColorOK)
 	return destPath, nil
-}
-
-func updateOtelCollectorIfPresent(envURL, token string, dryRun bool) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return
-	}
-	configPath := filepath.Join(cwd, "opentelemetry", "config.yaml")
-	if !fileExists(configPath) {
-		logger.Debug("otel collector config not found, skipping update", "path", configPath)
-		return
-	}
-	if dryRun {
-		return
-	}
-	_, err = PatchConfigFile(configPath, APIURL(envURL), token)
-	if err != nil {
-		logger.Debug("failed to update OTel Collector config", "path", configPath, "error", err)
-		return
-	}
-	display.PrintStatusLine("collector", "config updated", display.ColorOK)
 }
 
 func displayInstrumentedCmd(ep JavaEntrypoint, agentPath string) string {
@@ -177,11 +165,7 @@ func DetectJavaPlan(envURL, token string) *JavaInstrumentationPlan {
 		return nil
 	}
 
-	apiURL := APIURL(envURL)
-	projects, processes := runInParallel(detectJavaProjects, detectJavaProcesses)
-	processes = enrichProcessesWithJPS(processes)
-	matchProcessesToProjects(projects, processes)
-
+	projects := scanJavaProjects()
 	if len(projects) == 0 {
 		logger.Debug("no Java projects detected, skipping Java instrumentation")
 		return nil
@@ -191,31 +175,13 @@ func DetectJavaPlan(envURL, token string) *JavaInstrumentationPlan {
 	if sel == nil {
 		return nil
 	}
-	proj := *sel
-	svcName := projectServiceName(proj.Path)
-	envVars := generateBaseOtelEnvVars(apiURL, token, svcName)
 
-	if mm := detectMultiModule(proj.Path); mm != nil {
-		logger.Debug("multi-module project detected", "tool", mm.BuildTool)
-		return buildMultiModulePlan(mm, proj, apiURL, token, envURL)
+	proj := detectedProject{ScannedProject: *sel, Runtime: "Java"}
+	plan := buildJavaInstrumentationPlan(proj, APIURL(envURL), token, envURL)
+	if jp, ok := plan.(*JavaInstrumentationPlan); ok {
+		return jp
 	}
-
-	var entrypointCmd string
-	entrypoints := detectJavaEntrypoints(proj.Path)
-	if len(entrypoints) > 0 {
-		ep := promptEntrypointSelection(entrypoints)
-		if ep != nil {
-			entrypointCmd = ep.Command
-		}
-	}
-
-	return &JavaInstrumentationPlan{
-		Project:           proj,
-		EnvVars:           envVars,
-		EnvURL:            envURL,
-		Token:             token,
-		EntrypointCommand: entrypointCmd,
-	}
+	return nil
 }
 
 func (p *JavaInstrumentationPlan) PrintPlanSteps() {
@@ -257,117 +223,6 @@ func buildJavaInstrumentationPlan(proj detectedProject, apiURL, token, envURL st
 		Token:             token,
 		EntrypointCommand: entrypointCmd,
 	}
-}
-
-// buildMultiModulePlan constructs a JavaInstrumentationPlan for a multi-module project.
-func buildMultiModulePlan(mm *MultiModuleProject, proj ScannedProject, apiURL, token, envURL string) *JavaInstrumentationPlan {
-	logger.Debug("building multi-module plan", "tool", mm.BuildTool, "modules", len(mm.Modules), "build_cmd", mm.BuildCommand)
-	agentPath, err := javaAgentPath()
-	if err != nil {
-		agentPath = "opentelemetry-javaagent.jar"
-	}
-
-	subs := make([]SubModulePlan, len(mm.Modules))
-	for i, mod := range mm.Modules {
-		svcName := normalizeServiceName(mod.Name)
-		envVars := generateBaseOtelEnvVars(apiURL, token, svcName)
-
-		var launchCmd string
-		entrypoints := detectJavaEntrypoints(mod.Path)
-		if len(entrypoints) > 0 {
-			launchCmd = displayInstrumentedCmd(entrypoints[0], agentPath)
-		} else {
-			launchCmd = "(will be resolved after build)"
-		}
-
-		subs[i] = SubModulePlan{
-			Name:          svcName,
-			Path:          mod.Path,
-			LaunchCommand: launchCmd,
-			EnvVars:       envVars,
-		}
-	}
-
-	return &JavaInstrumentationPlan{
-		Project:      proj,
-		EnvURL:       envURL,
-		Token:        token,
-		BuildCommand: mm.BuildCommand,
-		SubModules:   subs,
-	}
-}
-
-// executeMultiModule runs the multi-module build (if needed), launches each sub-module,
-// prints a process summary, and updates the OTel Collector config if present.
-// It returns an error if any critical step fails (build, agent download, no services started/running).
-func (p *JavaInstrumentationPlan) executeMultiModule() error {
-	if p.BuildCommand != "" {
-		display.PrintStatusLine("build", "Running "+p.BuildCommand+"...", display.ColorOK)
-		fields := strings.Fields(p.BuildCommand)
-		var cmd *exec.Cmd
-		if len(fields) > 0 && (strings.HasSuffix(fields[0], ".cmd") || strings.HasSuffix(fields[0], ".bat")) {
-			cmd = exec.Command("cmd", append([]string{"/c", fields[0]}, fields[1:]...)...)
-		} else {
-			cmd = exec.Command(fields[0], fields[1:]...)
-		}
-		cmd.Dir = p.Project.Path
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			display.PrintStatusLine("error", "build failed: "+err.Error(), display.ColorError)
-			return fmt.Errorf("build failed: %w", err)
-		}
-	}
-
-	agentPath, err := downloadJavaAgent()
-	if err != nil {
-		display.PrintStatusLine("error", fmt.Sprintf("failed to download agent: %v", err), display.ColorError)
-		return fmt.Errorf("failed to download agent: %w", err)
-	}
-
-	var procs []*ManagedProcess
-	for i, sub := range p.SubModules {
-		entrypoints := detectJavaEntrypoints(sub.Path)
-		if len(entrypoints) == 0 {
-			display.PrintStatusLine("skip", sub.Name+": no runnable entrypoint found", display.ColorMuted)
-			continue
-		}
-		ep := &entrypoints[0]
-
-		svcName := sub.Name
-		logPath := filepath.Join(sub.Path, svcName+".log")
-		logFile, err := os.Create(logPath)
-		if err != nil {
-			display.PrintStatusLine("error", fmt.Sprintf("failed to create log file for %s: %v", svcName, err), display.ColorError)
-			continue
-		}
-
-		envVars := p.SubModules[i].EnvVars
-		logger.Debug("launching instrumented java process", "cmd", ep.Command, "dir", sub.Path)
-		cmd := buildInstrumentedCmd(*ep, agentPath, sub.Path, envVars)
-
-		proc, err := StartManagedProcess(svcName, svcName+".log", "", cmd, logFile)
-		if err != nil {
-			display.PrintStatusLine("error", fmt.Sprintf("failed to start %s: %v", svcName, err), display.ColorError)
-			continue
-		}
-		proc.portDetector = func(pid int) string { return detectJavaListeningPort(pid, sub.Path) }
-		procs = append(procs, proc)
-	}
-
-	if len(procs) == 0 {
-		display.PrintStatusLine("error", "No services started.", display.ColorError)
-		return fmt.Errorf("no services started")
-	}
-
-	aliveNames, _ := PrintProcessSummary(procs, processSettleDelay)
-	if len(aliveNames) == 0 {
-		display.PrintStatusLine("error", "No services are running — check the logs above for errors.", display.ColorError)
-		return fmt.Errorf("no services are running")
-	}
-
-	updateOtelCollectorIfPresent(p.EnvURL, p.Token, false)
-	return nil
 }
 
 func (p *JavaInstrumentationPlan) Execute() {
@@ -449,21 +304,7 @@ func InstallOtelJava(envURL, token, serviceName string, dryRun bool) error {
 
 	var envVars map[string]string
 
-	projects, processes := runInParallel(detectJavaProjects, detectJavaProcesses)
-	processes = enrichProcessesWithJPS(processes)
-	matchProcessesToProjects(projects, processes)
-
-	anyMatched := false
-	for _, proj := range projects {
-		for _, pid := range proj.RunningProcessIDs {
-			logger.Debug("matched process to project", "pid", pid, "project", proj.Path)
-			anyMatched = true
-		}
-	}
-	if !anyMatched {
-		logger.Debug("no running java processes matched to any project")
-	}
-
+	projects := scanJavaProjects()
 	logger.Debug("detected java projects", "count", len(projects))
 	if len(projects) == 0 {
 		display.PrintStatusLine("error", "no Java projects detected", display.ColorError)
