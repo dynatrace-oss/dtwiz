@@ -31,6 +31,15 @@ func projectServiceName(projectPath string) string {
 	return baseName
 }
 
+// normalizeServiceName converts a raw module name (which may contain path
+// separators, e.g. "ui/web" from a Maven nested module path) into a value that
+// is safe to use as an OTEL_SERVICE_NAME and as a filename fragment.
+// All forward-slash and back-slash characters are replaced with "-".
+func normalizeServiceName(name string) string {
+	r := strings.NewReplacer("/", "-", "\\", "-")
+	return r.Replace(name)
+}
+
 func GenerateEnvExportScript(envVars map[string]string) string {
 	lines := formatEnvExportLines(envVars)
 	if len(lines) == 0 {

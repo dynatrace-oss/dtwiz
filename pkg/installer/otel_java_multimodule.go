@@ -26,7 +26,16 @@ type mavenPOM struct {
 	Modules []string `xml:"modules>module"`
 }
 
-var gradleIncludeRe = regexp.MustCompile(`(?m)include\s*\(?\s*['"]([^'"]+)['"]`)
+// gradleIncludeLineRe matches an include directive and captures everything after
+// the keyword up to the end of the statement (closing paren or end-of-line).
+// This handles all common forms:
+//   include("api", "web")          – Kotlin DSL, parenthesised
+//   include ':api', ':web'          – Groovy DSL, no parens
+//   include(":api:sub", ":other")   – colon-prefixed nested paths
+var gradleIncludeLineRe = regexp.MustCompile(`(?m)include\s*\(?([^)\n]+)`)
+
+// gradleQuotedArgRe extracts individual quoted values from an include argument list.
+var gradleQuotedArgRe = regexp.MustCompile(`['"]([^'"]+)['"]`)
 
 func parseMavenModules(projectPath string) ([]string, error) {
 	data, err := os.ReadFile(filepath.Join(projectPath, "pom.xml"))
@@ -58,12 +67,13 @@ func parseGradleSubprojects(projectPath string) ([]string, error) {
 	if readErr != nil {
 		return nil, readErr
 	}
-	matches := gradleIncludeRe.FindAllSubmatch(data, -1)
 	var result []string
-	for _, m := range matches {
-		path := strings.TrimPrefix(string(m[1]), ":")
-		path = strings.ReplaceAll(path, ":", "/")
-		result = append(result, path)
+	for _, lineMatch := range gradleIncludeLineRe.FindAllSubmatch(data, -1) {
+		for _, argMatch := range gradleQuotedArgRe.FindAllSubmatch(lineMatch[1], -1) {
+			path := strings.TrimPrefix(string(argMatch[1]), ":")
+			path = strings.ReplaceAll(path, ":", "/")
+			result = append(result, path)
+		}
 	}
 	return result, nil
 }

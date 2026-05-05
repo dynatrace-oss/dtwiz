@@ -91,6 +91,36 @@ func TestParseGradleSubprojects_NestedPath(t *testing.T) {
 	}
 }
 
+func TestParseGradleSubprojects_MultiArgParens(t *testing.T) {
+	dir := t.TempDir()
+	settings := `include("api", "web")` + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "settings.gradle.kts"), []byte(settings), 0644); err != nil {
+		t.Fatal(err)
+	}
+	subs, err := parseGradleSubprojects(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(subs) != 2 || subs[0] != "api" || subs[1] != "web" {
+		t.Fatalf("expected [api web], got %v", subs)
+	}
+}
+
+func TestParseGradleSubprojects_MultiArgGroovy(t *testing.T) {
+	dir := t.TempDir()
+	settings := "include ':api', ':web'\n"
+	if err := os.WriteFile(filepath.Join(dir, "settings.gradle"), []byte(settings), 0644); err != nil {
+		t.Fatal(err)
+	}
+	subs, err := parseGradleSubprojects(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(subs) != 2 || subs[0] != "api" || subs[1] != "web" {
+		t.Fatalf("expected [api web], got %v", subs)
+	}
+}
+
 func TestDetectMultiModule_Maven(t *testing.T) {
 	dir := t.TempDir()
 	pom := `<project>

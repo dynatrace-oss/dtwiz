@@ -376,7 +376,7 @@ func detectJavaListeningPort(pid int, projectDir string) string {
 	return javaDescendantPort(pid, projectDir)
 }
 
-// isUnderDir reports whether path equals dir or is directly under it.
+// isUnderDir reports whether path equals dir or is anywhere beneath it (any depth).
 func isUnderDir(path, dir string) bool {
 	if path == "" || dir == "" {
 		return false

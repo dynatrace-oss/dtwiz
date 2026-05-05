@@ -269,7 +269,7 @@ func buildMultiModulePlan(mm *MultiModuleProject, proj ScannedProject, apiURL, t
 
 	subs := make([]SubModulePlan, len(mm.Modules))
 	for i, mod := range mm.Modules {
-		svcName := mod.Name
+		svcName := normalizeServiceName(mod.Name)
 		envVars := generateBaseOtelEnvVars(apiURL, token, svcName)
 
 		var launchCmd string
@@ -299,7 +299,8 @@ func buildMultiModulePlan(mm *MultiModuleProject, proj ScannedProject, apiURL, t
 
 // executeMultiModule runs the multi-module build (if needed), launches each sub-module,
 // prints a process summary, and updates the OTel Collector config if present.
-func (p *JavaInstrumentationPlan) executeMultiModule() {
+// It returns an error if any critical step fails (build, agent download, no services started/running).
+func (p *JavaInstrumentationPlan) executeMultiModule() error {
 	if p.BuildCommand != "" {
 		display.PrintStatusLine("build", "Running "+p.BuildCommand+"...", display.ColorOK)
 		fields := strings.Fields(p.BuildCommand)
@@ -314,14 +315,14 @@ func (p *JavaInstrumentationPlan) executeMultiModule() {
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
 			display.PrintStatusLine("error", "build failed: "+err.Error(), display.ColorError)
-			return
+			return fmt.Errorf("build failed: %w", err)
 		}
 	}
 
 	agentPath, err := downloadJavaAgent()
 	if err != nil {
 		display.PrintStatusLine("error", fmt.Sprintf("failed to download agent: %v", err), display.ColorError)
-		return
+		return fmt.Errorf("failed to download agent: %w", err)
 	}
 
 	var procs []*ManagedProcess
@@ -356,21 +357,24 @@ func (p *JavaInstrumentationPlan) executeMultiModule() {
 
 	if len(procs) == 0 {
 		display.PrintStatusLine("error", "No services started.", display.ColorError)
-		return
+		return fmt.Errorf("no services started")
 	}
 
 	aliveNames, _ := PrintProcessSummary(procs, processSettleDelay)
 	if len(aliveNames) == 0 {
 		display.PrintStatusLine("error", "No services are running — check the logs above for errors.", display.ColorError)
-		return
+		return fmt.Errorf("no services are running")
 	}
 
 	updateOtelCollectorIfPresent(p.EnvURL, p.Token, false)
+	return nil
 }
 
 func (p *JavaInstrumentationPlan) Execute() {
 	if len(p.SubModules) > 0 {
-		p.executeMultiModule()
+		if err := p.executeMultiModule(); err != nil {
+			logger.Debug("multi-module execution failed", "error", err)
+		}
 		return
 	}
 
@@ -510,7 +514,9 @@ func InstallOtelJava(envURL, token, serviceName string, dryRun bool) error {
 			return nil
 		}
 
-		plan.executeMultiModule()
+		if err := plan.executeMultiModule(); err != nil {
+			return err
+		}
 		return nil
 	}
 

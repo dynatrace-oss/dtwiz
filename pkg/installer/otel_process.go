@@ -20,7 +20,7 @@ const (
 	// full timeout before "port not detected" is shown.
 	portPollTimeout    = 3 * time.Minute
 	processSettleDelay = 3 * time.Second
-	slowHintIteration  = 20 // ~10s at portPollInterval
+	slowHintIteration  = 5
 )
 
 type ManagedProcess struct {
