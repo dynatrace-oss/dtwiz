@@ -22,7 +22,8 @@ The system SHALL detect Node.js projects by scanning for `package.json` files ac
 
 - **GIVEN** no `package.json` files exist in CWD or scanned directories
 - **WHEN** `DetectNodePlan` runs
-- **THEN** it returns nil and logs a debug message
+- **THEN** it returns `(nil, false)` — nil plan and `userInteracted=false`
+- **AND** the caller shows "No Node.js projects detected" fallback message
 
 ### Requirement: Monorepo detection
 
@@ -73,11 +74,11 @@ The system SHALL identify Next.js projects by checking for `next.config.js`, `ne
 
 ### Requirement: Nuxt project identification
 
-The system SHALL identify Nuxt projects by checking for `nuxt.config.js`, `nuxt.config.ts`, `nuxt.config.mjs`, or `nuxt` in `package.json` dependencies/devDependencies.
+The system SHALL identify Nuxt projects by checking for `nuxt.config.js`, `nuxt.config.ts`, `nuxt.config.mjs`, `nuxt.config.mts`, or `nuxt` in `package.json` dependencies/devDependencies.
 
 #### Scenario: Nuxt detected via config file
 
-- **GIVEN** a project directory contains `nuxt.config.ts` (or `.js` or `.mjs`)
+- **GIVEN** a project directory contains `nuxt.config.ts` (or `.js`, `.mjs`, or `.mts`)
 - **WHEN** `detectNodeFramework()` is called
 - **THEN** it returns `"nuxt"`
 

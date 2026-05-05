@@ -5,28 +5,28 @@ dtwiz unit tests mock all shell execution (`RunCommand`) and external dependenci
 ## What Changes
 
 - Add `test/e2e/` directory with `//go:build integration` build tag for compile-time separation from unit tests
-- Add `test/integration/` with shared setup (env gating, unique naming) and DQL trace polling helper
+- Add `test/integration/` with shared setup (env gating, unique naming) and a `grail/` sub-package for DQL trace polling (`execute.go`, `poll.go`, `wait.go`, `types.go`, `helpers.go`)
 - Add `test/fixtures/` with reusable test app scaffolds (starting with a minimal Flask app)
 - E2E tests call `client.New()` directly with URLs derived from `TEST_DT_ENVIRONMENT` via `APIURL()`/`AppsURL()` helpers and tokens from `TEST_DT_ACCESS_TOKEN`/`TEST_DT_PLATFORM_TOKEN` — no test-specific constructor needed
-- Add `make test-integration` makefile target that loads `.e2e-tests.env` if present and runs integration tests; fails with a descriptive error to stderr if credentials are missing
-- Add `.e2e-tests.env` to `.gitignore`
-- Add `.e2e-tests.env.example` to VCS with `TEST_DT_ENVIRONMENT` and `TEST_DT_ACCESS_TOKEN` placeholder values
+- Add `make test-integration` makefile target that loads `.e2e.env` if present and runs integration tests; fails with a descriptive error to stderr if credentials are missing
+- Add `.e2e.env` to `.gitignore`
+- Add `.e2e.env.example` to VCS with placeholder values for all three vars (`TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, `TEST_DT_PLATFORM_TOKEN`)
 - Implement one real E2E test: Python OTel auto-instrumentation lifecycle (install → run instrumented app → verify traces in DT via DQL → cleanup via `t.TempDir()`)
 
 ## Capabilities
 
 ### New Capabilities
 
-- `e2e-test-infra`: Shared E2E test infrastructure — env var gating (`TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, `TEST_DT_PLATFORM_TOKEN`), unique test naming, `t.TempDir()` isolation, `.e2e-tests.env` loading via makefile, `make test-integration` target, direct `client.New()` construction with URL derivation via `APIURL()`/`AppsURL()`, and DQL-based trace polling helper
+- `e2e-test-infra`: Shared E2E test infrastructure — env var gating (`TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, `TEST_DT_PLATFORM_TOKEN`), unique test naming, `t.TempDir()` isolation, `.e2e.env` loading via makefile, `make test-integration` target, direct `client.New()` construction with URL derivation via `APIURL()`/`AppsURL()`, and DQL-based trace polling via the `grail/` sub-package (async execute/poll two-step flow)
 
 ### Modified Capabilities
 
-_None — all changes are additive._
+_None — all changes are in `test/` and `makefile`. `pkg/client/` is unchanged._
 
 ## Impact
 
-- **`pkg/client/`**: No changes — E2E tests use existing `New()` constructor directly. Existing API unchanged.
+- **`pkg/client/`**: No changes — E2E tests use `PlatformClient.HTTP()` (the existing resty accessor) for DQL requests. Token stays encapsulated inside the client.
 - **`makefile`**: New `test-integration` target. Existing `test` target unchanged.
-- **`.gitignore`**: `.e2e-tests.env` added. `.e2e-tests.env.example` added (committed to VCS).
+- **`.gitignore`**: `.e2e.env` added. `.e2e.env.example` added (committed to VCS).
 - **Test runtime**: `make test` stays fast (~2 sec). `make test-integration` requires a live DT tenant and takes 30-60 sec.
 - **Dependencies**: No new Go dependencies. Test fixtures require Python 3 + pip available on the test machine.

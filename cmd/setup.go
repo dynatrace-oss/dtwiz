@@ -145,7 +145,7 @@ var setupCmd = &cobra.Command{
 			}
 			installErr = installer.UpdateOtelConfig(cfgPath, envURL, accessTok, platformTok, setupDryRun)
 		case recommender.MethodAWS:
-			installErr = installer.InstallAWS(envURL, accessTok, platformTok, setupDryRun, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
+			installErr = installer.InstallAWS(c.Platform, envURL, accessTok, platformTok, setupDryRun, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
 		default:
 			return fmt.Errorf("unsupported method: %s", selected.Method)
 		}

@@ -158,6 +158,23 @@ var installOtelPythonCmd = &cobra.Command{
 	},
 }
 
+var otelNodeServiceName string
+var installOtelNodeCmd = &cobra.Command{
+	Use:   "otel-node",
+	Short: "Set up OpenTelemetry Node.js auto-instrumentation",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		envURL, accessTok, platformTok, err := getDtEnvironment()
+		if err != nil {
+			return err
+		}
+		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+			return err
+		}
+		return installer.InstallOtelNode(envURL, accessTok, platformTok, otelNodeServiceName, installDryRun)
+	},
+}
+
 var otelJavaServiceName string
 var installOtelJavaCmd = &cobra.Command{
 	Use:   "otel-java",
@@ -193,7 +210,11 @@ var installAWSCmd = &cobra.Command{
 		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
 			return err
 		}
-		if err := installer.InstallAWS(envURL, accessTok, platformTok, installDryRun, StartTime.UTC().Format("2006-01-02T15:04:05Z")); err != nil {
+		c, err := setupClient()
+		if err != nil {
+			return err
+		}
+		if err := installer.InstallAWS(c.Platform, envURL, accessTok, platformTok, installDryRun, StartTime.UTC().Format("2006-01-02T15:04:05Z")); err != nil {
 			return err
 		}
 		return nil
@@ -269,6 +290,7 @@ func init() {
 	installOtelCmd.Flags().StringVar(&otelProject, "project", "", "path to the project to instrument (skips interactive scan)")
 	installOtelPythonCmd.Flags().StringVar(&otelProject, "project", "", "path to the Python project to instrument (skips interactive scan)")
 	installOtelPythonCmd.Flags().StringVar(&otelPythonServiceName, "service-name", "", "OTEL_SERVICE_NAME for the instrumented application (default: my-service)")
+	installOtelNodeCmd.Flags().StringVar(&otelNodeServiceName, "service-name", "", "OTEL_SERVICE_NAME for the instrumented application (default: my-service)")
 	installOtelJavaCmd.Flags().StringVar(&otelJavaServiceName, "service-name", "", "OTEL_SERVICE_NAME for the instrumented application (default: my-service)")
 
 	installOneAgentCmd.Flags().Bool("quiet", false, "Run a silent/unattended installation with no output")
@@ -279,6 +301,7 @@ func init() {
 	installCmd.AddCommand(installOtelCmd)
 	installCmd.AddCommand(installOtelCollectorCmd)
 	installCmd.AddCommand(installOtelPythonCmd)
+	installCmd.AddCommand(installOtelNodeCmd)
 	installCmd.AddCommand(installOtelJavaCmd)
 	installCmd.AddCommand(installAWSCmd)
 	installCmd.AddCommand(installAWSLambdaCmd)

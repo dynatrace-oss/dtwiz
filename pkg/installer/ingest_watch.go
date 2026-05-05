@@ -156,7 +156,7 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string) {
 		separator := " ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
 		highlight.Fprint(&buf, separator)
 		highlight.Fprintf(&buf, " 👉 See all your data and findings in Dynatrace QuickStart\n")
-		fmt.Fprintf(&buf, "    %s\n", linkFn(appsURL+"/ui/apps/my.getting.started.dieter/", "→ Open Dynatrace QuickStart"))
+		fmt.Fprintf(&buf, "    %s\n", linkFn(appsURL+"/ui/apps/dynatrace.quickstart/", "→ Open Dynatrace QuickStart"))
 		highlight.Fprint(&buf, separator)
 		buf.WriteString("\n")
 		dim.Fprint(&buf, " Press Enter to continue or keep watching...")

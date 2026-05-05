@@ -2,7 +2,9 @@ package installer
 
 import (
 	"os"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -35,6 +37,31 @@ func TestConfirmProceedAutoConfirm(t *testing.T) {
 	}
 	if !ok {
 		t.Fatal("expected confirmProceed to return true when AutoConfirm=true")
+	}
+}
+
+// TestInstallOtelCollectorWithProject_DryRun verifies that dry-run goes through
+// the full interactive flow (project detection) but makes no changes on disk.
+func TestInstallOtelCollectorWithProject_DryRun(t *testing.T) {
+	dir := t.TempDir()
+	setTestWorkingDir(t, dir)
+
+	output := captureStdout(t, func() {
+		err := InstallOtelCollectorWithProject(
+			"https://fake.live.dynatrace.com", "tok", "tok", "plat", "", true,
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	// The collector config preview (printed via fmt.Printf) must be present.
+	if !strings.Contains(output, "fake.live.dynatrace.com") {
+		t.Fatalf("expected collector config in dry-run output, got:\n%s", output)
+	}
+	// No files must be written.
+	if _, err := os.Stat(filepath.Join(dir, "opentelemetry")); !os.IsNotExist(err) {
+		t.Fatal("dry-run must not create the opentelemetry directory")
 	}
 }
 
