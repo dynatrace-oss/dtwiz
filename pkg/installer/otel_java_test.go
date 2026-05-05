@@ -29,7 +29,9 @@ func redirectAgentDownloadURL(t *testing.T, srv *httptest.Server) {
 	orig := otelJavaAgentURL
 	otelJavaAgentURL = srv.URL + "/opentelemetry-javaagent.jar"
 	t.Cleanup(func() { otelJavaAgentURL = orig })
-	t.Setenv("HOME", t.TempDir())
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 }
 
 // makeMavenProjectWithFatJar creates a temp Maven project containing a single

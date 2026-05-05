@@ -299,8 +299,10 @@ func TestUninstallOtelCollector_JavaDryRun_NothingPresent(t *testing.T) {
 	enrichProcessesWithJPSFunc = func(procs []DetectedProcess) []DetectedProcess { return procs }
 
 	// Point HOME to a temp dir that has no .opentelemetry/java directory.
+	// Set both HOME and USERPROFILE to ensure os.UserHomeDir() uses the temp dir on all platforms.
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 
 	origCleaners := runtimeCleaners
 	t.Cleanup(func() { runtimeCleaners = origCleaners })
@@ -329,8 +331,10 @@ func TestUninstallOtelCollector_JavaDryRun_AgentDirExists(t *testing.T) {
 	enrichProcessesWithJPSFunc = func(procs []DetectedProcess) []DetectedProcess { return procs }
 
 	// Create the agent dir under a temp HOME.
+	// Set both HOME and USERPROFILE to ensure os.UserHomeDir() uses the temp dir on all platforms.
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 	agentDir := filepath.Join(tmp, ".opentelemetry", "java")
 	if err := os.MkdirAll(agentDir, 0o755); err != nil {
 		t.Fatalf("setup: %v", err)
