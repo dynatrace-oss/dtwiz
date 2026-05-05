@@ -83,9 +83,9 @@
   - No matches: `logger.Debug("no running java processes matched to any project")`
 - [x] 4.3 Add `detectJavaListeningPort(pid int, projectDir string) string` in `otel_java_process.go` — tries `detectProcessListeningPort(pid)` directly first (handles direct `java -jar` launches); on failure delegates to `javaDescendantPort(pid, projectDir)` for wrapper launchers (mvn, gradle) that fork the app into a separate JVM.
 - [x] 4.3a Add `javaDescendantPort(pid int, projectDir string) string` as a platform-specific function in `otel_runtime_scan_unix.go` / `otel_runtime_scan_windows.go`:
-  - **Unix**: runs `jps -l`, skips build-tool JVMs via `isBuildToolJVM`, prefers JVMs whose working directory (via `/proc/<pid>/cwd`) is under `projectDir`, falls back to any eligible JVM with an open port.
+  - **Unix**: runs `jps -l`, skips build-tool JVMs via `isBuildToolJVM`, returns the first eligible JVM with a listening port.
   - **Windows**: uses WMI to find a `java.exe` child/descendant of the wrapper PID with a listening port.
-- [x] 4.3b Add `isUnderDir(path, dir string) bool` helper in `otel_java_process.go` — returns true when `path` equals `dir` or is directly under it (used by the Unix `javaDescendantPort` to prefer cwd-matching JVMs).
+- [x] 4.3b Add `isUnderDir(path, dir string) bool` helper in `otel_java_process.go` — returns true when `path` equals `dir` or is directly under it.
 - [x] 4.4 Add `isBuildToolJVM(mainClass string) bool` helper to filter Gradle/Maven/jps infrastructure from the `jps -l` fallback.
 - [x] 4.5 Add `portDetector func(pid int) string` field to `ManagedProcess` (with `detectPort()` method) so Java launches can inject `detectJavaListeningPort` without touching generic process detection.
 - [x] 4.6 Set `proc.portDetector` as a closure `func(pid int) string { return detectJavaListeningPort(pid, path) }` at all three Java `StartManagedProcess` call sites in `otel_java.go` (single-module flow, multi-module `executeMultiModule`, and `InstallOtelJava`).
@@ -233,7 +233,7 @@
 
 **Files:** `pkg/installer/otel_uninstall.go` (modify), `pkg/installer/otel_uninstall_test.go` (modify or create)
 
-- [x] 13.1 Add `findInstrumentedJavaProcesses() []DetectedProcess` in `otel_uninstall.go` — calls `detectJavaProcesses()` + `enrichProcessesWithJPS()`, filters to processes whose `Command` contains the exact dtwiz agent path (`~/.opentelemetry/java/opentelemetry-javaagent.jar`)
+- [x] 13.1 Add `findInstrumentedJavaProcesses() []DetectedProcess` in `otel_uninstall.go` — calls `detectJavaProcesses()` + `enrichProcessesWithJPS()`, filters to processes whose `Command` contains the dtwiz agent path OR whose open file descriptors include the agent JAR (`jvmHasAgentLoaded`). The second check catches Gradle `bootRun` where the agent is injected via `JAVA_TOOL_OPTIONS` and does not appear in the command line.
 - [x] 13.2 Add `javaAgentDir() string` helper — returns `filepath.Dir(javaAgentPath())`
 - [x] 13.3 Extend `UninstallOtelCollector(dryRun bool) error` to include a Java cleanup section: discover instrumented Java processes and the agent dir, include them in the combined preview alongside existing collector artifacts, and on confirmation stop matched processes then remove `~/.opentelemetry/java/` if it exists
 - [x] 13.4 Tests:

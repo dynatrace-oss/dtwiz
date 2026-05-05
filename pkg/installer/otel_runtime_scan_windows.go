@@ -165,3 +165,13 @@ if ($javaPids) {
 	logger.Debug("javaDescendantPort: found", "wrapper_pid", wrapperPID, "port", port)
 	return port
 }
+
+// jvmHasAgentLoaded reports whether a JVM process has loaded the given agent JAR.
+func jvmHasAgentLoaded(pid int, agentJAR string) bool {
+	script := `Get-Process -Id ` + strconv.Itoa(pid) + ` -ErrorAction SilentlyContinue | ForEach-Object { $_.Modules } | Where-Object { $_.FileName -eq '` + strings.ReplaceAll(agentJAR, "'", "''") + `' } | Select-Object -First 1`
+	output, err := exec.Command("powershell", "-NoProfile", "-Command", script).Output()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(output)) != ""
+}

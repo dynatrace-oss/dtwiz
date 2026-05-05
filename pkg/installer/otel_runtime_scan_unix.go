@@ -72,7 +72,7 @@ func detectProcesses(filterTerm string, excludeTerms []string) []DetectedProcess
 func lookupProcessWorkingDirectory(pid int) string {
 	output, err := exec.Command("lsof", "-a", "-d", "cwd", "-p", strconv.Itoa(pid), "-Fn").Output()
 	if err != nil {
-		logger.Warn("lsof cwd lookup failed", "pid", pid, "err", err)
+		logger.Debug("lsof cwd lookup failed", "pid", pid, "err", err)
 		return ""
 	}
 
@@ -86,8 +86,8 @@ func lookupProcessWorkingDirectory(pid int) string {
 
 // javaDescendantPort finds the listening port of an app JVM spawned by a
 // build-tool wrapper (mvn spring-boot:run, gradlew bootRun). Uses jps -l to
-// enumerate JVMs, skips build-tool JVMs, and prefers one whose working
-// directory is under projectDir.
+// enumerate JVMs, filters out build-tool processes, and checks each candidate
+// for a listening port.
 func javaDescendantPort(pid int, projectDir string) string {
 	out, err := exec.Command("jps", "-l").Output()
 	if err != nil {
@@ -95,52 +95,20 @@ func javaDescendantPort(pid int, projectDir string) string {
 		return ""
 	}
 
-	type jvmCandidate struct {
-		pid   int
-		class string
-		cwd   string
-	}
-	var candidates []jvmCandidate
 	for _, line := range strings.Split(string(out), "\n") {
 		fields := strings.Fields(strings.TrimSpace(line))
 		if len(fields) < 2 {
 			continue
 		}
 		jvmPID, err := strconv.Atoi(fields[0])
-		if err != nil {
-			continue
-		}
-		if jvmPID == pid {
-			// Tracked PID is itself an app JVM — it hasn't bound its port yet.
-			// Return "" so the poll loop retries direct detection.
-			if !isBuildToolJVM(fields[1]) {
-				logger.Debug("tracked pid is app JVM, waiting for it to bind", "pid", pid, "class", fields[1])
-				return ""
-			}
+		if err != nil || jvmPID == pid {
 			continue
 		}
 		if isBuildToolJVM(fields[1]) {
 			continue
 		}
-		cwd := lookupProcessWorkingDirectory(jvmPID)
-		candidates = append(candidates, jvmCandidate{pid: jvmPID, class: fields[1], cwd: cwd})
-	}
-
-	// First pass: prefer JVMs whose working directory is under projectDir.
-	for _, c := range candidates {
-		if !isUnderDir(c.cwd, projectDir) {
-			continue
-		}
-		if port := detectProcessListeningPort(c.pid); port != "" {
-			logger.Debug("javaDescendantPort: port found (cwd match)", "wrapper_pid", pid, "jvm_pid", c.pid, "port", port)
-			return port
-		}
-	}
-
-	// Second pass: any eligible JVM with an open port.
-	for _, c := range candidates {
-		if port := detectProcessListeningPort(c.pid); port != "" {
-			logger.Debug("javaDescendantPort: port found (no cwd match)", "wrapper_pid", pid, "jvm_pid", c.pid, "port", port)
+		if port := detectProcessListeningPort(jvmPID); port != "" {
+			logger.Debug("javaDescendantPort: port found", "wrapper_pid", pid, "jvm_pid", jvmPID, "class", fields[1], "port", port)
 			return port
 		}
 	}
@@ -167,4 +135,20 @@ func detectProcessListeningPort(pid int) string {
 		}
 	}
 	return ""
+}
+
+// jvmHasAgentLoaded reports whether a JVM process has loaded the given agent JAR.
+// It uses lsof to check open file descriptors, catching cases where the agent
+// is injected via JAVA_TOOL_OPTIONS and doesn't appear in the command line.
+func jvmHasAgentLoaded(pid int, agentJAR string) bool {
+	output, err := exec.Command("lsof", "-p", strconv.Itoa(pid), "-Fn").Output()
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(output), "\n") {
+		if strings.HasPrefix(line, "n") && strings.Contains(line, agentJAR) {
+			return true
+		}
+	}
+	return false
 }

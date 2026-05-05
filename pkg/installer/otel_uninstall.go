@@ -84,9 +84,10 @@ func javaAgentDir() string {
 var detectJavaProcessesFunc = detectJavaProcesses
 var enrichProcessesWithJPSFunc = enrichProcessesWithJPS
 
-// findInstrumentedJavaProcesses returns running Java processes whose command
-// line contains the exact dtwiz agent JAR path, indicating they were started
-// with dtwiz Java auto-instrumentation.
+// findInstrumentedJavaProcesses returns running Java processes that were
+// started with dtwiz Java auto-instrumentation. It checks both the command
+// line (for direct -javaagent usage) and open file descriptors (for
+// JAVA_TOOL_OPTIONS injection, e.g. Gradle bootRun).
 func findInstrumentedJavaProcesses() []DetectedProcess {
 	agentPath, err := javaAgentPath()
 	if err != nil {
@@ -97,7 +98,7 @@ func findInstrumentedJavaProcesses() []DetectedProcess {
 	processes = enrichProcessesWithJPSFunc(processes)
 	var instrumented []DetectedProcess
 	for _, p := range processes {
-		if strings.Contains(p.Command, agentPath) {
+		if strings.Contains(p.Command, agentPath) || jvmHasAgentLoaded(p.PID, agentPath) {
 			instrumented = append(instrumented, p)
 		}
 	}

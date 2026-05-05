@@ -154,8 +154,10 @@ When `jps` (JDK tool) is available in PATH, it provides richer process descripti
 
 **Port detection for wrapper launchers:** `detectJavaListeningPort(pid int, projectDir string)` is the port-detection function injected into every Java `ManagedProcess` via `proc.portDetector`. It first tries `detectProcessListeningPort(pid)` directly (handles `java -jar` launches). If no port is found on the tracked PID, it delegates to the platform-specific `javaDescendantPort(pid, projectDir)` helper (in `otel_runtime_scan_unix.go` / `otel_runtime_scan_windows.go`):
 
-- **Unix (`otel_runtime_scan_unix.go`):** Calls `jps -l` to enumerate all JVMs, skips build-tool JVMs (`org.gradle.*`, `org.apache.maven.*`, `sun.tools.jps.*`) via `isBuildToolJVM`, then looks for listening ports. Prefers JVMs whose working directory (read via `/proc/<pid>/cwd` symlink) is under `projectDir` so that multiple concurrently-running services do not resolve to the same port. Falls back to any eligible JVM with an open port.
+- **Unix (`otel_runtime_scan_unix.go`):** Calls `jps -l` to enumerate all JVMs, skips build-tool JVMs (`org.gradle.*`, `org.apache.maven.*`, `sun.tools.jps.*`) via `isBuildToolJVM`, and returns the first eligible JVM with a listening port. Using `jps` rather than process-tree traversal correctly handles the Gradle daemon model, where the app JVM is not a child of the `gradlew` wrapper process.
 - **Windows (`otel_runtime_scan_windows.go`):** Uses WMI to walk the process tree from the wrapper PID and find a `java.exe` descendant with a listening port.
+
+**Detecting instrumented processes for uninstall:** `findInstrumentedJavaProcesses` identifies running JVMs that were started with the dtwiz agent. It checks both: (1) the process command line contains the agent JAR path (Maven `spring-boot:run`, direct `java -jar`), and (2) the JVM has the agent JAR open as a file descriptor via `jvmHasAgentLoaded` (Gradle `bootRun`, where the agent is injected via `JAVA_TOOL_OPTIONS` and does not appear in `ps` output).
 
 This replaces the simpler approach of embedding the jps loop inside `otel_java_process.go` and allows platform-specific port-detection strategies without platform build tags in the shared file.
 
@@ -213,7 +215,7 @@ The installer uses a `findWrapper(projectPath, unixName, windowsName string) str
 | `otel_java.go` | `InstallOtelJava`, `DetectJavaPlan`, `JavaInstrumentationPlan`, plan/execute flow, JAR download, env var generation, `updateOtelCollectorIfPresent`, `buildInstrumentedCmd` |
 | `otel_java_multimodule.go` (new) | Multi-module detection (`detectMultiModule`, `isMavenMultiModule`, `parseMavenModules`, `isGradleMultiProject`, `parseGradleSubprojects`), `buildMultiModulePlan`, `executeMultiModule` |
 | `otel_java_process.go` (new) | `parseJavaVersion`, `validateJavaPrerequisites`, Java entrypoint detection (`detectJavaEntrypoints`, `isExecutableJar`, `promptEntrypointSelection`, `findWrapper`), `detectJavaListeningPort`, `isBuildToolJVM`, `isUnderDir`, process enrichment via `jps` (`enrichProcessesWithJPS`) |
-| `otel_runtime_scan_unix.go` | Extended with `javaDescendantPort(pid, projectDir)` — jps-based port detection for wrapper-launched JVMs on Unix, with cwd-preference for multi-service disambiguation |
+| `otel_runtime_scan_unix.go` | Extended with `javaDescendantPort(pid, projectDir)` — jps-based port detection for wrapper-launched JVMs on Unix; `jvmHasAgentLoaded(pid, agentJAR)` — lsof-based check for agent presence when injected via `JAVA_TOOL_OPTIONS` |
 | `otel_runtime_scan_windows.go` | Extended with `javaDescendantPort(wrapperPID, _)` — WMI-based port detection for wrapper-launched JVMs on Windows |
 | `otel_uninstall.go` | Extended `UninstallOtelCollector` — adds Java process discovery (`findInstrumentedJavaProcesses`) and agent-dir removal as a cleanup section |
 | `otel_runtime_scan.go` | `DetectedProcess` struct — add `Description string` field for JPS enrichment |
