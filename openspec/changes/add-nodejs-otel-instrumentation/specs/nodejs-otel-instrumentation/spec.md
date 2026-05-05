@@ -61,31 +61,33 @@ The system SHALL generate OTEL\_\* environment variables for Node.js including t
 - **WHEN** `generateOtelNodeEnvVars()` is called with apiURL, token, and serviceName
 - **THEN** the returned map includes `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_EXPORTER_OTLP_PROTOCOL`, and all exporter configs
 
-### Requirement: register.js generation for framework CLIs
+### Requirement: Framework bootstrap scripts generation
 
-For Next.js and Nuxt projects, the system SHALL generate wrapper scripts in `.otel/` that set `process.env.OTEL_*` variables and require `@opentelemetry/auto-instrumentations-node/register` before delegating to the framework CLI.
+For Next.js and Nuxt projects, the system SHALL generate framework-specific bootstrap scripts in `.otel/`. These scripts require the auto-instrumentation register module before delegating to the framework. OTEL\_\* env vars are NOT embedded in the scripts — they are passed via `cmd.Env` at process launch time, which sets `process.env` before any JS code executes. This avoids writing secrets (e.g. API tokens in `OTEL_EXPORTER_OTLP_HEADERS`) to disk. Bootstrap scripts SHALL be written with `0600` permissions (owner-only).
 
-#### Scenario: next-register.js generated for Next.js
+#### Scenario: next-otel-bootstrap.js generated for Next.js
 
 - **GIVEN** a project is identified as Next.js
 - **WHEN** the `.otel/` directory is created
-- **THEN** `.otel/next-register.js` is written
+- **THEN** `.otel/next-otel-bootstrap.js` is written (CommonJS) with `0600` permissions
 - **AND** it requires `@opentelemetry/auto-instrumentations-node/register`
-- **AND** it delegates to `next/dist/bin/next`
+- **AND** it delegates to `next/dist/bin/next` (Next.js CLI)
+- **AND** it does NOT embed OTEL\_\* env vars (they are passed via process environment at launch time)
 
-#### Scenario: nuxt-register.js generated for Nuxt
+#### Scenario: nuxt-otel-bootstrap.mjs generated for Nuxt
 
 - **GIVEN** a project is identified as Nuxt
 - **WHEN** the `.otel/` directory is created
-- **THEN** `.otel/nuxt-register.js` is written
-- **AND** it requires `@opentelemetry/auto-instrumentations-node/register`
-- **AND** it delegates to `nuxt/bin/nuxt.mjs`
+- **THEN** `.otel/nuxt-otel-bootstrap.mjs` is written (ES Module) with `0600` permissions
+- **AND** it uses `node:module.register()` to install ESM loader hooks (import-in-the-middle)
+- **AND** it requires `@opentelemetry/auto-instrumentations-node/register` via `createRequire()`
+- **AND** it does NOT delegate to the Nuxt CLI (the CLI spawns child processes that lose registration)
 
-#### Scenario: Wrapper script NOT generated for regular projects
+#### Scenario: No bootstrap script for regular projects
 
 - **GIVEN** a project is NOT Next.js or Nuxt
 - **WHEN** the `.otel/` directory is created
-- **THEN** no wrapper script is written
+- **THEN** no bootstrap scripts are written
 
 ### Requirement: Entrypoint detection
 
@@ -116,17 +118,61 @@ The system SHALL use the existing `detectNodeEntrypoints` function to resolve th
 - **GIVEN** a project with no `"main"`, no scripts referencing source files, and no conventional files
 - **AND** the project is not Next.js or Nuxt
 - **WHEN** `buildNodeInstrumentationPlan` runs
-- **THEN** the project is skipped with a diagnostic message
+- **THEN** the project is skipped with a message: "This project can't be auto-instrumented."
+- **AND** a link to the Dynatrace manual instrumentation docs is shown: "See Instrument your JavaScript application on Node.js with OpenTelemetry to instrument it manually."
+- **AND** the user is immediately prompted "Select another project? [Y/n]"
+- **AND** if the user confirms, the project list is shown again for re-selection
+- **AND** if the user declines, the flow exits without the "No Node.js projects detected" fallback message
+
+This behavior applies in both the standalone `dtwiz install otel-node` flow (via `DetectNodePlan`) and the combined `dtwiz install otel` flow (via `InstallOtelCollectorWithProject`).
+
+### Requirement: Project dependency prerequisite check
+
+Before launching, the system SHALL verify that the project's own `node_modules/` directory exists for regular and Next.js apps. If it is missing, the installer SHALL exit with a clear message pointing the user to the right install command. Nuxt is exempt from this check because it runs a pre-compiled `.output/server/index.mjs` that does not require the project's `node_modules/` at runtime.
+
+#### Scenario: node_modules/ missing for regular app
+
+- **GIVEN** a regular Node.js project is selected
+- **AND** the project directory does not contain a `node_modules/` subdirectory
+- **WHEN** `Execute()` prepares to launch
+- **THEN** it prints "Project dependencies are not installed in \<path\>"
+- **AND** it prints "Run '\<packageManager\> install' in that directory first, then re-run dtwiz." using the detected package manager (npm/yarn/pnpm)
+- **AND** it exits without creating `.otel/`, running `npm install`, or launching any process
+
+#### Scenario: node_modules/ missing for Next.js app
+
+- **GIVEN** a Next.js project is selected
+- **AND** the project directory does not contain a `node_modules/` subdirectory
+- **WHEN** `Execute()` prepares to launch
+- **THEN** it prints "Project dependencies are not installed in \<path\>"
+- **AND** it prints "Run '\<packageManager\> install' in that directory first, then re-run dtwiz."
+- **AND** it exits without creating `.otel/`, running `npm install`, or launching any process
+
+#### Scenario: node_modules/ present — proceeds normally
+
+- **GIVEN** a regular or Next.js project is selected
+- **AND** the project directory contains a `node_modules/` subdirectory
+- **WHEN** `Execute()` prepares to launch
+- **THEN** the prerequisite check passes and execution continues normally
+
+#### Scenario: Nuxt skips node_modules/ check
+
+- **GIVEN** a Nuxt project is selected
+- **AND** the project directory does not contain a `node_modules/` subdirectory
+- **BUT** `.output/server/index.mjs` exists
+- **WHEN** `Execute()` prepares to launch
+- **THEN** the `node_modules/` check is NOT performed and execution continues to the Nuxt launch step
 
 ### Requirement: Regular Node.js app launch
 
-For non-Next.js projects, the system SHALL launch the app using `node --require @opentelemetry/auto-instrumentations-node/register <entrypoint>` with CWD set to `.otel/` so that `require()` resolves the OTel module from `.otel/node_modules/`.
+For non-Next.js projects, the system SHALL launch the app using `node --require @opentelemetry/auto-instrumentations-node/register <entrypoint>` with CWD set to `.otel/` so that `require()` resolves the OTel module from `.otel/node_modules/`. The entrypoint path SHALL use forward slashes (e.g. `../server.js`) to ensure compatibility on Windows.
 
 #### Scenario: Regular app launched with auto-instrumentation
 
 - **GIVEN** a regular Node.js project where `detectNodeEntrypoints` resolved entrypoint `server.js`
 - **WHEN** `Execute()` launches the process
 - **THEN** the command is `node --require @opentelemetry/auto-instrumentations-node/register ../server.js`
+- **AND** the entrypoint path uses forward slashes regardless of the host OS
 - **AND** CWD is set to the `.otel/` directory
 - **AND** OTEL\_\* env vars are set on the process
 
@@ -139,37 +185,51 @@ For non-Next.js projects, the system SHALL launch the app using `node --require 
 
 ### Requirement: Next.js app launch
 
-For Next.js projects, the system SHALL launch the app using `node otel/next-register.js start` with CWD set to the project root.
+For Next.js projects, the system SHALL launch the app using `node .otel/next-otel-bootstrap.js start` with CWD set to the project root.
 
-#### Scenario: Next.js app launched with wrapper
+#### Scenario: Next.js app launched via wrapper
 
-- **GIVEN** a Next.js project
+- **GIVEN** a Next.js project and `.otel/next-otel-bootstrap.js` has been written
 - **WHEN** `Execute()` launches the process
-- **THEN** the command is `node otel/next-register.js start`
+- **THEN** the command is `node .otel/next-otel-bootstrap.js start`
 - **AND** CWD is set to the project root (not `.otel/`)
 - **AND** OTEL\_\* env vars are set on the process
+- **AND** the process is tracked with log file capture
 
 ### Requirement: Nuxt app launch
 
-For Nuxt projects, the system SHALL launch the app using `node otel/nuxt-register.js start` with CWD set to the project root.
+For Nuxt projects, the system SHALL launch the Nitro server directly using `node --import .otel/nuxt-otel-bootstrap.mjs .output/server/index.mjs` with CWD set to the project root. The Nuxt CLI is not used because it spawns child processes that lose OTel registration.
 
-#### Scenario: Nuxt app launched with wrapper
+#### Scenario: Nuxt build output required
 
-- **GIVEN** a Nuxt project
+- **GIVEN** a Nuxt project is selected
+- **WHEN** `Execute()` prepares to launch
+- **THEN** it checks for `.output/server/index.mjs` (built Nitro output)
+- **AND** if not found, it prints an error indicating that Nuxt build output was not found at the expected path `.output/server/index.mjs`
+- **AND** it instructs the user to run `npx nuxt build` before re-running dtwiz
+- **AND** it exits without launching
+
+#### Scenario: Nuxt app launched via ESM bootstrap
+
+- **GIVEN** a Nuxt project with `.output/server/index.mjs` available
+- **AND** `.otel/nuxt-otel-bootstrap.mjs` has been written
 - **WHEN** `Execute()` launches the process
-- **THEN** the command is `node otel/nuxt-register.js start`
-- **AND** CWD is set to the project root (not `.otel/`)
+- **THEN** the command is `node --import .otel/nuxt-otel-bootstrap.mjs .output/server/index.mjs`
+- **AND** CWD is set to the project root
 - **AND** OTEL\_\* env vars are set on the process
+- **AND** the ESM bootstrap uses `module.register()` to install import-in-the-middle hooks before any code loads
+- **AND** the process is tracked with log file capture
 
-### Requirement: Dynatrace service verification
+### Requirement: Process health check
 
-After launching the instrumented process, the system SHALL poll Dynatrace Smartscape until the service appears, using the existing `waitForServices()` infrastructure.
+After launching the instrumented process, the system SHALL use `PrintProcessSummary()` to verify processes are alive and detect listening ports.
 
-#### Scenario: Service appears in Dynatrace
+#### Scenario: Processes started successfully
 
 - **GIVEN** the instrumented process is running and sending telemetry
-- **WHEN** `waitForServices()` polls Smartscape
-- **THEN** it detects the service and prints a confirmation with a link to the Dynatrace UI
+- **WHEN** `PrintProcessSummary()` checks process status
+- **THEN** it reports alive services with detected ports
+- **AND** the user sees "Waiting for traffic — send requests to your services to generate traces and metrics."
 
 #### Scenario: All processes crashed
 

@@ -18,6 +18,8 @@ type otelProcessInfo struct {
 	pid        int
 	binaryPath string
 	installDir string
+	command    string
+	workingDir string
 }
 
 func findRunningOtelProcesses() []otelProcessInfo {
@@ -136,9 +138,118 @@ func removeWithRetry(path string) error {
 	return err
 }
 
+// findNodeOtelDirs scans CWD (recursively) and parent directories for .otel/
+// directories that contain a package.json with @opentelemetry in its content —
+// these are directories created by dtwiz's Node.js auto-instrumentation
+// installer. The scan mirrors scanProjectDirs: CWD + children, then up to 2
+// ancestor levels.
+func findNodeOtelDirs() []string {
+	var dirs []string
+	seen := map[string]bool{}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil
+	}
+
+	// checkDir tests whether dir contains a .otel/ child that is a valid
+	// Node.js OTel directory. Returns true if found (and appends to dirs).
+	// Deduplication uses the symlink-resolved path so that /tmp/.otel and
+	// /private/tmp/.otel (same directory on macOS) are not listed twice.
+	checkDir := func(dir string) bool {
+		otelDir := filepath.Join(dir, ".otel")
+		// Only bother with dedup and validation if .otel/ actually exists.
+		if _, err := os.Stat(otelDir); err != nil {
+			return false
+		}
+		key := otelDir
+		if resolved, err := filepath.EvalSymlinks(otelDir); err == nil {
+			key = resolved
+		}
+		if seen[key] {
+			return false
+		}
+		seen[key] = true
+		if isNodeOtelDir(otelDir) {
+			logger.Debug("found Node.js .otel/ directory", "dir", otelDir)
+			dirs = append(dirs, otelDir)
+			return true
+		}
+		return false
+	}
+
+	// walkCandidateDirs recursively checks dir and its children (skipping the
+	// same ignored directories as scanProjectDirs).
+	walkCandidateDirs(cwd, 2, func(dir string) bool {
+		checkDir(dir)
+		return false
+	}, isIgnoredDir)
+
+	return dirs
+}
+
+// isNodeOtelDir checks if a directory is a dtwiz-created Node.js OTel
+// instrumentation directory by verifying it contains a package.json
+// with @opentelemetry in its content.
+func isNodeOtelDir(dir string) bool {
+	pkgPath := filepath.Join(dir, "package.json")
+	data, err := os.ReadFile(pkgPath)
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(data), "@opentelemetry")
+}
+
+func printCollectorUninstallPreview(processes []otelProcessInfo, dirs []string) {
+	if len(processes) == 0 && len(dirs) == 0 {
+		return
+	}
+	display.Header("  OTel Collector")
+	fmt.Println()
+	if len(processes) > 0 {
+		fmt.Println("  Processes that will be killed:")
+		for _, p := range processes {
+			hint := ""
+			if p.binaryPath != "" {
+				hint = "  (" + p.binaryPath + ")"
+			}
+			fmt.Printf("    ")
+			display.ColorError.Printf("kill PID %d", p.pid)
+			display.ColorMuted.Printf("%s\n", hint)
+		}
+		fmt.Println()
+	} else {
+		display.ColorMuted.Println("  No running collector processes found.")
+		fmt.Println()
+	}
+
+	if len(dirs) > 0 {
+		fmt.Println("  Directories that will be removed:")
+		for _, d := range dirs {
+			fmt.Printf("    ")
+			display.ColorError.Printf("rm -rf %s\n", d)
+		}
+		fmt.Println()
+	} else {
+		display.ColorMuted.Println("  No installation directories found.")
+		fmt.Println()
+	}
+}
+
+// UninstallOtelCollector kills all running Dynatrace OTel Collector processes
+// and removes the installation directories created by dtwiz. It also detects
+// and removes Node.js OTel instrumentation artifacts (.otel/ directories and
+// instrumented Node.js processes).
 func UninstallOtelCollector(dryRun bool) error {
+
+	// Collector artifacts.
 	processes := findRunningOtelProcesses()
 	dirs := candidateOtelDirs(processes)
+
+	// Node.js .otel/ directory artifacts.
+	nodeOtelDirs := findNodeOtelDirs()
+
+	logger.Debug("uninstall scan complete", "collectorProcesses", len(processes), "collectorDirs", len(dirs), "nodeOtelDirs", len(nodeOtelDirs))
 
 	type runtimeResult struct {
 		label string
@@ -163,42 +274,14 @@ func UninstallOtelCollector(dryRun bool) error {
 		}
 	}
 
-	// ── Preview ──────────────────────────────────────────────────────────────
 	display.Header("Dynatrace OTel Collector Uninstall")
 
-	if len(processes) == 0 && len(dirs) == 0 && !anyRuntimeProcs {
-		display.ColorDefault.Println("  Nothing to remove — no running collector and no install directories found.")
+	if len(processes) == 0 && len(dirs) == 0 && !anyRuntimeProcs && len(nodeOtelDirs) == 0 {
+		display.ColorMuted.Println("  Nothing to remove — no running collector, no install directories, and no Node.js instrumentation found.")
 		return nil
 	}
 
-	if len(processes) > 0 {
-		fmt.Println("  Processes that will be killed:")
-		for _, p := range processes {
-			hint := ""
-			if p.binaryPath != "" {
-				hint = "  (" + p.binaryPath + ")"
-			}
-			fmt.Printf("    ")
-			display.ColorError.Printf("kill PID %d", p.pid)
-			display.ColorDefault.Printf("%s\n", hint)
-		}
-		fmt.Println()
-	} else {
-		display.ColorDefault.Println("  No running collector processes found.")
-		fmt.Println()
-	}
-
-	if len(dirs) > 0 {
-		fmt.Println("  Directories that will be removed:")
-		for _, d := range dirs {
-			fmt.Printf("    ")
-			display.ColorError.Printf("rm -rf %s\n", d)
-		}
-		fmt.Println()
-	} else {
-		display.ColorDefault.Println("  No installation directories found.")
-		fmt.Println()
-	}
+	printCollectorUninstallPreview(processes, dirs)
 
 	for _, r := range runtimeResults {
 		if len(r.procs) > 0 {
@@ -213,6 +296,17 @@ func UninstallOtelCollector(dryRun bool) error {
 	}
 
 	display.PrintSectionDivider()
+
+	if len(nodeOtelDirs) > 0 {
+		fmt.Println("  .otel/ directories that will be removed:")
+		for _, d := range nodeOtelDirs {
+			fmt.Printf("    ")
+			display.ColorError.Printf("rm -rf %s\n", d)
+		}
+		fmt.Println()
+	}
+
+	display.ColorMuted.Println("  " + strings.Repeat("─", 50))
 
 	if dryRun {
 		display.ColorDefault.Println("  [dry-run] No changes made.")
@@ -244,6 +338,15 @@ func UninstallOtelCollector(dryRun bool) error {
 	}
 
 	for _, d := range dirs {
+		if err := removeWithRetry(d); err != nil {
+			fmt.Printf("  Warning: could not remove %s: %v\n", d, err)
+			continue
+		}
+		fmt.Printf("  Removed %s\n", d)
+	}
+
+	// ── Remove .otel/ directories ───────────────────────────────────────────
+	for _, d := range nodeOtelDirs {
 		if err := removeWithRetry(d); err != nil {
 			fmt.Printf("  Warning: could not remove %s: %v\n", d, err)
 			continue
