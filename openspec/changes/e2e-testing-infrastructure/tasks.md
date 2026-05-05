@@ -24,6 +24,6 @@
 
 ## 5. Verification
 
-- [ ] 5.1 Run `make test`
-- [ ] 5.2 Run `make test-integration` without credentials — confirm descriptive error to stderr and non-zero exit
-- [ ] 5.3 Run `make lint` — confirm no new lint issues in added code
+- [x] 5.1 Run `make test`
+- [x] 5.2 Run `make test-integration` without credentials — confirm descriptive error to stderr and non-zero exit
+- [x] 5.3 Run `make lint` — confirm no new lint issues in added code

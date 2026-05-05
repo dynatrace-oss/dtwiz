@@ -10,6 +10,7 @@ import (
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/test/integration"
+	"github.com/dynatrace-oss/dtwiz/test/integration/grail"
 )
 
 // otelCase describes a single language's OTel auto-instrumentation test.
@@ -77,9 +78,9 @@ func runOTelTest(t *testing.T, tc otelCase) {
 	integration.TriggerRequestOnPort(t, tc.port)
 
 	t.Logf("waiting for traces in Grail (service: %q)", svcName)
-	traces := integration.RequireTraces(t, env.Client, svcName,
-		integration.WithTimeout(180*time.Second),
-		integration.WithInterval(5*time.Second),
+	traces := grail.RequireTraces(t, env.Client, svcName,
+		grail.WithTimeout(180*time.Second),
+		grail.WithInterval(20*time.Second),
 	)
 	t.Logf("found %d trace(s) for service %q", len(traces), svcName)
 }
