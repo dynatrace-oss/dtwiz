@@ -61,7 +61,15 @@ func TestMergeDynatraceExporter_EmptyConfig(t *testing.T) {
 // failing the test if the path or type assertion does not hold.
 func mustPipelineExporters(t *testing.T, cfg map[string]interface{}, pipelineName string) []interface{} {
 	t.Helper()
-	pipeline, ok := cfg["service"].(map[string]interface{})["pipelines"].(map[string]interface{})[pipelineName].(map[string]interface{})
+	svc, ok := cfg["service"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("cfg[\"service\"] missing or wrong type")
+	}
+	pipelines, ok := svc["pipelines"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("cfg[\"service\"][\"pipelines\"] missing or wrong type")
+	}
+	pipeline, ok := pipelines[pipelineName].(map[string]interface{})
 	if !ok {
 		t.Fatalf("pipeline %q not found or wrong type", pipelineName)
 	}
