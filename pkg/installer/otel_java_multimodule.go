@@ -102,38 +102,6 @@ func gradleBuildCommand(projectPath string) string {
 	return gradleCmd + " build -x test"
 }
 
-func hasExecutableJar(projectPath string) bool {
-	for _, dir := range []string{
-		filepath.Join(projectPath, "target"),
-		filepath.Join(projectPath, "build", "libs"),
-	} {
-		if !fileExists(dir) {
-			continue
-		}
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			continue
-		}
-		for _, e := range entries {
-			if !e.IsDir() && strings.HasSuffix(e.Name(), ".jar") {
-				if isExecutableJar(filepath.Join(dir, e.Name())) {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
-func needsBuild(subs []SubModule) bool {
-	for _, sub := range subs {
-		if !hasExecutableJar(sub.Path) {
-			return true
-		}
-	}
-	return false
-}
-
 // Maven is checked before Gradle — pom.xml takes precedence when both exist.
 func detectMultiModule(projectPath string) *MultiModuleProject {
 	modules, err := parseMavenModules(projectPath)
@@ -214,7 +182,7 @@ func buildMultiModulePlan(mm *MultiModuleProject, proj ScannedProject, apiURL, t
 	}
 }
 
-// executeMultiModule runs the multi-module build (if needed), launches each sub-module,
+// executeMultiModule runs the multi-module build (when BuildCommand is set), launches each sub-module,
 // prints a process summary, and updates the OTel Collector config if present.
 // It returns an error if any critical step fails (build, agent download, no services started/running).
 func (p *JavaInstrumentationPlan) executeMultiModule() error {

@@ -420,4 +420,3 @@ func updateOtelCollectorIfPresent(envURL, token string, dryRun bool) {
 	}
 	display.PrintStatusLine("collector", "config updated", display.ColorOK)
 }
-
