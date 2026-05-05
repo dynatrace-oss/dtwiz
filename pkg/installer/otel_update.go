@@ -3,6 +3,7 @@ package installer
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -12,13 +13,29 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
-// exporterSnippet is the YAML block to inject into an existing OTel Collector
+// exporterSnippetTemplate is the YAML block to inject into an existing OTel Collector
 // configuration as the `otlp_http/dynatrace` exporter.
 const exporterSnippetTemplate = `otlp_http/dynatrace:
-  endpoint: %s/api/v2/otlp
+  endpoint: %s
   headers:
     Authorization: "Api-Token %s"
 `
+
+// backupFile writes data to a timestamped .bak.<unix> copy of path and returns
+// the backup path.
+func backupFile(path string, data []byte) (string, error) {
+	backupPath := fmt.Sprintf("%s.bak.%d", path, time.Now().Unix())
+	if err := os.WriteFile(backupPath, data, 0o600); err != nil {
+		return "", fmt.Errorf("creating backup at %s: %w", backupPath, err)
+	}
+	logger.Debug("config backup created", "backup", backupPath, "originalBytes", len(data))
+	return backupPath, nil
+}
+
+// dtOTLPEndpoint returns the full Dynatrace OTLP ingest endpoint for apiURL.
+func dtOTLPEndpoint(apiURL string) string {
+	return strings.TrimRight(apiURL, "/") + "/api/v2/otlp"
+}
 
 // pipelineHint is the human-readable instruction for wiring the exporter.
 const pipelineHint = `Add "otlp_http/dynatrace" to the exporters list of each pipeline you want
@@ -46,7 +63,7 @@ type UpdateResult struct {
 // exporter, ready to paste into an existing OTel Collector config.
 func GenerateExporterSnippet(apiURL, token string) string {
 	return fmt.Sprintf(exporterSnippetTemplate,
-		strings.TrimRight(apiURL, "/"),
+		dtOTLPEndpoint(apiURL),
 		token,
 	)
 }
@@ -112,17 +129,18 @@ func diffLines(oldLines, newLines []string) []diffEdit {
 	for i > 0 || j > 0 {
 		switch {
 		case i > 0 && j > 0 && oldLines[i-1] == newLines[j-1]:
-			edits = append([]diffEdit{{editKeep, oldLines[i-1]}}, edits...)
+			edits = append(edits, diffEdit{editKeep, oldLines[i-1]})
 			i--
 			j--
 		case j > 0 && (i == 0 || dp[i][j-1] >= dp[i-1][j]):
-			edits = append([]diffEdit{{editAdd, newLines[j-1]}}, edits...)
+			edits = append(edits, diffEdit{editAdd, newLines[j-1]})
 			j--
 		default:
-			edits = append([]diffEdit{{editDel, oldLines[i-1]}}, edits...)
+			edits = append(edits, diffEdit{editDel, oldLines[i-1]})
 			i--
 		}
 	}
+	slices.Reverse(edits)
 	return edits
 }
 
@@ -156,7 +174,7 @@ func mergeDynatraceExporter(cfg map[string]interface{}, apiURL, token string) {
 	}
 
 	exporters["otlp_http/dynatrace"] = map[string]interface{}{
-		"endpoint": strings.TrimRight(apiURL, "/") + "/api/v2/otlp",
+		"endpoint": dtOTLPEndpoint(apiURL),
 		"headers": map[string]interface{}{
 			"Authorization": "Api-Token " + token,
 		},
@@ -195,6 +213,33 @@ func mergeDynatraceExporter(cfg map[string]interface{}, apiURL, token string) {
 	}
 }
 
+// mergeExporterIntoYAML unmarshals data, injects the Dynatrace exporter via
+// mergeDynatraceExporter, and returns the re-marshalled YAML.
+func mergeExporterIntoYAML(data []byte, apiURL, token string) ([]byte, error) {
+	var cfg map[string]interface{}
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parsing YAML: %w", err)
+	}
+	if cfg == nil {
+		cfg = make(map[string]interface{})
+	}
+	mergeDynatraceExporter(cfg, apiURL, token)
+	return yaml.Marshal(cfg)
+}
+
+// writeConfig writes updatedData to configPath and returns the result.
+func writeConfig(configPath string, updatedData []byte) (*UpdateResult, error) {
+	if err := os.WriteFile(configPath, updatedData, 0o600); err != nil {
+		return nil, fmt.Errorf("writing updated config to %s: %w", configPath, err)
+	}
+
+	return &UpdateResult{
+		ConfigPath:  configPath,
+		Modified:    true,
+		Description: "Dynatrace otlp_http/dynatrace exporter merged into existing config",
+	}, nil
+}
+
 // PatchConfigFile reads an existing OTel Collector YAML config file, backs it
 // up, injects the Dynatrace exporter, and writes the updated config back.
 func PatchConfigFile(configPath, apiURL, token string) (*UpdateResult, error) {
@@ -203,38 +248,23 @@ func PatchConfigFile(configPath, apiURL, token string) (*UpdateResult, error) {
 		return nil, fmt.Errorf("reading config file %s: %w", configPath, err)
 	}
 
-	var cfg map[string]interface{}
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("parsing YAML config %s: %w", configPath, err)
-	}
-	if cfg == nil {
-		cfg = make(map[string]interface{})
+	updated, err := mergeExporterIntoYAML(data, apiURL, token)
+	if err != nil {
+		return nil, fmt.Errorf("patching config %s: %w", configPath, err)
 	}
 
 	// Create a timestamped backup.
-	backupPath := fmt.Sprintf("%s.bak.%d", configPath, time.Now().Unix())
-	if err := os.WriteFile(backupPath, data, 0o600); err != nil {
-		return nil, fmt.Errorf("creating backup at %s: %w", backupPath, err)
-	}
-	logger.Debug("config backup created", "backup", backupPath, "originalBytes", len(data))
-
-	mergeDynatraceExporter(cfg, apiURL, token)
-
-	updated, err := yaml.Marshal(cfg)
+	backupPath, err := backupFile(configPath, data)
 	if err != nil {
-		return nil, fmt.Errorf("serialising updated config: %w", err)
+		return nil, err
 	}
 
-	if err := os.WriteFile(configPath, updated, 0o600); err != nil {
-		return nil, fmt.Errorf("writing updated config to %s: %w", configPath, err)
+	result, err := writeConfig(configPath, updated)
+	if err != nil {
+		return nil, err
 	}
-
-	return &UpdateResult{
-		ConfigPath:  configPath,
-		BackupPath:  backupPath,
-		Modified:    true,
-		Description: "Dynatrace otlp_http/dynatrace exporter merged into existing config",
-	}, nil
+	result.BackupPath = backupPath
+	return result, nil
 }
 
 // UpdateOtelConfig updates an existing OTel Collector config file with the
@@ -274,17 +304,9 @@ func UpdateOtelConfig(configPath, envURL, token, platformToken string, dryRun bo
 	if err != nil {
 		return fmt.Errorf("reading config file %s: %w", configPath, err)
 	}
-	var cfgPreview map[string]interface{}
-	if err := yaml.Unmarshal(origData, &cfgPreview); err != nil {
-		return fmt.Errorf("parsing YAML config %s: %w", configPath, err)
-	}
-	if cfgPreview == nil {
-		cfgPreview = make(map[string]interface{})
-	}
-	mergeDynatraceExporter(cfgPreview, apiURL, token)
-	updatedData, err := yaml.Marshal(cfgPreview)
+	updatedData, err := mergeExporterIntoYAML(origData, apiURL, token)
 	if err != nil {
-		return fmt.Errorf("serialising preview: %w", err)
+		return fmt.Errorf("building config preview for %s: %w", configPath, err)
 	}
 
 	display.Header(fmt.Sprintf("Preview of changes to %s:", configPath))
@@ -327,13 +349,19 @@ func UpdateOtelConfig(configPath, envURL, token, platformToken string, dryRun bo
 	}
 	fmt.Println()
 
-	// Patch the config file.
-	result, err := PatchConfigFile(configPath, apiURL, token)
+	// Create a timestamped backup before writing.
+	backupPath, err := backupFile(configPath, origData)
+	if err != nil {
+		return err
+	}
+
+	// Write updated config using data already computed for the diff preview.
+	result, err := writeConfig(configPath, updatedData)
 	if err != nil {
 		return err
 	}
 	fmt.Printf("  Config updated: %s\n", result.ConfigPath)
-	fmt.Printf("  Backup created: %s\n", result.BackupPath)
+	fmt.Printf("  Backup created: %s\n", backupPath)
 	fmt.Println()
 
 	if len(runningProcs) == 0 {
