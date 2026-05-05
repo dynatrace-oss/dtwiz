@@ -214,6 +214,9 @@ func TestUninstallOtelCollector_IncludesNodeDirs(t *testing.T) {
 	}
 	if !strings.Contains(output, ".otel") {
 		t.Errorf("expected output to mention .otel/ directory, got:\n%s", output)
+	}
+}
+
 // TestFindInstrumentedJavaProcesses_FiltersByAgentFlag verifies that only
 // processes whose command contains the dtwiz agent JAR path are returned.
 func TestFindInstrumentedJavaProcesses_FiltersByAgentFlag(t *testing.T) {
