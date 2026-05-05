@@ -165,7 +165,7 @@ func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) 
 		go func() {
 			select {
 			case <-time.After(slowHintDelay):
-				fmt.Println("  Still detecting ports — this may take a while on slow machines.")
+				fmt.Println("  Still detecting ports — this may take a while.")
 			case <-hintDone:
 			}
 		}()
