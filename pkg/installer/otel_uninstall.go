@@ -178,7 +178,7 @@ func findNodeOtelDirs() []string {
 		return false
 	}
 
-	// scanChildren recursively checks dir and its children (skipping the
+	// walkCandidateDirs recursively checks dir and its children (skipping the
 	// same ignored directories as scanProjectDirs).
 	walkCandidateDirs(cwd, 2, func(dir string) bool {
 		checkDir(dir)
