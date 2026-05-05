@@ -3,6 +3,7 @@ package installer
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -128,17 +129,18 @@ func diffLines(oldLines, newLines []string) []diffEdit {
 	for i > 0 || j > 0 {
 		switch {
 		case i > 0 && j > 0 && oldLines[i-1] == newLines[j-1]:
-			edits = append([]diffEdit{{editKeep, oldLines[i-1]}}, edits...)
+			edits = append(edits, diffEdit{editKeep, oldLines[i-1]})
 			i--
 			j--
 		case j > 0 && (i == 0 || dp[i][j-1] >= dp[i-1][j]):
-			edits = append([]diffEdit{{editAdd, newLines[j-1]}}, edits...)
+			edits = append(edits, diffEdit{editAdd, newLines[j-1]})
 			j--
 		default:
-			edits = append([]diffEdit{{editDel, oldLines[i-1]}}, edits...)
+			edits = append(edits, diffEdit{editDel, oldLines[i-1]})
 			i--
 		}
 	}
+	slices.Reverse(edits)
 	return edits
 }
 
@@ -211,6 +213,20 @@ func mergeDynatraceExporter(cfg map[string]interface{}, apiURL, token string) {
 	}
 }
 
+// mergeExporterIntoYAML unmarshals data, injects the Dynatrace exporter via
+// mergeDynatraceExporter, and returns the re-marshalled YAML.
+func mergeExporterIntoYAML(data []byte, apiURL, token string) ([]byte, error) {
+	var cfg map[string]interface{}
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parsing YAML: %w", err)
+	}
+	if cfg == nil {
+		cfg = make(map[string]interface{})
+	}
+	mergeDynatraceExporter(cfg, apiURL, token)
+	return yaml.Marshal(cfg)
+}
+
 // writeConfig writes updatedData to configPath and returns the result.
 func writeConfig(configPath string, updatedData []byte) (*UpdateResult, error) {
 	if err := os.WriteFile(configPath, updatedData, 0o600); err != nil {
@@ -232,25 +248,15 @@ func PatchConfigFile(configPath, apiURL, token string) (*UpdateResult, error) {
 		return nil, fmt.Errorf("reading config file %s: %w", configPath, err)
 	}
 
-	var cfg map[string]interface{}
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("parsing YAML config %s: %w", configPath, err)
-	}
-	if cfg == nil {
-		cfg = make(map[string]interface{})
+	updated, err := mergeExporterIntoYAML(data, apiURL, token)
+	if err != nil {
+		return nil, fmt.Errorf("patching config %s: %w", configPath, err)
 	}
 
 	// Create a timestamped backup.
 	backupPath, err := backupFile(configPath, data)
 	if err != nil {
 		return nil, err
-	}
-
-	mergeDynatraceExporter(cfg, apiURL, token)
-
-	updated, err := yaml.Marshal(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("serialising updated config: %w", err)
 	}
 
 	result, err := writeConfig(configPath, updated)
@@ -298,17 +304,9 @@ func UpdateOtelConfig(configPath, envURL, token, platformToken string, dryRun bo
 	if err != nil {
 		return fmt.Errorf("reading config file %s: %w", configPath, err)
 	}
-	var cfgPreview map[string]interface{}
-	if err := yaml.Unmarshal(origData, &cfgPreview); err != nil {
-		return fmt.Errorf("parsing YAML config %s: %w", configPath, err)
-	}
-	if cfgPreview == nil {
-		cfgPreview = make(map[string]interface{})
-	}
-	mergeDynatraceExporter(cfgPreview, apiURL, token)
-	updatedData, err := yaml.Marshal(cfgPreview)
+	updatedData, err := mergeExporterIntoYAML(origData, apiURL, token)
 	if err != nil {
-		return fmt.Errorf("serialising preview: %w", err)
+		return fmt.Errorf("building config preview for %s: %w", configPath, err)
 	}
 
 	display.Header(fmt.Sprintf("Preview of changes to %s:", configPath))
