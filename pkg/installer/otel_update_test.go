@@ -57,6 +57,21 @@ func TestMergeDynatraceExporter_EmptyConfig(t *testing.T) {
 	}
 }
 
+// mustPipelineExporters returns the exporters slice for a named pipeline,
+// failing the test if the path or type assertion does not hold.
+func mustPipelineExporters(t *testing.T, cfg map[string]interface{}, pipelineName string) []interface{} {
+	t.Helper()
+	pipeline, ok := cfg["service"].(map[string]interface{})["pipelines"].(map[string]interface{})[pipelineName].(map[string]interface{})
+	if !ok {
+		t.Fatalf("pipeline %q not found or wrong type", pipelineName)
+	}
+	exporters, ok := pipeline["exporters"].([]interface{})
+	if !ok {
+		t.Fatalf("pipeline %q has no exporters slice", pipelineName)
+	}
+	return exporters
+}
+
 func TestMergeDynatraceExporter_AppendsToPipelines(t *testing.T) {
 	cfg := map[string]interface{}{
 		"service": map[string]interface{}{
@@ -69,19 +84,12 @@ func TestMergeDynatraceExporter_AppendsToPipelines(t *testing.T) {
 	}
 	mergeDynatraceExporter(cfg, "https://env.dt.com", "tok")
 
-	pipeline := cfg["service"].(map[string]interface{})["pipelines"].(map[string]interface{})["traces"].(map[string]interface{})
-	exporters := pipeline["exporters"].([]interface{})
-	found := false
-	for _, e := range exporters {
-		if e == "otlp_http/dynatrace" {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("otlp_http/dynatrace not appended to pipeline exporters: %v", exporters)
-	}
+	exporters := mustPipelineExporters(t, cfg, "traces")
 	if len(exporters) != 2 {
-		t.Errorf("expected 2 exporters, got %d: %v", len(exporters), exporters)
+		t.Fatalf("expected 2 exporters, got %d: %v", len(exporters), exporters)
+	}
+	if exporters[1] != "otlp_http/dynatrace" {
+		t.Errorf("expected otlp_http/dynatrace appended last, got %v", exporters[1])
 	}
 }
 
@@ -97,9 +105,7 @@ func TestMergeDynatraceExporter_NoDuplicates(t *testing.T) {
 	}
 	mergeDynatraceExporter(cfg, "https://env.dt.com", "tok")
 
-	pipeline := cfg["service"].(map[string]interface{})["pipelines"].(map[string]interface{})["traces"].(map[string]interface{})
-	exporters := pipeline["exporters"].([]interface{})
-	if len(exporters) != 1 {
+	if exporters := mustPipelineExporters(t, cfg, "traces"); len(exporters) != 1 {
 		t.Errorf("expected 1 exporter (no duplicate), got %d: %v", len(exporters), exporters)
 	}
 }
@@ -117,22 +123,23 @@ func TestMergeDynatraceExporter_NoServiceSection(t *testing.T) {
 }
 
 func TestDiffLines_BasicCases(t *testing.T) {
-	old := []string{"a", "b", "c"}
-	new := []string{"a", "x", "c"}
-	edits := diffLines(old, new)
+	oldLines := []string{"a", "b", "c"}
+	newLines := []string{"a", "x", "c"}
 
-	counts := map[editKind]int{}
-	for _, e := range edits {
-		counts[e.kind]++
+	want := []diffEdit{
+		{editKeep, "a"},
+		{editDel, "b"},
+		{editAdd, "x"},
+		{editKeep, "c"},
 	}
-	if counts[editKeep] != 2 {
-		t.Errorf("expected 2 keep edits, got %d", counts[editKeep])
+	got := diffLines(oldLines, newLines)
+	if len(got) != len(want) {
+		t.Fatalf("diffLines returned %d edits, want %d: %v", len(got), len(want), got)
 	}
-	if counts[editDel] != 1 {
-		t.Errorf("expected 1 delete edit, got %d", counts[editDel])
-	}
-	if counts[editAdd] != 1 {
-		t.Errorf("expected 1 add edit, got %d", counts[editAdd])
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("edit[%d] = %+v, want %+v", i, got[i], w)
+		}
 	}
 }
 
@@ -189,6 +196,12 @@ service:
 	if _, ok := exporters["otlp_http/dynatrace"]; !ok {
 		t.Error("otlp_http/dynatrace exporter missing from updated config")
 	}
+	if result.BackupPath == "" {
+		t.Error("expected non-empty BackupPath")
+	}
+	if _, err := os.Stat(result.BackupPath); err != nil {
+		t.Errorf("backup file not found: %v", err)
+	}
 }
 
 func TestPatchConfigFile_EmptyConfig(t *testing.T) {
@@ -213,10 +226,6 @@ func TestWriteConfig(t *testing.T) {
 	configPath := filepath.Join(dir, "config.yaml")
 	updated := []byte("original: true\nnew: field\n")
 
-	if err := os.WriteFile(configPath, []byte("original: true\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
 	result, err := writeConfig(configPath, updated)
 	if err != nil {
 		t.Fatalf("writeConfig error: %v", err)
@@ -228,5 +237,179 @@ func TestWriteConfig(t *testing.T) {
 	configData, _ := os.ReadFile(configPath)
 	if string(configData) != string(updated) {
 		t.Error("config file does not match updated data")
+	}
+}
+
+func TestWriteConfig_Error(t *testing.T) {
+	_, err := writeConfig("/nonexistent/dir/config.yaml", []byte("data"))
+	if err == nil {
+		t.Error("expected error writing to non-existent directory")
+	}
+}
+
+func TestBackupFile(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+	data := []byte("receivers:\n  otlp: {}\n")
+	if err := os.WriteFile(configPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	backupPath, err := backupFile(configPath, data)
+	if err != nil {
+		t.Fatalf("backupFile error: %v", err)
+	}
+	if backupPath == "" {
+		t.Error("expected non-empty backup path")
+	}
+	if _, err := os.Stat(backupPath); err != nil {
+		t.Errorf("backup file not found at %s: %v", backupPath, err)
+	}
+}
+
+func TestBackupFile_Error(t *testing.T) {
+	_, err := backupFile("/nonexistent/dir/config.yaml", []byte("data"))
+	if err == nil {
+		t.Error("expected error when backup directory does not exist")
+	}
+}
+
+func TestGeneratePipelineHint(t *testing.T) {
+	hint := GeneratePipelineHint()
+	if !strings.Contains(hint, "otlp_http/dynatrace") {
+		t.Errorf("pipeline hint missing exporter name: %s", hint)
+	}
+	if !strings.Contains(hint, "exporters") {
+		t.Errorf("pipeline hint missing 'exporters': %s", hint)
+	}
+}
+
+func TestGenerateFullInstructions(t *testing.T) {
+	instructions := GenerateFullInstructions("https://env.live.dynatrace.com/", "mytoken")
+	if !strings.Contains(instructions, "exporters:") {
+		t.Errorf("instructions missing exporters section header: %s", instructions)
+	}
+	if !strings.Contains(instructions, "otlp_http/dynatrace") {
+		t.Errorf("instructions missing exporter name: %s", instructions)
+	}
+	if !strings.Contains(instructions, "mytoken") {
+		t.Errorf("instructions missing token: %s", instructions)
+	}
+	if !strings.Contains(instructions, "https://env.live.dynatrace.com/api/v2/otlp") {
+		t.Errorf("instructions missing endpoint URL: %s", instructions)
+	}
+}
+
+func TestShowConfigDiff_NoChange(t *testing.T) {
+	data := []byte("receivers:\n  otlp: {}\n")
+	// Should not panic when inputs are identical.
+	showConfigDiff(data, data)
+}
+
+func TestShowConfigDiff_WithChanges(t *testing.T) {
+	orig := []byte("receivers:\n  otlp: {}\n")
+	updated := []byte("receivers:\n  otlp: {}\nexporters:\n  logging: {}\n")
+	// Should not panic.
+	showConfigDiff(orig, updated)
+}
+
+func TestMergeDynatraceExporter_InvalidPipelineValue(t *testing.T) {
+	// Pipeline value is a non-map type — should be skipped without panic.
+	cfg := map[string]interface{}{
+		"service": map[string]interface{}{
+			"pipelines": map[string]interface{}{
+				"traces": "not-a-map",
+			},
+		},
+	}
+	mergeDynatraceExporter(cfg, "https://env.dt.com", "tok")
+
+	exporters, ok := cfg["exporters"].(map[string]interface{})
+	if !ok {
+		t.Fatal("exporters key missing")
+	}
+	if _, ok := exporters["otlp_http/dynatrace"]; !ok {
+		t.Error("otlp_http/dynatrace exporter missing")
+	}
+}
+
+func TestMergeDynatraceExporter_NoPipelinesKey(t *testing.T) {
+	cfg := map[string]interface{}{
+		"service": map[string]interface{}{
+			"extensions": []interface{}{"health_check"},
+		},
+	}
+	// Should not panic when service has no pipelines key.
+	mergeDynatraceExporter(cfg, "https://env.dt.com", "tok")
+
+	if _, ok := cfg["exporters"]; !ok {
+		t.Error("exporters key should be created even without pipelines")
+	}
+}
+
+func TestMergeDynatraceExporter_PipelineWithNoExporters(t *testing.T) {
+	// Pipeline exists but has no exporters list yet.
+	cfg := map[string]interface{}{
+		"service": map[string]interface{}{
+			"pipelines": map[string]interface{}{
+				"traces": map[string]interface{}{
+					"receivers": []interface{}{"otlp"},
+				},
+			},
+		},
+	}
+	mergeDynatraceExporter(cfg, "https://env.dt.com", "tok")
+
+	exporters := mustPipelineExporters(t, cfg, "traces")
+	if len(exporters) != 1 || exporters[0] != "otlp_http/dynatrace" {
+		t.Errorf("unexpected exporters: %v", exporters)
+	}
+}
+
+func TestPatchConfigFile_NotFound(t *testing.T) {
+	_, err := PatchConfigFile("/nonexistent/dir/config.yaml", "https://env.dt.com", "tok")
+	if err == nil {
+		t.Error("expected error for non-existent config file")
+	}
+}
+
+func TestPatchConfigFile_InvalidYAML(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "bad.yaml")
+	if err := os.WriteFile(configPath, []byte(": : invalid: yaml: [[["), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := PatchConfigFile(configPath, "https://env.dt.com", "tok")
+	if err == nil {
+		t.Error("expected error for invalid YAML")
+	}
+}
+
+func TestUpdateOtelConfig_DryRun(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+	initial := `receivers:
+  otlp:
+    protocols:
+      grpc: {}
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [logging]
+`
+	if err := os.WriteFile(configPath, []byte(initial), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := UpdateOtelConfig(configPath, "https://env.live.dynatrace.com", "mytoken", "", true)
+	if err != nil {
+		t.Fatalf("UpdateOtelConfig dry-run error: %v", err)
+	}
+
+	// In dry-run mode the config must not be modified.
+	data, _ := os.ReadFile(configPath)
+	if string(data) != initial {
+		t.Error("config file was modified during dry-run")
 	}
 }
