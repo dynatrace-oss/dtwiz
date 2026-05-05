@@ -3,7 +3,12 @@
 ## 1. Test Infrastructure (`test/integration/`)
 
 - [x] 1.1 Create `test/integration/setup.go` — `SetupIntegration(t *testing.T)` function that validates `TEST_DT_ENVIRONMENT`, `TEST_DT_ACCESS_TOKEN`, and `TEST_DT_PLATFORM_TOKEN` are set (calls `t.Fatal` if not), constructs a `*client.Client` via `client.New()` with URLs derived from `TEST_DT_ENVIRONMENT` and tokens from `TEST_DT_ACCESS_TOKEN`/`TEST_DT_PLATFORM_TOKEN`, generates unique test ID `dtwiz-test-{unix-ts}-{random}` using `crypto/rand`, returns a `TestEnv` struct with client, test ID, temp dir (`t.TempDir()`), and raw credential values (`EnvURL`, `AccessToken`, `PlatformToken`)
-- [x] 1.2 Create `test/integration/grail_client.go` — `WaitForTraces(ctx context.Context, client *client.Client, serviceName string, opts ...PollOption) ([]TraceRecord, error)` that polls the DQL endpoint via `PlatformClient.HTTP()` (resty, no raw token exposure) filtering by `service.name` with `from:now()-30m` scope, default 60s timeout / 2s interval, configurable via `WithTimeout`/`WithInterval` poll options; `RequireTraces` wrapper that fatals on error or empty result
+- [x] 1.2 Create `test/integration/grail/` sub-package with:
+  - `types.go` — `TraceRecord`, `PollOption`, `pollConfig`, `grailResponse`, path constants (`grailExecutePath`, `grailPollPath`), `WithTimeout`/`WithInterval` options
+  - `execute.go` — `executeDQL`: POST to `/query:execute`; handles `SUCCEEDED` (inline records) and `RUNNING` (delegates to `pollDQL`)
+  - `poll.go` — `pollDQL`: GET `/query:poll?request-token=<token>` up to 10 retries / 1s interval until `SUCCEEDED`
+  - `helpers.go` — `checkDQLStatus`, `sleepOrCancel`, `tracesByServiceQuery` (builds `smartscapeNodes "SERVICE", from: -30m, to: now() | filter name == "<svcName>"`)
+  - `wait.go` — `WaitForTraces(ctx, *client.Client, serviceName, ...PollOption)` outer poll loop (default 60s / 2s); `RequireTraces` wrapper that fatals on error or empty result
 
 ## 2. Fixture App (`test/fixtures/`)
 
@@ -13,7 +18,7 @@
 ## 3. Python E2E Test (`test/e2e/`)
 
 - [x] 3.1 Create helpers in `test/integration/` (no build tag — pure function definitions, compile harmlessly): `fixture.go` (`PrepareFixture`, `CopyFixture`), `http.go` (`TriggerRequest`, `TriggerRequestOnPort` — uses `http.Client{Timeout: 10s}` with `NewRequestWithContext`), `process.go` (`ServiceName`, `WaitForPort`, `RegisterPortCleanup`, `KillProcessOnPort`)
-- [x] 3.2 Create `test/e2e/otel_test.go` with `//go:build integration` — `TestOTelAutoInstrumentation` with table-driven `otelCase` struct; for Python: checks `python3` available (skip if not), calls `SetupIntegration`, copies flask fixture via `PrepareFixture`, calls `installer.InstallOtelPython` directly (installs packages AND starts the instrumented process), waits for port via `WaitForPort`, sends request via `TriggerRequestOnPort`, calls `RequireTraces` (180s timeout / 5s interval override), logs trace count
+- [x] 3.2 Create `test/e2e/otel_test.go` with `//go:build integration` — `TestOTelAutoInstrumentation` with table-driven `otelCase` struct; for Python: checks `python3` available (skip if not), calls `SetupIntegration`, copies flask fixture via `PrepareFixture`, sets `installer.AutoConfirm = true` to suppress interactive prompts, calls `installer.InstallOtelPython` directly (installs packages AND starts the instrumented process), waits for port via `WaitForPort`, sends request via `TriggerRequestOnPort`, calls `grail.RequireTraces` (180s timeout / 20s interval override), logs trace count
 
 ## 4. makefile & Gitignore
 

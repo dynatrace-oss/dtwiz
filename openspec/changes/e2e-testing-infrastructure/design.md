@@ -88,19 +88,33 @@ Missing credentials produce a clear, actionable error to stderr — no silent sk
 
 ### 5. DQL polling for trace verification
 
-**Choice:** Query the DT Grail/DQL API (`/platform/storage/query/v1/query:execute`) for traces matching the unique test service name. Poll with configurable interval and timeout.
+**Choice:** Query the DT Grail/DQL API for traces matching the unique test service name. Implemented as a dedicated `test/integration/grail/` sub-package. Poll with a configurable interval and timeout.
 
-The DQL query uses `from:now()-30m` (explicit time bound) and filters by `service.name` only — no `fields` projection. Projecting non-existent field names (e.g. `span_id`, `trace_id`) causes DQL to return 0 records even when the filter matches, so the query is kept minimal. DQL requests are made via `PlatformClient.HTTP()` (the existing resty client) so the Bearer token stays encapsulated and resty's retry logic applies.
+**DQL query format:** Uses a `smartscapeNodes` entity-level query rather than a span-level `fetch spans` query:
 
-Default poll config is 60s timeout / 2s interval. The Python E2E test overrides to 180s / 5s to account for OTel pipeline latency.
+`smartscapeNodes "SERVICE", from: -30m, to: now() | filter name == "<svcName>"`
+
+This queries entity nodes by service name within a 30-minute window. Filtering by `service.name` at the span level caused DQL to return 0 records even when spans were ingested; the entity-level query proved reliable.
+
+**Async execute/poll flow:** The DQL API returns a `RUNNING` state with a `requestToken` for long-running queries instead of immediate results. The `grail/` package implements a two-step flow:
+
+1. POST to `/platform/storage/query/v1/query:execute` — returns either `SUCCEEDED` (records inline) or `RUNNING` (+ `requestToken`)
+2. If `RUNNING`, poll GET `/platform/storage/query/v1/query:poll?request-token=<token>` until `SUCCEEDED` (up to `dqlPollMaxRetries=10` attempts, 1s between retries)
+
+The outer `WaitForTraces` loop then re-runs the full execute call at the configured interval until traces appear or the timeout is exceeded.
+
+DQL requests are made via `PlatformClient.HTTP()` (resty) so the Bearer token stays encapsulated and resty's retry logic applies.
+
+Default poll config is 60s timeout / 2s interval. The Python E2E test overrides to 180s / 20s to account for OTel pipeline latency and ingestion time.
 
 **Alternatives considered:**
 
 - *Local-only verification (check installed packages, env vars)* — misses the most important assertion: did traces actually reach Dynatrace?
 - *Classic API v2 metrics/traces endpoints* — DQL is the current standard for Grail-based environments.
 - *Exposing `PlatformClient.AuthHeader()` for raw `net/http` requests* — leaks the token as a plain string; using resty via `.HTTP()` keeps auth encapsulated and gets retry logic for free.
+- *Single-file `grail_client.go`* — the async execute/poll logic, types, and helpers warranted a dedicated sub-package to keep concerns separated.
 
-**Rationale:** The whole point of E2E is verifying the data pipeline end-to-end. The PlatformClient already has Bearer auth and the `.apps.` URL needed for DQL. Polling handles ingestion latency naturally.
+**Rationale:** The whole point of E2E is verifying the data pipeline end-to-end. The PlatformClient already has Bearer auth and the `.apps.` URL needed for DQL. The entity-level `smartscapeNodes` query proved more reliable than span-level queries. Polling handles ingestion latency naturally.
 
 ### 6. Unique service naming: `dtwiz-test-{unix-ts}-{random}`
 

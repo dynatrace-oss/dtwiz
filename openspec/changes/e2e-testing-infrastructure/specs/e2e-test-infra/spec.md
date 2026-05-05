@@ -141,7 +141,13 @@ E2E tests SHALL use `t.TempDir()` for all fixture app directories. No test artif
 
 ### Requirement: DQL trace query
 
-The test infrastructure SHALL provide a helper function that queries the Dynatrace DQL API for traces matching a given service name. The function SHALL use the `PlatformClient` from `pkg/client/`.
+The test infrastructure SHALL provide a helper function that queries the Dynatrace DQL API for service entities matching a given service name. The function SHALL use the `PlatformClient` from `pkg/client/` via its resty accessor (`.HTTP()`), keeping the Bearer token encapsulated.
+
+The DQL query SHALL use an entity-level `smartscapeNodes` query:
+
+`smartscapeNodes "SERVICE", from: -30m, to: now() | filter name == "<svcName>"`
+
+This queries service entities within a 30-minute window filtered by name. Span-level `fetch spans` queries are not used — they proved unreliable (returned 0 records even when matching spans were ingested).
 
 #### Scenario: Traces found
 
@@ -152,6 +158,30 @@ The test infrastructure SHALL provide a helper function that queries the Dynatra
 
 - **WHEN** the helper queries DQL with a service name that has no traces
 - **THEN** it returns an empty result set without error
+
+### Requirement: Async DQL execution
+
+The DQL execute endpoint (`/platform/storage/query/v1/query:execute`) MAY return a `RUNNING` state with a `requestToken` instead of immediate results. The helper SHALL handle this two-step flow:
+
+1. POST to `/query:execute` — if response state is `SUCCEEDED`, return records inline
+2. If state is `RUNNING`, poll GET `/platform/storage/query/v1/query:poll?request-token=<token>` until state becomes `SUCCEEDED`, up to a fixed retry limit (10 retries, 1s apart)
+
+Any other state SHALL be treated as an error.
+
+#### Scenario: Query completes immediately
+
+- **WHEN** the DQL execute endpoint returns `SUCCEEDED` with records
+- **THEN** the helper returns those records without polling
+
+#### Scenario: Query deferred (RUNNING state)
+
+- **WHEN** the DQL execute endpoint returns `RUNNING` with a `requestToken`
+- **THEN** the helper polls the poll endpoint until `SUCCEEDED` and returns the records
+
+#### Scenario: Poll retries exceeded
+
+- **WHEN** the poll endpoint returns `RUNNING` for all retry attempts
+- **THEN** the helper returns an error indicating the retry limit was exceeded
 
 ### Requirement: Polling with timeout
 
@@ -169,9 +199,9 @@ The trace verification helper SHALL poll the DQL API at a configurable interval 
 
 ### Requirement: DQL query scope
 
-The DQL query SHALL filter traces by `service.name` attribute matching the unique test identifier. The query SHALL target the `dt.entity.spans` or equivalent Grail table.
+The DQL query SHALL filter service entities by name matching the unique test identifier. The query targets the `smartscapeNodes "SERVICE"` entity source with a 30-minute look-back window.
 
 #### Scenario: Query specificity
 
 - **WHEN** multiple services are sending traces to the same tenant
-- **THEN** the query returns only traces matching the exact test service name
+- **THEN** the query returns only entities matching the exact test service name
