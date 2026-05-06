@@ -554,3 +554,76 @@ func TestInstallOtelJava_AutoBuildFails(t *testing.T) {
 		}
 	})
 }
+
+// ── javaAgentPath tests ───────────────────────────────────────────────────────
+
+func TestJavaAgentPath_UsesHomeDirectory(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
+
+	path, err := javaAgentPath()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	expectedSubpath := filepath.Join(".opentelemetry", "java", "opentelemetry-javaagent.jar")
+	if !strings.HasSuffix(path, expectedSubpath) {
+		t.Fatalf("expected path to end with %q, got %q", expectedSubpath, path)
+	}
+	if !strings.Contains(path, tmpHome) {
+		t.Fatalf("expected path to contain home dir %q, got %q", tmpHome, path)
+	}
+}
+
+// ── buildInstrumentedCmd tests ────────────────────────────────────────────────
+
+func TestBuildInstrumentedCmd_WithEnvVars(t *testing.T) {
+	ep := JavaEntrypoint{
+		Command:     "java -jar app.jar",
+		Description: "test app",
+	}
+	agentPath := "/path/to/agent.jar"
+	projectDir := "/path/to/project"
+	envVars := map[string]string{
+		"CUSTOM_VAR":     "custom_value",
+		"ANOTHER_VAR":    "another_value",
+		"OTEL_EXPORTER":  "should_be_overridden",
+	}
+
+	cmd := buildInstrumentedCmd(ep, agentPath, projectDir, envVars)
+	if cmd == nil {
+		t.Fatal("expected non-nil *exec.Cmd")
+	}
+	if !strings.Contains(cmd.String(), "agent.jar") {
+		t.Fatalf("expected agent path in command, got: %s", cmd.String())
+	}
+
+	// Check that custom env vars are present
+	found := false
+	for _, env := range cmd.Env {
+		if strings.Contains(env, "CUSTOM_VAR=custom_value") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected custom env var in command env, got: %v", cmd.Env)
+	}
+}
+
+func TestBuildInstrumentedCmd_JavaPrefixCommand(t *testing.T) {
+	ep := JavaEntrypoint{
+		Command:     "java -Xmx512m -jar my-app.jar --arg1 value1",
+		Description: "test",
+	}
+	agentPath := "/path/to/agent.jar"
+	projectDir := "/tmp"
+
+	cmd := buildInstrumentedCmd(ep, agentPath, projectDir, nil)
+	if cmd == nil {
+		t.Fatal("expected non-nil *exec.Cmd")
+	}
+	if cmd.Path != "/usr/bin/java" && !strings.HasSuffix(cmd.Path, "java.exe") && cmd.Path != "java" {
+		t.Fatalf("expected command to be java, got: %s", cmd.Path)
+	}
+}

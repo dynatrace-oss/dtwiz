@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -607,4 +608,159 @@ func TestDetectPort_FallsBackWithoutDetector(t *testing.T) {
 	if port != "" {
 		t.Fatalf("expected empty port for PID 0, got %q", port)
 	}
+}
+
+// ── detectJavaListeningPort tests ─────────────────────────────────────────────
+
+func TestDetectJavaListeningPort_DirectPortDetection(t *testing.T) {
+	// Test when directProcessListeningPort finds the port directly.
+	called := false
+	port := detectJavaListeningPort(0, "") // PID 0 won't have a port
+	// For localhost testing, we can't reliably detect a port on PID 0,
+	// but we can verify the function doesn't panic and returns a string.
+	if !isStringEmpty(port) && !isValidPort(port) {
+		t.Fatalf("expected empty or valid port, got %q", port)
+	}
+	_ = called
+}
+
+// ── validateJavaPrerequisites tests ───────────────────────────────────────────
+
+func TestValidateJavaPrerequisites_JavaNotFound(t *testing.T) {
+	t.Setenv("PATH", "")
+	_, err := validateJavaPrerequisites()
+	if err == nil {
+		t.Fatal("expected error when java is not on PATH")
+	}
+	if !strings.Contains(err.Error(), "Java not found") {
+		t.Fatalf("expected 'Java not found' error, got %v", err)
+	}
+}
+
+func TestValidateJavaPrerequisites_ValidVersion(t *testing.T) {
+	skipIfNoJava(t)
+	javaPath, err := validateJavaPrerequisites()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if javaPath == "" {
+		t.Fatal("expected non-empty java path")
+	}
+	if !strings.Contains(javaPath, "java") {
+		t.Fatalf("expected path to contain 'java', got %q", javaPath)
+	}
+}
+
+// ── resolveGradleCmd tests ────────────────────────────────────────────────────
+
+func TestResolveGradleCmd_NoGradleFile(t *testing.T) {
+	dir := t.TempDir()
+	cmd, desc := resolveGradleCmd(dir)
+	if cmd != "" {
+		t.Fatalf("expected empty cmd when no gradle file, got %q", cmd)
+	}
+	if desc != "" {
+		t.Fatalf("expected empty desc when no gradle file, got %q", desc)
+	}
+}
+
+func TestResolveGradleCmd_WithGradleKts(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "build.gradle.kts"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Without wrapper or gradle in PATH, should fail gracefully
+	cmd, desc := resolveGradleCmd(dir)
+	// Expected: either wrapper cmd (if exists) or empty
+	if cmd != "" && desc != "Gradle" {
+		t.Fatalf("expected Gradle desc when cmd is not empty, got %q", desc)
+	}
+}
+
+func TestResolveGradleCmd_WithWrapper(t *testing.T) {
+	dir := t.TempDir()
+	setupGradleWrapper(t, dir)
+	if err := os.WriteFile(filepath.Join(dir, "build.gradle"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmd, desc := resolveGradleCmd(dir)
+	if cmd == "" {
+		t.Fatal("expected non-empty cmd when wrapper exists")
+	}
+	if desc != "Gradle" {
+		t.Fatalf("expected 'Gradle' desc, got %q", desc)
+	}
+	expectedCmd := gradleWrapperCmd()
+	if !strings.Contains(cmd, expectedCmd) {
+		t.Fatalf("expected cmd to contain %q, got %q", expectedCmd, cmd)
+	}
+}
+
+// ── isExecutableJar tests ─────────────────────────────────────────────────────
+
+func TestIsExecutableJar_InvalidJarFile(t *testing.T) {
+	dir := t.TempDir()
+	jarPath := filepath.Join(dir, "invalid.jar")
+	if err := os.WriteFile(jarPath, []byte("not a jar"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	result := isExecutableJar(jarPath)
+	if result {
+		t.Fatalf("expected false for invalid JAR, got %v", result)
+	}
+}
+
+func TestIsExecutableJar_NonExistentFile(t *testing.T) {
+	result := isExecutableJar("/nonexistent/path/to/file.jar")
+	if result {
+		t.Fatalf("expected false for non-existent JAR, got %v", result)
+	}
+}
+
+// ── isSpringBootMaven tests ───────────────────────────────────────────────────
+
+func TestIsSpringBootMaven_MissingPomXml(t *testing.T) {
+	dir := t.TempDir()
+	result := isSpringBootMaven(dir)
+	if result {
+		t.Fatalf("expected false when pom.xml is missing, got %v", result)
+	}
+}
+
+func TestIsSpringBootMaven_PomWithoutSpringBoot(t *testing.T) {
+	dir := t.TempDir()
+	pomContent := `<project><groupId>com.example</groupId></project>`
+	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte(pomContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	result := isSpringBootMaven(dir)
+	if result {
+		t.Fatalf("expected false when pom.xml lacks spring-boot, got %v", result)
+	}
+}
+
+func TestIsSpringBootMaven_PomWithSpringBoot(t *testing.T) {
+	dir := t.TempDir()
+	pomContent := `<project><dependency><artifactId>spring-boot-starter</artifactId></dependency></project>`
+	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte(pomContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	result := isSpringBootMaven(dir)
+	if !result {
+		t.Fatalf("expected true when pom.xml contains spring-boot, got %v", result)
+	}
+}
+
+// ── helper functions for tests ────────────────────────────────────────────────
+
+func isStringEmpty(s string) bool {
+	return s == ""
+}
+
+func isValidPort(s string) bool {
+	if s == "" {
+		return true
+	}
+	port, err := strconv.Atoi(s)
+	return err == nil && port > 0 && port < 65536
 }

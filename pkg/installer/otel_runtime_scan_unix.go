@@ -107,6 +107,9 @@ func javaDescendantPort(pid int, projectDir string) string {
 		if isBuildToolJVM(fields[1]) {
 			continue
 		}
+		if projectDir != "" && !isUnderDir(fields[1], projectDir) {
+			continue
+		}
 		if port := detectProcessListeningPort(jvmPID); port != "" {
 			logger.Debug("javaDescendantPort: port found", "wrapper_pid", pid, "jvm_pid", jvmPID, "class", fields[1], "port", port)
 			return port

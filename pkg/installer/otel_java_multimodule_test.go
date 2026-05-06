@@ -3,6 +3,7 @@ package installer
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -176,5 +177,107 @@ func TestDetectMultiModule_NilForSingleModule(t *testing.T) {
 	}
 	if detectMultiModule(dir) != nil {
 		t.Fatal("expected nil for single-module project")
+	}
+}
+
+// ── parseMavenModules tests ───────────────────────────────────────────────────
+
+func TestParseMavenModules_InvalidPath(t *testing.T) {
+	result, err := parseMavenModules("/nonexistent/path")
+	if err == nil {
+		t.Fatal("expected error for nonexistent path")
+	}
+	if len(result) != 0 {
+		t.Fatalf("expected empty result on error, got %v", result)
+	}
+}
+
+func TestParseMavenModules_EmptyModules(t *testing.T) {
+	dir := t.TempDir()
+	// Create pom.xml with no modules
+	pomContent := `<?xml version="1.0"?><project><modelVersion>4.0.0</modelVersion></project>`
+	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte(pomContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := parseMavenModules(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Fatalf("expected empty result for pom with no modules, got %v", result)
+	}
+}
+
+// ── mavenBuildCommand tests ───────────────────────────────────────────────────
+
+func TestMavenBuildCommand_NoPomXml(t *testing.T) {
+	dir := t.TempDir()
+	cmd := mavenBuildCommand(dir)
+	if cmd != "" {
+		t.Fatalf("expected empty cmd when pom.xml missing, got %q", cmd)
+	}
+}
+
+func TestMavenBuildCommand_WithMvnWrapper(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte("<project/>"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "mvnw"), []byte(""), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "mvnw.cmd"), []byte(""), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, ".mvn", "wrapper"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".mvn", "wrapper", "maven-wrapper.jar"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := mavenBuildCommand(dir)
+	if cmd == "" {
+		t.Fatal("expected non-empty cmd when wrapper exists")
+	}
+	if !strings.Contains(cmd, "clean package") {
+		t.Fatalf("expected cmd to contain 'clean package', got %q", cmd)
+	}
+}
+
+// ── gradleBuildCommand tests ──────────────────────────────────────────────────
+
+func TestGradleBuildCommand_NoBuildFile(t *testing.T) {
+	dir := t.TempDir()
+	cmd := gradleBuildCommand(dir)
+	if cmd != "" {
+		t.Fatalf("expected empty cmd when build file missing, got %q", cmd)
+	}
+}
+
+func TestGradleBuildCommand_WithGradlew(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "build.gradle"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "gradlew"), []byte(""), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "gradlew.bat"), []byte(""), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "gradle", "wrapper"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "gradle", "wrapper", "gradle-wrapper.jar"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := gradleBuildCommand(dir)
+	if cmd == "" {
+		t.Fatal("expected non-empty cmd when gradlew exists")
+	}
+	if !strings.Contains(cmd, "build") {
+		t.Fatalf("expected cmd to contain 'build', got %q", cmd)
 	}
 }
