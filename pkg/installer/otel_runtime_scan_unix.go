@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
@@ -67,6 +69,19 @@ func detectProcesses(filterTerm string, excludeTerms []string) []DetectedProcess
 	}
 	logger.Debug("process scan complete", "filter", filterTerm, "matched", len(processes))
 	return processes
+}
+
+// waitForProcessDeath polls until the process with pid is gone or the timeout
+// elapses. It uses kill(pid, 0)
+func waitForProcessDeath(pid int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if err := syscall.Kill(pid, 0); err != nil {
+			return true
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return false
 }
 
 func lookupProcessWorkingDirectory(pid int) string {

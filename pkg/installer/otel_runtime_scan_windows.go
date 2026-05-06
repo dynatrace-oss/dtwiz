@@ -7,9 +7,27 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
+
+// waitForProcessDeath polls until the process is gone or the timeout elapses.
+// On Windows, killAndWaitProcess is used instead of SIGINT, so this is only
+// called in the SIGKILL fallback path (which should not be reached on Windows).
+// The implementation uses tasklist to check whether the PID is still present.
+func waitForProcessDeath(pid int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	pidStr := strconv.Itoa(pid)
+	for time.Now().Before(deadline) {
+		out, err := exec.Command("tasklist", "/FI", "PID eq "+pidStr, "/NH").Output()
+		if err != nil || !strings.Contains(string(out), pidStr) {
+			return true
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return false
+}
 
 // winProcessQuery runs a Get-CimInstance Win32_Process query on Windows.
 // whereClause is the PowerShell Where-Object expression and fieldsExpr

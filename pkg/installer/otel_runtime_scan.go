@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
@@ -238,7 +239,14 @@ func stopProcesses(pids []int) {
 		} else {
 			err = process.Signal(os.Interrupt)
 			if err == nil {
-				_, _ = process.Wait()
+				// proc.Wait() only works for child processes; for orphaned
+				// processes (started by a previous dtwiz run) we poll via
+				// kill(pid,0) until the OS reports the PID is gone.
+				if !waitForProcessDeath(pid, 30*time.Second) {
+					// Graceful shutdown timed out — escalate to SIGKILL.
+					_ = process.Kill()
+					waitForProcessDeath(pid, 5*time.Second)
+				}
 			}
 		}
 		if err != nil {
