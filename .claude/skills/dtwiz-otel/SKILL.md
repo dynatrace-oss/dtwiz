@@ -1,3 +1,8 @@
+---
+name: "dtwiz-otel"
+description: "Guidance for implementing OpenTelemetry auto-instrumentation for various runtimes in dtwiz"
+---
+
 # OTel Instrumentation Developer
 
 You are assisting with development on **dtwiz**'s OpenTelemetry support. This means downloading the OTel Collector binary, auto-instrumenting one or more running apps (Java, Python, Node.js, Go), and watching Dynatrace for ingested data.

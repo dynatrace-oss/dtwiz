@@ -1,3 +1,8 @@
+---
+name: process-detection
+description: "How dtwiz discovers, identifies, and correlates running OS processes to project directories across Unix and Windows"
+---
+
 # Running Process Detection
 
 This skill covers how dtwiz discovers, identifies, and correlates running OS processes to project directories. Process detection is the foundation for auto-instrumentation — it answers "what's running and where does it live?".
