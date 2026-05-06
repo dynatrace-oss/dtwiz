@@ -6,6 +6,7 @@ import (
 )
 
 var enabled bool
+var debugMode bool
 var verbosityLevel int
 
 // Init configures structured logging. Writes to stderr.
@@ -14,6 +15,7 @@ var verbosityLevel int
 //   - --debug: shows both Verbose and Debug messages (superset of -v)
 func Init(debug bool, verbosity int) {
 	verbosityLevel = verbosity
+	debugMode = debug
 	if debug && verbosityLevel < 1 {
 		verbosityLevel = 1
 	}
@@ -30,6 +32,11 @@ func Init(debug bool, verbosity int) {
 
 func Enabled() bool {
 	return enabled
+}
+
+// IsDebug returns true when --debug was passed.
+func IsDebug() bool {
+	return debugMode
 }
 
 // Verbosity returns the current verbosity level (0 = off, 1 = verbose+).

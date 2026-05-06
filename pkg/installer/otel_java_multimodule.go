@@ -196,8 +196,10 @@ func (p *JavaInstrumentationPlan) executeMultiModule() error {
 			cmd = exec.Command(fields[0], fields[1:]...)
 		}
 		cmd.Dir = p.Project.Path
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		if logger.IsDebug() {
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+		}
 		if err := cmd.Run(); err != nil {
 			display.PrintStatusLine("error", "build failed: "+err.Error(), display.ColorError)
 			return fmt.Errorf("build failed: %w", err)
