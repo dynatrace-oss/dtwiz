@@ -89,6 +89,66 @@ Before running any block of commands or applying changes, always show the user a
 
 **Reduce to the max:** Surface only what the user needs to stay informed. Omit internal details, progress spam, and redundant labels. Every line of output must earn its place — if it doesn't help the user understand what happened or what went wrong, cut it.
 
+## Development practices
+
+### Core principles
+
+- Write idiomatic Go (effective Go, standard project layout)
+- **Cross-platform first:** always handle Unix (Linux/macOS) and Windows differences
+- Test everything: unit tests and integration tests
+- Use OS-specific file suffixes and build tags: `_windows.go`, `_linux.go`, `_darwin.go` are automatically recognized by Go; for "non-Windows" logic, use `_unix.go` with an explicit `//go:build !windows` constraint
+
+### Cross-platform development
+
+**File paths:**
+
+```go
+// ALWAYS use filepath.Join for constructing paths
+agentPath := filepath.Join(installDir, "opentelemetry-javaagent.jar")
+
+// Use os.UserHomeDir() or os.UserConfigDir() for user-specific locations
+configDir, err := os.UserConfigDir()
+
+// Environment variable path separator
+func envSeparator() string {
+    if runtime.GOOS == "windows" {
+        return ";"
+    }
+    return ":"
+}
+```
+
+**File permissions:**
+
+```go
+// Windows ignores Unix permissions — only chmod on Unix
+if runtime.GOOS != "windows" {
+    os.Chmod(scriptPath, 0755)
+}
+```
+
+**Process execution & detection:**
+
+- Unix: parse `ps` output
+- Windows: use WMI (via PowerShell)
+- Separate non-trivial platform divergence into build-tagged files (e.g., `_unix.go` with `//go:build !windows`, `_windows.go` with `//go:build windows`)
+
+### Error handling
+
+- Wrap with context: `fmt.Errorf("failed to do X: %w", err)`
+- Include platform info on failures: `runtime.GOOS`, `runtime.GOARCH`
+- Distinguish user errors (bad config, missing env var) from system errors (network, permissions)
+
+### Code quality
+
+- Run `golangci-lint` with the existing configuration (see `.golangci.yml`)
+- No `//nolint` without justification comment
+- Never shell out unnecessarily — use Go stdlib or libraries
+- Validate all user inputs (endpoints, paths, service names)
+- Use `context.Context` propagation throughout
+- Handle SIGINT/SIGTERM gracefully for long-running operations
+- Use `logger.Debug()` for diagnostic log lines that help with troubleshooting (process detection, API calls, config generation, etc.)
+
 ## Build & release
 
 ```sh
