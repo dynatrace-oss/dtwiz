@@ -101,6 +101,7 @@ Before running any block of commands or applying changes, always show the user a
 ### Cross-platform development
 
 **File paths:**
+
 ```go
 // ALWAYS use filepath.Join for constructing paths
 agentPath := filepath.Join(installDir, "opentelemetry-javaagent.jar")
@@ -118,6 +119,7 @@ func envSeparator() string {
 ```
 
 **File permissions:**
+
 ```go
 // Windows ignores Unix permissions — only chmod on Unix
 if runtime.GOOS != "windows" {
@@ -126,6 +128,7 @@ if runtime.GOOS != "windows" {
 ```
 
 **Process execution & detection:**
+
 - Unix: parse `ps` output
 - Windows: use WMI (via PowerShell)
 - Use build-tag files (`_unix.go` / `_windows.go`) for non-trivial platform divergence
@@ -138,8 +141,7 @@ if runtime.GOOS != "windows" {
 
 ### Code quality
 
-- Run `golangci-lint` with `govet`, `staticcheck`, `errcheck`, `gosec`
-- Enforce `gofumpt` formatting
+- Run `golangci-lint` with the existing configuration (see `.golangci.yml`)
 - No `//nolint` without justification comment
 - Never shell out unnecessarily — use Go stdlib or libraries
 - Validate all user inputs (endpoints, paths, service names)

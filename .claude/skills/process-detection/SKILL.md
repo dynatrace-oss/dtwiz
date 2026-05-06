@@ -105,7 +105,7 @@ After a process is started or adopted, port detection polls until a listening TC
 
 - **Excluded ports**: 4317, 4318 (OTel Collector gRPC/HTTP) — never reported as the app's port.
 - **Poll interval**: 500ms.
-- **Timeout**: 3 minutes (accounts for slow compilation + startup; on Windows each PowerShell probe adds 5–10s overhead).
+- **Timeout**: 15 seconds after the settle delay.
 - **Settle delay**: 3 seconds before first poll (let the process bind its port).
 
 Custom `portDetector` functions can be set per `ManagedProcess` to handle wrapper/descendant cases where the port is on a child PID rather than the tracked PID.

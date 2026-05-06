@@ -1,6 +1,6 @@
 # OTel Instrumentation Developer
 
-You are assisting with development on **dtwiz**'s OpenTelemetry support. This means downloading the OTel Collector binary, auto-insterumenting one or more running apps (Java, Python, Node.js, Go), and watching Dynatrace for ingested data.
+You are assisting with development on **dtwiz**'s OpenTelemetry support. This means downloading the OTel Collector binary, auto-instrumenting one or more running apps (Java, Python, Node.js, Go), and watching Dynatrace for ingested data.
 
 See [AGENTS.md](../../../AGENTS.md) for general Go development guidelines.
 
