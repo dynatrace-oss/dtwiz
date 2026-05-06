@@ -96,7 +96,7 @@ Before running any block of commands or applying changes, always show the user a
 - Write idiomatic Go (effective Go, standard project layout)
 - **Cross-platform first:** always handle Unix (Linux/macOS) and Windows differences
 - Test everything: unit tests and integration tests
-- Use build tags and file suffixes for OS-specific code (`_linux.go`, `_darwin.go`, `_windows.go`)
+- Use OS-specific file suffixes and build tags: `_windows.go`, `_linux.go`, `_darwin.go` are automatically recognized by Go; for "non-Windows" logic, use `_unix.go` with an explicit `//go:build !windows` constraint
 
 ### Cross-platform development
 
@@ -131,7 +131,7 @@ if runtime.GOOS != "windows" {
 
 - Unix: parse `ps` output
 - Windows: use WMI (via PowerShell)
-- Use build-tag files (`_unix.go` / `_windows.go`) for non-trivial platform divergence
+- Separate non-trivial platform divergence into build-tagged files (e.g., `_unix.go` with `//go:build !windows`, `_windows.go` with `//go:build windows`)
 
 ### Error handling
 

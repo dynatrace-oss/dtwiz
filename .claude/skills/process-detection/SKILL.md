@@ -119,7 +119,7 @@ Custom `portDetector` functions can be set per `ManagedProcess` to handle wrappe
 ## Key Principles
 
 1. **Command line is the universal fallback.** When process tree relationships aren't available, substring matching on the full command line correlates processes to projects.
-2. **Platform divergence is isolated in build-tagged files.** Shared logic calls platform-specific functions defined in `_unix.go` / `_windows.go` files.
+2. **Platform divergence is isolated in build-tagged files.** Shared logic calls platform-specific functions defined in build-constrained files (e.g., `_unix.go` with `//go:build !windows`, `_windows.go` with `//go:build windows`).
 3. **PowerShell is expensive.** Every Windows detection call pays PowerShell startup overhead. Batch queries where possible (single `Get-CimInstance` call with `Where-Object` instead of per-PID queries).
 4. **Exclude noise early.** Filter terms and exclude terms prevent false matches from tooling processes (package managers, build daemons, dtwiz itself).
 5. **Two-signal correlation.** Matching uses both working directory and command-line content — either is sufficient, both together increase confidence.
