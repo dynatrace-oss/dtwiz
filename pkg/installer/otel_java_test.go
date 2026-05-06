@@ -585,9 +585,9 @@ func TestBuildInstrumentedCmd_WithEnvVars(t *testing.T) {
 	agentPath := "/path/to/agent.jar"
 	projectDir := "/path/to/project"
 	envVars := map[string]string{
-		"CUSTOM_VAR":     "custom_value",
-		"ANOTHER_VAR":    "another_value",
-		"OTEL_EXPORTER":  "should_be_overridden",
+		"CUSTOM_VAR":    "custom_value",
+		"ANOTHER_VAR":   "another_value",
+		"OTEL_EXPORTER": "should_be_overridden",
 	}
 
 	cmd := buildInstrumentedCmd(ep, agentPath, projectDir, envVars)
