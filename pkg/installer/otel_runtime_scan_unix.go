@@ -171,3 +171,23 @@ func jvmHasAgentLoaded(pid int, agentJAR string) bool {
 	}
 	return false
 }
+// detectChildListeningPort checks direct children of pid for an open TCP LISTEN port.
+// Used as a fallback when the main process delegates listening to a worker child.
+func detectChildListeningPort(pid int) string {
+	out, err := exec.Command("pgrep", "-P", strconv.Itoa(pid)).Output()
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		childPID, err := strconv.Atoi(strings.TrimSpace(line))
+		if err != nil || childPID == 0 {
+			continue
+		}
+		if port := detectProcessListeningPort(childPID); port != "" {
+			logger.Debug("port found on child process", "parent_pid", pid, "child_pid", childPID, "port", port)
+			return port
+		}
+	}
+	return ""
+}
+

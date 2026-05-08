@@ -126,42 +126,41 @@ The system SHALL use the existing `detectNodeEntrypoints` function to resolve th
 
 This behavior applies in both the standalone `dtwiz install otel-node` flow (via `DetectNodePlan`) and the combined `dtwiz install otel` flow (via `InstallOtelCollectorWithProject`).
 
-### Requirement: Project dependency prerequisite check
+### Requirement: Auto-install project dependencies
 
-Before launching, the system SHALL verify that the project's own `node_modules/` directory exists for regular and Next.js apps. If it is missing, the installer SHALL exit with a clear message pointing the user to the right install command. Nuxt is exempt from this check because it runs a pre-compiled `.output/server/index.mjs` that does not require the project's `node_modules/` at runtime.
+Before launching, the system SHALL automatically install the project's own `node_modules/` when it is absent for regular and Next.js apps. The installer calls `installNodeProjectDeps()`, which runs `npm ci` when `package-lock.json` is present, or `npm install` otherwise. When `node_modules/` already exists the call is a silent no-op. Nuxt is exempt because it runs a pre-compiled `.output/server/index.mjs` that does not require the project's `node_modules/` at runtime.
 
-#### Scenario: node_modules/ missing for regular app
+#### Scenario: node_modules/ missing for regular app — auto-installed
 
 - **GIVEN** a regular Node.js project is selected
 - **AND** the project directory does not contain a `node_modules/` subdirectory
 - **WHEN** `Execute()` prepares to launch
-- **THEN** it prints "Project dependencies are not installed in \<path\>"
-- **AND** it prints "Run '\<packageManager\> install' in that directory first, then re-run dtwiz." using the detected package manager (npm/yarn/pnpm)
-- **AND** it exits without creating `.otel/`, running `npm install`, or launching any process
+- **THEN** it prints "Installing project dependencies..."
+- **AND** `installNodeProjectDeps()` runs `npm ci` (if `package-lock.json` exists) or `npm install`
+- **AND** on success it prints "done." and execution continues normally
 
-#### Scenario: node_modules/ missing for Next.js app
-
-- **GIVEN** a Next.js project is selected
-- **AND** the project directory does not contain a `node_modules/` subdirectory
-- **WHEN** `Execute()` prepares to launch
-- **THEN** it prints "Project dependencies are not installed in \<path\>"
-- **AND** it prints "Run '\<packageManager\> install' in that directory first, then re-run dtwiz."
-- **AND** it exits without creating `.otel/`, running `npm install`, or launching any process
-
-#### Scenario: node_modules/ present — proceeds normally
+#### Scenario: node_modules/ missing and install fails
 
 - **GIVEN** a regular or Next.js project is selected
-- **AND** the project directory contains a `node_modules/` subdirectory
-- **WHEN** `Execute()` prepares to launch
-- **THEN** the prerequisite check passes and execution continues normally
+- **AND** the project directory does not contain a `node_modules/` subdirectory
+- **AND** `npm install` / `npm ci` exits non-zero
+- **WHEN** `Execute()` calls `installNodeProjectDeps()`
+- **THEN** it prints "failed." with the npm error output
+- **AND** it exits without creating `.otel/`, running `npm install` in `.otel/`, or launching any process
 
-#### Scenario: Nuxt skips node_modules/ check
+#### Scenario: node_modules/ already present — no-op
+
+- **GIVEN** a regular or Next.js project is selected
+- **AND** the project directory already contains a `node_modules/` subdirectory
+- **WHEN** `Execute()` calls `installNodeProjectDeps()`
+- **THEN** the function returns immediately without running npm
+- **AND** execution continues normally
+
+#### Scenario: Nuxt skips dependency install
 
 - **GIVEN** a Nuxt project is selected
-- **AND** the project directory does not contain a `node_modules/` subdirectory
-- **BUT** `.output/server/index.mjs` exists
 - **WHEN** `Execute()` prepares to launch
-- **THEN** the `node_modules/` check is NOT performed and execution continues to the Nuxt launch step
+- **THEN** `installNodeProjectDeps()` is NOT called and execution continues to the Nuxt launch step
 
 ### Requirement: Regular Node.js app launch
 
@@ -183,7 +182,37 @@ For non-Next.js projects, the system SHALL launch the app using `node --require 
 - **THEN** it is tracked via `StartManagedProcess()` with log file capture
 - **AND** `PrintProcessSummary()` reports port detection or crash status
 
-### Requirement: Next.js app launch
+### Requirement: Auto-build Next.js project when `.next/` is missing
+
+For Next.js projects, `next start` requires a production build in `.next/`. If `.next/` is absent when `Execute()` runs, the system SHALL automatically run `npm run build` via `runBuildScript()` before proceeding, using the same pattern as Nuxt. If the build script is absent or the build fails, the installer exits with a clear error. After a successful build, the presence of `.next/` is re-verified before continuing.
+
+#### Scenario: .next/ missing — auto-build triggered
+
+- **GIVEN** a Next.js project is selected
+- **AND** `.next/` does not exist
+- **AND** `package.json` contains a `"build"` script
+- **WHEN** `Execute()` prepares to launch
+- **THEN** it prints "Building Next.js project (npm run build)..."
+- **AND** runs `npm run build` via `runBuildScript()`
+- **AND** on success prints "done." and continues normally
+
+#### Scenario: .next/ missing — auto-build fails (no build script)
+
+- **GIVEN** a Next.js project is selected
+- **AND** `.next/` does not exist
+- **AND** `package.json` has no `"build"` script
+- **WHEN** `Execute()` calls `runBuildScript()`
+- **THEN** it prints "failed." with an error indicating to add a build script
+- **AND** exits without creating `.otel/` or launching any process
+
+#### Scenario: .next/ already exists — build skipped
+
+- **GIVEN** a Next.js project is selected
+- **AND** `.next/` already exists
+- **WHEN** `Execute()` prepares to launch
+- **THEN** `runBuildScript()` is NOT called and execution proceeds directly
+
+
 
 For Next.js projects, the system SHALL launch the app using `node .otel/next-otel-bootstrap.js start` with CWD set to the project root.
 
@@ -200,14 +229,41 @@ For Next.js projects, the system SHALL launch the app using `node .otel/next-ote
 
 For Nuxt projects, the system SHALL launch the Nitro server directly using `node --import .otel/nuxt-otel-bootstrap.mjs .output/server/index.mjs` with CWD set to the project root. The Nuxt CLI is not used because it spawns child processes that lose OTel registration.
 
-#### Scenario: Nuxt build output required
+#### Scenario: Nuxt build output required — auto-build triggered
 
 - **GIVEN** a Nuxt project is selected
+- **AND** `.output/server/index.mjs` does not exist
+- **AND** `package.json` contains a `"build"` script
 - **WHEN** `Execute()` prepares to launch
-- **THEN** it checks for `.output/server/index.mjs` (built Nitro output)
-- **AND** if not found, it prints an error indicating that Nuxt build output was not found at the expected path `.output/server/index.mjs`
-- **AND** it instructs the user to run `npx nuxt build` before re-running dtwiz
-- **AND** it exits without launching
+- **THEN** it prints "Building Nuxt project (npm run build)..."
+- **AND** runs `npm run build` via `buildNuxtProject()`
+- **AND** on success prints "done." and continues normally
+
+#### Scenario: Nuxt auto-build fails — no build script
+
+- **GIVEN** a Nuxt project is selected
+- **AND** `.output/server/index.mjs` does not exist
+- **AND** `package.json` has no `"build"` script
+- **WHEN** `Execute()` calls `buildNuxtProject()`
+- **THEN** it prints "failed." with an error indicating to add a build script or run `npx nuxt build` manually
+- **AND** exits without creating `.otel/` or launching any process
+
+#### Scenario: Nuxt auto-build fails — npm run build exits non-zero
+
+- **GIVEN** a Nuxt project is selected
+- **AND** `.output/server/index.mjs` does not exist
+- **AND** `package.json` contains a `"build"` script
+- **AND** `npm run build` exits with a non-zero code
+- **WHEN** `Execute()` calls `buildNuxtProject()`
+- **THEN** it prints "failed." with the npm error output
+- **AND** exits without creating `.otel/` or launching any process
+
+#### Scenario: Nuxt build output already exists — build skipped
+
+- **GIVEN** a Nuxt project is selected
+- **AND** `.output/server/index.mjs` already exists
+- **WHEN** `Execute()` prepares to launch
+- **THEN** `buildNuxtProject()` is NOT called and execution proceeds directly to the launch step
 
 #### Scenario: Nuxt app launched via ESM bootstrap
 

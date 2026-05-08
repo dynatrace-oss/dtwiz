@@ -203,3 +203,22 @@ func jvmHasAgentLoaded(pid int, agentJAR string) bool {
 	}
 	return strings.Contains(strings.ToLower(string(output)), strings.ToLower(agentJAR))
 }
+// detectChildListeningPort checks direct children of pid for an open TCP LISTEN port.
+// Used as a fallback when the main process delegates listening to a worker child.
+// A single PowerShell call collects child PIDs and their listening ports together
+// to avoid spawning PowerShell twice per poll iteration.
+func detectChildListeningPort(pid int) string {
+	script := "$pids = (Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq " + strconv.Itoa(pid) + " } | ForEach-Object { $_.ProcessId });" +
+		"Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.OwningProcess -in $pids -and $_.LocalPort -notin @(4317,4318) } | Select-Object -First 1 -ExpandProperty LocalPort"
+	cmd := exec.Command("powershell", "-NoProfile", "-Command", script)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return ""
+	}
+	port := strings.TrimSpace(string(out))
+	if port != "" {
+		logger.Debug("port found on child process", "parent_pid", pid, "port", port)
+	}
+	return port
+}
+

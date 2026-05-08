@@ -145,9 +145,34 @@ After this message, the user is prompted "Select another project? [Y/n]". If con
 
 All changes are in the existing `installer` package — no new packages or public API changes beyond `InstallOtelNode()`.
 
-## Risks / Trade-offs
+### 10. Auto-install project dependencies
 
-- **[npm availability]** → `.otel/` always uses npm. If a user only has yarn/pnpm installed without npm, `npm install` will fail. Mitigation: npm is bundled with Node.js by default; if missing, the prerequisite check will catch it.
+For regular and Next.js apps, `Execute()` calls `installNodeProjectDeps()` before creating `.otel/`. This function is a no-op when `node_modules/` already exists; otherwise it runs `npm ci` (when `package-lock.json` is present) or `npm install`. Both subcommands share a single `runNpm(dir, subCmd string) error` helper that owns command construction, debug logging, and error formatting.
+
+**Rationale:** Requiring the user to manually install deps before running dtwiz adds friction for a common scenario (fresh clone, CI environment). Auto-installing is safe because `installNodeProjectDeps` is idempotent — it skips when deps are already present — and it respects the lockfile when available (`npm ci` for reproducible installs).
+
+**Nuxt exemption:** Nuxt runs a pre-compiled `.output/server/index.mjs` at runtime and does not use the project's `node_modules/` directly, so the check and install are skipped entirely for Nuxt projects.
+
+**Alternative considered:** Exiting with an error when `node_modules/` is missing and instructing the user to install manually. Rejected — adds unnecessary friction and the auto-install is safe and idempotent.
+
+### 11. Auto-build framework projects when build output is missing
+
+Both Nuxt and Next.js require a production build before they can be launched. If the build output is absent when `Execute()` runs, dtwiz automatically triggers `npm run build` via the shared `runBuildScript(projPath string) error` helper rather than failing with a manual instruction.
+
+- **Nuxt**: checks for `.output/server/index.mjs` (the compiled Nitro server entry point)
+- **Next.js**: checks for `.next/` (the production build directory required by `next start`)
+
+`runBuildScript()` reads `scripts.build` from the project's `package.json`. If absent it returns a descriptive error. If present it runs `npm run build` via `runNpm(projPath, "run", "build")`. After a successful build, `Execute()` re-verifies that the expected output was actually produced.
+
+`PrintPlanSteps()` reflects this for both frameworks: the `npm run build` step is shown only when the build output does not yet exist, so the plan accurately previews what will happen.
+
+**Why a shared helper instead of two functions:** `buildNuxtProject` and `buildNextProject` would be byte-for-byte identical — both read `scripts.build` and run `npm run build`. One `runBuildScript` function with two call sites is cleaner.
+
+**Rationale:** Without auto-build, a Next.js or Nuxt project without a production build would proceed through the full setup (`.otel/` creation, `npm install`) before failing silently at launch — wasting time and leaving a confusing state. Auto-building fails fast with a clear message if the build script is missing, and succeeds transparently if it is present.
+
+**Alternative considered:** Failing with an error message instructing the user to build manually. Rejected — adds an avoidable manual step for a predictable, fully automatable situation.
+
+## Risks / Trade-offs `.otel/` always uses npm. If a user only has yarn/pnpm installed without npm, `npm install` will fail. Mitigation: npm is bundled with Node.js by default; if missing, the prerequisite check will catch it.
 - **[Next.js internal path]** → `./node_modules/next/dist/bin/next` is an internal path that could change across Next.js versions. Mitigation: this is the stable entry point used by the `next` CLI itself; if it changes, the error will be obvious and the path can be updated.
 - **[Nuxt internal path]** → `./node_modules/nuxt/bin/nuxt.mjs` is an internal path that could change across Nuxt versions. Same mitigation as Next.js — this is the stable entry point used by the `nuxt` CLI.
 - **[CWD trick for regular apps]** → Running from `.otel/` with a `../` entrypoint path works for simple cases but may break if the app uses `__dirname`-relative paths that depend on CWD being the project root. Mitigation: set the `--require` path to the absolute path of the module in `.otel/node_modules/` so CWD can remain the project root.
