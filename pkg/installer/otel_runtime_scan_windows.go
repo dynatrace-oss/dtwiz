@@ -184,12 +184,22 @@ if ($javaPids) {
 	return port
 }
 
-// jvmHasAgentLoaded reports whether a JVM process has loaded the given agent JAR.
+// jvmHasAgentLoaded reports whether a JVM process has the given agent JAR
+// on its command line. Process.Modules enumerates loaded PE/native modules
+// (DLLs), so a -javaagent JAR loaded by the JVM classloader never appears
+// there — we inspect the command-line string instead.
+//
+// Unlike the Unix variant, which uses lsof to also catch agents injected
+// via JAVA_TOOL_OPTIONS, there is no clean PowerShell-only way to read
+// another process's environment block, so this only covers the
+// command-line case.
 func jvmHasAgentLoaded(pid int, agentJAR string) bool {
-	script := `Get-Process -Id ` + strconv.Itoa(pid) + ` -ErrorAction SilentlyContinue | ForEach-Object { $_.Modules } | Where-Object { $_.FileName -eq '` + strings.ReplaceAll(agentJAR, "'", "''") + `' } | Select-Object -First 1`
-	output, err := exec.Command("powershell", "-NoProfile", "-Command", script).Output()
+	output, err := exec.Command(
+		"powershell", "-NoProfile", "-Command",
+		"Get-CimInstance Win32_Process -Filter \"ProcessId="+strconv.Itoa(pid)+"\" | Select-Object -ExpandProperty CommandLine",
+	).Output()
 	if err != nil {
 		return false
 	}
-	return strings.TrimSpace(string(output)) != ""
+	return strings.Contains(strings.ToLower(string(output)), strings.ToLower(agentJAR))
 }
