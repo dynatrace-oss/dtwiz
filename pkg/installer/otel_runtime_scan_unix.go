@@ -115,18 +115,19 @@ func javaDescendantPort(pid int, projectDir string) string {
 		if len(fields) < 2 {
 			continue
 		}
-		jvmPID, err := strconv.Atoi(fields[0])
+		jvmPIDStr, jvmClass := fields[0], fields[1]
+		jvmPID, err := strconv.Atoi(jvmPIDStr)
 		if err != nil || jvmPID == pid {
 			continue
 		}
-		if isBuildToolJVM(fields[1]) {
+		if isBuildToolJVM(jvmClass) {
 			continue
 		}
-		if projectDir != "" && !isUnderDir(fields[1], projectDir) {
+		if projectDir != "" && !isUnderDir(jvmClass, projectDir) {
 			continue
 		}
 		if port := detectProcessListeningPort(jvmPID); port != "" {
-			logger.Debug("javaDescendantPort: port found", "wrapper_pid", pid, "jvm_pid", jvmPID, "class", fields[1], "port", port)
+			logger.Debug("javaDescendantPort: port found", "wrapper_pid", pid, "jvm_pid", jvmPID, "class", jvmClass, "port", port)
 			return port
 		}
 	}

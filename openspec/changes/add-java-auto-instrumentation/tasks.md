@@ -192,7 +192,7 @@
 
 - [x] 10.1 Add `isMavenMultiModule(projectPath string) bool` — parse root `pom.xml` via `encoding/xml` and return true when `<modules>` is non-empty
 - [x] 10.2 Add `parseMavenModules(projectPath string) ([]string, error)` — extract `<module>` entries from root `pom.xml`; return nil/empty for non-multi-module projects
-- [x] 10.3 Add `isGradleMultiProject(projectPath string) bool` and `parseGradleSubprojects(projectPath string) ([]string, error)` — regex scan `settings.gradle` / `settings.gradle.kts` for `include` directives; convert colon notation to path separators
+- [x] 10.3 Add `parseGradleSubprojects(projectPath string) ([]string, error)` — regex scan `settings.gradle` / `settings.gradle.kts` for `include` directives; convert colon notation to path separators
 - [x] 10.4 Add `mavenBuildCommand(projectPath string) string` and `gradleBuildCommand(projectPath string) string` — return the build command based on which wrapper is present, or `""` if none
 - [x] 10.5 Add `needsBuild(subs []SubModule) bool` — return true when any sub-module is missing a fat JAR in `target/` or `build/libs/`
 - [x] 10.6 Add `detectMultiModule(projectPath string) *MultiModuleProject` — checks Maven first, then Gradle; returns `nil` for single-module projects

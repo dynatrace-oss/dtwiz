@@ -81,11 +81,6 @@ func parseGradleSubprojects(projectPath string) ([]string, error) {
 	return result, nil
 }
 
-func isGradleMultiProject(projectPath string) bool {
-	subs, err := parseGradleSubprojects(projectPath)
-	return err == nil && len(subs) > 0
-}
-
 func mavenBuildCommand(projectPath string) string {
 	mvnCmd, _ := resolveMavenCmd(projectPath)
 	if mvnCmd == "" {
@@ -121,27 +116,23 @@ func detectMultiModule(projectPath string) *MultiModuleProject {
 		}
 	}
 
-	if !isGradleMultiProject(projectPath) {
+	subprojects, err := parseGradleSubprojects(projectPath)
+	if err != nil || len(subprojects) == 0 {
 		return nil
 	}
-	subprojects, err := parseGradleSubprojects(projectPath)
-	if err == nil && len(subprojects) > 0 {
-		subs := make([]SubModule, len(subprojects))
-		for i, sub := range subprojects {
-			subs[i] = SubModule{
-				Name: filepath.Base(sub),
-				Path: filepath.Join(projectPath, filepath.FromSlash(sub)),
-			}
-		}
-		logger.Debug("detected gradle multi-module project", "modules", len(subs))
-		return &MultiModuleProject{
-			BuildTool:    "gradle",
-			Modules:      subs,
-			BuildCommand: gradleBuildCommand(projectPath),
+	subs := make([]SubModule, len(subprojects))
+	for i, sub := range subprojects {
+		subs[i] = SubModule{
+			Name: filepath.Base(sub),
+			Path: filepath.Join(projectPath, filepath.FromSlash(sub)),
 		}
 	}
-
-	return nil
+	logger.Debug("detected gradle multi-module project", "modules", len(subs))
+	return &MultiModuleProject{
+		BuildTool:    "gradle",
+		Modules:      subs,
+		BuildCommand: gradleBuildCommand(projectPath),
+	}
 }
 
 // buildMultiModulePlan constructs a JavaInstrumentationPlan for a multi-module project.

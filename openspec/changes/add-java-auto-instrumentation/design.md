@@ -213,7 +213,7 @@ The installer uses a `findWrapper(projectPath, unixName, windowsName string) str
 | File | Responsibility |
 |---|---|
 | `otel_java.go` | `InstallOtelJava`, `DetectJavaPlan`, `JavaInstrumentationPlan`, plan/execute flow, JAR download, env var generation, `updateOtelCollectorIfPresent`, `buildInstrumentedCmd` |
-| `otel_java_multimodule.go` (new) | Multi-module detection (`detectMultiModule`, `isMavenMultiModule`, `parseMavenModules`, `isGradleMultiProject`, `parseGradleSubprojects`), `buildMultiModulePlan`, `executeMultiModule` |
+| `otel_java_multimodule.go` (new) | Multi-module detection (`detectMultiModule`, `isMavenMultiModule`, `parseMavenModules`, `parseGradleSubprojects`), `buildMultiModulePlan`, `executeMultiModule` |
 | `otel_java_process.go` (new) | `parseJavaVersion`, `validateJavaPrerequisites`, Java entrypoint detection (`detectJavaEntrypoints`, `isExecutableJar`, `promptEntrypointSelection`, `findWrapper`), `detectJavaListeningPort`, `isBuildToolJVM`, `isUnderDir`, process enrichment via `jps` (`enrichProcessesWithJPS`) |
 | `otel_runtime_scan_unix.go` | Extended with `javaDescendantPort(pid, projectDir)` — jps-based port detection for wrapper-launched JVMs on Unix; `jvmHasAgentLoaded(pid, agentJAR)` — lsof-based check for agent presence when injected via `JAVA_TOOL_OPTIONS` |
 | `otel_runtime_scan_windows.go` | Extended with `javaDescendantPort(wrapperPID, _)` — WMI-based port detection for wrapper-launched JVMs on Windows |
