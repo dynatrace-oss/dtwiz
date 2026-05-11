@@ -134,7 +134,7 @@ func nodeServiceNameFromCommand(projectDir, command string) string {
 			// Resolve relative to .otel/ → actual entrypoint relative to project.
 			ep := strings.TrimPrefix(last, ".."+string(filepath.Separator))
 			ep = strings.TrimPrefix(ep, "../")
-			return serviceNameFromEntrypoint(projectDir, ep)
+			return nodeServiceNameFromEntrypoint(projectDir, ep)
 		}
 	}
 	// Framework (next/nuxt) or unrecognized pattern — use project name.

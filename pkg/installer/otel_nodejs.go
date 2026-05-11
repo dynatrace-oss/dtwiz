@@ -23,6 +23,21 @@ var otelNodePackages = []string{
 	"@opentelemetry/exporter-logs-otlp-http",
 }
 
+// nodeServiceNameFromEntrypoint derives OTEL_SERVICE_NAME for a Node.js entrypoint.
+// Unlike the Python variant, the project name is NOT prefixed when the entrypoint
+// lives in a subdirectory — the subdirectory name alone is the service name.
+// Examples:
+//
+//	"index.js"              in "my-app"  → "my-app"
+//	"s-load-balancer/index.js" in "my-app" → "s-load-balancer"
+func nodeServiceNameFromEntrypoint(projectPath, entrypoint string) string {
+	dir := filepath.Dir(entrypoint)
+	if dir == "." || dir == "" {
+		return filepath.Base(projectPath)
+	}
+	return filepath.Base(dir)
+}
+
 // generateOtelNodeEnvVars extends base OTel env vars with Node.js-specific settings.
 func generateOtelNodeEnvVars(apiURL, token, serviceName string) map[string]string {
 	envVars := generateBaseOtelEnvVars(apiURL, token, serviceName)
@@ -134,7 +149,7 @@ func (p *NodeInstrumentationPlan) PrintPlanSteps() {
 		fmt.Printf("     node --import .otel/nuxt-otel-bootstrap.mjs .output/server/index.mjs\n")
 	default:
 		for _, ep := range p.Entrypoints {
-			svcName := serviceNameFromEntrypoint(p.Project.Path, ep)
+			svcName := nodeServiceNameFromEntrypoint(p.Project.Path, ep)
 			fmt.Printf("     node --require @opentelemetry/auto-instrumentations-node/register %s  (service: %s)\n", ep, svcName)
 		}
 	}
@@ -344,19 +359,14 @@ func (p *NodeInstrumentationPlan) Execute() {
 		logger.Debug("next.js build output found", "path", nextBuildDir)
 	}
 
-	// For regular and Next.js apps, ensure project dependencies are installed.
-	// Nuxt is exempt — it runs a pre-built .output/server/index.mjs and does not
-	// need the project's node_modules/ at runtime.
-	// installNodeProjectDeps is a no-op when node_modules already exists.
-	if p.Framework == "" || p.Framework == "next" {
-		fmt.Print("  Installing project dependencies... ")
-		if err := installNodeProjectDeps(proj.Path); err != nil {
-			fmt.Println("failed.")
-			fmt.Printf("    %v\n", err)
-			return
-		}
-		fmt.Println("done.")
+	// Ensure project dependencies are installed.
+	fmt.Print("  Installing project dependencies... ")
+	if err := installNodeProjectDeps(proj.Path); err != nil {
+		fmt.Println("failed.")
+		fmt.Printf("    %v\n", err)
+		return
 	}
+	fmt.Println("done.")
 
 	if len(proj.RunningProcessIDs) > 0 {
 		fmt.Print("  Stopping running processes... ")
@@ -456,7 +466,7 @@ func (p *NodeInstrumentationPlan) Execute() {
 		}
 	default:
 		for _, ep := range p.Entrypoints {
-			svcName := serviceNameFromEntrypoint(proj.Path, ep)
+			svcName := nodeServiceNameFromEntrypoint(proj.Path, ep)
 			epEnvVars := maps.Clone(p.EnvVars)
 			epEnvVars["OTEL_SERVICE_NAME"] = svcName
 

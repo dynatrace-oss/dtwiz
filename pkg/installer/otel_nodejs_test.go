@@ -257,7 +257,7 @@ func TestRunBuildScript_FailsWhenNoPackageJSON(t *testing.T) {
 	}
 }
 
-
+func TestNodeInstrumentationPlan_PrintPlanSteps_PackageManager(t *testing.T) {
 	for _, pm := range []string{"npm", "yarn", "pnpm"} {
 		t.Run(pm, func(t *testing.T) {
 			plan := &NodeInstrumentationPlan{
@@ -281,6 +281,25 @@ func TestNodeInstrumentationPlan_Execute(t *testing.T) {
 	// This test verifies the old print-based stub was replaced; a full integration test
 	// requires npm on PATH and is covered by end-to-end tests.
 	t.Skip("Execute() is now a real implementation — tested via end-to-end tests")
+}
+
+func TestNodeServiceNameFromEntrypoint(t *testing.T) {
+	tests := []struct {
+		projectPath string
+		entrypoint  string
+		want        string
+	}{
+		{"/home/user/my-app", "index.js", "my-app"},
+		{"/home/user/my-app", "server.js", "my-app"},
+		{"/home/user/node-package-delivery", "s-load-balancer/index.js", "s-load-balancer"},
+		{"/home/user/my-app", "services/api/server.js", "api"},
+	}
+	for _, tt := range tests {
+		got := nodeServiceNameFromEntrypoint(tt.projectPath, tt.entrypoint)
+		if got != tt.want {
+			t.Errorf("nodeServiceNameFromEntrypoint(%q, %q) = %q, want %q", tt.projectPath, tt.entrypoint, got, tt.want)
+		}
+	}
 }
 
 // --- Task 3.3: createOtelDir tests ---
