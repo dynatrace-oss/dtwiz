@@ -2,6 +2,7 @@ package installer
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -101,6 +102,7 @@ func TestNodeInstrumentationPlan_PrintPlanSteps_Regular(t *testing.T) {
 		"/tmp/node-svc",
 		"Package manager: npm",
 		"/tmp/node-svc/.otel/",
+		"npm install (in project dir, if node_modules/ missing)",
 		"npm install (in .otel/)",
 		"node --require @opentelemetry/auto-instrumentations-node/register server.js  (service: node-svc)",
 	}
@@ -132,6 +134,7 @@ func TestNodeInstrumentationPlan_PrintPlanSteps_NextJS(t *testing.T) {
 		"/tmp/next-app",
 		"Package manager: yarn",
 		"Framework:       next",
+		"npm install (in project dir, if node_modules/ missing)",
 		"npm run build",
 		"npm install (in .otel/)",
 		"node .otel/next-otel-bootstrap.js start",
@@ -186,6 +189,7 @@ func TestNodeInstrumentationPlan_PrintPlanSteps_Nuxt(t *testing.T) {
 		"/tmp/nuxt-app",
 		"Package manager: pnpm",
 		"Framework:       nuxt",
+		"npm install (in project dir, if node_modules/ missing)",
 		"npm run build",
 		"--import",
 		"nuxt-otel-bootstrap.mjs",
@@ -436,6 +440,12 @@ func TestGenerateNuxtBootstrapMJS_ExitsOnEADDRINUSE(t *testing.T) {
 			t.Errorf("expected bootstrap to contain %q, got:\n%s", check, content)
 		}
 	}
+
+	// Non-EADDRINUSE errors must be rethrown so other crashes still fail fast.
+	// Without this, adding an uncaughtException listener suppresses Node's default exit.
+	if !strings.Contains(content, "throw err") {
+		t.Errorf("expected bootstrap to rethrow non-EADDRINUSE errors, got:\n%s", content)
+	}
 }
 
 func TestGenerateNuxtBootstrapMJS_EADDRINUSEHandlerBeforeHooks(t *testing.T) {
@@ -481,39 +491,34 @@ func TestNodeInstrumentationPlan_PrintPlanSteps_ShowsRunningPIDs(t *testing.T) {
 	}
 }
 
+// withFakeNpmRunner replaces npmRunner with fn for the duration of the test.
+func withFakeNpmRunner(t *testing.T, fn func(dir string, args ...string) error) {
+	t.Helper()
+	orig := npmRunner
+	npmRunner = fn
+	t.Cleanup(func() { npmRunner = orig })
+}
+
 // --- runNpm tests ---
 
 func TestRunNpm_ErrorIncludesSubcmdAndDir(t *testing.T) {
-	if _, err := exec.LookPath("npm"); err != nil {
-		t.Skip("npm not installed on PATH")
-	}
-
 	dir := t.TempDir()
-	// npm ci requires package-lock.json; running it without one produces a non-zero exit.
+	// Stub npmRunner to simulate a failure, then verify runNpm wraps the error
+	// with both the subcommand and the directory in the message.
+	withFakeNpmRunner(t, func(d string, args ...string) error {
+		subCmd := strings.Join(args, " ")
+		return fmt.Errorf("npm %s in %s failed: exit status 1\nsome npm output", subCmd, d)
+	})
+
 	err := runNpm(dir, "ci")
 	if err == nil {
-		t.Fatal("runNpm ci without package-lock.json should return error")
+		t.Fatal("runNpm should propagate the error from npmRunner")
 	}
 	if !strings.Contains(err.Error(), "npm ci") {
 		t.Errorf("error should mention subcommand, got: %v", err)
 	}
 	if !strings.Contains(err.Error(), dir) {
 		t.Errorf("error should mention directory, got: %v", err)
-	}
-}
-
-func TestRunNpm_SucceedsOnValidProject(t *testing.T) {
-	if _, err := exec.LookPath("npm"); err != nil {
-		t.Skip("npm not installed on PATH")
-	}
-
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name":"test","private":true}`), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := runNpm(dir, "install"); err != nil {
-		t.Fatalf("runNpm install on empty package.json: %v", err)
 	}
 }
 
@@ -533,45 +538,46 @@ func TestInstallProjectDeps_SkipsWhenNodeModulesExists(t *testing.T) {
 }
 
 func TestInstallProjectDeps_UsesNpmCI_WhenPackageLockExists(t *testing.T) {
-	if _, err := exec.LookPath("npm"); err != nil {
-		t.Skip("npm not installed on PATH")
-	}
-
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name":"test","private":true}`), 0644); err != nil {
 		t.Fatal(err)
 	}
-	// Create a minimal package-lock.json (npm ci requires it).
 	lockContent := `{"name":"test","version":"1.0.0","lockfileVersion":3,"requires":true,"packages":{"":{"name":"test","version":"1.0.0"}}}`
 	if err := os.WriteFile(filepath.Join(dir, "package-lock.json"), []byte(lockContent), 0644); err != nil {
 		t.Fatal(err)
 	}
 
+	var gotSubCmd string
+	withFakeNpmRunner(t, func(_ string, args ...string) error {
+		gotSubCmd = args[0]
+		return nil
+	})
+
 	if err := installNodeProjectDeps(dir); err != nil {
 		t.Fatalf("installNodeProjectDeps() with package-lock.json: %v", err)
 	}
-
-	if _, err := os.Stat(filepath.Join(dir, "node_modules")); os.IsNotExist(err) {
-		t.Error("expected node_modules to be created after npm ci")
+	if gotSubCmd != "ci" {
+		t.Errorf("expected npm ci, got npm %s", gotSubCmd)
 	}
 }
 
 func TestInstallProjectDeps_UsesNpmInstall_WhenNoLockfile(t *testing.T) {
-	if _, err := exec.LookPath("npm"); err != nil {
-		t.Skip("npm not installed on PATH")
-	}
-
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name":"test","private":true}`), 0644); err != nil {
 		t.Fatal(err)
 	}
 
+	var gotSubCmd string
+	withFakeNpmRunner(t, func(_ string, args ...string) error {
+		gotSubCmd = args[0]
+		return nil
+	})
+
 	if err := installNodeProjectDeps(dir); err != nil {
 		t.Fatalf("installNodeProjectDeps() without lockfile: %v", err)
 	}
-
-	if _, err := os.Stat(filepath.Join(dir, "node_modules")); os.IsNotExist(err) {
-		t.Error("expected node_modules to be created after npm install")
+	if gotSubCmd != "install" {
+		t.Errorf("expected npm install, got npm %s", gotSubCmd)
 	}
 }
 

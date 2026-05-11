@@ -128,11 +128,11 @@ This behavior applies in both the standalone `dtwiz install otel-node` flow (via
 
 ### Requirement: Auto-install project dependencies
 
-Before launching, the system SHALL automatically install the project's own `node_modules/` when it is absent for regular and Next.js apps. The installer calls `installNodeProjectDeps()`, which runs `npm ci` when `package-lock.json` is present, or `npm install` otherwise. When `node_modules/` already exists the call is a silent no-op. Nuxt is exempt because it runs a pre-compiled `.output/server/index.mjs` that does not require the project's `node_modules/` at runtime.
+`Execute()` SHALL install the project's own `node_modules/` as the **first** step, before any framework build. This ensures that `npm run build` (triggered for Next.js/Nuxt when build output is missing) has dependencies available. The installer calls `installNodeProjectDeps()`, which runs `npm ci` when `package-lock.json` is present, or `npm install` otherwise. When `node_modules/` already exists the call is a silent no-op.
 
-#### Scenario: node_modules/ missing for regular app — auto-installed
+#### Scenario: node_modules/ missing for regular, Next.js, or Nuxt app — auto-installed
 
-- **GIVEN** a regular Node.js project is selected
+- **GIVEN** a Node.js project (regular, Next.js, or Nuxt) is selected
 - **AND** the project directory does not contain a `node_modules/` subdirectory
 - **WHEN** `Execute()` prepares to launch
 - **THEN** it prints "Installing project dependencies..."
@@ -141,26 +141,20 @@ Before launching, the system SHALL automatically install the project's own `node
 
 #### Scenario: node_modules/ missing and install fails
 
-- **GIVEN** a regular or Next.js project is selected
+- **GIVEN** any Node.js project (regular, Next.js, or Nuxt) is selected
 - **AND** the project directory does not contain a `node_modules/` subdirectory
 - **AND** `npm install` / `npm ci` exits non-zero
-- **WHEN** `Execute()` calls `installNodeProjectDeps()`
+- **WHEN** `Execute()` calls `installNodeProjectDeps()` as its first step
 - **THEN** it prints "failed." with the npm error output
-- **AND** it exits without creating `.otel/`, running `npm install` in `.otel/`, or launching any process
+- **AND** it exits without running any framework build, creating `.otel/`, or launching any process
 
 #### Scenario: node_modules/ already present — no-op
 
-- **GIVEN** a regular or Next.js project is selected
+- **GIVEN** any Node.js project (regular, Next.js, or Nuxt) is selected
 - **AND** the project directory already contains a `node_modules/` subdirectory
 - **WHEN** `Execute()` calls `installNodeProjectDeps()`
 - **THEN** the function returns immediately without running npm
 - **AND** execution continues normally
-
-#### Scenario: Nuxt skips dependency install
-
-- **GIVEN** a Nuxt project is selected
-- **WHEN** `Execute()` prepares to launch
-- **THEN** `installNodeProjectDeps()` is NOT called and execution continues to the Nuxt launch step
 
 ### Requirement: Regular Node.js app launch
 
@@ -211,8 +205,6 @@ For Next.js projects, `next start` requires a production build in `.next/`. If `
 - **AND** `.next/` already exists
 - **WHEN** `Execute()` prepares to launch
 - **THEN** `runBuildScript()` is NOT called and execution proceeds directly
-
-
 
 For Next.js projects, the system SHALL launch the app using `node .otel/next-otel-bootstrap.js start` with CWD set to the project root.
 

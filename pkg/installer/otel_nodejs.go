@@ -133,19 +133,24 @@ func (p *NodeInstrumentationPlan) PrintPlanSteps() {
 	if p.Framework != "" {
 		fmt.Printf("     Framework:       %s\n", p.Framework)
 	}
+	fmt.Printf("     npm install (in project dir, if node_modules/ missing)\n")
+	switch p.Framework {
+	case "next":
+		if _, err := os.Stat(filepath.Join(p.Project.Path, ".next")); os.IsNotExist(err) {
+			fmt.Printf("     npm run build (produce .next/)\n")
+		}
+	case "nuxt":
+		nitroEntry := filepath.Join(p.Project.Path, ".output", "server", "index.mjs")
+		if _, err := os.Stat(nitroEntry); os.IsNotExist(err) {
+			fmt.Printf("     npm run build (produce .output/server/index.mjs)\n")
+		}
+	}
 	fmt.Printf("     Create %s/ with OTel deps\n", p.OtelDir)
 	fmt.Printf("     npm install (in .otel/)\n")
 	switch p.Framework {
 	case "next":
-		if _, err := os.Stat(filepath.Join(p.Project.Path, ".next")); err != nil {
-			fmt.Printf("     npm run build (produce .next/)\n")
-		}
 		fmt.Printf("     node .otel/next-otel-bootstrap.js start\n")
 	case "nuxt":
-		nitroEntry := filepath.Join(p.Project.Path, ".output", "server", "index.mjs")
-		if _, err := os.Stat(nitroEntry); err != nil {
-			fmt.Printf("     npm run build (produce .output/server/index.mjs)\n")
-		}
 		fmt.Printf("     node --import .otel/nuxt-otel-bootstrap.mjs .output/server/index.mjs\n")
 	default:
 		for _, ep := range p.Entrypoints {
@@ -229,6 +234,8 @@ func generateNuxtBootstrapMJS(otelDir string) string {
 	sb.WriteString("  if (err.code === 'EADDRINUSE') {\n")
 	sb.WriteString("    process.stderr.write('Error: ' + err.message + '\\n');\n")
 	sb.WriteString("    process.exit(1);\n")
+	sb.WriteString("  } else {\n")
+	sb.WriteString("    throw err;\n")
 	sb.WriteString("  }\n")
 	sb.WriteString("});\n\n")
 
@@ -252,8 +259,9 @@ func npmCmd() string {
 	return "npm"
 }
 
-// runNpm executes `npm <args...>` in dir and returns a descriptive error on failure.
-func runNpm(dir string, args ...string) error {
+// npmRunner is the function used to execute npm commands.
+// Tests replace it with a stub to avoid hitting the real npm binary.
+var npmRunner = func(dir string, args ...string) error {
 	subCmd := strings.Join(args, " ")
 	cmd := exec.Command(npmCmd(), args...)
 	cmd.Dir = dir
@@ -266,13 +274,20 @@ func runNpm(dir string, args ...string) error {
 	return nil
 }
 
+// runNpm executes `npm <args...>` in dir and returns a descriptive error on failure.
+func runNpm(dir string, args ...string) error {
+	return npmRunner(dir, args...)
+}
+
 // installNodeProjectDeps installs project dependencies if node_modules is missing.
 // If package-lock.json is present it runs npm ci; otherwise npm install.
 // Returns nil immediately when node_modules already exists.
 func installNodeProjectDeps(projPath string) error {
 	nodeModulesDir := filepath.Join(projPath, "node_modules")
 	if _, err := os.Stat(nodeModulesDir); err == nil {
-		return nil
+		return nil // already installed
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("check node_modules: %w", err)
 	}
 
 	subCmd := "install"
@@ -314,12 +329,22 @@ func runBuildScript(projPath string) error {
 func (p *NodeInstrumentationPlan) Execute() {
 	proj := p.Project
 
+	// Ensure project dependencies are installed before any build step.
+	// Framework builds (npm run build) require node_modules to be present.
+	fmt.Print("  Installing project dependencies... ")
+	if err := installNodeProjectDeps(proj.Path); err != nil {
+		fmt.Println("failed.")
+		fmt.Printf("    %v\n", err)
+		return
+	}
+	fmt.Println("done.")
+
 	// Nuxt requires a pre-built Nitro server. If the build output is missing,
 	// automatically run `npm run build` (using the project's build script) so
 	// the user doesn't have to run a separate step before re-running dtwiz.
 	if p.Framework == "nuxt" {
 		nitroEntry := filepath.Join(proj.Path, ".output", "server", "index.mjs")
-		if _, err := os.Stat(nitroEntry); err != nil {
+		if _, err := os.Stat(nitroEntry); os.IsNotExist(err) {
 			fmt.Print("  Building Nuxt project (npm run build)... ")
 			if err := runBuildScript(proj.Path); err != nil {
 				fmt.Println("failed.")
@@ -333,6 +358,9 @@ func (p *NodeInstrumentationPlan) Execute() {
 				fmt.Println("    Check the build output above for errors.")
 				return
 			}
+		} else if err != nil {
+			fmt.Printf("  Cannot access %s: %v\n", nitroEntry, err)
+			return
 		}
 		logger.Debug("nuxt build output found", "path", nitroEntry)
 	}
@@ -341,7 +369,7 @@ func (p *NodeInstrumentationPlan) Execute() {
 	// If the build output is missing, run `npm run build` automatically.
 	if p.Framework == "next" {
 		nextBuildDir := filepath.Join(proj.Path, ".next")
-		if _, err := os.Stat(nextBuildDir); err != nil {
+		if _, err := os.Stat(nextBuildDir); os.IsNotExist(err) {
 			fmt.Print("  Building Next.js project (npm run build)... ")
 			if err := runBuildScript(proj.Path); err != nil {
 				fmt.Println("failed.")
@@ -355,18 +383,12 @@ func (p *NodeInstrumentationPlan) Execute() {
 				fmt.Println("    Check the build output above for errors.")
 				return
 			}
+		} else if err != nil {
+			fmt.Printf("  Cannot access %s: %v\n", nextBuildDir, err)
+			return
 		}
 		logger.Debug("next.js build output found", "path", nextBuildDir)
 	}
-
-	// Ensure project dependencies are installed.
-	fmt.Print("  Installing project dependencies... ")
-	if err := installNodeProjectDeps(proj.Path); err != nil {
-		fmt.Println("failed.")
-		fmt.Printf("    %v\n", err)
-		return
-	}
-	fmt.Println("done.")
 
 	if len(proj.RunningProcessIDs) > 0 {
 		fmt.Print("  Stopping running processes... ")

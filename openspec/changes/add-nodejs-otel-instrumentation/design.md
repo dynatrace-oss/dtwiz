@@ -147,11 +147,9 @@ All changes are in the existing `installer` package — no new packages or publi
 
 ### 10. Auto-install project dependencies
 
-For regular and Next.js apps, `Execute()` calls `installNodeProjectDeps()` before creating `.otel/`. This function is a no-op when `node_modules/` already exists; otherwise it runs `npm ci` (when `package-lock.json` is present) or `npm install`. Both subcommands share a single `runNpm(dir, subCmd string) error` helper that owns command construction, debug logging, and error formatting.
+`Execute()` calls `installNodeProjectDeps()` as its **first** step — before any framework build — for all project types (regular, Next.js, and Nuxt). This ensures that `npm run build` (triggered when build output is missing) has the project's own dependencies available. The function is a no-op when `node_modules/` already exists; otherwise it runs `npm ci` (when `package-lock.json` is present) or `npm install`. Both subcommands share a single `runNpm` helper that owns command construction, debug logging, and error formatting.
 
-**Rationale:** Requiring the user to manually install deps before running dtwiz adds friction for a common scenario (fresh clone, CI environment). Auto-installing is safe because `installNodeProjectDeps` is idempotent — it skips when deps are already present — and it respects the lockfile when available (`npm ci` for reproducible installs).
-
-**Nuxt exemption:** Nuxt runs a pre-compiled `.output/server/index.mjs` at runtime and does not use the project's `node_modules/` directly, so the check and install are skipped entirely for Nuxt projects.
+**Rationale:** Requiring the user to manually install deps before running dtwiz adds friction for a common scenario (fresh clone, CI environment). Running dep install first also prevents the framework build from failing due to missing `node_modules` on a fresh clone. Auto-installing is safe because `installNodeProjectDeps` is idempotent — it skips when deps are already present — and it respects the lockfile when available (`npm ci` for reproducible installs).
 
 **Alternative considered:** Exiting with an error when `node_modules/` is missing and instructing the user to install manually. Rejected — adds unnecessary friction and the auto-install is safe and idempotent.
 
@@ -172,7 +170,10 @@ Both Nuxt and Next.js require a production build before they can be launched. If
 
 **Alternative considered:** Failing with an error message instructing the user to build manually. Rejected — adds an avoidable manual step for a predictable, fully automatable situation.
 
-## Risks / Trade-offs `.otel/` always uses npm. If a user only has yarn/pnpm installed without npm, `npm install` will fail. Mitigation: npm is bundled with Node.js by default; if missing, the prerequisite check will catch it.
+## Risks / Trade-offs
+
+- **[npm-only `.otel/` install]** → `.otel/` always uses npm. If a user only has yarn/pnpm installed without npm, `npm install` will fail. Mitigation: npm is bundled with Node.js by default; if missing, the prerequisite check will catch it.
+
 - **[Next.js internal path]** → `./node_modules/next/dist/bin/next` is an internal path that could change across Next.js versions. Mitigation: this is the stable entry point used by the `next` CLI itself; if it changes, the error will be obvious and the path can be updated.
 - **[Nuxt internal path]** → `./node_modules/nuxt/bin/nuxt.mjs` is an internal path that could change across Nuxt versions. Same mitigation as Next.js — this is the stable entry point used by the `nuxt` CLI.
 - **[CWD trick for regular apps]** → Running from `.otel/` with a `../` entrypoint path works for simple cases but may break if the app uses `__dirname`-relative paths that depend on CWD being the project root. Mitigation: set the `--require` path to the absolute path of the module in `.otel/node_modules/` so CWD can remain the project root.
