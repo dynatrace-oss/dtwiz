@@ -71,7 +71,7 @@
 - **GIVEN** the process runs as a non-root user
 - **AND** sudo is not configured for this user
 - **WHEN** `dtwiz install oneagent` runs
-- **THEN** the command exits with `"This command requires root privileges. Please run with sudo."
+- **THEN** the command exits with `"This command requires root privileges. Please run with sudo."`
 - **AND** no HTTP requests are made
 
 #### Scenario: Non-privileged Windows process
