@@ -20,7 +20,7 @@ This project follows our [Code of Conduct](CODE_OF_CONDUCT.md). All contributors
 
 Creating a well-structured issue can help us understand and complete a fix or a feature faster. This way, we can reproduce the problem, evaluate its priority, and give you early feedback before we write any code. See the full guide:
 
-- [How to open a feature issue](docs/contributing/issues.md#how-to-open-a-feature-issue)
+- [How to open a feature request](docs/contributing/issues.md#how-to-open-a-feature-request)
 - [How to open a bug issue](docs/contributing/issues.md#how-to-open-a-bug-issue)
 
 ## Pull Requests
