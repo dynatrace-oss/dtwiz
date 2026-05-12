@@ -171,6 +171,7 @@ func jvmHasAgentLoaded(pid int, agentJAR string) bool {
 	}
 	return false
 }
+
 // detectChildListeningPort checks direct children of pid for an open TCP LISTEN port.
 // Used as a fallback when the main process delegates listening to a worker child.
 func detectChildListeningPort(pid int) string {
