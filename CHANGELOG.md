@@ -7,9 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.16] - 2026-05-12
+
 ### Added
 
-- Added `--extensions` switch to `dtwiz status` to test common http client and token usage
+- `dtwiz install otel-java` — Java auto-instrumentation now fully implemented: detects Maven and Gradle projects (single-module and multi-module), builds the project before instrumentation, attaches the OTel Java agent, and detects the running process by port; `dtwiz uninstall otel` gracefully terminates instrumented JVM processes
+- `dtwiz install otel-node` — Node.js auto-instrumentation: detects Next.js and Nuxt.js projects, injects OTel SDK via a register file, fails fast when project dependencies are not installed; `dtwiz uninstall otel` removes Node.js OTel artifacts
+- `--extensions` switch to `dtwiz status` to test common HTTP client and token usage
+- `pkg/extensions` — new package with Platform Extensions v2 API client wrappers (`InstallExtension`, `ListMonitoringConfigs`, `CreateMonitoringConfig`, `DeleteMonitoringConfig`) wired into the AWS installer
+- Feature flags package (`pkg/featureflags`) for runtime feature toggling
+- Centralized HTTP client (`pkg/client`) with `ClassicClient` (API token auth) and `PlatformClient` (Bearer/platform token auth)
+- E2E test infrastructure with `install otel-python` test
+
+### Changed
+
+- AWS `install` now activates `com.dynatrace.extension.da-aws` via Platform Extensions v2 API before creating monitoring configurations
+- OTel Collector update: minor UX improvements
+- Updated QuickStart app link
+- `refactor(cmd)`: commands now use the `pkg/display` package for consistent output formatting
+
+### Fixed
+
+- Extensions: `CreateMonitoringConfig` now POSTs a single `{scope,value}` object; Platform v2 endpoint rejects bulk arrays with HTTP 400
+- AWS CloudFormation deploy: capture stderr so failures report the actual AWS CLI error instead of a bare exit status
+- AWS: DT API calls are now gated behind dry-run guard and user confirmation
+- Debug HTTP response body capped at 2048 bytes to prevent large/sensitive payloads appearing on stderr
+- Improved instrumented process detection (cross-platform, including Windows)
 
 ## [0.2.15] - 2026-04-22
 
@@ -220,7 +243,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.15...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.16...HEAD
+[0.2.16]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.15...v0.2.16
 [0.2.15]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.14...v0.2.15
 [0.2.14]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.13...v0.2.14
 [0.2.13]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.12...v0.2.13
