@@ -1,5 +1,16 @@
 # OneAgent Install Tasks
 
+## 0. Investigate and Confirm Assumptions
+
+Before implementing, review the design and spec documents to understand the requirements and constraints.
+
+**Files:** `design.md`, `spec.md`
+
+- [ ] 0.1 Read `design.md` and `spec.md` to understand token minting, download, and signature verification requirements
+- [ ] 0.2 Identify and document any unclear assumptions about API endpoints or certificate handling
+- [ ] 0.3 Review existing OneAgent installer code patterns in `pkg/installer/oneagent.go`
+- [ ] 0.4 Confirm logging, error handling, and cross-platform behavior align with the specification
+
 ## 5. Download Installer + Linux Signature Verification
 
 Use the minted token to download the installer. On Linux, verify the signature against the published Dynatrace root CA.

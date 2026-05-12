@@ -1,5 +1,16 @@
 # OneAgent Windows Tasks
 
+## 0. Investigate and Confirm Assumptions
+
+Before implementing, review the design and spec documents to understand the requirements and constraints.
+
+**Files:** `design.md`, `spec.md`
+
+- [ ] 0.1 Read `design.md` and `spec.md` to understand Windows-specific requirements and cross-platform considerations
+- [ ] 0.2 Identify and document any unclear assumptions about Authenticode verification or installer paths
+- [ ] 0.3 Review existing Windows-specific code patterns (build tags, `_windows.go` files) in the codebase
+- [ ] 0.4 Confirm error messages, temporary file handling, and elevation behavior align with the specification
+
 ## 11. Windows-Specific Support
 
 Complete Windows-specific implementation not covered inline by earlier tasks: correct installer download URL/extension, Authenticode signature verification via PowerShell, and temp-file permission handling. Earlier tasks (2.7b, 5.3, 6.2, 7) reference Windows but leave the platform-specific logic as stubs or TODOs. This spec consolidates all Windows-specific work.

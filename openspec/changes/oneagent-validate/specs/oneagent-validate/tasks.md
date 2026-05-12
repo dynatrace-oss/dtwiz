@@ -1,5 +1,17 @@
 # OneAgent Validate Tasks
 
+## 0. Investigate and Confirm Assumptions
+
+Before implementing, review the design and spec documents to understand the requirements and constraints.
+
+**Files:** `design.md`, `spec.md`
+
+- [ ] 0.1 Read `design.md` and `spec.md` to understand post-install verification and connectivity requirements
+- [ ] 0.2 Identify and document any unclear assumptions about Grail queries or polling behavior
+- [ ] 0.3 Review existing connectivity checking patterns in the codebase
+- [ ] 0.4 Confirm timeout handling and user-facing messaging align with the specification
+- [ ] 0.5 **Investigate DQL query polling approaches:** Compare `query:execute` (manual polling loop) vs. `query:poll` (server-managed polling) for host registration verification. Document the trade-offs (latency, resource consumption, simplicity, integration complexity). Determine the optimal approach and justify the choice in the implementation. Review how `query:poll` integrates with the resty client and Bearer auth, and confirm it aligns with existing patterns in `pkg/installer/ingest_watch.go`
+
 ## 7. Post-install Verification
 
 Confirm the agent has registered with the tenant. Timeout is a warning, not a failure.

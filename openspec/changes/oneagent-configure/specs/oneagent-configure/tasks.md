@@ -1,5 +1,16 @@
 # OneAgent Configure Tasks
 
+## 0. Investigate and Confirm Assumptions
+
+Before implementing, review the design and spec documents to understand the requirements and constraints.
+
+**Files:** `design.md`, `spec.md`
+
+- [ ] 0.1 Read `design.md` and `spec.md` to understand agent configuration and token minting requirements
+- [ ] 0.2 Identify and document any unclear assumptions about API scopes or monitoring mode defaults
+- [ ] 0.3 Review existing token-minting patterns and security considerations in the codebase
+- [ ] 0.4 Confirm logging and error handling practices align with the specification
+
 ## 4. Mint Short-lived Installer Token (Mandatory)
 
 Mint an `InstallerDownload`-scoped token for the duration of this install. There is no fallback to the user's long-lived token.

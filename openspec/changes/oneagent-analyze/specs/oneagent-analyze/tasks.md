@@ -4,6 +4,19 @@
 
 ---
 
+## 0. Investigate and Confirm Assumptions
+
+Before implementing, review the design and spec documents to understand the requirements and constraints.
+
+**Files:** `design.md`, `spec.md`
+
+- [ ] 0.1 Read `design.md` and `spec.md` to understand environment detection and preflight check requirements
+- [ ] 0.2 Identify and document any unclear assumptions about OS/arch support or detection logic
+- [ ] 0.3 Review existing OneAgent detection code in `pkg/installer/oneagent.go` to understand patterns
+- [ ] 0.4 Confirm error messages and behavior align with the specification
+
+---
+
 ## 2. OS/Arch Detection and Pre-flight Checks
 
 Detect OS/arch and run the existing-OneAgent and privilege pre-flights before any network work. Fail fast with clear, actionable errors. Agent configuration (default + `--monitoring-mode` override) is a separate concern owned by Task 2.5.

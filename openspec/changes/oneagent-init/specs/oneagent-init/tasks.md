@@ -1,5 +1,16 @@
 # OneAgent PoC Scaffolding Tasks
 
+## 0. Investigate and Confirm Assumptions
+
+Before implementing, review the design and spec documents to understand the requirements and constraints.
+
+**Files:** `design.md`, `spec.md`
+
+- [ ] 0.1 Read `design.md` and `spec.md` to understand the scaffolding strategy and requirements
+- [ ] 0.2 Identify and document any unclear assumptions about type definitions or feature-flag behavior
+- [ ] 0.3 Verify that the feature-flag implementation pattern matches existing flags in `pkg/featureflags/featureflags.go`
+- [ ] 0.4 Confirm that the CLI flag structure and defaults align with the specification
+
 ## 1. Scaffolding and Feature Flag
 
 Set up the foundational structure for the OneAgent PoC implementation: feature flag, stub files, type definitions, CLI flags, and feature-flag branching.
