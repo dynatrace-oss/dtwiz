@@ -64,7 +64,7 @@
 
 ```go
 if featureflags.IsEnabled(featureflags.OneAgentPoC) {
-    return installer.InstallOneAgentV2(c.Classic, opts)
+    return installer.InstallOneAgentV2(c, opts)
 }
 return installer.InstallOneAgent(c.Classic, installDryRun, quiet, hostGroup)
 ```

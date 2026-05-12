@@ -32,14 +32,6 @@ Download URL pattern:
 
 Temp file: `os.CreateTemp("", "dynatrace-oneagent-*")` → `chmod 0o700` on Unix. On success, stdout prints `✓ <basename> (<size>)`.
 
-Download URL pattern:
-
-- Linux x86: `/api/v1/deployment/installer/agent/unix/default/latest?arch=x86`
-- Linux arm: `/api/v1/deployment/installer/agent/unix/default/latest?arch=arm`
-- Windows: handled in `oneagent-windows`
-
-Temp file: `os.CreateTemp("", "dynatrace-oneagent-*")` → `chmod 0o700` on Unix. On success, stdout prints `✓ <basename> (<size>)`.
-
 ### 2. Linux signature verification: openssl subprocess
 
 The Dynatrace Linux installer ships with a CMS detached signature. Verification pipeline (shell equivalent):

@@ -64,21 +64,21 @@
 
 ### Requirement: Privilege check before any network work
 
-`InstallOneAgentV2` SHALL verify that the process has the necessary privileges to install OneAgent before issuing any HTTP request. On Unix, the check SHALL verify root access. On Windows, the check SHALL verify the process token belongs to the BUILTIN\Administrators group. On failure, the install SHALL exit with `"This command requires administrator/root privileges. Please run with sudo or as an administrator."`.
+`InstallOneAgentV2` SHALL verify that the process has the necessary privileges to install OneAgent before issuing any HTTP request. On Unix, the check SHALL verify root access, and on failure the install SHALL exit with `"This command requires root privileges. Please run with sudo."`. On Windows, the check SHALL verify the process token belongs to the BUILTIN\Administrators group, and on failure the install SHALL exit with `"This command requires administrator privileges. Please run as an administrator."`.
 
 #### Scenario: Non-privileged Unix process
 
 - **GIVEN** the process runs as a non-root user
 - **AND** sudo is not configured for this user
 - **WHEN** `dtwiz install oneagent` runs
-- **THEN** the command exits with the privilege-required message
+- **THEN** the command exits with `"This command requires root privileges. Please run with sudo."
 - **AND** no HTTP requests are made
 
 #### Scenario: Non-privileged Windows process
 
 - **GIVEN** the process runs without administrator rights
 - **WHEN** `dtwiz install oneagent` runs
-- **THEN** the command exits with the privilege-required message
+- **THEN** - **THEN** the command exits with `"This command requires administrator privileges. Please run as an administrator."`
 
 #### Scenario: Root Unix process
 

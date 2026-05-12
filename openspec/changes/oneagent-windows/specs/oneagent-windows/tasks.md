@@ -8,7 +8,7 @@ Complete Windows-specific implementation not covered inline by earlier tasks: co
 
 ### Part A — Windows installer download
 
-- [ ] 11.1 In `DownloadInstaller` (Task 5.1), map `env.OS == "windows"` to the correct API path segment (`/windows/default/x86_64/` or `/api/v1/deployment/installer/agent/windows/default/latest?arch=x86`); the Linux branch uses `/unix/default/<arch>/`
+- [ ] 11.1 In `DownloadInstaller` (Task 5.1), map `env.OS == "windows"` to the installer request path/query `/api/v1/deployment/installer/agent/windows/default/latest?arch=x86`; the Linux branch uses `/unix/default/<arch>/`
 - [ ] 11.2 Save the Windows temp file with a `.exe` extension so the OS recognises it as an executable (use `os.CreateTemp("", "dynatrace-oneagent-*.exe")`)
 - [ ] 11.3 Skip `os.Chmod(tmpPath, 0o700)` on Windows — NTFS ACLs are not meaningful in the same way; guard with `if runtime.GOOS != "windows"`
 - [ ] 11.4 Unit tests: `DownloadInstaller` with `env.OS == "windows"` produces a request URL containing the Windows path segment and a temp file ending in `.exe`; `env.OS == "linux"` path is unchanged
