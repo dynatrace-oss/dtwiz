@@ -30,6 +30,8 @@ var javaProjectMarkers = []string{
 	"build.gradle",
 	"build.gradle.kts",
 	"gradlew",
+	"gradlew.bat",
+	"mvnw.cmd",
 	".mvn",
 }
 
@@ -41,6 +43,15 @@ func detectJavaProcesses() []DetectedProcess {
 	processes := detectProcesses("java", nil)
 	logger.Debug("detected java processes", "count", len(processes))
 	return processes
+}
+
+// scanJavaProjects scans for Java projects, enriches process data, and matches
+// running processes to their projects. Returns the list of detected projects.
+func scanJavaProjects() []ScannedProject {
+	projects, processes := runInParallel(detectJavaProjects, detectJavaProcesses)
+	processes = enrichProcessesWithJPS(processes)
+	matchProcessesToProjects(projects, processes)
+	return projects
 }
 
 func javaAgentPath() (string, error) {
@@ -86,27 +97,6 @@ func downloadJavaAgent() (string, error) {
 	return destPath, nil
 }
 
-func updateOtelCollectorIfPresent(envURL, token string, dryRun bool) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return
-	}
-	configPath := filepath.Join(cwd, "opentelemetry", "config.yaml")
-	if !fileExists(configPath) {
-		logger.Debug("otel collector config not found, skipping update", "path", configPath)
-		return
-	}
-	if dryRun {
-		return
-	}
-	_, err = PatchConfigFile(configPath, APIURL(envURL), token)
-	if err != nil {
-		logger.Debug("failed to update OTel Collector config", "path", configPath, "error", err)
-		return
-	}
-	display.PrintStatusLine("collector", "config updated", display.ColorOK)
-}
-
 func displayInstrumentedCmd(ep JavaEntrypoint, agentPath string) string {
 	if strings.HasPrefix(ep.Command, "java ") {
 		return "java -javaagent:" + agentPath + " " + strings.TrimPrefix(ep.Command, "java ")
@@ -127,6 +117,9 @@ func buildInstrumentedCmd(ep JavaEntrypoint, agentPath, projectPath string, envV
 		fields := strings.Fields(ep.Command)
 		if len(fields) == 0 {
 			cmd = exec.Command(ep.Command)
+		} else if strings.HasSuffix(fields[0], ".cmd") || strings.HasSuffix(fields[0], ".bat") {
+			// Windows wrapper: must be invoked via cmd /c.
+			cmd = exec.Command("cmd", append([]string{"/c", fields[0]}, fields[1:]...)...)
 		} else {
 			cmd = exec.Command(fields[0], fields[1:]...)
 		}
@@ -145,12 +138,21 @@ func buildInstrumentedCmd(ep JavaEntrypoint, agentPath, projectPath string, envV
 	return cmd
 }
 
+type SubModulePlan struct {
+	Name          string
+	Path          string
+	LaunchCommand string
+	EnvVars       map[string]string
+}
+
 type JavaInstrumentationPlan struct {
 	Project           ScannedProject
 	EnvVars           map[string]string
 	EnvURL            string
 	Token             string
 	EntrypointCommand string
+	BuildCommand      string
+	SubModules        []SubModulePlan
 }
 
 func (p *JavaInstrumentationPlan) Runtime() string { return "Java" }
@@ -163,11 +165,7 @@ func DetectJavaPlan(envURL, token string) *JavaInstrumentationPlan {
 		return nil
 	}
 
-	apiURL := APIURL(envURL)
-	projects, processes := runInParallel(detectJavaProjects, detectJavaProcesses)
-	processes = enrichProcessesWithJPS(processes)
-	matchProcessesToProjects(projects, processes)
-
+	projects := scanJavaProjects()
 	if len(projects) == 0 {
 		logger.Debug("no Java projects detected, skipping Java instrumentation")
 		return nil
@@ -177,26 +175,13 @@ func DetectJavaPlan(envURL, token string) *JavaInstrumentationPlan {
 	if sel == nil {
 		return nil
 	}
-	proj := *sel
-	svcName := projectServiceName(proj.Path)
-	envVars := generateBaseOtelEnvVars(apiURL, token, svcName)
 
-	var entrypointCmd string
-	entrypoints := detectJavaEntrypoints(proj.Path)
-	if len(entrypoints) > 0 {
-		ep := promptEntrypointSelection(entrypoints)
-		if ep != nil {
-			entrypointCmd = ep.Command
-		}
+	proj := detectedProject{ScannedProject: *sel, Runtime: "Java"}
+	plan := buildJavaInstrumentationPlan(proj, APIURL(envURL), token, envURL)
+	if jp, ok := plan.(*JavaInstrumentationPlan); ok {
+		return jp
 	}
-
-	return &JavaInstrumentationPlan{
-		Project:           proj,
-		EnvVars:           envVars,
-		EnvURL:            envURL,
-		Token:             token,
-		EntrypointCommand: entrypointCmd,
-	}
+	return nil
 }
 
 func (p *JavaInstrumentationPlan) PrintPlanSteps() {
@@ -209,7 +194,7 @@ func (p *JavaInstrumentationPlan) PrintPlanSteps() {
 		ep := JavaEntrypoint{Command: p.EntrypointCommand}
 		fmt.Printf("     Launch:     %s\n", displayInstrumentedCmd(ep, agentPath))
 	} else {
-		fmt.Printf("     Launch:     java -javaagent:opentelemetry-javaagent.jar -jar your_app.jar\n")
+		fmt.Printf("     Launch:     (entrypoint will be detected at execution time)\n")
 	}
 	fmt.Printf("     Agent JAR:  %s\n", otelJavaAgentURL)
 	for _, line := range formatPrintableEnvVars(p.EnvVars) {
@@ -217,7 +202,42 @@ func (p *JavaInstrumentationPlan) PrintPlanSteps() {
 	}
 }
 
+func buildJavaInstrumentationPlan(proj detectedProject, apiURL, token, envURL string) InstrumentationPlan {
+	if mm := detectMultiModule(proj.Path); mm != nil {
+		return buildMultiModulePlan(mm, proj.ScannedProject, apiURL, token, envURL)
+	}
+	svcName := projectServiceName(proj.Path)
+	envVars := generateBaseOtelEnvVars(apiURL, token, svcName)
+	entrypoints := detectJavaEntrypoints(proj.Path)
+	var entrypointCmd string
+	if len(entrypoints) > 0 {
+		ep := promptEntrypointSelection(entrypoints)
+		if ep != nil {
+			entrypointCmd = ep.Command
+		}
+	}
+	return &JavaInstrumentationPlan{
+		Project:           proj.ScannedProject,
+		EnvVars:           envVars,
+		EnvURL:            envURL,
+		Token:             token,
+		EntrypointCommand: entrypointCmd,
+	}
+}
+
 func (p *JavaInstrumentationPlan) Execute() {
+	if len(p.SubModules) > 0 {
+		if len(p.Project.RunningProcessIDs) > 0 {
+			fmt.Print("  Stopping running processes... ")
+			stopProcesses(p.Project.RunningProcessIDs)
+			fmt.Println("done.")
+		}
+		if err := p.executeMultiModule(); err != nil {
+			logger.Debug("multi-module execution failed", "error", err)
+		}
+		return
+	}
+
 	agentPath, err := downloadJavaAgent()
 	if err != nil {
 		display.PrintStatusLine("error", fmt.Sprintf("failed to download agent: %v", err), display.ColorError)
@@ -264,7 +284,7 @@ func (p *JavaInstrumentationPlan) Execute() {
 		display.PrintStatusLine("error", fmt.Sprintf("failed to start process: %v", err), display.ColorError)
 		return
 	}
-	proc.portDetector = detectJavaListeningPort
+	proc.portDetector = func(pid int) string { return detectJavaListeningPort(pid, p.Project.Path) }
 
 	aliveNames, _ := PrintProcessSummary([]*ManagedProcess{proc}, processSettleDelay)
 	if len(aliveNames) == 0 {
@@ -289,21 +309,7 @@ func InstallOtelJava(envURL, token, serviceName string, dryRun bool) error {
 
 	var envVars map[string]string
 
-	projects, processes := runInParallel(detectJavaProjects, detectJavaProcesses)
-	processes = enrichProcessesWithJPS(processes)
-	matchProcessesToProjects(projects, processes)
-
-	anyMatched := false
-	for _, proj := range projects {
-		for _, pid := range proj.RunningProcessIDs {
-			logger.Debug("matched process to project", "pid", pid, "project", proj.Path)
-			anyMatched = true
-		}
-	}
-	if !anyMatched {
-		logger.Debug("no running java processes matched to any project")
-	}
-
+	projects := scanJavaProjects()
 	logger.Debug("detected java projects", "count", len(projects))
 	if len(projects) == 0 {
 		display.PrintStatusLine("error", "no Java projects detected", display.ColorError)
@@ -322,6 +328,48 @@ func InstallOtelJava(envURL, token, serviceName string, dryRun bool) error {
 	}
 	logger.Debug("java instrumentation target", "project", proj.Path, "service", serviceName)
 	envVars = generateBaseOtelEnvVars(apiURL, token, serviceName)
+
+	if mm := detectMultiModule(proj.Path); mm != nil {
+		logger.Debug("multi-module project detected", "tool", mm.BuildTool)
+		plan := buildMultiModulePlan(mm, proj, apiURL, token, envURL)
+
+		fmt.Println()
+		display.Header("Java multi-module instrumentation plan")
+		fmt.Printf("  Project:       %s\n", proj.Path)
+		if plan.BuildCommand != "" {
+			fmt.Printf("  Build command: %s\n", plan.BuildCommand)
+		}
+		fmt.Println()
+		fmt.Println("  Modules:")
+		for _, sub := range plan.SubModules {
+			fmt.Printf("    [%s]  %s\n", sub.Name, sub.LaunchCommand)
+		}
+		fmt.Println()
+
+		if dryRun {
+			display.PrintStatusLine("dry-run", "no changes made", display.ColorMuted)
+			return nil
+		}
+
+		ok, err := confirmProceed("  Proceed with multi-module instrumentation?")
+		if err != nil {
+			return fmt.Errorf("reading confirmation: %w", err)
+		}
+		if !ok {
+			fmt.Println("  Installation cancelled.")
+			return nil
+		}
+
+		if len(proj.RunningProcessIDs) > 0 {
+			logger.Debug("stopping running java processes", "pids", proj.RunningProcessIDs)
+			stopProcesses(proj.RunningProcessIDs)
+		}
+
+		if err := plan.executeMultiModule(); err != nil {
+			return err
+		}
+		return nil
+	}
 
 	entrypoints := detectJavaEntrypoints(proj.Path)
 	logger.Debug("detected java entrypoints", "count", len(entrypoints), "project", proj.Path)
@@ -415,7 +463,7 @@ func InstallOtelJava(envURL, token, serviceName string, dryRun bool) error {
 	if err != nil {
 		return fmt.Errorf("starting instrumented process: %w", err)
 	}
-	proc.portDetector = detectJavaListeningPort
+	proc.portDetector = func(pid int) string { return detectJavaListeningPort(pid, proj.Path) }
 
 	aliveNames, _ := PrintProcessSummary([]*ManagedProcess{proc}, processSettleDelay)
 	if len(aliveNames) == 0 {

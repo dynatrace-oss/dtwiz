@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
@@ -69,16 +71,64 @@ func detectProcesses(filterTerm string, excludeTerms []string) []DetectedProcess
 	return processes
 }
 
+// waitForProcessDeath polls until the process with pid is gone or the timeout
+// elapses. It uses kill(pid, 0)
+func waitForProcessDeath(pid int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if err := syscall.Kill(pid, 0); err != nil {
+			return true
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return false
+}
+
 func lookupProcessWorkingDirectory(pid int) string {
 	output, err := exec.Command("lsof", "-a", "-d", "cwd", "-p", strconv.Itoa(pid), "-Fn").Output()
 	if err != nil {
-		logger.Warn("lsof cwd lookup failed", "pid", pid, "err", err)
+		logger.Debug("lsof cwd lookup failed", "pid", pid, "err", err)
 		return ""
 	}
 
 	for _, line := range strings.Split(string(output), "\n") {
 		if strings.HasPrefix(line, "n") {
 			return line[1:]
+		}
+	}
+	return ""
+}
+
+// javaDescendantPort finds the listening port of an app JVM spawned by a
+// build-tool wrapper (mvn spring-boot:run, gradlew bootRun). Uses jps -l to
+// enumerate JVMs, filters out build-tool processes, and checks each candidate
+// for a listening port.
+func javaDescendantPort(pid int, projectDir string) string {
+	out, err := exec.Command("jps", "-l").Output()
+	if err != nil {
+		logger.Debug("jps -l failed", "err", err)
+		return ""
+	}
+
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) < 2 {
+			continue
+		}
+		jvmPIDStr, jvmClass := fields[0], fields[1]
+		jvmPID, err := strconv.Atoi(jvmPIDStr)
+		if err != nil || jvmPID == pid {
+			continue
+		}
+		if isBuildToolJVM(jvmClass) {
+			continue
+		}
+		if projectDir != "" && !isUnderDir(jvmClass, projectDir) {
+			continue
+		}
+		if port := detectProcessListeningPort(jvmPID); port != "" {
+			logger.Debug("javaDescendantPort: port found", "wrapper_pid", pid, "jvm_pid", jvmPID, "class", jvmClass, "port", port)
+			return port
 		}
 	}
 	return ""
@@ -104,4 +154,20 @@ func detectProcessListeningPort(pid int) string {
 		}
 	}
 	return ""
+}
+
+// jvmHasAgentLoaded reports whether a JVM process has loaded the given agent JAR.
+// It uses lsof to check open file descriptors, catching cases where the agent
+// is injected via JAVA_TOOL_OPTIONS and doesn't appear in the command line.
+func jvmHasAgentLoaded(pid int, agentJAR string) bool {
+	output, err := exec.Command("lsof", "-p", strconv.Itoa(pid), "-Fn").Output()
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(output), "\n") {
+		if strings.HasPrefix(line, "n") && strings.Contains(line, agentJAR) {
+			return true
+		}
+	}
+	return false
 }

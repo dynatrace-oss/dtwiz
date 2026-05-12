@@ -11,9 +11,16 @@ import (
 )
 
 const (
-	portPollInterval   = 500 * time.Millisecond
-	portPollTimeout    = 15 * time.Second
+	portPollInterval = 500 * time.Millisecond
+	// portPollTimeout has to outlast Maven compilation + Spring Boot startup.
+	// Typical projects take 20–45s on Unix; on slow Windows VMs Spring Boot
+	// can take 60–120s. Each probe iteration also burns ~5–10s to PowerShell
+	// startup, so the effective poll rate is much lower than portPollInterval.
+	// Services that legitimately do not expose a port make the user wait the
+	// full timeout before "port not detected" is shown.
+	portPollTimeout    = 3 * time.Minute
 	processSettleDelay = 3 * time.Second
+	slowHintDelay      = 10 * time.Second
 )
 
 type ManagedProcess struct {
@@ -154,9 +161,15 @@ func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) 
 		}
 
 		deadline := time.Now().Add(portPollTimeout)
-		iteration := 0
+		hintDone := make(chan struct{})
+		go func() {
+			select {
+			case <-time.After(slowHintDelay):
+				fmt.Println("  Still detecting ports — this may take a while.")
+			case <-hintDone:
+			}
+		}()
 		for time.Now().Before(deadline) {
-			iteration++
 			var mu sync.Mutex
 			portsFound := 0
 			remaining := 0
@@ -175,7 +188,7 @@ func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) 
 				go func(idx int, proc *ManagedProcess) {
 					defer wg.Done()
 					port := proc.detectPort()
-					logger.Debug("port probe", "iteration", iteration, "pid", proc.PID, "name", proc.Name, "port", port)
+					logger.Debug("port probe", "pid", proc.PID, "name", proc.Name, "port", port)
 					if port != "" {
 						mu.Lock()
 						ports[idx] = port
@@ -185,13 +198,14 @@ func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) 
 				}(i, p)
 			}
 			wg.Wait()
-			logger.Debug("poll iteration complete", "iteration", iteration, "remaining", remaining, "ports_found", portsFound)
+			logger.Debug("poll iteration complete", "remaining", remaining, "ports_found", portsFound)
 			if remaining == 0 || portsFound == started {
 				logger.Debug("port detection done", "reason", map[bool]string{true: "all exited", false: "all ports found"}[remaining == 0])
 				break
 			}
 			time.Sleep(portPollInterval)
 		}
+		close(hintDone)
 	}
 
 	for i, p := range procs {

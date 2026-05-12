@@ -27,6 +27,30 @@ func TestProjectServiceName(t *testing.T) {
 	}
 }
 
+func TestNormalizeServiceName(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"plain", "my-service", "my-service"},
+		{"forward slash", "ui/web", "ui-web"},
+		{"back slash", "ui\\web", "ui-web"},
+		{"colon", "group:artifact", "group-artifact"},
+		{"gradle colon-prefixed", ":api:web", "-api-web"},
+		{"mixed separators", "a/b\\c:d", "a-b-c-d"},
+		{"empty", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizeServiceName(tt.in)
+			if got != tt.want {
+				t.Errorf("normalizeServiceName(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestGenerateBaseOtelEnvVars(t *testing.T) {
 	envVars := generateBaseOtelEnvVars("https://abc123.live.dynatrace.com", "dt0c01.TOKEN", "my-svc")
 

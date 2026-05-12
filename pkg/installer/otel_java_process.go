@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -88,6 +89,22 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
+// findWrapper returns the wrapper filename (not full path) for the current platform.
+// On Windows it checks windowsName; on all other platforms it checks unixName.
+// Returns "" if the file does not exist.
+func findWrapper(projectPath, unixName, windowsName string) string {
+	if runtime.GOOS == "windows" {
+		if fileExists(filepath.Join(projectPath, windowsName)) {
+			return windowsName
+		}
+		return ""
+	}
+	if fileExists(filepath.Join(projectPath, unixName)) {
+		return unixName
+	}
+	return ""
+}
+
 // isExecutableJar returns true if the JAR at jarPath has a Main-Class entry in
 // META-INF/MANIFEST.MF.
 func isExecutableJar(jarPath string) bool {
@@ -150,14 +167,17 @@ func resolveMavenCmd(projectPath string) (cmd, desc string) {
 	if !fileExists(filepath.Join(projectPath, "pom.xml")) {
 		return "", ""
 	}
-	if fileExists(filepath.Join(projectPath, "mvnw")) &&
-		fileExists(filepath.Join(projectPath, ".mvn", "wrapper", "maven-wrapper.jar")) {
-		return "./mvnw", "Maven"
+	wrapperName := findWrapper(projectPath, "mvnw", "mvnw.cmd")
+	if wrapperName != "" && fileExists(filepath.Join(projectPath, ".mvn", "wrapper", "maven-wrapper.jar")) {
+		if runtime.GOOS == "windows" {
+			return wrapperName, "Maven"
+		}
+		return "./" + wrapperName, "Maven"
 	}
 	if _, err := exec.LookPath("mvn"); err == nil {
 		return "mvn", "Maven"
 	}
-	if fileExists(filepath.Join(projectPath, "mvnw")) {
+	if wrapperName != "" {
 		display.PrintStatusLine("error", "maven-wrapper.jar not found and 'mvn' is not in PATH — install Maven or run: mvn wrapper:wrapper", display.ColorError)
 	}
 	return "", ""
@@ -169,14 +189,17 @@ func resolveGradleCmd(projectPath string) (cmd, desc string) {
 	if !hasBuildFile {
 		return "", ""
 	}
-	if fileExists(filepath.Join(projectPath, "gradlew")) &&
-		fileExists(filepath.Join(projectPath, "gradle", "wrapper", "gradle-wrapper.jar")) {
-		return "./gradlew", "Gradle"
+	wrapperName := findWrapper(projectPath, "gradlew", "gradlew.bat")
+	if wrapperName != "" && fileExists(filepath.Join(projectPath, "gradle", "wrapper", "gradle-wrapper.jar")) {
+		if runtime.GOOS == "windows" {
+			return wrapperName, "Gradle"
+		}
+		return "./" + wrapperName, "Gradle"
 	}
 	if _, err := exec.LookPath("gradle"); err == nil {
 		return "gradle", "Gradle"
 	}
-	if fileExists(filepath.Join(projectPath, "gradlew")) {
+	if wrapperName != "" {
 		display.PrintStatusLine("error", "gradle-wrapper.jar not found and 'gradle' is not in PATH — install Gradle or run: gradle wrapper --gradle-version 8.7", display.ColorError)
 	}
 	return "", ""
@@ -265,23 +288,30 @@ func attemptSingleModuleBuild(projectPath string) error {
 	mvnCmd, _ := resolveMavenCmd(projectPath)
 	gradleCmd, _ := resolveGradleCmd(projectPath)
 
-	var buildCmd string
-	var args []string
+	var cmd *exec.Cmd
+	var displayCmd string
 
 	switch {
 	case mvnCmd != "":
-		buildCmd = mvnCmd
-		args = []string{"clean", "package", "-DskipTests"}
+		displayCmd = mvnCmd + " clean package -DskipTests"
+		if strings.HasSuffix(mvnCmd, ".cmd") {
+			cmd = exec.Command("cmd", "/c", mvnCmd, "clean", "package", "-DskipTests")
+		} else {
+			cmd = exec.Command(mvnCmd, "clean", "package", "-DskipTests")
+		}
 	case gradleCmd != "":
-		buildCmd = gradleCmd
-		args = []string{"build", "-x", "test"}
+		displayCmd = gradleCmd + " build -x test"
+		if strings.HasSuffix(gradleCmd, ".bat") {
+			cmd = exec.Command("cmd", "/c", gradleCmd, "build", "-x", "test")
+		} else {
+			cmd = exec.Command(gradleCmd, "build", "-x", "test")
+		}
 	default:
 		display.PrintStatusLine("error", "no build tool detected — build the project manually and re-run", display.ColorError)
 		return fmt.Errorf("no build tool detected")
 	}
 
-	logger.Debug("attempting auto-build", "command", buildCmd, "project", projectPath)
-	cmd := exec.Command(buildCmd, args...)
+	logger.Debug("attempting auto-build", "command", displayCmd, "project", projectPath)
 	cmd.Dir = projectPath
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -334,36 +364,24 @@ func promptEntrypointSelection(entrypoints []JavaEntrypoint) *JavaEntrypoint {
 	return &entrypoints[selection-1]
 }
 
-// detectJavaListeningPort extends detectProcessListeningPort with a jps -l
-// fallback that skips build-tool JVMs. Needed for Gradle, where the app runs
-// inside the daemon rather than the tracked wrapper process.
-func detectJavaListeningPort(pid int) string {
+// detectJavaListeningPort returns the listening port of a Java process.
+// Tries the tracked PID directly first (handles direct java -jar launches),
+// then delegates to javaDescendantPort for wrapper launchers (mvn, gradle)
+// that fork the app into a separate JVM.
+func detectJavaListeningPort(pid int, projectDir string) string {
 	if port := detectProcessListeningPort(pid); port != "" {
+		logger.Debug("port found directly on tracked pid", "pid", pid, "port", port)
 		return port
 	}
-	out, err := exec.Command("jps", "-l").Output()
-	if err != nil {
-		return ""
+	return javaDescendantPort(pid, projectDir)
+}
+
+// isUnderDir reports whether path equals dir or is anywhere beneath it (any depth).
+func isUnderDir(path, dir string) bool {
+	if path == "" || dir == "" {
+		return false
 	}
-	for _, line := range strings.Split(string(out), "\n") {
-		fields := strings.Fields(strings.TrimSpace(line))
-		if len(fields) < 2 {
-			continue
-		}
-		jvmPID, err := strconv.Atoi(fields[0])
-		if err != nil || jvmPID == pid {
-			continue
-		}
-		if isBuildToolJVM(fields[1]) {
-			logger.Debug("skipping build-tool JVM", "pid", jvmPID, "class", fields[1])
-			continue
-		}
-		if port := detectProcessListeningPort(jvmPID); port != "" {
-			logger.Debug("port found on app JVM", "root_pid", pid, "jvm_pid", jvmPID, "class", fields[1], "port", port)
-			return port
-		}
-	}
-	return ""
+	return path == dir || strings.HasPrefix(path, dir+string(os.PathSeparator))
 }
 
 // isBuildToolJVM reports whether a JVM main class belongs to a build-tool process.
@@ -371,6 +389,7 @@ func isBuildToolJVM(mainClass string) bool {
 	for _, prefix := range []string{
 		"org.gradle.",
 		"org.apache.maven.",
+		"org.mvndaemon.mvnd.", // Maven daemon (mvnd)
 		"sun.tools.jps.",
 		"com.sun.tools.jps.",
 	} {

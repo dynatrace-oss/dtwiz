@@ -13,7 +13,7 @@
 - **OTel Collector config update.** After instrumenting the Java process, update the existing OTel Collector config (if one is present) to include a Java-specific pipeline or confirm the OTLP receiver is already covering it — mirroring the `dtwiz update otel` behavior.
 - Add pre-flight validation: Java in PATH, version >= 8.
 - Add Java version parsing that handles all common `java -version` output formats (openjdk version "1.8.0_…", java version "17.0.1", etc.).
-- After launching the instrumented process, reuse the existing `ManagedProcess` / `PrintProcessSummary` infrastructure from `otel_process.go` and call `waitForServices()` to verify the service appears in Dynatrace via DQL.
+- After launching the instrumented process, reuse the existing `ManagedProcess` / `PrintProcessSummary` infrastructure from `otel_process.go`. Post-install ingest watching is handled by `WatchIngest()` (from `ingest_watch.go`), called by `cmd/install.go` after `InstallOtelJava()` returns — the same pattern used by every other runtime.
 
 - Remove Java from the `DTWIZ_ALL_RUNTIMES` gate so it appears in `dtwiz install otel` project selection by default.
 - `--dry-run` supported for the full flow.
@@ -22,7 +22,7 @@
 
 ### New Capabilities
 
-- `java-auto-instrumentation`: Scan for Java projects, detect launch entrypoints, download the OTel Java agent JAR, stop any running instance, start the application with `-javaagent` and OTEL env vars, update the OTel Collector config, and verify traces/logs appear in Dynatrace.
+- `java-auto-instrumentation`: Scan for Java projects, detect launch entrypoints, download the OTel Java agent JAR, stop any running instance, start the application with `-javaagent` and OTEL env vars, update the OTel Collector config, and verify traces/logs appear in Dynatrace. Works from both `dtwiz install otel-java` (standalone) and `dtwiz install otel` (multi-runtime flow via `createRuntimePlan` → `Execute()`). For multi-module Maven/Gradle projects, all sub-modules are instrumented as independent services regardless of which entry point triggered the flow.
 - `java-uninstall`: detect Java processes whose command line references the exact dtwiz agent path (`~/.opentelemetry/java/opentelemetry-javaagent.jar`), stop them, and remove `~/.opentelemetry/java/`. This logic is folded into the existing `UninstallOtelCollector()` as an additional cleanup section — no separate command is added. The preview explicitly asks the user to verify the list before confirming. Supports `--dry-run`.
 - `java-entrypoint-detection`: Locate runnable JAR artifacts and build-tool wrappers in a Java project directory. Support Maven (`target/*.jar`, `./mvnw spring-boot:run` / `mvnw.cmd spring-boot:run` for Spring Boot), Gradle (`build/libs/*.jar`, `./gradlew bootRun` / `gradlew.bat bootRun` for Spring Boot, `./gradlew run` / `gradlew.bat run` otherwise), and plain `java -jar` invocations. Wrapper detection and command construction are platform-aware (Unix vs Windows). When no built JAR is found, attempt an auto-build before falling back to an error. Non-Spring Boot Maven projects with no build tool receive a "no build tool detected" message.
 - `java-process-detection`: Detect running Java processes from `ps ax` output (and `jps` when available) as an enrichment signal — matched to detected projects to show which projects are currently running and to stop any running instance before relaunch.
@@ -34,8 +34,8 @@
 
 ## Impact
 
-- **Code**: New files `pkg/installer/otel_java_process.go` (process detection, command parsing, reconstruction, entrypoint detection), modified `pkg/installer/otel_java.go` (full automated flow replacing manual instructions), modified `pkg/installer/otel_uninstall.go` (extend `UninstallOtelCollector` to include Java process and agent-dir cleanup), modified `cmd/install.go`, modified `pkg/installer/otel.go` (enable Java in default runtimes, update `createRuntimePlan` Java case). No new `cmd/uninstall.go` subcommand is added.
-- **Dependencies**: No new Go module dependencies. Uses existing `os/exec`, `net/http` for JAR download, `filepath.Glob` for artifact discovery, and existing `ManagedProcess`/`waitForServices`/collector-update infrastructure.
+- **Code**: New files `pkg/installer/otel_java_process.go` (version validation, entrypoint detection, `detectJavaListeningPort`, `isBuildToolJVM`, `isUnderDir`, jps enrichment), `pkg/installer/otel_java_multimodule.go` (multi-module detection and execution); modified `pkg/installer/otel_java.go` (full automated flow replacing manual instructions); modified `pkg/installer/otel_runtime_scan_unix.go` and `otel_runtime_scan_windows.go` (add platform-specific `javaDescendantPort` for wrapper-launcher port detection); modified `pkg/installer/otel_uninstall.go` (extend `UninstallOtelCollector` to include Java process and agent-dir cleanup), modified `cmd/install.go`, modified `pkg/installer/otel.go` (enable Java in default runtimes, update `createRuntimePlan` Java case). No new `cmd/uninstall.go` subcommand is added.
+- **Dependencies**: No new Go module dependencies. Uses existing `os/exec`, `net/http` for JAR download, `filepath.Glob` for artifact discovery, and existing `ManagedProcess`/`WatchIngest`/collector-update infrastructure.
 - **UX**: `install otel-java` becomes a fully automated, interactive installer that starts from project detection — no running process required. `install otel` project selection shows Java projects by default (no longer gated).
 - **Token scope**: Reuses existing `DT_ACCESS_TOKEN` for OTLP ingest and DQL verification (Bearer auth).
 - **Non-regression**: The `setup` flow's multi-runtime detection continues to work with Java now enabled.

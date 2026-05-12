@@ -3,7 +3,9 @@
 package installer
 
 import (
+	"os"
 	"os/exec"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -80,5 +82,28 @@ func TestDetectProcesses_ExcludeTermsCaseInsensitive(t *testing.T) {
 		if p.PID == pid {
 			t.Errorf("detectProcesses excluded \"SLEEP\" but PID %d still appeared — case-insensitive exclude broken", pid)
 		}
+	}
+}
+
+// TestJvmHasAgentLoaded_DetectsOpenFile verifies that jvmHasAgentLoaded
+// returns true when the given path is open in the queried process. Uses
+// the test binary's own executable, which is guaranteed to appear in
+// `lsof -p <self>` output.
+func TestJvmHasAgentLoaded_DetectsOpenFile(t *testing.T) {
+	self, err := os.Executable()
+	if err != nil {
+		t.Skipf("os.Executable failed: %v", err)
+	}
+	if !jvmHasAgentLoaded(os.Getpid(), self) {
+		t.Errorf("jvmHasAgentLoaded(self, %q) = false; want true", self)
+	}
+}
+
+// TestJvmHasAgentLoaded_ReturnsFalseWhenAbsent verifies that
+// jvmHasAgentLoaded returns false when the path is not open in the process.
+func TestJvmHasAgentLoaded_ReturnsFalseWhenAbsent(t *testing.T) {
+	unique := "/nonexistent/dtwiz-marker-" + strconv.Itoa(os.Getpid()) + "-no-such-agent.jar"
+	if jvmHasAgentLoaded(os.Getpid(), unique) {
+		t.Errorf("jvmHasAgentLoaded(self, %q) = true; want false (path not open)", unique)
 	}
 }

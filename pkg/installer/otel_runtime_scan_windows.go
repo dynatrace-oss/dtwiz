@@ -7,9 +7,27 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
+
+// waitForProcessDeath polls until the process is gone or the timeout elapses.
+// On Windows, killAndWaitProcess is used instead of SIGINT, so this is only
+// called in the SIGKILL fallback path (which should not be reached on Windows).
+// The implementation uses tasklist to check whether the PID is still present.
+func waitForProcessDeath(pid int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	pidStr := strconv.Itoa(pid)
+	for time.Now().Before(deadline) {
+		out, err := exec.Command("tasklist", "/FI", "PID eq "+pidStr, "/NH").Output()
+		if err != nil || !strings.Contains(string(out), pidStr) {
+			return true
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return false
+}
 
 // winProcessQuery runs a Get-CimInstance Win32_Process query on Windows.
 // whereClause is the PowerShell Where-Object expression and fieldsExpr
@@ -106,21 +124,82 @@ func lookupProcessWorkingDirectory(pid int) string {
 	return strings.TrimSpace(string(output))
 }
 
-// detectProcessListeningPort returns the first non-OTel TCP port a process is listening on,
-// using Get-NetTCPConnection (available on Windows Server 2012 R2+ / Windows 8.1+).
+// detectProcessListeningPort returns the first non-OTel TCP port a process is
+// listening on, using Get-NetTCPConnection (Windows Server 2012 R2+ / Win 8.1+).
+//
+// Get-NetTCPConnection -OwningProcess exits with code 1 when the process has no
+// connections even with -ErrorAction SilentlyContinue, so we read output
+// regardless of the exit code and treat non-empty output as success.
 func detectProcessListeningPort(pid int) string {
-	output, err := exec.Command(
+	cmd := exec.Command(
 		"powershell", "-NoProfile", "-Command",
 		"Get-NetTCPConnection -State Listen -OwningProcess "+strconv.Itoa(pid)+
 			" -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -notin @(4317,4318) } | Select-Object -First 1 -ExpandProperty LocalPort",
-	).Output()
-	if err != nil {
-		logger.Debug("detectProcessListeningPort: query failed", "pid", pid, "err", err)
+	)
+	output, err := cmd.Output()
+	port := strings.TrimSpace(string(output))
+	if port == "" {
+		if err != nil {
+			logger.Debug("detectProcessListeningPort: query failed", "pid", pid, "err", err)
+		}
 		return ""
 	}
-	port := strings.TrimSpace(string(output))
-	if port != "" {
-		logger.Debug("detectProcessListeningPort: found port", "pid", pid, "port", port)
-	}
+	logger.Debug("detectProcessListeningPort: found port", "pid", pid, "port", port)
 	return port
+}
+
+// javaDescendantPort finds the listening port of a java.exe process that is a
+// descendant of wrapperPID. This handles Maven/Gradle wrappers (cmd /c mvn.cmd)
+// which spawn a java.exe child that owns the actual listening port.
+// Walks up to 4 levels of the process tree from wrapperPID, collects all
+// java.exe descendants, then returns the first listening port found among them.
+func javaDescendantPort(wrapperPID int, _ string) string {
+	pidStr := strconv.Itoa(wrapperPID)
+	script := `
+$all = Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId,Name -ErrorAction SilentlyContinue
+$pids = @(` + pidStr + `)
+1..4 | ForEach-Object {
+    $children = @($all | Where-Object { $pids -contains $_.ParentProcessId -and $_.ProcessId -notin $pids })
+    if ($children.Count -eq 0) { return }
+    $pids = $pids + @($children | ForEach-Object { $_.ProcessId })
+}
+$javaPids = @($all | Where-Object { $pids -contains $_.ProcessId -and $_.Name -match '^java' -and $_.ProcessId -ne ` + pidStr + ` } | ForEach-Object { $_.ProcessId })
+if ($javaPids) {
+    Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
+        Where-Object { $javaPids -contains $_.OwningProcess -and $_.LocalPort -notin @(4317,4318) } |
+        Select-Object -First 1 -ExpandProperty LocalPort
+}`
+	logger.Debug("javaDescendantPort: scanning", "wrapper_pid", wrapperPID)
+	output, err := exec.Command("powershell", "-NoProfile", "-Command", script).Output()
+	port := strings.TrimSpace(string(output))
+	if port == "" {
+		if err != nil {
+			logger.Debug("javaDescendantPort: query failed", "wrapper_pid", wrapperPID, "err", err)
+		} else {
+			logger.Debug("javaDescendantPort: no descendant with port found", "wrapper_pid", wrapperPID)
+		}
+		return ""
+	}
+	logger.Debug("javaDescendantPort: found", "wrapper_pid", wrapperPID, "port", port)
+	return port
+}
+
+// jvmHasAgentLoaded reports whether a JVM process has the given agent JAR
+// on its command line. Process.Modules enumerates loaded PE/native modules
+// (DLLs), so a -javaagent JAR loaded by the JVM classloader never appears
+// there — we inspect the command-line string instead.
+//
+// Unlike the Unix variant, which uses lsof to also catch agents injected
+// via JAVA_TOOL_OPTIONS, there is no clean PowerShell-only way to read
+// another process's environment block, so this only covers the
+// command-line case.
+func jvmHasAgentLoaded(pid int, agentJAR string) bool {
+	output, err := exec.Command(
+		"powershell", "-NoProfile", "-Command",
+		"Get-CimInstance Win32_Process -Filter \"ProcessId="+strconv.Itoa(pid)+"\" | Select-Object -ExpandProperty CommandLine",
+	).Output()
+	if err != nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(string(output)), strings.ToLower(agentJAR))
 }

@@ -1,6 +1,7 @@
 package installer
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -8,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/fatih/color"
 )
 
 // ── test helpers ──────────────────────────────────────────────────────────────
@@ -26,7 +29,9 @@ func redirectAgentDownloadURL(t *testing.T, srv *httptest.Server) {
 	orig := otelJavaAgentURL
 	otelJavaAgentURL = srv.URL + "/opentelemetry-javaagent.jar"
 	t.Cleanup(func() { otelJavaAgentURL = orig })
-	t.Setenv("HOME", t.TempDir())
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 }
 
 // makeMavenProjectWithFatJar creates a temp Maven project containing a single
@@ -206,7 +211,7 @@ func TestJavaInstrumentationPlan_PrintPlanSteps(t *testing.T) {
 		plan.PrintPlanSteps()
 	})
 
-	checks := []string{"/tmp/service", otelJavaAgentURL, "java -javaagent:opentelemetry-javaagent.jar -jar your_app.jar"}
+	checks := []string{"/tmp/service", otelJavaAgentURL, "(entrypoint will be detected at execution time)"}
 	for _, check := range checks {
 		if !strings.Contains(output, check) {
 			t.Fatalf("expected output to contain %q, got:\n%s", check, output)
@@ -252,6 +257,108 @@ func TestJavaInstrumentationPlan_Execute(t *testing.T) {
 	captureStdout(t, func() {
 		plan.Execute()
 	})
+}
+
+// TestJavaInstrumentationPlan_Execute_MultiModuleDispatch verifies that Execute()
+// routes to executeMultiModule() when SubModules is non-empty. Before the fix,
+// Execute() ignored SubModules and fell through to single-module entrypoint
+// detection on the root, starting at most one process.
+func TestJavaInstrumentationPlan_Execute_MultiModuleDispatch(t *testing.T) {
+	skipIfNoJava(t)
+
+	root := t.TempDir()
+	subA := filepath.Join(root, "svc-a")
+	subB := filepath.Join(root, "svc-b")
+	if err := os.MkdirAll(subA, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(subB, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	agentDownloaded := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		agentDownloaded = true
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("fake-jar"))
+	}))
+	defer srv.Close()
+	redirectAgentDownloadURL(t, srv)
+
+	// Redirect color.Output so display.PrintStatusLine output is captured.
+	var colorBuf bytes.Buffer
+	origColorOutput := color.Output
+	color.Output = &colorBuf
+	origNoColor := color.NoColor
+	color.NoColor = true
+	t.Cleanup(func() {
+		color.Output = origColorOutput
+		color.NoColor = origNoColor
+	})
+
+	plan := &JavaInstrumentationPlan{
+		Project: ScannedProject{Path: root},
+		EnvURL:  "https://tenant.live.dynatrace.com",
+		Token:   "token",
+		SubModules: []SubModulePlan{
+			{Name: "svc-a", Path: subA, EnvVars: map[string]string{"OTEL_SERVICE_NAME": "svc-a"}},
+			{Name: "svc-b", Path: subB, EnvVars: map[string]string{"OTEL_SERVICE_NAME": "svc-b"}},
+		},
+	}
+
+	captureStdout(t, func() {
+		plan.Execute()
+	})
+	output := colorBuf.String()
+
+	if !agentDownloaded {
+		t.Error("agent download not attempted — Execute() did not dispatch to executeMultiModule()")
+	}
+	if strings.Contains(output, "no runnable entrypoint detected") {
+		t.Error("single-module error found in output — Execute() did not dispatch to executeMultiModule()")
+	}
+	if !strings.Contains(output, "svc-a") || !strings.Contains(output, "svc-b") {
+		t.Errorf("expected both sub-module names in output, got:\n%s", output)
+	}
+}
+
+// TestDetectJavaPlan_MultiModule_HasSubModules verifies that DetectJavaPlan
+// returns a plan with SubModules populated for a Maven multi-module project.
+func TestDetectJavaPlan_MultiModule_HasSubModules(t *testing.T) {
+	skipIfNoJava(t)
+
+	root := t.TempDir()
+	rootPOM := `<?xml version="1.0"?><project xmlns="http://maven.apache.org/POM/4.0.0">` +
+		`<modules><module>svc-a</module><module>svc-b</module></modules></project>`
+	if err := os.WriteFile(filepath.Join(root, "pom.xml"), []byte(rootPOM), 0644); err != nil {
+		t.Fatal(err)
+	}
+	for _, mod := range []string{"svc-a", "svc-b"} {
+		dir := filepath.Join(root, mod)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte("<project/>"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	setTestWorkingDir(t, root)
+	setTestStdin(t, "1\n")
+
+	plan := DetectJavaPlan("https://tenant.live.dynatrace.com", "token")
+	if plan == nil {
+		t.Fatal("expected plan for multi-module project")
+	}
+	if len(plan.SubModules) != 2 {
+		t.Fatalf("expected 2 sub-modules, got %d", len(plan.SubModules))
+	}
+	if plan.SubModules[0].Name != "svc-a" || plan.SubModules[1].Name != "svc-b" {
+		t.Errorf("unexpected sub-module names: %v", plan.SubModules)
+	}
+	if plan.EntrypointCommand != "" {
+		t.Errorf("multi-module plan should not have EntrypointCommand set, got %q", plan.EntrypointCommand)
+	}
 }
 
 // ── Download tests ────────────────────────────────────────────────────────────
@@ -446,4 +553,77 @@ func TestInstallOtelJava_AutoBuildFails(t *testing.T) {
 			t.Fatal("expected error when auto-build fails, got nil")
 		}
 	})
+}
+
+// ── javaAgentPath tests ───────────────────────────────────────────────────────
+
+func TestJavaAgentPath_UsesHomeDirectory(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
+
+	path, err := javaAgentPath()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	expectedSubpath := filepath.Join(".opentelemetry", "java", "opentelemetry-javaagent.jar")
+	if !strings.HasSuffix(path, expectedSubpath) {
+		t.Fatalf("expected path to end with %q, got %q", expectedSubpath, path)
+	}
+	if !strings.Contains(path, tmpHome) {
+		t.Fatalf("expected path to contain home dir %q, got %q", tmpHome, path)
+	}
+}
+
+// ── buildInstrumentedCmd tests ────────────────────────────────────────────────
+
+func TestBuildInstrumentedCmd_WithEnvVars(t *testing.T) {
+	ep := JavaEntrypoint{
+		Command:     "java -jar app.jar",
+		Description: "test app",
+	}
+	agentPath := "/path/to/agent.jar"
+	projectDir := "/path/to/project"
+	envVars := map[string]string{
+		"CUSTOM_VAR":    "custom_value",
+		"ANOTHER_VAR":   "another_value",
+		"OTEL_EXPORTER": "should_be_overridden",
+	}
+
+	cmd := buildInstrumentedCmd(ep, agentPath, projectDir, envVars)
+	if cmd == nil {
+		t.Fatal("expected non-nil *exec.Cmd")
+	}
+	if !strings.Contains(cmd.String(), "agent.jar") {
+		t.Fatalf("expected agent path in command, got: %s", cmd.String())
+	}
+
+	// Check that custom env vars are present
+	found := false
+	for _, env := range cmd.Env {
+		if strings.Contains(env, "CUSTOM_VAR=custom_value") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected custom env var in command env, got: %v", cmd.Env)
+	}
+}
+
+func TestBuildInstrumentedCmd_JavaPrefixCommand(t *testing.T) {
+	ep := JavaEntrypoint{
+		Command:     "java -Xmx512m -jar my-app.jar --arg1 value1",
+		Description: "test",
+	}
+	agentPath := "/path/to/agent.jar"
+	projectDir := "/tmp"
+
+	cmd := buildInstrumentedCmd(ep, agentPath, projectDir, nil)
+	if cmd == nil {
+		t.Fatal("expected non-nil *exec.Cmd")
+	}
+	if cmd.Path != "/usr/bin/java" && !strings.HasSuffix(cmd.Path, "java.exe") && cmd.Path != "java" {
+		t.Fatalf("expected command to be java, got: %s", cmd.Path)
+	}
 }

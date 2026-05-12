@@ -130,6 +130,44 @@ func TestDetectProcesses_SelfExcluded(t *testing.T) {
 	}
 }
 
+// TestJvmHasAgentLoaded_DetectsInCommandLine verifies that
+// jvmHasAgentLoaded returns true when the given path is present in the
+// queried process's command line. Uses the test binary's own executable
+// path, which is guaranteed to be on its own command line.
+func TestJvmHasAgentLoaded_DetectsInCommandLine(t *testing.T) {
+	self, err := os.Executable()
+	if err != nil {
+		t.Skipf("os.Executable failed: %v", err)
+	}
+	if !jvmHasAgentLoaded(os.Getpid(), self) {
+		t.Errorf("jvmHasAgentLoaded(self, %q) = false; want true", self)
+	}
+}
+
+// TestJvmHasAgentLoaded_ReturnsFalseWhenAbsent verifies that
+// jvmHasAgentLoaded returns false when the path is not on the process's
+// command line.
+func TestJvmHasAgentLoaded_ReturnsFalseWhenAbsent(t *testing.T) {
+	unique := `C:\nonexistent\dtwiz-marker-` + strconv.Itoa(os.Getpid()) + `-no-such-agent.jar`
+	if jvmHasAgentLoaded(os.Getpid(), unique) {
+		t.Errorf("jvmHasAgentLoaded(self, %q) = true; want false (not in command line)", unique)
+	}
+}
+
+// TestJvmHasAgentLoaded_CaseInsensitive verifies that matching is
+// case-insensitive — Windows file paths are case-insensitive, so the
+// same path with different casing must still match.
+func TestJvmHasAgentLoaded_CaseInsensitive(t *testing.T) {
+	self, err := os.Executable()
+	if err != nil {
+		t.Skipf("os.Executable failed: %v", err)
+	}
+	upper := strings.ToUpper(self)
+	if !jvmHasAgentLoaded(os.Getpid(), upper) {
+		t.Errorf("jvmHasAgentLoaded(self, %q) = false; want true (case-insensitive match)", upper)
+	}
+}
+
 // TestWinProcessQuery_PipeDelimitedMultiField verifies that a multi-field
 // pipe-delimited query returns parseable output for the current process.
 func TestWinProcessQuery_PipeDelimitedMultiField(t *testing.T) {

@@ -37,7 +37,7 @@ func detectAvailableRuntimes() []runtimeInfo {
 	allEnabled := featureflags.IsEnabled(featureflags.AllRuntimes)
 	return []runtimeInfo{
 		{name: "Python", binName: "python3", enabled: true, detect: detectPythonRuntimeProjects},
-		{name: "Java", binName: "java", enabled: allEnabled, detect: detectJavaRuntimeProjects},
+		{name: "Java", binName: "java", enabled: true, detect: detectJavaRuntimeProjects},
 		{name: "Node.js", binName: "node", enabled: true, detect: detectNodeRuntimeProjects},
 		{name: "Go", binName: "go", enabled: allEnabled, detect: detectGoRuntimeProjects},
 	}
@@ -170,12 +170,7 @@ func createRuntimePlan(proj detectedProject, apiURL, token, envURL, platformToke
 		}
 		return plan
 	case "Java":
-		return &JavaInstrumentationPlan{
-			Project: proj.ScannedProject,
-			EnvVars: envVars,
-			EnvURL:  envURL,
-			Token:   token,
-		}
+		return buildJavaInstrumentationPlan(proj, apiURL, token, envURL)
 	case "Node.js":
 		plan := buildNodeInstrumentationPlan(proj.ScannedProject, apiURL, token)
 		if plan == nil {

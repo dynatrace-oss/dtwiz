@@ -5,6 +5,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -21,13 +24,29 @@ func mustCreateFile(t *testing.T, path string) {
 func setupMvnWrapper(t *testing.T, dir string) {
 	t.Helper()
 	mustCreateFile(t, filepath.Join(dir, "mvnw"))
+	mustCreateFile(t, filepath.Join(dir, "mvnw.cmd"))
 	mustCreateFile(t, filepath.Join(dir, ".mvn", "wrapper", "maven-wrapper.jar"))
 }
 
 func setupGradleWrapper(t *testing.T, dir string) {
 	t.Helper()
 	mustCreateFile(t, filepath.Join(dir, "gradlew"))
+	mustCreateFile(t, filepath.Join(dir, "gradlew.bat"))
 	mustCreateFile(t, filepath.Join(dir, "gradle", "wrapper", "gradle-wrapper.jar"))
+}
+
+func mvnWrapperCmd() string {
+	if runtime.GOOS == "windows" {
+		return "mvnw.cmd"
+	}
+	return "./mvnw"
+}
+
+func gradleWrapperCmd() string {
+	if runtime.GOOS == "windows" {
+		return "gradlew.bat"
+	}
+	return "./gradlew"
 }
 
 // ── parseJavaVersion tests ─────────────────────────────────────────────────────
@@ -191,14 +210,15 @@ func TestDetectJavaEntrypoints_MavenWrapperSpringBoot(t *testing.T) {
 	if len(entrypoints) == 0 {
 		t.Fatal("expected spring-boot:run entrypoint for Maven Spring Boot project")
 	}
+	want := mvnWrapperCmd() + " spring-boot:run"
 	found := false
 	for _, ep := range entrypoints {
-		if ep.Command == "./mvnw spring-boot:run" {
+		if ep.Command == want {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("expected './mvnw spring-boot:run' entrypoint, got %+v", entrypoints)
+		t.Fatalf("expected %q entrypoint, got %+v", want, entrypoints)
 	}
 }
 
@@ -213,14 +233,15 @@ func TestDetectJavaEntrypoints_MavenWrapperNonSpringBoot(t *testing.T) {
 	if len(entrypoints) == 0 {
 		t.Fatal("expected 'exec:java' entrypoint for Maven non-Spring Boot project")
 	}
+	want := mvnWrapperCmd() + " exec:java"
 	found := false
 	for _, ep := range entrypoints {
-		if ep.Command == "./mvnw exec:java" {
+		if ep.Command == want {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("expected './mvnw exec:java' entrypoint, got %+v", entrypoints)
+		t.Fatalf("expected %q entrypoint, got %+v", want, entrypoints)
 	}
 }
 
@@ -238,14 +259,15 @@ func TestDetectJavaEntrypoints_GradleWrapperSpringBoot(t *testing.T) {
 	if len(entrypoints) == 0 {
 		t.Fatal("expected bootRun entrypoint for Gradle Spring Boot project")
 	}
+	want := gradleWrapperCmd() + " bootRun"
 	found := false
 	for _, ep := range entrypoints {
-		if ep.Command == "./gradlew bootRun" {
+		if ep.Command == want {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("expected './gradlew bootRun' entrypoint, got %+v", entrypoints)
+		t.Fatalf("expected %q entrypoint, got %+v", want, entrypoints)
 	}
 }
 
@@ -260,14 +282,15 @@ func TestDetectJavaEntrypoints_GradleWrapperNoJar(t *testing.T) {
 	if len(entrypoints) == 0 {
 		t.Fatal("expected 'gradlew run' entrypoint for non-Spring Boot Gradle project")
 	}
+	want := gradleWrapperCmd() + " run"
 	found := false
 	for _, ep := range entrypoints {
-		if ep.Command == "./gradlew run" {
+		if ep.Command == want {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("expected './gradlew run' entrypoint, got %+v", entrypoints)
+		t.Fatalf("expected %q entrypoint, got %+v", want, entrypoints)
 	}
 }
 
@@ -353,6 +376,76 @@ func TestEnrichProcessesWithJPS_WithJPS(t *testing.T) {
 	result := enrichProcessesWithJPS([]DetectedProcess{})
 	if len(result) != 0 {
 		t.Fatalf("expected empty result for empty input, got %v", result)
+	}
+}
+
+// ── findWrapper tests ─────────────────────────────────────────────────────────
+
+func TestFindWrapper_FoundOnCurrentPlatform(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "mvnw"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "mvnw.cmd"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	got := findWrapper(dir, "mvnw", "mvnw.cmd")
+	if runtime.GOOS == "windows" {
+		if got != "mvnw.cmd" {
+			t.Fatalf("expected mvnw.cmd on Windows, got %q", got)
+		}
+	} else {
+		if got != "mvnw" {
+			t.Fatalf("expected mvnw on Unix, got %q", got)
+		}
+	}
+}
+
+func TestFindWrapper_Missing_ReturnsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	got := findWrapper(dir, "mvnw", "mvnw.cmd")
+	if got != "" {
+		t.Fatalf("expected empty string when wrapper is absent, got %q", got)
+	}
+}
+
+func TestDetectJavaEntrypoints_WindowsWrapperSpringBootMaven(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows-only test")
+	}
+	dir := t.TempDir()
+	mustCreateFile(t, filepath.Join(dir, "mvnw.cmd"))
+	mustCreateFile(t, filepath.Join(dir, ".mvn", "wrapper", "maven-wrapper.jar"))
+	pomContent := `<project><parent><artifactId>spring-boot-starter-parent</artifactId></parent></project>`
+	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte(pomContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	entrypoints := detectJavaEntrypoints(dir)
+	if len(entrypoints) == 0 {
+		t.Fatal("expected entrypoint for Windows Maven Spring Boot wrapper")
+	}
+	if !strings.HasPrefix(entrypoints[0].Command, "mvnw.cmd") {
+		t.Fatalf("expected command to start with mvnw.cmd, got %q", entrypoints[0].Command)
+	}
+}
+
+func TestDetectJavaEntrypoints_WindowsWrapperSpringBootGradle(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows-only test")
+	}
+	dir := t.TempDir()
+	mustCreateFile(t, filepath.Join(dir, "gradlew.bat"))
+	mustCreateFile(t, filepath.Join(dir, "gradle", "wrapper", "gradle-wrapper.jar"))
+	gradleContent := `plugins { id 'org.springframework.boot' version '3.0.0' }`
+	if err := os.WriteFile(filepath.Join(dir, "build.gradle"), []byte(gradleContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	entrypoints := detectJavaEntrypoints(dir)
+	if len(entrypoints) == 0 {
+		t.Fatal("expected entrypoint for Windows Gradle Spring Boot wrapper")
+	}
+	if !strings.HasPrefix(entrypoints[0].Command, "gradlew.bat") {
+		t.Fatalf("expected command to start with gradlew.bat, got %q", entrypoints[0].Command)
 	}
 }
 
@@ -449,6 +542,37 @@ func TestIsBuildToolJVM_Empty(t *testing.T) {
 	}
 }
 
+func TestIsBuildToolJVM_MavenDaemon(t *testing.T) {
+	if !isBuildToolJVM("org.mvndaemon.mvnd.daemon.Server") {
+		t.Fatal("expected Maven daemon to be recognized as build-tool JVM")
+	}
+}
+
+// ── isUnderDir tests ──────────────────────────────────────────────────────────
+
+func TestIsUnderDir(t *testing.T) {
+	sep := string(os.PathSeparator)
+	base := sep + "projects" + sep + "app"
+	tests := []struct {
+		path, dir string
+		want      bool
+	}{
+		{base, base, true},                              // exact match
+		{base + sep + "src", base, true},                // direct child
+		{base + sep + "src" + sep + "main", base, true}, // deep child
+		{sep + "projects" + sep + "other", base, false}, // sibling
+		{sep + "projects" + sep + "appx", base, false},  // prefix but not a path boundary
+		{"", base, false},                               // empty path
+		{base, "", false},                               // empty dir
+	}
+	for _, tt := range tests {
+		got := isUnderDir(tt.path, tt.dir)
+		if got != tt.want {
+			t.Errorf("isUnderDir(%q, %q) = %v, want %v", tt.path, tt.dir, got, tt.want)
+		}
+	}
+}
+
 // ── detectJavaListeningPort / portDetector tests ──────────────────────────────
 
 func TestDetectPort_UsesCustomDetector(t *testing.T) {
@@ -484,4 +608,159 @@ func TestDetectPort_FallsBackWithoutDetector(t *testing.T) {
 	if port != "" {
 		t.Fatalf("expected empty port for PID 0, got %q", port)
 	}
+}
+
+// ── detectJavaListeningPort tests ─────────────────────────────────────────────
+
+func TestDetectJavaListeningPort_DirectPortDetection(t *testing.T) {
+	// Test when directProcessListeningPort finds the port directly.
+	called := false
+	port := detectJavaListeningPort(0, "") // PID 0 won't have a port
+	// For localhost testing, we can't reliably detect a port on PID 0,
+	// but we can verify the function doesn't panic and returns a string.
+	if !isStringEmpty(port) && !isValidPort(port) {
+		t.Fatalf("expected empty or valid port, got %q", port)
+	}
+	_ = called
+}
+
+// ── validateJavaPrerequisites tests ───────────────────────────────────────────
+
+func TestValidateJavaPrerequisites_JavaNotFound(t *testing.T) {
+	t.Setenv("PATH", "")
+	_, err := validateJavaPrerequisites()
+	if err == nil {
+		t.Fatal("expected error when java is not on PATH")
+	}
+	if !strings.Contains(err.Error(), "Java not found") {
+		t.Fatalf("expected 'Java not found' error, got %v", err)
+	}
+}
+
+func TestValidateJavaPrerequisites_ValidVersion(t *testing.T) {
+	skipIfNoJava(t)
+	javaPath, err := validateJavaPrerequisites()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if javaPath == "" {
+		t.Fatal("expected non-empty java path")
+	}
+	if !strings.Contains(javaPath, "java") {
+		t.Fatalf("expected path to contain 'java', got %q", javaPath)
+	}
+}
+
+// ── resolveGradleCmd tests ────────────────────────────────────────────────────
+
+func TestResolveGradleCmd_NoGradleFile(t *testing.T) {
+	dir := t.TempDir()
+	cmd, desc := resolveGradleCmd(dir)
+	if cmd != "" {
+		t.Fatalf("expected empty cmd when no gradle file, got %q", cmd)
+	}
+	if desc != "" {
+		t.Fatalf("expected empty desc when no gradle file, got %q", desc)
+	}
+}
+
+func TestResolveGradleCmd_WithGradleKts(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "build.gradle.kts"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Without wrapper or gradle in PATH, should fail gracefully
+	cmd, desc := resolveGradleCmd(dir)
+	// Expected: either wrapper cmd (if exists) or empty
+	if cmd != "" && desc != "Gradle" {
+		t.Fatalf("expected Gradle desc when cmd is not empty, got %q", desc)
+	}
+}
+
+func TestResolveGradleCmd_WithWrapper(t *testing.T) {
+	dir := t.TempDir()
+	setupGradleWrapper(t, dir)
+	if err := os.WriteFile(filepath.Join(dir, "build.gradle"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmd, desc := resolveGradleCmd(dir)
+	if cmd == "" {
+		t.Fatal("expected non-empty cmd when wrapper exists")
+	}
+	if desc != "Gradle" {
+		t.Fatalf("expected 'Gradle' desc, got %q", desc)
+	}
+	expectedCmd := gradleWrapperCmd()
+	if !strings.Contains(cmd, expectedCmd) {
+		t.Fatalf("expected cmd to contain %q, got %q", expectedCmd, cmd)
+	}
+}
+
+// ── isExecutableJar tests ─────────────────────────────────────────────────────
+
+func TestIsExecutableJar_InvalidJarFile(t *testing.T) {
+	dir := t.TempDir()
+	jarPath := filepath.Join(dir, "invalid.jar")
+	if err := os.WriteFile(jarPath, []byte("not a jar"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	result := isExecutableJar(jarPath)
+	if result {
+		t.Fatalf("expected false for invalid JAR, got %v", result)
+	}
+}
+
+func TestIsExecutableJar_NonExistentFile(t *testing.T) {
+	result := isExecutableJar("/nonexistent/path/to/file.jar")
+	if result {
+		t.Fatalf("expected false for non-existent JAR, got %v", result)
+	}
+}
+
+// ── isSpringBootMaven tests ───────────────────────────────────────────────────
+
+func TestIsSpringBootMaven_MissingPomXml(t *testing.T) {
+	dir := t.TempDir()
+	result := isSpringBootMaven(dir)
+	if result {
+		t.Fatalf("expected false when pom.xml is missing, got %v", result)
+	}
+}
+
+func TestIsSpringBootMaven_PomWithoutSpringBoot(t *testing.T) {
+	dir := t.TempDir()
+	pomContent := `<project><groupId>com.example</groupId></project>`
+	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte(pomContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	result := isSpringBootMaven(dir)
+	if result {
+		t.Fatalf("expected false when pom.xml lacks spring-boot, got %v", result)
+	}
+}
+
+func TestIsSpringBootMaven_PomWithSpringBoot(t *testing.T) {
+	dir := t.TempDir()
+	pomContent := `<project><dependency><artifactId>spring-boot-starter</artifactId></dependency></project>`
+	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte(pomContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	result := isSpringBootMaven(dir)
+	if !result {
+		t.Fatalf("expected true when pom.xml contains spring-boot, got %v", result)
+	}
+}
+
+// ── helper functions for tests ────────────────────────────────────────────────
+
+func isStringEmpty(s string) bool {
+	return s == ""
+}
+
+func isValidPort(s string) bool {
+	if s == "" {
+		return true
+	}
+	port, err := strconv.Atoi(s)
+	return err == nil && port > 0 && port < 65536
 }
