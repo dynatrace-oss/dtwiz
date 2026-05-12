@@ -88,7 +88,7 @@ At Task 8, the branch is deleted, `InstallOneAgent` is replaced with the v2 impl
 
 The new `InstallOneAgentV2` orchestrates the following stages, each implemented as an exported (testable) function. Stages run in strict order; any failure short-circuits with a clear error.
 
-```
+```text
 InstallOneAgentV2(c *client.Client, opts InstallOptions) error
   │
   ├─ DetectEnvironment()                          // Task 2A
@@ -229,7 +229,7 @@ Logging: the token value is never written to logs, stdout, or files. Only the fa
 
 `BuildInstallCommand(env Environment, cfg AgentConfig, installerPath string) ([]string, error)` returns the argv. Linux includes a leading `/bin/sh`; Windows runs the `.exe` directly. The minimal arg set is:
 
-```
+```bash
 --set-monitoring-mode=<cfg.MonitoringMode>
 --set-app-log-content-access=<cfg.AppLogContentAccess>
 ```

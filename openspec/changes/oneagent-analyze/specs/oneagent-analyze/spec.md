@@ -199,7 +199,7 @@ Pre-flight checks SHALL run in the order: (1) environment detection, (2) existin
 - **WHEN** `ExtractTenantID(envURL)` is called
 - **THEN** it returns `"abc12345"`
 
-#### Scenario: Managed URL with /e/<id>
+#### Scenario: Managed URL with /e/ID
 
 - **GIVEN** `--environment https://my-managed.example.com/e/abc12345`
 - **WHEN** `ExtractTenantID(envURL)` is called

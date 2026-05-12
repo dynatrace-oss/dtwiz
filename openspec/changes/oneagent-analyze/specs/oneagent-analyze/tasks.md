@@ -165,7 +165,7 @@ Resolve agent communication endpoints dynamically from the tenant API. Drop the 
 - [ ] 3.20 Wire `opts.SkipConnectivityCheck` (from `InstallOptions`): when `true`, skip `CheckAllEndpoints` entirely; emit `logger.Debug("skipping connectivity probe", "reason", "--skip-connectivity-check")`
 - [ ] 3.21 Emit one `logger.Debug("endpoint probe result", "host", r.Endpoint.Host, "port", r.Endpoint.Port, "reachable", r.Reachable, "latency_ms", r.Latency.Milliseconds(), "error", r.Error)` per result when probing
 - [ ] 3.22 Emit `logger.Verbose("connectivity probe complete", "total", len(report.Results), "failed", report.FailedCount)` after all probes finish (only when the probe ran in the normal path)
-- [ ] 3.23 Unit tests: 
+- [ ] 3.23 Unit tests:
   - Normal path: all reachable (no output, no remediation), some blocked (warning printed), all blocked, `SkipConnectivityCheck == true` (no probe, no output)
   - `--connectivity-check-only`: mixed reachable/blocked endpoints print the expected table, no token mint
   - `--print-endpoints`: prints correct `host:port` lines, exits before probing
