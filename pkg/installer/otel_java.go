@@ -296,7 +296,7 @@ func (p *JavaInstrumentationPlan) Execute() {
 }
 
 // InstallOtelJava is the main entry point for the `dtwiz install otel-java` command.
-func InstallOtelJava(envURL, token, serviceName string, dryRun bool) error {
+func InstallOtelJava(envURL, token, serviceName, projectPath string, dryRun bool) error {
 	if _, err := validateJavaPrerequisites(); err != nil {
 		return err
 	}
@@ -309,19 +309,33 @@ func InstallOtelJava(envURL, token, serviceName string, dryRun bool) error {
 
 	var envVars map[string]string
 
-	projects := scanJavaProjects()
-	logger.Debug("detected java projects", "count", len(projects))
-	if len(projects) == 0 {
-		display.PrintStatusLine("error", "no Java projects detected", display.ColorError)
-		return fmt.Errorf("no Java projects detected")
-	}
+	var proj ScannedProject
+	if projectPath != "" {
+		cleanProjectPath := filepath.Clean(projectPath)
+		info, err := os.Stat(cleanProjectPath)
+		if err != nil {
+			return fmt.Errorf("project path %q: %w", projectPath, err)
+		}
+		if info.IsDir() {
+			proj = ScannedProject{Path: cleanProjectPath}
+		} else {
+			proj = ScannedProject{Path: filepath.Dir(cleanProjectPath)}
+		}
+	} else {
+		projects := scanJavaProjects()
+		logger.Debug("detected java projects", "count", len(projects))
+		if len(projects) == 0 {
+			display.PrintStatusLine("error", "no Java projects detected", display.ColorError)
+			return fmt.Errorf("no Java projects detected")
+		}
 
-	sel := promptProjectSelection("Java", projects)
-	if sel == nil {
-		logger.Debug("user skipped project selection")
-		return nil
+		sel := promptProjectSelection("Java", projects)
+		if sel == nil {
+			logger.Debug("user skipped project selection")
+			return nil
+		}
+		proj = *sel
 	}
-	proj := *sel
 
 	if serviceName == "my-service" {
 		serviceName = projectServiceName(proj.Path)

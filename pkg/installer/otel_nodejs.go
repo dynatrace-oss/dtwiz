@@ -399,7 +399,7 @@ func launchEntrypoint(svcName, projectPath, entrypoint string, cmd *exec.Cmd) *M
 	return mp
 }
 
-func InstallOtelNode(envURL, token, platformToken, serviceName string, dryRun bool) error {
+func InstallOtelNode(envURL, token, platformToken, serviceName, projectPath string, dryRun bool) error {
 	if _, err := exec.LookPath("node"); err != nil {
 		return fmt.Errorf("node not found — install Node.js and ensure it is in PATH")
 	}
@@ -433,14 +433,35 @@ func InstallOtelNode(envURL, token, platformToken, serviceName string, dryRun bo
 	fmt.Println()
 	display.Header("Dynatrace Node.js Auto-Instrumentation")
 
-	plan, userInteracted := DetectNodePlan(apiURL, token)
-	if plan == nil {
-		if !userInteracted {
-			fmt.Println()
-			fmt.Println("  No Node.js projects detected. Make sure you are in or near a project directory")
-			fmt.Println("  containing a package.json with a recognizable entrypoint.")
+	var plan *NodeInstrumentationPlan
+	if projectPath != "" {
+		info, err := os.Stat(projectPath)
+		if err != nil {
+			return fmt.Errorf("cannot use project path %q: %w", projectPath, err)
 		}
-		return nil
+		normalizedProjectPath := filepath.Clean(projectPath)
+		if !info.IsDir() {
+			if strings.EqualFold(filepath.Base(normalizedProjectPath), "package.json") {
+				normalizedProjectPath = filepath.Dir(normalizedProjectPath)
+			} else {
+				return fmt.Errorf("project path must be a directory or package.json: %s", projectPath)
+			}
+		}
+		plan = buildNodeInstrumentationPlan(ScannedProject{Path: normalizedProjectPath, Markers: []string{"package.json"}}, apiURL, token)
+		if plan == nil {
+			return fmt.Errorf("provided project path is not a valid Node.js project for auto-instrumentation: %s (missing package.json or no recognizable entrypoint/framework detected)", projectPath)
+		}
+	} else {
+		var userInteracted bool
+		plan, userInteracted = DetectNodePlan(apiURL, token)
+		if plan == nil {
+			if !userInteracted {
+				fmt.Println()
+				fmt.Println("  No Node.js projects detected. Make sure you are in or near a project directory")
+				fmt.Println("  containing a package.json with a recognizable entrypoint.")
+			}
+			return nil
+		}
 	}
 
 	fmt.Println()
