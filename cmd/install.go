@@ -171,7 +171,7 @@ var installOtelNodeCmd = &cobra.Command{
 		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
 			return err
 		}
-		return installer.InstallOtelNode(envURL, accessTok, platformTok, otelNodeServiceName, "", installDryRun)
+		return installer.InstallOtelNode(envURL, accessTok, platformTok, otelNodeServiceName, otelProject, installDryRun)
 	},
 }
 
@@ -188,7 +188,7 @@ var installOtelJavaCmd = &cobra.Command{
 		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
 			return err
 		}
-		if err := installer.InstallOtelJava(envURL, accessTok, otelJavaServiceName, "", installDryRun); err != nil {
+		if err := installer.InstallOtelJava(envURL, accessTok, otelJavaServiceName, otelProject, installDryRun); err != nil {
 			return err
 		}
 		if !installDryRun {
@@ -290,7 +290,9 @@ func init() {
 	installOtelCmd.Flags().StringVar(&otelProject, "project", "", "path to the project to instrument (skips interactive scan)")
 	installOtelPythonCmd.Flags().StringVar(&otelProject, "project", "", "path to the Python project to instrument (skips interactive scan)")
 	installOtelPythonCmd.Flags().StringVar(&otelPythonServiceName, "service-name", "", "OTEL_SERVICE_NAME for the instrumented application (default: my-service)")
+	installOtelNodeCmd.Flags().StringVar(&otelProject, "project", "", "path to the Node.js project to instrument (skips interactive scan)")
 	installOtelNodeCmd.Flags().StringVar(&otelNodeServiceName, "service-name", "", "OTEL_SERVICE_NAME for the instrumented application (default: my-service)")
+	installOtelJavaCmd.Flags().StringVar(&otelProject, "project", "", "path to the Java project to instrument (skips interactive scan)")
 	installOtelJavaCmd.Flags().StringVar(&otelJavaServiceName, "service-name", "", "OTEL_SERVICE_NAME for the instrumented application (default: my-service)")
 
 	installOneAgentCmd.Flags().Bool("quiet", false, "Run a silent/unattended installation with no output")
