@@ -399,7 +399,7 @@ func launchEntrypoint(svcName, projectPath, entrypoint string, cmd *exec.Cmd) *M
 	return mp
 }
 
-func InstallOtelNode(envURL, token, platformToken, serviceName string, dryRun bool) error {
+func InstallOtelNode(envURL, token, platformToken, serviceName, projectPath string, dryRun bool) error {
 	if _, err := exec.LookPath("node"); err != nil {
 		return fmt.Errorf("node not found — install Node.js and ensure it is in PATH")
 	}
@@ -433,14 +433,26 @@ func InstallOtelNode(envURL, token, platformToken, serviceName string, dryRun bo
 	fmt.Println()
 	display.Header("Dynatrace Node.js Auto-Instrumentation")
 
-	plan, userInteracted := DetectNodePlan(apiURL, token)
-	if plan == nil {
-		if !userInteracted {
-			fmt.Println()
-			fmt.Println("  No Node.js projects detected. Make sure you are in or near a project directory")
-			fmt.Println("  containing a package.json with a recognizable entrypoint.")
+	var plan *NodeInstrumentationPlan
+	if projectPath != "" {
+		if _, err := os.Stat(projectPath); err != nil {
+			return fmt.Errorf("project path not found: %s", projectPath)
 		}
-		return nil
+		plan = buildNodeInstrumentationPlan(ScannedProject{Path: projectPath, Markers: []string{"package.json"}}, apiURL, token)
+		if plan == nil {
+			return nil
+		}
+	} else {
+		var userInteracted bool
+		plan, userInteracted = DetectNodePlan(apiURL, token)
+		if plan == nil {
+			if !userInteracted {
+				fmt.Println()
+				fmt.Println("  No Node.js projects detected. Make sure you are in or near a project directory")
+				fmt.Println("  containing a package.json with a recognizable entrypoint.")
+			}
+			return nil
+		}
 	}
 
 	fmt.Println()

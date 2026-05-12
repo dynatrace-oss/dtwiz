@@ -480,7 +480,7 @@ func TestBuildInstrumentedCmd_WrapperCmd(t *testing.T) {
 
 func TestInstallOtelJava_JavaNotFound(t *testing.T) {
 	t.Setenv("PATH", "")
-	err := InstallOtelJava("https://tenant.live.dynatrace.com", "token", "svc", false)
+	err := InstallOtelJava("https://tenant.live.dynatrace.com", "token", "svc", "", false)
 	if err == nil {
 		t.Fatal("expected error when java is not on PATH")
 	}
@@ -491,7 +491,7 @@ func TestInstallOtelJava_DryRun(t *testing.T) {
 	makeMavenProjectWithFatJar(t)
 
 	output := captureStdout(t, func() {
-		err := InstallOtelJava("https://tenant.live.dynatrace.com", "tok", "test-svc", true)
+		err := InstallOtelJava("https://tenant.live.dynatrace.com", "tok", "test-svc", "", true)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -523,7 +523,7 @@ func TestInstallOtelJava_NoBuildArtifact_NoRunningProcess(t *testing.T) {
 	setTestStdin(t, "1\n")
 
 	captureStdout(t, func() {
-		err := InstallOtelJava("https://tenant.live.dynatrace.com", "tok", "", false)
+		err := InstallOtelJava("https://tenant.live.dynatrace.com", "tok", "", "", false)
 		if err == nil {
 			t.Fatal("expected error when no build tool is present, got nil")
 		}
@@ -548,7 +548,7 @@ func TestInstallOtelJava_AutoBuildFails(t *testing.T) {
 	setTestStdin(t, "1\n")
 
 	captureStdout(t, func() {
-		err := InstallOtelJava("https://tenant.live.dynatrace.com", "tok", "", false)
+		err := InstallOtelJava("https://tenant.live.dynatrace.com", "tok", "", "", false)
 		if err == nil {
 			t.Fatal("expected error when auto-build fails, got nil")
 		}

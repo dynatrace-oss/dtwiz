@@ -171,7 +171,7 @@ var installOtelNodeCmd = &cobra.Command{
 		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
 			return err
 		}
-		return installer.InstallOtelNode(envURL, accessTok, platformTok, otelNodeServiceName, installDryRun)
+		return installer.InstallOtelNode(envURL, accessTok, platformTok, otelNodeServiceName, "", installDryRun)
 	},
 }
 
@@ -188,7 +188,7 @@ var installOtelJavaCmd = &cobra.Command{
 		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
 			return err
 		}
-		if err := installer.InstallOtelJava(envURL, accessTok, otelJavaServiceName, installDryRun); err != nil {
+		if err := installer.InstallOtelJava(envURL, accessTok, otelJavaServiceName, "", installDryRun); err != nil {
 			return err
 		}
 		if !installDryRun {

@@ -3,7 +3,10 @@
 package e2e_test
 
 import (
+	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
@@ -24,6 +27,9 @@ type otelCase struct {
 }
 
 func TestOTelAutoInstrumentation(t *testing.T) {
+	// Set once before parallel subtests; all install funcs only read it.
+	installer.AutoConfirm = true
+
 	cases := []otelCase{
 		{
 			lang:    "python",
@@ -36,15 +42,60 @@ func TestOTelAutoInstrumentation(t *testing.T) {
 				}
 			},
 			install: func(env *integration.TestEnv, appDir, svcName string) error {
-				installer.AutoConfirm = true
-				defer func() { installer.AutoConfirm = false }()
 				return installer.InstallOtelPython(env.EnvURL, env.AccessToken, env.PlatformToken, svcName, appDir, false)
+			},
+		},
+		{
+			lang:    "node",
+			fixture: "node-http",
+			port:    18082,
+			portEnv: "TEST_NODE_APP_PORT",
+			skipCheck: func(t *testing.T) {
+				if _, err := exec.LookPath("node"); err != nil {
+					t.Skip("node not found in PATH")
+				}
+				if _, err := exec.LookPath("npm"); err != nil {
+					t.Skip("npm not found in PATH")
+				}
+			},
+			install: func(env *integration.TestEnv, appDir, svcName string) error {
+				// Execute() checks that node_modules/ exists before launching.
+				// The fixture has no dependencies, so create the directory directly
+				// rather than relying on npm install (npm v7+ skips it when there's nothing to install).
+				if err := os.MkdirAll(filepath.Join(appDir, "node_modules"), 0755); err != nil {
+					return err
+				}
+				return installer.InstallOtelNode(env.EnvURL, env.AccessToken, env.PlatformToken, svcName, appDir, false)
+			},
+		},
+		{
+			lang:    "java",
+			fixture: "java-maven",
+			port:    18081,
+			portEnv: "TEST_JAVA_APP_PORT",
+			skipCheck: func(t *testing.T) {
+				if _, err := exec.LookPath("java"); err != nil {
+					t.Skip("java not found in PATH")
+				}
+				if _, err := exec.LookPath("mvn"); err != nil {
+					t.Skip("mvn not found in PATH")
+				}
+			},
+			install: func(env *integration.TestEnv, appDir, svcName string) error {
+				// Build the fat JAR first so detectJavaEntrypoints finds java -jar
+				// instead of falling back to mvn exec:java.
+				out, err := exec.Command("mvn", "clean", "package", "-DskipTests", "-f", appDir+"/pom.xml").CombinedOutput()
+				if err != nil {
+					return fmt.Errorf("mvn build failed: %w\n%s", err, out)
+				}
+				return installer.InstallOtelJava(env.EnvURL, env.AccessToken, svcName, appDir, false)
 			},
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.lang, func(t *testing.T) {
+			t.Parallel()
 			runOTelTest(t, tc)
 		})
 	}
@@ -62,7 +113,9 @@ func runOTelTest(t *testing.T, tc otelCase) {
 	t.Logf("preparing fixture %q for service %q", tc.fixture, svcName)
 	appDir := integration.PrepareFixture(t, env, tc.fixture, svcName)
 
-	t.Setenv(tc.portEnv, strconv.Itoa(tc.port))
+	prev := os.Getenv(tc.portEnv)
+	os.Setenv(tc.portEnv, strconv.Itoa(tc.port))
+	t.Cleanup(func() { os.Setenv(tc.portEnv, prev) })
 
 	t.Logf("installing OTel instrumentation (lang: %s, service: %s)", tc.lang, svcName)
 	if err := tc.install(env, appDir, svcName); err != nil {
