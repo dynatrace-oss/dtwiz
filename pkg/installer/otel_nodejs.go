@@ -435,12 +435,21 @@ func InstallOtelNode(envURL, token, platformToken, serviceName, projectPath stri
 
 	var plan *NodeInstrumentationPlan
 	if projectPath != "" {
-		if _, err := os.Stat(projectPath); err != nil {
+		info, err := os.Stat(projectPath)
+		if err != nil {
 			return fmt.Errorf("project path not found: %s", projectPath)
 		}
-		plan = buildNodeInstrumentationPlan(ScannedProject{Path: projectPath, Markers: []string{"package.json"}}, apiURL, token)
+		normalizedProjectPath := filepath.Clean(projectPath)
+		if !info.IsDir() {
+			if strings.EqualFold(filepath.Base(normalizedProjectPath), "package.json") {
+				normalizedProjectPath = filepath.Dir(normalizedProjectPath)
+			} else {
+				return fmt.Errorf("project path must be a directory or package.json: %s", projectPath)
+			}
+		}
+		plan = buildNodeInstrumentationPlan(ScannedProject{Path: normalizedProjectPath, Markers: []string{"package.json"}}, apiURL, token)
 		if plan == nil {
-			return nil
+			return fmt.Errorf("provided project path is not a valid Node.js project for auto-instrumentation: %s (missing package.json or no recognizable entrypoint/framework detected)", projectPath)
 		}
 	} else {
 		var userInteracted bool

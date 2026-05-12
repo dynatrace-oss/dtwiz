@@ -27,8 +27,9 @@ type otelCase struct {
 }
 
 func TestOTelAutoInstrumentation(t *testing.T) {
-	// Set once before parallel subtests; all install funcs only read it.
+	originalAutoConfirm := installer.AutoConfirm
 	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = originalAutoConfirm })
 
 	cases := []otelCase{
 		{
@@ -84,7 +85,7 @@ func TestOTelAutoInstrumentation(t *testing.T) {
 			install: func(env *integration.TestEnv, appDir, svcName string) error {
 				// Build the fat JAR first so detectJavaEntrypoints finds java -jar
 				// instead of falling back to mvn exec:java.
-				out, err := exec.Command("mvn", "clean", "package", "-DskipTests", "-f", appDir+"/pom.xml").CombinedOutput()
+				out, err := exec.Command("mvn", "clean", "package", "-DskipTests", "-f", filepath.Join(appDir, "pom.xml")).CombinedOutput()
 				if err != nil {
 					return fmt.Errorf("mvn build failed: %w\n%s", err, out)
 				}
@@ -113,9 +114,15 @@ func runOTelTest(t *testing.T, tc otelCase) {
 	t.Logf("preparing fixture %q for service %q", tc.fixture, svcName)
 	appDir := integration.PrepareFixture(t, env, tc.fixture, svcName)
 
-	prev := os.Getenv(tc.portEnv)
+	prev, wasSet := os.LookupEnv(tc.portEnv)
 	os.Setenv(tc.portEnv, strconv.Itoa(tc.port))
-	t.Cleanup(func() { os.Setenv(tc.portEnv, prev) })
+	t.Cleanup(func() {
+		if wasSet {
+			os.Setenv(tc.portEnv, prev)
+		} else {
+			os.Unsetenv(tc.portEnv)
+		}
+	})
 
 	t.Logf("installing OTel instrumentation (lang: %s, service: %s)", tc.lang, svcName)
 	if err := tc.install(env, appDir, svcName); err != nil {
