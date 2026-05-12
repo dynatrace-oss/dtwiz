@@ -25,6 +25,15 @@ The existing `downloadOneAgentInstaller` helper in `pkg/installer/oneagent.go` s
 `DownloadInstaller` overrides the resty client's default `Authorization` header for the single download request, using `Api-Token <mintedToken>`. The user's `--access-token` does not appear in the download request.
 
 Download URL pattern:
+
+- Linux x86: `/api/v1/deployment/installer/agent/unix/default/latest?arch=x86`
+- Linux arm: `/api/v1/deployment/installer/agent/unix/default/latest?arch=arm`
+- Windows: handled in `oneagent-windows`
+
+Temp file: `os.CreateTemp("", "dynatrace-oneagent-*")` → `chmod 0o700` on Unix. On success, stdout prints `✓ <basename> (<size>)`.
+
+Download URL pattern:
+
 - Linux x86: `/api/v1/deployment/installer/agent/unix/default/latest?arch=x86`
 - Linux arm: `/api/v1/deployment/installer/agent/unix/default/latest?arch=arm`
 - Windows: handled in `oneagent-windows`
@@ -42,6 +51,7 @@ The Dynatrace Linux installer ships with a CMS detached signature. Verification 
 ```
 
 Steps:
+
 1. `exec.LookPath("openssl")` — missing → hard error, no silent skip.
 2. Download `https://ca.dynatrace.com/dt-root.cert.pem` to a second temp file.
 3. Run pipeline via `exec.Command`; capture stderr.
@@ -56,9 +66,11 @@ On success: `✓ Installer signature verified.` to stdout.
 `BuildInstallCommand` returns `[]string` so callers can inspect, log, and test the full argv without string parsing.
 
 Linux argv:
-```
+
+```bash
 [sudo?, /bin/sh, <installerPath>, --set-server=<apiURL>, --set-monitoring-mode=<mode>, --set-app-log-content-access=<bool>, --set-host-group=<group>?]
 ```
+
 `sudo` prepended when `needsSudo()` returns true. Windows argv covered in `oneagent-windows`.
 
 ### 4. Execute: exit code + streaming

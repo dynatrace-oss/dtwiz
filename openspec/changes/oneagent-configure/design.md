@@ -23,7 +23,7 @@ The `pkg/featureflags` package already supports adding new flags; `pkg/client` p
 
 ### 1. Mint endpoint and payload
 
-```
+```json
 POST /api/v2/tokens
 Authorization: Api-Token <user-access-token>
 Body: {

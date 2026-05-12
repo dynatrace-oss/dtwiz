@@ -21,7 +21,8 @@ Tasks 2–7 implement the OneAgent PoC install flow with Linux as the primary ta
 ### 1. Installer download: URL path and temp file extension
 
 Windows installer API path:
-```
+
+```bash
 /api/v1/deployment/installer/agent/windows/default/latest?arch=x86
 ```
 
@@ -52,7 +53,8 @@ This avoids requiring elevated privileges at test time. The corresponding Unix c
 ### 4. Command construction: no shell wrapper, --quiet first
 
 Windows argv:
-```
+
+```bash
 [<installerPath.exe>, --quiet?, --set-monitoring-mode=<mode>, --set-app-log-content-access=<bool>, --set-host-group=<group>?]
 ```
 
@@ -61,6 +63,7 @@ No `/bin/sh` prefix (the `.exe` is directly executable). No `sudo` prefix (UAC i
 ### 5. Windows vs Unix file split
 
 Platform-specific code goes in:
+
 - `pkg/installer/preflight_windows.go` (`//go:build windows`) — `isAdminWindows`, Windows privilege check.
 - `pkg/installer/preflight_unix.go` (`//go:build !windows`) — `needsSudo`-based check (already exists as `sudo_unix.go`; extend or add file as needed).
 
