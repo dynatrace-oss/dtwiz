@@ -18,11 +18,11 @@
 - **WHEN** the application initializes feature flags
 - **THEN** `featureflags.IsEnabled(featureflags.OneAgentPoC)` returns `true`
 
-#### Scenario: Feature flag appears in help and version output
+#### Scenario: Feature flag appears in help and status output
 
 - **GIVEN** the feature flag is registered in the flag registry
-- **WHEN** `dtwiz --help` runs
-- **THEN** the flag may appear in debug or feature-flag-listing output if the CLI exposes that
+- **WHEN** `dtwiz --help` runs and `dtwiz status` is executed
+- **THEN** the flag appears in `dtwiz status` output showing its enabled/disabled state, and in help text if feature-flag listing is exposed
 
 ### Requirement: Scaffold oneagent_v2.go with stub functions
 

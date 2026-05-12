@@ -48,13 +48,13 @@ This avoids introducing a parallel HTTP convention.
 
 ### 3. Polling cadence and timeout semantics
 
-Poll every 5 seconds (matching `watchPollInterval` in `ingest_watch.go`). On the first non-empty `result.records` array, extract the `id` field (e.g. `HOST-abc123`) and return it. On timeout: print `⚠ Host registration verification timed out after 2 minutes. Check the tenant UI.` and return `("", nil)` — the install is still considered successful.
+Poll every 5 seconds (matching the cadence in `watchIngest()` defined by `watchPollInterval` in `pkg/installer/ingest_watch.go`). On the first non-empty `result.records` array, extract the `id` field (e.g. `HOST-abc123`) and return it. On timeout: output via `display.PrintStatusLine("warning", "Host registration verification timed out after 2 minutes. Check the tenant UI.", display.ColorWarning)` and return `("", nil)` — the install is still considered successful.
 
 Transient 5xx or network errors are logged at Debug and polling continues. Persistent 4xx (e.g. 401 Unauthorized) aborts polling and returns an error.
 
 ### 4. No platform token: skip with warning
 
-If `p == nil` (no `--platform-token` / `DT_PLATFORM_TOKEN` configured), `WaitForHostRegistration` prints `⚠ Platform token not set — skipping host registration verification.` and returns `("", nil)`. This mirrors `WatchIngest`'s early-return at `ingest_watch.go:64-67`.
+If `p == nil` (no `--platform-token` / `DT_PLATFORM_TOKEN` configured), `WaitForHostRegistration` outputs via `display.PrintStatusLine("warning", "Platform token not set — skipping host registration verification.", display.ColorWarning)` and returns `("", nil)`. This mirrors `WatchIngest`'s early-return at `ingest_watch.go:64-67`.
 
 ### 5. Hostname source
 
@@ -69,4 +69,4 @@ If `p == nil` (no `--platform-token` / `DT_PLATFORM_TOKEN` configured), `WaitFor
 | Success | Verbose | `"host registered"` | `host_id`, `hostname`, `elapsed` |
 | Timeout | Warn | `"host registration timed out"` | `timeout`, `hostname` |
 
-User-facing stdout: `Waiting for agent registration... (polling)` printed once at start; `✓ Host '<hostname>' registered with ID '<entityId>'.` on success.
+User-facing stdout: `Waiting for agent registration... (polling)` output once at start via `display.PrintStatusLine`; success output via `display.PrintStatusLine("host", "registered <entityId>", display.ColorOK)`.

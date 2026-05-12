@@ -289,35 +289,33 @@ Pre-flight checks SHALL run in the order: (1) environment detection, (2) existin
 
 ### Requirement: User-facing probe output format
 
-When the probe runs (either as part of the install or under `--connectivity-check-only`), it SHALL print a structured report to stdout at default verbosity (no `-v` required). The report starts with a header line `Checking network connectivity...`, followed by one line per endpoint formatted as `<status-glyph> <host>:<port>           (<detail>)`. Status glyph is `✓` for reachable, `✗` for unreachable. Detail is either the observed latency (e.g. `23ms`) for reachable endpoints, or the failure cause (e.g. `timeout after 10s`, `connection refused`) for unreachable ones.
+When the probe runs (either as part of the install or under `--connectivity-check-only`), it SHALL output a structured report to stdout at default verbosity (no `-v` required). The report starts with a header via `display.Header("Checking network connectivity...")`, followed by one status line per endpoint via `display.PrintStatusLine("<host>:<port>", "<detail>", colorFunc)`. Status glyph is `✓` (via `display.ColorOK`) for reachable, `✗` (via `display.ColorError`) for unreachable. Detail is either the observed latency (e.g. `23ms`) for reachable endpoints, or the failure cause (e.g. `timeout after 10s`, `connection refused`) for unreachable ones.
 
 #### Scenario: All endpoints reachable
 
 - **GIVEN** 2 endpoints both reachable in 23ms and 31ms
 - **WHEN** the probe completes
-- **THEN** stdout contains the header `Checking network connectivity...`
-- **AND** stdout contains `✓ abc12345.live.dynatrace.com:443           (23ms)`
-- **AND** stdout contains `✓ activegatecluster-1.dynatrace.com:443     (31ms)`
+- **THEN** stdout contains the header via `display.Header`
+- **AND** stdout contains status lines for each endpoint via `display.PrintStatusLine` with `display.ColorOK` showing latency
 
 #### Scenario: Mixed reachable and unreachable
 
 - **GIVEN** 4 endpoints: 2 reachable, 1 times out after 10s, 1 connection-refused
 - **WHEN** the probe completes
-- **THEN** stdout contains 4 lines below the header
-- **AND** the timeout line contains `(timeout after 10s)`
-- **AND** the connection-refused line contains `(connection refused)`
+- **THEN** stdout contains 4 status lines via `display.PrintStatusLine` (one per endpoint)
+- **AND** unreachable endpoints use `display.ColorError` with failure details
 
 ### Requirement: Connectivity failures are warnings, not errors
 
-When the probe is run as part of the normal install (not `--connectivity-check-only`), unreachable endpoints SHALL produce a warning section listing the failed endpoints plus a note about `HTTP_PROXY`/`HTTPS_PROXY`. The install SHALL proceed regardless.
+When the probe is run as part of the normal install (not `--connectivity-check-only`), unreachable endpoints SHALL produce a warning section via `display.Header` listing the failed endpoints plus a note about `HTTP_PROXY`/`HTTPS_PROXY`. The install SHALL proceed regardless.
 
 #### Scenario: Partial failure proceeds with install
 
 - **GIVEN** `--skip-connectivity-check` is NOT set
 - **AND** 2 of 5 resolved endpoints are unreachable
 - **WHEN** `InstallOneAgentV2` reaches the connectivity-probe stage
-- **THEN** stdout prints a `WARNING:` block listing the 2 unreachable endpoints
-- **AND** prints `"If you're behind a corporate proxy, configure it via HTTP_PROXY / HTTPS_PROXY env vars."`
+- **THEN** stdout outputs a warning header and status lines via `display.Header` and `display.PrintStatusLine` listing the 2 unreachable endpoints
+- **AND** outputs a note via `display.PrintStatusLine` about proxy configuration
 - **AND** the install proceeds to `MintInstallerToken`
 
 ### Requirement: Probe debug logging

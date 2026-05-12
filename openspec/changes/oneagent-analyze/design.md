@@ -263,7 +263,7 @@ smartscapeNodes HOST, from:now()-1h
 - **Warning, not error:** on timeout, the function returns `("", nil)` after printing `⚠ Host registration verification timed out after 2 minutes. Check the tenant UI.`. The install is still considered successful.
 - The DQL request payload (`requestTimeoutMilliseconds`, `maxResultRecords`) mirrors the values in `executeDQL` ([ingest_watch.go:280](pkg/installer/ingest_watch.go#L280)) so we don't introduce a parallel HTTP convention.
 
-The polling cadence is `5s` to balance API load and time-to-first-detection; this also matches `WatchIngest`'s `watchPollInterval`.
+The polling cadence is `5s` to balance API load and time-to-first-detection; this also matches the polling cadence in `watchIngest()` (defined by `watchPollInterval` in `pkg/installer/ingest_watch.go`).
 
 **Why DQL/Grail over `/api/v1/entity/infrastructure/hosts`:** the classic Hosts API would require Api-Token auth and a second URL family in the post-install path. Reusing the platform DQL path keeps the post-install verification consistent with the rest of the post-install behavior (`WatchIngest` already runs after this in `cmd/install.go`), uses the platform token that's already validated by `validateCredentials`, and avoids introducing a new auth-and-URL combination to the v2 flow.
 

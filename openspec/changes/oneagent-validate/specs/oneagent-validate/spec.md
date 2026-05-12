@@ -14,7 +14,7 @@ The post-install verification SHALL NOT use the classic `/api/v1/entity/infrastr
 - **AND** smartscape returns a HOST node matching the local hostname on the second poll
 - **WHEN** `WaitForHostRegistration(p, hostname, 2*time.Minute)` runs
 - **THEN** the function returns `(entityId, nil)` where `entityId` is the `id` field from the DQL result (e.g. `"HOST-abc123"`)
-- **AND** prints `✓ Host '<hostname>' registered with ID '<entityId>'.`
+- **AND** outputs `display.PrintStatusLine("host", "registered <entityId>", display.ColorOK)`
 
 #### Scenario: DQL request shape
 
@@ -29,7 +29,7 @@ The post-install verification SHALL NOT use the classic `/api/v1/entity/infrastr
 
 - **GIVEN** the host has not registered yet
 - **WHEN** `WaitForHostRegistration` polls the API
-- **THEN** consecutive poll requests are issued approximately 5 seconds apart (matching `watchPollInterval` in `ingest_watch.go`)
+- **THEN** consecutive poll requests are issued approximately 5 seconds apart (matching the polling cadence in `watchIngest()` function defined by `watchPollInterval` in `pkg/installer/ingest_watch.go`)
 
 #### Scenario: Missing platform token skips verification
 
@@ -41,13 +41,13 @@ The post-install verification SHALL NOT use the classic `/api/v1/entity/infrastr
 
 ### Requirement: Timeout is a warning, not a failure
 
-When the poll timeout elapses without the host appearing, `WaitForHostRegistration` SHALL return `("", nil)` and print `⚠ Host registration verification timed out after 2 minutes. Check the tenant UI.`. The overall `InstallOneAgentV2` SHALL still return success (the installer subprocess already exited 0).
+When the poll timeout elapses without the host appearing, `WaitForHostRegistration` SHALL return `("", nil)` and output `display.PrintStatusLine("warning", "Host registration verification timed out after 2 minutes. Check the tenant UI.", display.ColorWarning)`. The overall `InstallOneAgentV2` SHALL still return success (the installer subprocess already exited 0).
 
 #### Scenario: Timeout warns but succeeds
 
 - **GIVEN** the host never appears within 2 minutes
 - **WHEN** `InstallOneAgentV2` returns
-- **THEN** stdout contains the timeout warning
+- **THEN** stdout contains the timeout warning via `display.PrintStatusLine`
 - **AND** `InstallOneAgentV2` returns nil (the command exits 0)
 
 #### Scenario: Skipped after --dry-run
@@ -77,14 +77,14 @@ When the DQL endpoint returns 5xx or a network error during polling, `WaitForHos
 
 ### Requirement: User-facing polling output
 
-`WaitForHostRegistration` SHALL print a single status line to stdout (at default verbosity, no `-v` required) when polling begins: `Waiting for agent registration... (polling)`. This line is printed once at the start, not on every poll iteration, to avoid log spam during the 2-minute wait. Per-poll detail belongs in `logger.Debug`.
+`WaitForHostRegistration` SHALL output a single status line to stdout (at default verbosity, no `-v` required) when polling begins via `display.PrintStatusLine("register", "Waiting for agent registration... (polling)", display.ColorMuted)`. This line is output once at the start, not on every poll iteration, to avoid log spam during the 2-minute wait. Per-poll detail belongs in `logger.Debug`.
 
-#### Scenario: Polling status line printed once
+#### Scenario: Polling status line output once
 
 - **GIVEN** the installer subprocess has exited 0
 - **WHEN** `WaitForHostRegistration` begins its polling loop
-- **THEN** stdout contains exactly one line `Waiting for agent registration... (polling)` before the first poll
-- **AND** subsequent polls do NOT add additional `Waiting for...` lines to stdout
+- **THEN** stdout contains exactly one line via `display.PrintStatusLine` indicating polling status before the first poll
+- **AND** subsequent polls do NOT add additional status lines to stdout
 
 ### Requirement: Polling debug logging
 

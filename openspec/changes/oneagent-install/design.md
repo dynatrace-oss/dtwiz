@@ -30,7 +30,7 @@ Download URL pattern:
 - Linux arm: `/api/v1/deployment/installer/agent/unix/default/latest?arch=arm`
 - Windows: handled in `oneagent-windows`
 
-Temp file: `os.CreateTemp("", "dynatrace-oneagent-*")` → `chmod 0o700` on Unix. On success, stdout prints `✓ <basename> (<size>)`.
+Temp file: `os.CreateTemp("", "dynatrace-oneagent-*")` → `chmod 0o700` on Unix. On success, stdout outputs via `display.PrintStatusLine("installer", "<basename> (<size>)", display.ColorOK)`.
 
 ### 2. Linux signature verification: openssl subprocess
 
@@ -49,7 +49,7 @@ Steps:
 3. Run pipeline via `exec.Command`; capture stderr.
 4. Non-zero exit → error wrapping the openssl stderr.
 
-On success: `✓ Installer signature verified.` to stdout.
+On success: stdout outputs via `display.PrintStatusLine("signature", "Installer signature verified", display.ColorOK)`.
 
 **Why openssl over Go-native CMS:** `openssl cms -verify` against the Dynatrace-published pipeline is the documented approach. A Go-crypto rewrite risks subtle PKCS#7 parsing divergence.
 
@@ -67,7 +67,7 @@ Linux argv:
 
 ### 4. Execute: exit code + streaming
 
-`ExecuteInstallCommand` returns `(exitCode int, err error)`. Non-zero exit is wrapped as an error including the captured installer output. Streaming (`quiet == false`) lets the user see installer progress in real time. `--dry-run` prints `Command: <argv>` and returns `(0, nil)` without spawning a process.
+`ExecuteInstallCommand` returns `(exitCode int, err error)`. Non-zero exit is wrapped as an error including the captured installer output. Streaming (`quiet == false`) lets the user see installer progress in real time. On success, stdout outputs via `display.PrintStatusLine("result", "Installer executed successfully", display.ColorOK)`. `--dry-run` prints the command via `fmt.Printf("Command: %s\n", ...)` and returns `(0, nil)` without spawning a process.
 
 ### 5. Logging
 

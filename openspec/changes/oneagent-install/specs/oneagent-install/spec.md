@@ -39,13 +39,13 @@
 
 ### Requirement: User-facing download output
 
-`DownloadInstaller` SHALL print to stdout (visible at default verbosity, no `-v` required) a one-line confirmation on success: `✓ <installer-filename> (<size>)`. Progress detail SHALL NOT be printed at default verbosity beyond this single line — finer detail belongs in `logger.Debug`/`logger.Verbose`.
+`DownloadInstaller` SHALL output to stdout (visible at default verbosity, no `-v` required) a one-line confirmation on success via `display.PrintStatusLine("installer", "<filename> (<size>)", display.ColorOK)`. Progress detail SHALL NOT be printed at default verbosity beyond this single line — finer detail belongs in `logger.Debug`/`logger.Verbose`.
 
 #### Scenario: Successful download produces one stdout line
 
 - **GIVEN** the installer downloads successfully
 - **WHEN** `DownloadInstaller` returns
-- **THEN** stdout contains exactly one line matching `✓ <basename> (<size>)` (e.g. `✓ Dynatrace-OneAgent-Linux-x86-1.340.0.sh (245MB)`)
+- **THEN** stdout contains exactly one line via `display.PrintStatusLine` showing the installer filename and size (e.g. `Dynatrace-OneAgent-Linux-x86-1.340.0.sh (245MB)`)
 - **AND** the filename is the OS-specific basename of the temp file (Unix: `.sh`, Windows: `.exe`)
 
 ### Requirement: Download debug logging
@@ -107,16 +107,16 @@ When `env.OS == "linux"` and `--no-verify-signature` is not passed, `VerifyInsta
 
 ### Requirement: User-facing signature verification output
 
-`VerifyInstallerSignature` SHALL print `✓ Installer signature verified.` to stdout on successful Linux verification. The skip paths (`--no-verify-signature` set, or non-Linux OS) SHALL print no stdout output. Verification failure produces an error returned to the caller, not stdout output.
+`VerifyInstallerSignature` SHALL output to stdout on successful Linux verification via `display.PrintStatusLine("signature", "Installer signature verified", display.ColorOK)`. The skip paths (`--no-verify-signature` set, or non-Linux OS) SHALL produce no stdout output. Verification failure produces an error returned to the caller, not stdout output.
 
-#### Scenario: Successful Linux verification prints stdout line
+#### Scenario: Successful Linux verification outputs status line
 
 - **GIVEN** `env.OS == "linux"`
 - **AND** `--no-verify-signature` is NOT set
 - **WHEN** the openssl pipeline exits 0
-- **THEN** stdout contains `✓ Installer signature verified.`
+- **THEN** stdout contains the status line via `display.PrintStatusLine` indicating signature verified
 
-#### Scenario: Skip path prints nothing
+#### Scenario: Skip path produces no output
 
 - **GIVEN** `--no-verify-signature` is set OR `env.OS != "linux"`
 - **WHEN** `VerifyInstallerSignature` returns nil
@@ -256,23 +256,22 @@ When `opts.DryRun == false`, `ExecuteInstallCommand` SHALL launch the installer 
 
 ### Requirement: User-facing execution output
 
-`ExecuteInstallCommand` SHALL print user-facing stdout messages at default verbosity (no `-v` required): `Executing installer...` when the subprocess starts (non-dry-run, non-quiet path), and `✓ Installer executed successfully.` on a zero exit code. On non-zero exit, the wrapped error returned to the caller is sufficient — no separate stdout line is required.
+`ExecuteInstallCommand` SHALL output user-facing stdout messages at default verbosity (no `-v` required): `display.PrintStatusLine("execute", "Executing installer...", display.ColorMessage)` when the subprocess starts (non-dry-run, non-quiet path), and `display.PrintStatusLine("result", "Installer executed successfully", display.ColorOK)` on a zero exit code. On non-zero exit, the wrapped error returned to the caller is sufficient — no separate stdout line is required.
 
-#### Scenario: Non-quiet execution prints start and success lines
+#### Scenario: Non-quiet execution outputs status lines
 
 - **GIVEN** `opts.DryRun == false` and `opts.Quiet == false`
 - **AND** the installer subprocess exits 0
 - **WHEN** `ExecuteInstallCommand` returns
-- **THEN** stdout contains `Executing installer...`
-- **AND** stdout contains `✓ Installer executed successfully.`
+- **THEN** stdout contains execution status line via `display.PrintStatusLine`
+- **AND** stdout contains success status line via `display.PrintStatusLine`
 
-#### Scenario: Quiet mode suppresses execution chatter
+#### Scenario: Quiet mode suppresses execution output
 
 - **GIVEN** `opts.Quiet == true`
 - **AND** the installer subprocess exits 0
 - **WHEN** `ExecuteInstallCommand` returns
-- **THEN** stdout does NOT contain `Executing installer...`
-- **AND** stdout does NOT contain `✓ Installer executed successfully.`
+- **THEN** stdout contains no execution or success output
 
 ### Requirement: Build and execution debug logging
 
