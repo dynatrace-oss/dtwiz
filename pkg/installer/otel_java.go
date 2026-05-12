@@ -314,7 +314,7 @@ func InstallOtelJava(envURL, token, serviceName, projectPath string, dryRun bool
 		cleanProjectPath := filepath.Clean(projectPath)
 		info, err := os.Stat(cleanProjectPath)
 		if err != nil {
-			return fmt.Errorf("project path not found: %s", projectPath)
+			return fmt.Errorf("project path %q: %w", projectPath, err)
 		}
 		if info.IsDir() {
 			proj = ScannedProject{Path: cleanProjectPath}

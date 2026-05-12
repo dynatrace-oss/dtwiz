@@ -437,7 +437,7 @@ func InstallOtelNode(envURL, token, platformToken, serviceName, projectPath stri
 	if projectPath != "" {
 		info, err := os.Stat(projectPath)
 		if err != nil {
-			return fmt.Errorf("project path not found: %s", projectPath)
+			return fmt.Errorf("cannot use project path %q: %w", projectPath, err)
 		}
 		normalizedProjectPath := filepath.Clean(projectPath)
 		if !info.IsDir() {
