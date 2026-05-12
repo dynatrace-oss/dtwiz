@@ -27,6 +27,7 @@
 ### Requirement: Scaffold oneagent_v2.go with stub functions
 
 `pkg/installer/oneagent_v2.go` SHALL be created with:
+
 - Entry point: `InstallOneAgentV2(c *client.Client, opts InstallOptions) error` — documented but not implemented (returns `errors.New("not yet implemented")`)
 - Type definitions: `Environment`, `AgentConfig`, `InstallOptions`, `Endpoint`, `ConnectivityReport`, `ConnectivityResult`
 - Stub function signatures (not implemented) for all Tasks 2–7 functions: `DetectEnvironment()`, `RunPreflightChecks()`, `ResolveAgentConfig()`, `ResolveEndpoints()`, `MintInstallerToken()`, `DownloadInstaller()`, `VerifyInstallerSignature()`, `BuildInstallCommand()`, `ExecuteInstallCommand()`, `WaitForHostRegistration()`, `CheckAllEndpoints()`
@@ -46,6 +47,7 @@
 ### Requirement: Scaffold oneagent_v2_test.go with test structure
 
 `pkg/installer/oneagent_v2_test.go` SHALL be created with:
+
 - Test helper functions for mocking HTTP server responses (tenant API, token mint, installer download, etc.)
 - Skeleton test cases with TODO placeholders for Tasks 2–7 unit tests
 - Comment blocks indicating which task each test batch covers

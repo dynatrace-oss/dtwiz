@@ -36,12 +36,14 @@ Set up the foundational structure for the OneAgent PoC implementation: feature f
 ### Feature-Flag Branching
 
 - [ ] 1.16 In `cmd/install.go`'s `installOneAgentCmd.RunE`, add branching:
+
   ```go
   if featureflags.IsEnabled(featureflags.OneAgentPoC) {
       return installer.InstallOneAgentV2(c, opts)
   }
   return installer.InstallOneAgent(c.Classic, installDryRun, quiet, hostGroup)
   ```
+
 - [ ] 1.17 Add a comment marking the branching point: `// Task 1 — feature-flag branching; remove at Task 8`
 - [ ] 1.18 Verify existing `InstallOneAgent` call path is unchanged when the flag is disabled (default)
 - [ ] 1.19 Integration test: with `DTWIZ_ONEAGENT_POC=true`, verify `InstallOneAgentV2` is called (and returns "not yet implemented")

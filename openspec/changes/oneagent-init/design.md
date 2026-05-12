@@ -48,6 +48,7 @@ Default-false means existing behavior is preserved. At Task 8, the constant and 
 All new scaffolding lives in a new file, leaving `oneagent.go` untouched (until Task 8 replacement). This keeps the diff reviewable and makes rollback mechanical (delete one file).
 
 File structure:
+
 - Type definitions (exported)
 - Entry point: `InstallOneAgentV2(c *client.Client, opts InstallOptions) error` — returns `errors.New("oneagent v2 not yet implemented")`
 - Stub functions for Tasks 2–7 — each returns a placeholder error and is documented with the task number
@@ -155,6 +156,7 @@ The comment is a clear marker for Task 8 search-and-replace: remove the if-block
 ### 7. Stub test file: pkg/installer/oneagent_v2_test.go
 
 Created with:
+
 - Helper functions for mocking HTTP server responses (httptest setup, mock tenant API, etc.)
 - Skeleton test cases with `t.Skip()` and TODO comments indicating which task each batch covers
 - Compilable structure so `go test ./...` passes even with unimplemented tests
