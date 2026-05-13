@@ -27,7 +27,7 @@ Set up the foundational structure for the OneAgent PoC implementation: feature f
 ### Scaffolding: pkg/installer/oneagent_v2.go
 
 - [x] 1.5 Create `pkg/installer/oneagent_v2.go` with type definitions: `Environment`, `AgentConfig`, `InstallOptions`, `Endpoint`, `ConnectivityReport`, `ConnectivityResult`
-- [x] 1.6 Define `InstallOptions` struct carrying `DryRun`, `Force`, `MonitoringMode`, `NoVerifySignature`, `SkipConnectivityCheck`, `ConnectivityCheckOnly`, `PrintEndpoints`, `HostGroup`, `Quiet`
+- [x] 1.6 Define `InstallOptions` struct carrying `DryRun`, `MonitoringMode`, `NoVerifySignature`, `SkipConnectivityCheck`, `ConnectivityCheckOnly`, `PrintEndpoints`, `Quiet`
 - [x] 1.7 Implement stub entry point `InstallOneAgentV2(c *client.Client, opts InstallOptions) error` that returns `errors.New("oneagent v2 not yet implemented")`
 - [x] 1.8 Add stub function signatures (not implemented) for: `DetectEnvironment()`, `RunPreflightChecks()`, `ResolveAgentConfig()`, `ResolveEndpoints()`, `MintInstallerToken()`, `DownloadInstaller()`, `VerifyInstallerSignature()`, `BuildInstallCommand()`, `ExecuteInstallCommand()`, `WaitForHostRegistration()`, `CheckAllEndpoints()`
 - [x] 1.9 Ensure code compiles with `go build ./...`
@@ -40,7 +40,7 @@ Set up the foundational structure for the OneAgent PoC implementation: feature f
 
 ### CLI Flags
 
-- [x] 1.13 Add flag definitions on `installOneAgentCmd`: `--force`, `--monitoring-mode`, `--no-verify-signature`, `--skip-connectivity-check`, `--connectivity-check-only`, `--print-endpoints`
+- [x] 1.13 Add flag definitions on `installOneAgentCmd`: `--monitoring-mode`, `--no-verify-signature`, `--skip-connectivity-check`, `--connectivity-check-only`, `--print-endpoints`
 - [x] 1.14 Each flag is properly documented in the cobra command definition
 - [x] 1.15 Unit test: flags parse correctly from the command line
 

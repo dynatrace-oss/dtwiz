@@ -12,7 +12,6 @@ var installAutoConfirm bool
 
 // OneAgent v2 flags (used when DTWIZ_ONEAGENT_POC is enabled)
 var (
-	flagForce                 bool
 	flagMonitoringMode        string
 	flagNoVerifySignature     bool
 	flagSkipConnectivityCheck bool
@@ -50,13 +49,11 @@ var installOneAgentCmd = &cobra.Command{
 
 		opts := installer.InstallOptions{
 			DryRun:                installDryRun,
-			Force:                 flagForce,
 			MonitoringMode:        flagMonitoringMode,
 			NoVerifySignature:     flagNoVerifySignature,
 			SkipConnectivityCheck: flagSkipConnectivityCheck,
 			ConnectivityCheckOnly: flagConnectivityCheckOnly,
 			PrintEndpoints:        flagPrintEndpoints,
-			HostGroup:             hostGroup,
 			Quiet:                 quiet,
 		}
 
@@ -325,7 +322,6 @@ func init() {
 
 	installOneAgentCmd.Flags().Bool("quiet", false, "Run a silent/unattended installation with no output")
 	installOneAgentCmd.Flags().String("host-group", "", "Assign the host to a host group (--set-host-group)")
-	installOneAgentCmd.Flags().BoolVar(&flagForce, "force", false, "Override existing-OneAgent preflight check")
 	installOneAgentCmd.Flags().StringVar(&flagMonitoringMode, "monitoring-mode", "fullstack", "OneAgent monitoring mode (fullstack, infra, discovery)")
 	installOneAgentCmd.Flags().BoolVar(&flagNoVerifySignature, "no-verify-signature", false, "Skip installer signature verification (Linux only)")
 	installOneAgentCmd.Flags().BoolVar(&flagSkipConnectivityCheck, "skip-connectivity-check", false, "Skip endpoint connectivity probe before installation")

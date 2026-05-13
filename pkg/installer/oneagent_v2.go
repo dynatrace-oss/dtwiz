@@ -9,13 +9,11 @@ import (
 // InstallOptions carries all CLI-derived inputs for the v2 installer flow.
 type InstallOptions struct {
 	DryRun                bool
-	Force                 bool
 	MonitoringMode        string
 	NoVerifySignature     bool
 	SkipConnectivityCheck bool
 	ConnectivityCheckOnly bool
 	PrintEndpoints        bool
-	HostGroup             string
 	Quiet                 bool
 }
 
