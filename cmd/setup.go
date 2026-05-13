@@ -10,6 +10,7 @@ import (
 
 	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
+	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/recommender"
 )
@@ -131,7 +132,14 @@ var setupCmd = &cobra.Command{
 		var installErr error
 		switch selected.Method {
 		case recommender.MethodOneAgent:
-			installErr = installer.InstallOneAgent(c.Classic, setupDryRun, false, "")
+			if featureflags.IsEnabled(featureflags.OneAgentPoC) {
+				installErr = installer.InstallOneAgentV2(c, installer.InstallOptions{
+					DryRun:         setupDryRun,
+					MonitoringMode: "fullstack",
+				})
+			} else {
+				installErr = installer.InstallOneAgent(c.Classic, setupDryRun, false, "")
+			}
 		case recommender.MethodKubernetes:
 			installErr = installer.InstallKubernetes(envURL, accessTok, accessTok, "" /* name */, setupDryRun)
 		case recommender.MethodDocker:
