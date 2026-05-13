@@ -8,6 +8,7 @@
 - [Making Code Changes](#making-code-changes)
   - [Step 3: OpenSpec](#step-3-openspec)
   - [Step 4: Folder structure](#step-4-folder-structure)
+- [Development](development.md)
 
 ## Prerequisites
 
@@ -83,27 +84,8 @@ git feature add-integration-testing-setup
 
 We use OpenSpec for significant changes — new commands, new packages, architectural decisions, or meaningful behavior changes. This gives us and our AI agents proper context during the development process.
 
-See the full guide: [OpenSpec](openspec.md).
+See the full guide: [openspec.md](openspec.md).
 
-### Step 4: Folder structure
+### Step 4: Development guide
 
-Before writing code, please familiarize yourself with how our project is laid out. Adding new functionality in the wrong layer is a common source of review feedback.
-
-```text
-main.go                         # entry point → cmd.Execute()
-cmd/
-  root.go                       # cobra root, persistent flags: --environment, --access-token, --platform-token
-  auth.go                       # getDtEnvironment(), accessToken(), platformToken(), URL helpers
-  analyze.go, recommend.go, setup.go, status.go, version.go
-  install.go, update.go, uninstall.go
-pkg/
-  analyzer/                     # system detection (platform, Docker, K8s, OneAgent, OTel, AWS, Azure, services)
-  recommender/                  # recommendation engine (priority-ranked, method-based)
-  installer/                    # shared utilities (URL/token helpers, RunCommand) + per-method installers
-    installer.go                # AuthHeader(), APIURL(), AppsURL(), ExtractTenantID(), RunCommand()
-    oneagent.go, kubernetes.go, docker.go, otel.go, otel_update.go, otel_python.go, aws.go
-    dynakube.tmpl, otel.tmpl, aws.tmpl   # embedded Go templates
-    sudo_unix.go, sudo_windows.go
-scripts/
-  install.sh, install.ps1       # curl|sh installer scripts
-```
+Before writing code, please refer to [development.md](development.md) — it covers folder structure, Go best practices, and feature flags.
