@@ -1,6 +1,8 @@
 package installer
 
 import (
+	"fmt"
+
 	"github.com/dynatrace-oss/dtwiz/pkg/client"
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
@@ -35,6 +37,6 @@ func ResolveAgentConfig(opts InstallOptions) AgentConfig {
 }
 
 func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
-	display.PrintStatusLine("oneagent", "under development — set DTWIZ_ONEAGENT_POC=false to use the stable installer", display.ColorWarning)
+	display.PrintStatusLine("oneagent", fmt.Sprintf("under development (monitoring-mode=%s) — set DTWIZ_ONEAGENT_POC=false to use the stable installer", opts.MonitoringMode), display.ColorWarning)
 	return nil
 }
