@@ -1,4 +1,4 @@
-.PHONY: build install test test-coverage test-integration lint fmt clean markdownlint markdownlint-fix
+.PHONY: build install test test-coverage test-integration lint fmt clean markdownlint markdownlint-fix setup
 
 ifneq (,$(wildcard .e2e.env))
 include .e2e.env
@@ -60,4 +60,9 @@ markdownlint:
 
 markdownlint-fix:
 	docker run -v $(CURDIR):/workdir --rm  $(MD_LINT_CLI_IMAGE)  "**/*.md" --fix
+
+setup:
+	git config --local core.hooksPath .githooks
+	chmod +x .githooks/*
+	@echo "Git hooks installed from .githooks/"
 
