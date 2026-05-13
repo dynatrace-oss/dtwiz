@@ -2,6 +2,7 @@ package installer
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -101,6 +102,7 @@ func TestNodeInstrumentationPlan_PrintPlanSteps_Regular(t *testing.T) {
 		"/tmp/node-svc",
 		"Package manager: npm",
 		"/tmp/node-svc/.otel/",
+		"npm install (in project dir, if node_modules/ missing)",
 		"npm install (in .otel/)",
 		"node --require @opentelemetry/auto-instrumentations-node/register server.js  (service: node-svc)",
 	}
@@ -132,6 +134,8 @@ func TestNodeInstrumentationPlan_PrintPlanSteps_NextJS(t *testing.T) {
 		"/tmp/next-app",
 		"Package manager: yarn",
 		"Framework:       next",
+		"npm install (in project dir, if node_modules/ missing)",
+		"npm run build",
 		"npm install (in .otel/)",
 		"node .otel/next-otel-bootstrap.js start",
 	}
@@ -139,6 +143,32 @@ func TestNodeInstrumentationPlan_PrintPlanSteps_NextJS(t *testing.T) {
 		if !strings.Contains(output, check) {
 			t.Fatalf("expected output to contain %q, got:\n%s", check, output)
 		}
+	}
+}
+
+func TestNodeInstrumentationPlan_PrintPlanSteps_NextJS_BuildOutputExists(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".next"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	plan := &NodeInstrumentationPlan{
+		Project:        ScannedProject{Path: dir},
+		PackageManager: "yarn",
+		OtelDir:        filepath.Join(dir, ".otel"),
+		Framework:      "next",
+	}
+
+	output := captureStdout(t, func() {
+		plan.PrintPlanSteps()
+	})
+
+	// Build step should NOT appear when .next/ already exists.
+	if strings.Contains(output, "npm run build") {
+		t.Fatalf("unexpected build step when .next/ already exists:\n%s", output)
+	}
+	if !strings.Contains(output, "next-otel-bootstrap.js") {
+		t.Fatalf("expected launch command in output:\n%s", output)
 	}
 }
 
@@ -159,6 +189,8 @@ func TestNodeInstrumentationPlan_PrintPlanSteps_Nuxt(t *testing.T) {
 		"/tmp/nuxt-app",
 		"Package manager: pnpm",
 		"Framework:       nuxt",
+		"npm install (in project dir, if node_modules/ missing)",
+		"npm run build",
 		"--import",
 		"nuxt-otel-bootstrap.mjs",
 		".output/server/index.mjs",
@@ -174,7 +206,62 @@ func TestNodeInstrumentationPlan_PrintPlanSteps_Nuxt(t *testing.T) {
 	}
 }
 
-func TestNodeInstrumentationPlan_PrintPlanSteps_ShowsPackageManager(t *testing.T) {
+func TestNodeInstrumentationPlan_PrintPlanSteps_Nuxt_BuildOutputExists(t *testing.T) {
+	dir := t.TempDir()
+	nitroDir := filepath.Join(dir, ".output", "server")
+	if err := os.MkdirAll(nitroDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nitroDir, "index.mjs"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	plan := &NodeInstrumentationPlan{
+		Project:        ScannedProject{Path: dir},
+		PackageManager: "pnpm",
+		OtelDir:        filepath.Join(dir, ".otel"),
+		Framework:      "nuxt",
+	}
+
+	output := captureStdout(t, func() {
+		plan.PrintPlanSteps()
+	})
+
+	// Build step should NOT appear when .output/server/index.mjs already exists.
+	if strings.Contains(output, "npm run build") {
+		t.Fatalf("unexpected build step when .output/server/index.mjs already exists:\n%s", output)
+	}
+	if !strings.Contains(output, "nuxt-otel-bootstrap.mjs") {
+		t.Fatalf("expected launch command in output:\n%s", output)
+	}
+}
+
+// --- runBuildScript tests ---
+
+func TestRunBuildScript_FailsWhenNoBuildScript(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name":"app","scripts":{}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := runBuildScript(dir)
+	if err == nil {
+		t.Fatal("runBuildScript() should return error when no build script is defined")
+	}
+	if !strings.Contains(err.Error(), "build") {
+		t.Errorf("error should mention 'build', got: %v", err)
+	}
+}
+
+func TestRunBuildScript_FailsWhenNoPackageJSON(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := runBuildScript(dir); err == nil {
+		t.Fatal("runBuildScript() should return error when package.json is missing")
+	}
+}
+
+func TestNodeInstrumentationPlan_PrintPlanSteps_PackageManager(t *testing.T) {
 	for _, pm := range []string{"npm", "yarn", "pnpm"} {
 		t.Run(pm, func(t *testing.T) {
 			plan := &NodeInstrumentationPlan{
@@ -198,6 +285,25 @@ func TestNodeInstrumentationPlan_Execute(t *testing.T) {
 	// This test verifies the old print-based stub was replaced; a full integration test
 	// requires npm on PATH and is covered by end-to-end tests.
 	t.Skip("Execute() is now a real implementation — tested via end-to-end tests")
+}
+
+func TestNodeServiceNameFromEntrypoint(t *testing.T) {
+	tests := []struct {
+		projectPath string
+		entrypoint  string
+		want        string
+	}{
+		{"/home/user/my-app", "index.js", "my-app"},
+		{"/home/user/my-app", "server.js", "my-app"},
+		{"/home/user/node-package-delivery", "s-load-balancer/index.js", "s-load-balancer"},
+		{"/home/user/my-app", "services/api/server.js", "api"},
+	}
+	for _, tt := range tests {
+		got := nodeServiceNameFromEntrypoint(tt.projectPath, tt.entrypoint)
+		if got != tt.want {
+			t.Errorf("nodeServiceNameFromEntrypoint(%q, %q) = %q, want %q", tt.projectPath, tt.entrypoint, got, tt.want)
+		}
+	}
 }
 
 // --- Task 3.3: createOtelDir tests ---
@@ -318,6 +424,48 @@ func TestGenerateNuxtBootstrapMJS_UsesOtelDir(t *testing.T) {
 	}
 }
 
+func TestGenerateNuxtBootstrapMJS_ExitsOnEADDRINUSE(t *testing.T) {
+	content := generateNuxtBootstrapMJS("/tmp/project/.otel")
+
+	// The bootstrap must register an uncaughtException handler that exits with
+	// code 1 on EADDRINUSE, before Nitro's own handler runs. This makes dtwiz
+	// report the crash correctly instead of showing "running, port not detected".
+	checks := []string{
+		"process.on('uncaughtException'",
+		"EADDRINUSE",
+		"process.exit(1)",
+	}
+	for _, check := range checks {
+		if !strings.Contains(content, check) {
+			t.Errorf("expected bootstrap to contain %q, got:\n%s", check, content)
+		}
+	}
+
+	// Non-EADDRINUSE errors must be rethrown so other crashes still fail fast.
+	// Without this, adding an uncaughtException listener suppresses Node's default exit.
+	if !strings.Contains(content, "throw err") {
+		t.Errorf("expected bootstrap to rethrow non-EADDRINUSE errors, got:\n%s", content)
+	}
+}
+
+func TestGenerateNuxtBootstrapMJS_EADDRINUSEHandlerBeforeHooks(t *testing.T) {
+	content := generateNuxtBootstrapMJS("/tmp/project/.otel")
+
+	// The uncaughtException handler must appear before module.register() so it
+	// is active before any application code (including Nitro's own handler) runs.
+	eaddrPos := strings.Index(content, "EADDRINUSE")
+	registerPos := strings.Index(content, "register(hookURL")
+	if eaddrPos < 0 {
+		t.Fatal("EADDRINUSE handler not found in bootstrap")
+	}
+	if registerPos < 0 {
+		t.Fatal("register(hookURL call not found in bootstrap")
+	}
+	if eaddrPos > registerPos {
+		t.Errorf("EADDRINUSE handler (pos %d) appears after register(hookURL (pos %d) — handler must come first", eaddrPos, registerPos)
+	}
+}
+
 // --- Task 4.7: PrintPlanSteps shows running PIDs ---
 
 func TestNodeInstrumentationPlan_PrintPlanSteps_ShowsRunningPIDs(t *testing.T) {
@@ -343,57 +491,108 @@ func TestNodeInstrumentationPlan_PrintPlanSteps_ShowsRunningPIDs(t *testing.T) {
 	}
 }
 
-// --- Prerequisite check: node_modules/ ---
+// withFakeNpmRunner replaces npmRunner with fn for the duration of the test.
+func withFakeNpmRunner(t *testing.T, fn func(dir string, args ...string) error) {
+	t.Helper()
+	orig := npmRunner
+	npmRunner = fn
+	t.Cleanup(func() { npmRunner = orig })
+}
 
-func TestExecute_RegularApp_MissingNodeModules_DoesNotCreateOtelDir(t *testing.T) {
+// --- runNpm tests ---
+
+func TestRunNpm_ErrorIncludesSubcmdAndDir(t *testing.T) {
 	dir := t.TempDir()
-	// Project has a package.json and an entrypoint but NO node_modules/.
-	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name":"myapp"}`), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "index.js"), []byte(`console.log("hi")`), 0644); err != nil {
-		t.Fatal(err)
-	}
+	// Stub npmRunner to simulate a failure, then verify runNpm wraps the error
+	// with both the subcommand and the directory in the message.
+	withFakeNpmRunner(t, func(d string, args ...string) error {
+		subCmd := strings.Join(args, " ")
+		return fmt.Errorf("npm %s in %s failed: exit status 1\nsome npm output", subCmd, d)
+	})
 
-	otelDir := filepath.Join(dir, ".otel")
-	plan := &NodeInstrumentationPlan{
-		Project:        ScannedProject{Path: dir},
-		Entrypoints:    []string{"index.js"},
-		PackageManager: "npm",
-		OtelDir:        otelDir,
-		Framework:      "",
+	err := runNpm(dir, "ci")
+	if err == nil {
+		t.Fatal("runNpm should propagate the error from npmRunner")
 	}
-
-	plan.Execute()
-
-	if _, err := os.Stat(otelDir); !os.IsNotExist(err) {
-		t.Errorf(".otel/ was created despite missing node_modules/ — expected early exit")
+	if !strings.Contains(err.Error(), "npm ci") {
+		t.Errorf("error should mention subcommand, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), dir) {
+		t.Errorf("error should mention directory, got: %v", err)
 	}
 }
 
-func TestExecute_NextJSApp_MissingNodeModules_DoesNotCreateOtelDir(t *testing.T) {
+// --- installNodeProjectDeps tests ---
+
+func TestInstallProjectDeps_SkipsWhenNodeModulesExists(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"dependencies":{"next":"14.0.0"}}`), 0644); err != nil {
+	// Create a node_modules/ directory to simulate already-installed deps.
+	if err := os.Mkdir(filepath.Join(dir, "node_modules"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "next.config.js"), []byte(`module.exports = {}`), 0644); err != nil {
+
+	// Should return nil immediately without attempting to run npm.
+	if err := installNodeProjectDeps(dir); err != nil {
+		t.Fatalf("installNodeProjectDeps() = %v, want nil when node_modules exists", err)
+	}
+}
+
+func TestInstallProjectDeps_UsesNpmCI_WhenPackageLockExists(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name":"test","private":true}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	lockContent := `{"name":"test","version":"1.0.0","lockfileVersion":3,"requires":true,"packages":{"":{"name":"test","version":"1.0.0"}}}`
+	if err := os.WriteFile(filepath.Join(dir, "package-lock.json"), []byte(lockContent), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	otelDir := filepath.Join(dir, ".otel")
-	plan := &NodeInstrumentationPlan{
-		Project:        ScannedProject{Path: dir},
-		Entrypoints:    []string{"next:start"},
-		PackageManager: "npm",
-		OtelDir:        otelDir,
-		Framework:      "next",
+	var gotSubCmd string
+	withFakeNpmRunner(t, func(_ string, args ...string) error {
+		gotSubCmd = args[0]
+		return nil
+	})
+
+	if err := installNodeProjectDeps(dir); err != nil {
+		t.Fatalf("installNodeProjectDeps() with package-lock.json: %v", err)
+	}
+	if gotSubCmd != "ci" {
+		t.Errorf("expected npm ci, got npm %s", gotSubCmd)
+	}
+}
+
+func TestInstallProjectDeps_UsesNpmInstall_WhenNoLockfile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name":"test","private":true}`), 0644); err != nil {
+		t.Fatal(err)
 	}
 
-	plan.Execute()
+	var gotSubCmd string
+	withFakeNpmRunner(t, func(_ string, args ...string) error {
+		gotSubCmd = args[0]
+		return nil
+	})
 
-	if _, err := os.Stat(otelDir); !os.IsNotExist(err) {
-		t.Errorf(".otel/ was created despite missing node_modules/ — expected early exit")
+	if err := installNodeProjectDeps(dir); err != nil {
+		t.Fatalf("installNodeProjectDeps() without lockfile: %v", err)
 	}
+	if gotSubCmd != "install" {
+		t.Errorf("expected npm install, got npm %s", gotSubCmd)
+	}
+}
+
+func TestExecute_RegularApp_MissingNodeModules_DoesNotCreateOtelDir(t *testing.T) {
+	// Execute() always calls installNodeProjectDeps(), which is a no-op when
+	// node_modules exists and runs npm ci/install otherwise.
+	// Install success/failure is covered by TestInstallProjectDeps_* and e2e tests.
+	t.Skip("Execute() delegates dep install to installNodeProjectDeps — covered by unit and e2e tests")
+}
+
+func TestExecute_NextJSApp_MissingNodeModules_DoesNotCreateOtelDir(t *testing.T) {
+	// Execute() always calls installNodeProjectDeps(), which is a no-op when
+	// node_modules exists and runs npm ci/install otherwise.
+	// Install success/failure is covered by TestInstallProjectDeps_* and e2e tests.
+	t.Skip("Execute() delegates dep install to installNodeProjectDeps — covered by unit and e2e tests")
 }
 
 // --- Task 2.3: generateOtelNodeEnvVars tests ---

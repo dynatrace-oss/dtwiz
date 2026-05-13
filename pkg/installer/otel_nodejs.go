@@ -23,6 +23,21 @@ var otelNodePackages = []string{
 	"@opentelemetry/exporter-logs-otlp-http",
 }
 
+// nodeServiceNameFromEntrypoint derives OTEL_SERVICE_NAME for a Node.js entrypoint.
+// Unlike the Python variant, the project name is NOT prefixed when the entrypoint
+// lives in a subdirectory — the subdirectory name alone is the service name.
+// Examples:
+//
+//	"index.js"              in "my-app"  → "my-app"
+//	"s-load-balancer/index.js" in "my-app" → "s-load-balancer"
+func nodeServiceNameFromEntrypoint(projectPath, entrypoint string) string {
+	dir := filepath.Dir(entrypoint)
+	if dir == "." || dir == "" {
+		return filepath.Base(projectPath)
+	}
+	return filepath.Base(dir)
+}
+
 // generateOtelNodeEnvVars extends base OTel env vars with Node.js-specific settings.
 func generateOtelNodeEnvVars(apiURL, token, serviceName string) map[string]string {
 	envVars := generateBaseOtelEnvVars(apiURL, token, serviceName)
@@ -118,6 +133,18 @@ func (p *NodeInstrumentationPlan) PrintPlanSteps() {
 	if p.Framework != "" {
 		fmt.Printf("     Framework:       %s\n", p.Framework)
 	}
+	fmt.Printf("     npm install (in project dir, if node_modules/ missing)\n")
+	switch p.Framework {
+	case "next":
+		if _, err := os.Stat(filepath.Join(p.Project.Path, ".next")); os.IsNotExist(err) {
+			fmt.Printf("     npm run build (produce .next/)\n")
+		}
+	case "nuxt":
+		nitroEntry := filepath.Join(p.Project.Path, ".output", "server", "index.mjs")
+		if _, err := os.Stat(nitroEntry); os.IsNotExist(err) {
+			fmt.Printf("     npm run build (produce .output/server/index.mjs)\n")
+		}
+	}
 	fmt.Printf("     Create %s/ with OTel deps\n", p.OtelDir)
 	fmt.Printf("     npm install (in .otel/)\n")
 	switch p.Framework {
@@ -127,7 +154,7 @@ func (p *NodeInstrumentationPlan) PrintPlanSteps() {
 		fmt.Printf("     node --import .otel/nuxt-otel-bootstrap.mjs .output/server/index.mjs\n")
 	default:
 		for _, ep := range p.Entrypoints {
-			svcName := serviceNameFromEntrypoint(p.Project.Path, ep)
+			svcName := nodeServiceNameFromEntrypoint(p.Project.Path, ep)
 			fmt.Printf("     node --require @opentelemetry/auto-instrumentations-node/register %s  (service: %s)\n", ep, svcName)
 		}
 	}
@@ -199,6 +226,19 @@ func generateNuxtBootstrapMJS(otelDir string) string {
 	sb.WriteString("import { register } from 'node:module';\n")
 	sb.WriteString("import { createRequire } from 'node:module';\n\n")
 
+	// Exit with code 1 when the port is already in use so dtwiz can report the
+	// crash. This handler is registered before Nitro's own uncaughtException
+	// handler, so it fires first and terminates the process before the heartbeat
+	// timer (or any other async work) keeps it alive indefinitely.
+	sb.WriteString("process.on('uncaughtException', (err) => {\n")
+	sb.WriteString("  if (err.code === 'EADDRINUSE') {\n")
+	sb.WriteString("    process.stderr.write('Error: ' + err.message + '\\n');\n")
+	sb.WriteString("    process.exit(1);\n")
+	sb.WriteString("  } else {\n")
+	sb.WriteString("    throw err;\n")
+	sb.WriteString("  }\n")
+	sb.WriteString("});\n\n")
+
 	// Resolve paths relative to this script's location (.otel/) using import.meta.url.
 	// This works on Windows, macOS, and Linux — import.meta.url is always a valid file:// URL.
 	sb.WriteString("const hookURL = new URL('./node_modules/@opentelemetry/instrumentation/hook.mjs', import.meta.url);\n")
@@ -211,50 +251,143 @@ func generateNuxtBootstrapMJS(otelDir string) string {
 	return sb.String()
 }
 
-// installOtelNodeDeps runs npm install inside the .otel/ directory.
-func installOtelNodeDeps(otelDir string) error {
-	npmBin := "npm"
+// npmCmd returns the npm binary name for the current platform.
+func npmCmd() string {
 	if runtime.GOOS == "windows" {
-		npmBin = "npm.cmd"
+		return "npm.cmd"
 	}
-	cmd := exec.Command(npmBin, "install")
-	cmd.Dir = otelDir
-	logger.Debug("running npm install", "dir", otelDir)
+	return "npm"
+}
+
+// npmRunner is the function used to execute npm commands.
+// Tests replace it with a stub to avoid hitting the real npm binary.
+var npmRunner = func(dir string, args ...string) error {
+	subCmd := strings.Join(args, " ")
+	cmd := exec.Command(npmCmd(), args...)
+	cmd.Dir = dir
+	logger.Debug("running npm "+subCmd, "dir", dir)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("npm install in %s failed: %w\n%s", otelDir, err, string(out))
+		return fmt.Errorf("npm %s in %s failed: %w\n%s", subCmd, dir, err, string(out))
 	}
-	logger.Debug("npm install completed", "dir", otelDir)
+	logger.Debug("npm "+subCmd+" completed", "dir", dir)
 	return nil
+}
+
+// runNpm executes `npm <args...>` in dir and returns a descriptive error on failure.
+func runNpm(dir string, args ...string) error {
+	return npmRunner(dir, args...)
+}
+
+// installNodeProjectDeps installs project dependencies if node_modules is missing.
+// If package-lock.json is present it runs npm ci; otherwise npm install.
+// Returns nil immediately when node_modules already exists.
+func installNodeProjectDeps(projPath string) error {
+	nodeModulesDir := filepath.Join(projPath, "node_modules")
+	if _, err := os.Stat(nodeModulesDir); err == nil {
+		return nil // already installed
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("check node_modules: %w", err)
+	}
+
+	subCmd := "install"
+	if _, err := os.Stat(filepath.Join(projPath, "package-lock.json")); err == nil {
+		logger.Debug("package-lock.json found, running npm ci", "dir", projPath)
+		subCmd = "ci"
+	} else {
+		logger.Debug("no package-lock.json, running npm install", "dir", projPath)
+	}
+
+	return runNpm(projPath, subCmd)
+}
+
+// installOtelNodeDeps runs npm install inside the .otel/ directory.
+func installOtelNodeDeps(otelDir string) error {
+	return runNpm(otelDir, "install")
+}
+
+// runBuildScript runs the project's `build` npm script (npm run build).
+// Returns an error if no build script is defined in package.json or if the build fails.
+func runBuildScript(projPath string) error {
+	data, err := os.ReadFile(filepath.Join(projPath, "package.json"))
+	if err != nil {
+		return fmt.Errorf("read package.json: %w", err)
+	}
+	var pkg struct {
+		Scripts map[string]string `json:"scripts"`
+	}
+	if err := json.Unmarshal(data, &pkg); err != nil {
+		return fmt.Errorf("parse package.json: %w", err)
+	}
+	if pkg.Scripts["build"] == "" {
+		return fmt.Errorf("no 'build' script in package.json — add one or run the build manually")
+	}
+	logger.Debug("running build script", "dir", projPath)
+	return runNpm(projPath, "run", "build")
 }
 
 func (p *NodeInstrumentationPlan) Execute() {
 	proj := p.Project
 
-	// Validate prerequisites before doing any work. Nuxt requires a pre-built
-	// Nitro server; fail fast instead of creating .otel/ and running npm install
-	// only to discover the build output is missing.
+	// Ensure project dependencies are installed before any build step.
+	// Framework builds (npm run build) require node_modules to be present.
+	fmt.Print("  Installing project dependencies... ")
+	if err := installNodeProjectDeps(proj.Path); err != nil {
+		fmt.Println("failed.")
+		fmt.Printf("    %v\n", err)
+		return
+	}
+	fmt.Println("done.")
+
+	// Nuxt requires a pre-built Nitro server. If the build output is missing,
+	// automatically run `npm run build` (using the project's build script) so
+	// the user doesn't have to run a separate step before re-running dtwiz.
 	if p.Framework == "nuxt" {
 		nitroEntry := filepath.Join(proj.Path, ".output", "server", "index.mjs")
-		if _, err := os.Stat(nitroEntry); err != nil {
-			fmt.Printf("    Nuxt build output not found at %s\n", nitroEntry)
-			fmt.Println("    Run 'npx nuxt build' first, then re-run dtwiz.")
+		if _, err := os.Stat(nitroEntry); os.IsNotExist(err) {
+			fmt.Print("  Building Nuxt project (npm run build)... ")
+			if err := runBuildScript(proj.Path); err != nil {
+				fmt.Println("failed.")
+				fmt.Printf("    %v\n", err)
+				return
+			}
+			fmt.Println("done.")
+			// Re-verify the build produced the expected output.
+			if _, err := os.Stat(nitroEntry); err != nil {
+				fmt.Printf("    Build completed but %s was not produced.\n", nitroEntry)
+				fmt.Println("    Check the build output above for errors.")
+				return
+			}
+		} else if err != nil {
+			fmt.Printf("  Cannot access %s: %v\n", nitroEntry, err)
 			return
 		}
 		logger.Debug("nuxt build output found", "path", nitroEntry)
 	}
 
-	// For regular and Next.js apps, verify that project dependencies are installed.
-	// Nuxt is exempt — it runs a pre-built .output/server/index.mjs and does not
-	// need the project's node_modules/ at runtime.
-	if p.Framework == "" || p.Framework == "next" {
-		nodeModulesDir := filepath.Join(proj.Path, "node_modules")
-		if _, err := os.Stat(nodeModulesDir); os.IsNotExist(err) {
-			fmt.Println()
-			fmt.Printf("    Project dependencies are not installed in %s\n", proj.Path)
-			fmt.Printf("    Run '%s install' in that directory first, then re-run dtwiz.\n", p.PackageManager)
+	// Next.js requires a production build (.next/) for `next start`.
+	// If the build output is missing, run `npm run build` automatically.
+	if p.Framework == "next" {
+		nextBuildDir := filepath.Join(proj.Path, ".next")
+		if _, err := os.Stat(nextBuildDir); os.IsNotExist(err) {
+			fmt.Print("  Building Next.js project (npm run build)... ")
+			if err := runBuildScript(proj.Path); err != nil {
+				fmt.Println("failed.")
+				fmt.Printf("    %v\n", err)
+				return
+			}
+			fmt.Println("done.")
+			// Re-verify the build produced the expected output.
+			if _, err := os.Stat(nextBuildDir); err != nil {
+				fmt.Printf("    Build completed but .next/ was not produced.\n")
+				fmt.Println("    Check the build output above for errors.")
+				return
+			}
+		} else if err != nil {
+			fmt.Printf("  Cannot access %s: %v\n", nextBuildDir, err)
 			return
 		}
+		logger.Debug("next.js build output found", "path", nextBuildDir)
 	}
 
 	if len(proj.RunningProcessIDs) > 0 {
@@ -348,11 +481,14 @@ func (p *NodeInstrumentationPlan) Execute() {
 
 		mp := launchEntrypoint(svcName, proj.Path, nitroEntry, cmd)
 		if mp != nil {
+			// Nitro may spawn a cluster worker that holds the TCP socket while
+			// the parent acts as manager — fall back to child-process detection.
+			mp.portDetector = detectProcessOrChildListeningPort
 			procs = append(procs, mp)
 		}
 	default:
 		for _, ep := range p.Entrypoints {
-			svcName := serviceNameFromEntrypoint(proj.Path, ep)
+			svcName := nodeServiceNameFromEntrypoint(proj.Path, ep)
 			epEnvVars := maps.Clone(p.EnvVars)
 			epEnvVars["OTEL_SERVICE_NAME"] = svcName
 

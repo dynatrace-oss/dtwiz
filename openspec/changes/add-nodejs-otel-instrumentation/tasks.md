@@ -49,7 +49,7 @@ Update the plan struct and implement `.otel/` directory creation with package in
 - [x] 3.2 Update `buildNodeInstrumentationPlan()` signature to accept `envURL, platformToken string`; populate new struct fields including `OtelDir = filepath.Join(proj.Path, ".otel")`, detect package manager via `detectNodePackageManager()`, detect framework via `detectNodeFramework()`. When no entrypoint is found and the project is not a known framework, show "This project can't be auto-instrumented" with a link to the Dynatrace manual instrumentation docs and return nil.
 - [x] 3.3 Implement `createOtelDir(plan *NodeInstrumentationPlan) error` — create `.otel/` directory, write `.otel/package.json` with OTel deps as dependencies
 - [x] 3.4 Implement `generateWrapperJS(framework string) string` — generate CJS wrapper script content that requires `@opentelemetry/auto-instrumentations-node/register` and delegates to the Next.js CLI (`next/dist/bin/next`). OTEL\_\* env vars are passed via `cmd.Env` at launch time, not embedded in the script. Called only for Next.js. Implement `generateNuxtBootstrapMJS(otelDir string) string` — generate an ESM bootstrap script (`.mjs`) that uses `module.register()` to install `import-in-the-middle` hooks and loads the OTel CJS register via `createRequire`. Called only for Nuxt (Nuxt bypasses the CLI; the Nitro server is launched directly).
-- [x] 3.5 Implement `installOtelNodeDeps(otelDir string) error` — run `npm install` inside `.otel/` directory using `exec.Command`
+- [x] 3.5 Extract `runNpm(dir, subCmd string) error` as a shared helper — wraps `exec.Command(npmCmd(), subCmd)` with debug logging and a descriptive error that includes both the subcommand and directory. Implement `installNodeProjectDeps(projPath string) error` — returns nil immediately when `node_modules/` exists, otherwise runs `npm ci` (if `package-lock.json` present) or `npm install` via `runNpm`. Implement `installOtelNodeDeps(otelDir string) error` as a one-line wrapper calling `runNpm(otelDir, "install")`.
 - [x] 3.6 Tests:
   - `TestCreateOtelDir_CreatesPackageJSON`
   - `TestCreateOtelDir_PackageJSONContainsOtelDeps`
@@ -62,6 +62,11 @@ Update the plan struct and implement `.otel/` directory creation with package in
   - `TestBuildNodeInstrumentationPlan_DetectsNuxt`
   - `TestBuildNodeInstrumentationPlan_DetectsPackageManager`
   - `TestBuildNodeInstrumentationPlan_SetsOtelDir`
+  - `TestRunNpm_ErrorIncludesSubcmdAndDir` (error message contains subcommand and directory)
+  - `TestRunNpm_SucceedsOnValidProject` (returns nil on successful npm install)
+  - `TestInstallProjectDeps_SkipsWhenNodeModulesExists`
+  - `TestInstallProjectDeps_UsesNpmCI_WhenPackageLockExists`
+  - `TestInstallProjectDeps_UsesNpmInstall_WhenNoLockfile`
 
 ## 4. Full Execute Flow
 
@@ -69,17 +74,22 @@ Rewrite `Execute()` to perform actual installation, process launch, and Dynatrac
 
 **Files:** `pkg/installer/otel_nodejs.go` (modify), `pkg/installer/otel_nodejs_test.go` (modify)
 
-- [x] 4.1 Rewrite `Execute()`: stop running processes (reuse `stopProcesses()`), call `createOtelDir()`, for Next.js/Nuxt write framework wrapper script, call `installOtelNodeDeps()`, build the run command (regular vs Next.js vs Nuxt), set OTEL\_\* env vars on the process, use `StartManagedProcess()` to launch, use `PrintProcessSummary()` for port detection and process health check
+- [x] 4.1 Rewrite `Execute()`: stop running processes (reuse `stopProcesses()`), for regular and Next.js apps call `installNodeProjectDeps()` to auto-install project deps when `node_modules/` is absent (no-op when present), for Nuxt auto-run `buildNuxtProject()` when `.output/server/index.mjs` is absent (no-op when it already exists), call `createOtelDir()`, for Next.js/Nuxt write framework wrapper script, call `installOtelNodeDeps()`, build the run command (regular vs Next.js vs Nuxt), set OTEL\_\* env vars on the process, use `StartManagedProcess()` to launch, use `PrintProcessSummary()` for port detection and process health check
 - [x] 4.2 For regular apps: the run command is `node --require @opentelemetry/auto-instrumentations-node/register <entrypoint>` with CWD set to `.otel/` and entrypoint path adjusted to be relative from `.otel/` (e.g., `../server.js`)
 - [x] 4.3 For Next.js apps: the run command is `node otel/next-otel-bootstrap.js start` with CWD set to project root
 - [x] 4.4 For Nuxt apps: the run command is `node --import .otel/nuxt-otel-bootstrap.mjs .output/server/index.mjs` with CWD set to project root (launches the Nitro server directly; Nuxt CLI is not used because it spawns child processes that lose OTel registration)
-- [x] 4.5 Update `PrintPlanSteps()` to show: project path, package manager, framework status (Next.js/Nuxt if applicable), `.otel/` directory creation, `npm install` in `.otel/`, run command
+- [x] 4.4a Implement `runBuildScript(projPath string) error` — shared helper used by both Next.js and Nuxt paths: reads `scripts.build` from `package.json`; if absent returns a clear error; if present runs `npm run build` via `runNpm(projPath, "run", "build")`. For Nuxt, `Execute()` calls it when `.output/server/index.mjs` is missing and re-verifies the output afterwards. For Next.js, `Execute()` calls it when `.next/` is missing and re-verifies afterwards.
+- [x] 4.5 Update `PrintPlanSteps()` to show: project path, package manager, framework status (Next.js/Nuxt if applicable), `.otel/` directory creation, `npm install` in `.otel/`, for Next.js conditionally show `npm run build` step when `.next/` does not yet exist, for Nuxt conditionally show `npm run build` step when `.output/server/index.mjs` does not yet exist, run command
 - [x] 4.6 Update `DetectNodePlan()` to return `(*NodeInstrumentationPlan, bool)` — the second value (`userInteracted`) indicates whether the user interacted with the project selection prompt. When `buildNodeInstrumentationPlan` returns nil (non-instrumentable project), show "This project can't be auto-instrumented." with a docs link, immediately prompt "Select another project? [Y/n]", and loop back to show the project list on confirmation. The caller (`InstallOtelNode`) uses `userInteracted` to suppress the "No Node.js projects detected" fallback when the user already saw the project list.
 - [x] 4.7 Tests:
   - `TestNodeInstrumentationPlan_PrintPlanSteps_Regular`
-  - `TestNodeInstrumentationPlan_PrintPlanSteps_NextJS`
-  - `TestNodeInstrumentationPlan_PrintPlanSteps_Nuxt`
+  - `TestNodeInstrumentationPlan_PrintPlanSteps_NextJS` (verifies `npm run build` step shown when `.next/` absent)
+  - `TestNodeInstrumentationPlan_PrintPlanSteps_NextJS_BuildOutputExists` (verifies build step NOT shown when `.next/` exists)
+  - `TestNodeInstrumentationPlan_PrintPlanSteps_Nuxt` (verifies `npm run build` step shown when `.output/server/index.mjs` absent)
+  - `TestNodeInstrumentationPlan_PrintPlanSteps_Nuxt_BuildOutputExists` (verifies build step NOT shown when output already exists)
   - `TestNodeInstrumentationPlan_PrintPlanSteps_ShowsPackageManager`
+  - `TestRunBuildScript_FailsWhenNoBuildScript`
+  - `TestRunBuildScript_FailsWhenNoPackageJSON`
 
 ## 5. Standalone CLI Command
 

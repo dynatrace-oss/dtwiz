@@ -257,8 +257,17 @@ func stopProcesses(pids []int) {
 	}
 }
 
-// parseWinProcessOutput splits raw PowerShell output into non-blank lines,
-// stripping trailing CR characters (\r\n line endings).
+// detectProcessOrChildListeningPort checks pid first, then its direct children.
+// Needed for frameworks (e.g. Nuxt/Nitro) that may spawn a cluster worker to hold
+// the TCP socket while the parent process acts as a manager.
+func detectProcessOrChildListeningPort(pid int) string {
+	if port := detectProcessListeningPort(pid); port != "" {
+		return port
+	}
+	return detectChildListeningPort(pid)
+}
+
+// parseWinProcessOutput splits raw Windows process output into non-empty lines, stripping trailing CR characters from CRLF line endings.
 func parseWinProcessOutput(raw string) []string {
 	var lines []string
 	for _, line := range strings.Split(strings.TrimSpace(raw), "\n") {
