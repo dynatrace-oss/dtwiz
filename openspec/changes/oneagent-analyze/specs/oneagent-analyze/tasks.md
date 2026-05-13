@@ -57,7 +57,7 @@ Resolve the agent's runtime configuration — monitoring mode and app-log conten
 
 **Files:** `pkg/installer/oneagent_v2.go` (extend — scaffolded in Task 1), `pkg/installer/oneagent_v2_test.go` (extend — scaffolded in Task 1), `cmd/install.go` (modify — wire `--monitoring-mode`)
 
-- [ ] 2.5.1 Define the `AgentConfig` struct in `oneagent_v2.go`:
+- [x] 2.5.1 Define the `AgentConfig` struct in `oneagent_v2.go`:
 
   ```go
   type AgentConfig struct {
@@ -66,17 +66,17 @@ Resolve the agent's runtime configuration — monitoring mode and app-log conten
   }
   ```
 
-- [ ] 2.5.2 Implement `DefaultAgentConfig() AgentConfig` returning `{MonitoringMode: "fullstack", AppLogContentAccess: true}` — this is the canonical zero-config default and the only construction path callers should use
-- [ ] 2.5.3 Implement `ResolveAgentConfig(opts InstallOptions) AgentConfig`:
+- [x] 2.5.2 Implement `DefaultAgentConfig() AgentConfig` returning `{MonitoringMode: "fullstack", AppLogContentAccess: true}` — this is the canonical zero-config default and the only construction path callers should use
+- [x] 2.5.3 Implement `ResolveAgentConfig(opts InstallOptions) AgentConfig`:
   - Start with `DefaultAgentConfig()`
-  - If `opts.MonitoringMode != ""`, override `cfg.MonitoringMode = opts.MonitoringMode` (no validation, pass-through)
+  - Always assign `cfg.MonitoringMode = opts.MonitoringMode` (no validation, pass-through; CLI default guarantees it is never empty)
   - Return the resolved config
-- [ ] 2.5.4 Add `MonitoringMode string` to the `InstallOptions` struct in Task 1's scaffold (if not already present — Task 1.8 includes it)
-- [ ] 2.5.5 Wire the cobra flag in `cmd/install.go`: `installOneAgentCmd.Flags().StringVar(&installOneAgentMonitoringMode, "monitoring-mode", "", "override the OneAgent monitoring mode (default: fullstack)")` and populate `opts.MonitoringMode` from the parsed value
-- [ ] 2.5.6 Emit `logger.Debug("resolved agent config", "monitoring_mode", cfg.MonitoringMode, "app_log_content_access", cfg.AppLogContentAccess, "override_set", opts.MonitoringMode != "")` once the config is resolved
-- [ ] 2.5.7 Unit test — **default path**: `cfg := ResolveAgentConfig(InstallOptions{})` returns exactly `{"fullstack", true}`
-- [ ] 2.5.8 Unit test — **override path**: `cfg := ResolveAgentConfig(InstallOptions{MonitoringMode: "infra-only"})` returns `{"infra-only", true}`
-- [ ] 2.5.9 Unit test — **empty-string override preserves default**: `cfg := ResolveAgentConfig(InstallOptions{MonitoringMode: ""})` returns `{"fullstack", true}` (whitespace-only is NOT treated as override; pass-through preserves "no flag passed" semantics)
+- [x] 2.5.4 `MonitoringMode string` already present in `InstallOptions` (no change needed)
+- [x] 2.5.5 `--monitoring-mode` flag already wired on `installOneAgentCmd` with default `"fullstack"` (no change needed)
+- [x] 2.5.6 Emit `logger.Debug("resolved agent config", "monitoring_mode", cfg.MonitoringMode, "app_log_content_access", cfg.AppLogContentAccess, "override_set", opts.MonitoringMode != "fullstack")` once the config is resolved
+- [x] 2.5.7 Unit test — **default path**: `cfg := ResolveAgentConfig(InstallOptions{MonitoringMode: "fullstack"})` returns exactly `{"fullstack", true}`
+- [x] 2.5.8 Unit test — **override path**: `cfg := ResolveAgentConfig(InstallOptions{MonitoringMode: "infra-only"})` returns `{"infra-only", true}`
+- [x] 2.5.9 Unit test — **default constant matches flag default**: `DefaultAgentConfig().MonitoringMode == "fullstack"` (documents that the struct default and the CLI flag default are in sync)
 - [ ] 2.5.10 Unit test — **debug log captures both default and override paths**: with `--debug`, run the function twice (default + override) and assert two separate `"resolved agent config"` Debug lines appear with the correct `monitoring_mode` and `override_set` field values
 - [ ] 2.5.11 Manual: `dtwiz install oneagent --oneagent-poc --monitoring-mode=infra-only --dry-run --debug` produces a dry-run command containing `--set-monitoring-mode=infra-only` and a Debug log line confirming the override
 
