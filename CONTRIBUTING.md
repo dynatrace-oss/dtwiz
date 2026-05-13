@@ -8,13 +8,13 @@ This project follows our [Code of Conduct](CODE_OF_CONDUCT.md). All contributors
 
 ## How to Contribute
 
-| Contribution                              | Action |
-|-------------------------------------------|---|
-| Bugs & small fixes                        | Open a PR |
-| New feature / architecture change         | Open a GitHub Issue — most features belong in third-party plugins via our plugin SDK |
-| Refactor-only PR                          | Don't open a PR — we don't accept refactor-only changes unless a maintainer explicitly requests them as part of a concrete fix |
+| Contribution                              | Action                                                                                                                           |
+|-------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------|
+| Bugs & small fixes                        | Open a PR                                                                                                                        |
+| New feature / architecture change         | Open a GitHub Issue — most features belong in third-party plugins via our plugin SDK                                             |
+| Refactor-only PR                          | Don't open a PR — we don't accept refactor-only changes unless a maintainer explicitly requests them as part of a concrete fix   |
 | Test/CI-only PR for known `main` failures | Don't open a PR — the maintainer team is already tracking those failures; such PRs will be closed unless they validate a new fix |
-| Question                                  | Open a GitHub Issue with the `question` label |
+| Question                                  | Open a GitHub Issue with the `question` label                                                                                    |
 
 ## Issues
 
