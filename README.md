@@ -64,6 +64,16 @@ cd dtwiz
 make install
 ```
 
+### Install channels
+
+| Channel | Linux / macOS | Windows (PowerShell) |
+|---------|---------------|----------------------|
+| Latest stable release *(default)* | `source <(curl -sSL .../install.sh)` | `irm .../install.ps1 \| iex` |
+| Latest `main` branch snapshot | `DTWIZ_CHANNEL=main source <(curl -sSL .../install.sh)` | `$env:DTWIZ_CHANNEL="main"; irm .../install.ps1 \| iex` |
+| Specific PR/branch snapshot | `DTWIZ_TAG=snapshot-<branch> source <(curl -sSL .../install.sh)` | `$env:DTWIZ_TAG="snapshot-<branch>"; irm .../install.ps1 \| iex` |
+
+The `main` channel is rebuilt automatically on every push to `main` and is intended for testing unreleased changes. It is not recommended for production use.
+
 ## Available commands
 
 | Command | Description |

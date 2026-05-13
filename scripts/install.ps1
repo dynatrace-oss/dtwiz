@@ -11,15 +11,26 @@
 #
 # Run once to allow execution:
 #   Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+#
+# Install channels:
+#   (default)              Latest stable release
+#   -Channel main          Latest snapshot from the main branch
+#   -Tag <tag>             Specific snapshot/pre-release tag
 
 [CmdletBinding()]
 param(
     [string]$InstallDir = "",
-    [string]$Tag = $env:DTWIZ_TAG
+    [string]$Tag = $env:DTWIZ_TAG,
+    [string]$Channel = $env:DTWIZ_CHANNEL
 )
 
 $ErrorActionPreference = "Stop"
 $Repo = "dynatrace-oss/dtwiz"
+
+# Translate channel name to a release tag
+if ($Channel -eq "main") {
+    $Tag = "snapshot-main"
+}
 
 # ── Detect architecture ────────────────────────────────────────────────────────
 # Try .NET RuntimeInformation first (PowerShell 7+ / .NET 4.7.1+), then fall
@@ -49,7 +60,11 @@ Write-Host "Detected platform: windows/$Arch"
 if ($Tag) {
     # Use the provided release tag directly
     $ReleaseTag = $Tag
-    Write-Host "Installing preview snapshot for tag: $Tag"
+    if ($Tag -eq "snapshot-main") {
+        Write-Host "Installing latest snapshot from the main branch..."
+    } else {
+        Write-Host "Installing preview snapshot for tag: $Tag"
+    }
     $VersionFile = Join-Path ([System.IO.Path]::GetTempPath()) "dtwiz-version.txt"
     try {
         Invoke-WebRequest `
@@ -59,11 +74,19 @@ if ($Tag) {
         $Version = (Get-Content $VersionFile -Raw).Trim()
         Remove-Item $VersionFile -ErrorAction SilentlyContinue
     } catch {
-        Write-Error "Could not find a snapshot release for tag '$Tag'. Make sure the tag exists and its release has been published."
+        if ($Tag -eq "snapshot-main") {
+            Write-Error "Could not find the main snapshot release. The 'snapshot-main' release may not have been published yet."
+        } else {
+            Write-Error "Could not find a snapshot release for tag '$Tag'. Make sure the tag exists and its release has been published."
+        }
         exit 1
     }
     if (-not $Version) {
-        Write-Error "Could not find a snapshot release for tag '$Tag'. Make sure the tag exists and its release has been published."
+        if ($Tag -eq "snapshot-main") {
+            Write-Error "Could not find the main snapshot release. The 'snapshot-main' release may not have been published yet."
+        } else {
+            Write-Error "Could not find a snapshot release for tag '$Tag'. Make sure the tag exists and its release has been published."
+        }
         exit 1
     }
 } else {
@@ -97,7 +120,9 @@ if (-not $InstallDir) {
 # ── Confirm installation ──────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "This will download and install dtwiz ${Version}:"
-if ($Tag) {
+if ($Tag -eq "snapshot-main") {
+    Write-Host "  * Channel:  main (pre-release snapshot)"
+} elseif ($Tag) {
     Write-Host "  * Tag:      $Tag (pre-release)"
 }
 Write-Host "  * Download from github.com/${Repo}"
