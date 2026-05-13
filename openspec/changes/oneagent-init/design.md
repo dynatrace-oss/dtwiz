@@ -66,8 +66,7 @@ type Environment struct {
 }
 
 type AgentConfig struct {
-    MonitoringMode      string
-    AppLogContentAccess bool
+    MonitoringMode string
 }
 
 type InstallOptions struct {
@@ -112,7 +111,7 @@ All new flags are added to the `installOneAgentCmd` Cobra command definition (no
 | `--connectivity-check-only` | bool | `false` |
 | `--print-endpoints` | bool | `false` |
 
-Pre-existing flags (`--dry-run`, `--quiet`) remain unchanged on their current parent command.
+ Pre-existing flags (`--dry-run`, `--quiet`, `--host-group`) remain unchanged on their current parent command(s). `--host-group` continues to apply to the existing v1 installer flow; the v2 scaffolding in this change does not model it in `InstallOptions` yet.
 
 ### 5. InstallOptions struct from CLI
 

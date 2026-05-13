@@ -28,7 +28,7 @@ Set up the foundational structure for the OneAgent PoC implementation: feature f
 
 - [x] 1.5 Create `pkg/installer/oneagent_v2.go` with type definitions: `Environment`, `AgentConfig`, `InstallOptions`, `Endpoint`, `ConnectivityReport`, `ConnectivityResult`
 - [x] 1.6 Define `InstallOptions` struct carrying `DryRun`, `MonitoringMode`, `NoVerifySignature`, `SkipConnectivityCheck`, `ConnectivityCheckOnly`, `PrintEndpoints`, `Quiet`
-- [x] 1.7 Implement stub entry point `InstallOneAgentV2(c *client.Client, opts InstallOptions) error` that returns `errors.New("oneagent v2 not yet implemented")`
+- [x] 1.7 Implement stub entry point `InstallOneAgentV2(c *client.Client, opts InstallOptions) error` that prints a "under development" warning and returns `nil` (not an error, to avoid showing help output in the setup flow)
 - [x] 1.8 Add stub function signatures (not implemented) for: `DetectEnvironment()`, `RunPreflightChecks()`, `ResolveAgentConfig()`, `ResolveEndpoints()`, `MintInstallerToken()`, `DownloadInstaller()`, `VerifyInstallerSignature()`, `BuildInstallCommand()`, `ExecuteInstallCommand()`, `WaitForHostRegistration()`, `CheckAllEndpoints()`
 - [x] 1.9 Ensure code compiles with `go build ./...`
 
@@ -57,4 +57,4 @@ Set up the foundational structure for the OneAgent PoC implementation: feature f
 
 - [x] 1.17 Add a comment marking the branching point: `// Task 1 — feature-flag branching; remove at Task 8`
 - [x] 1.18 Verify existing `InstallOneAgent` call path is unchanged when the flag is disabled (default)
-- [x] 1.19 Integration test: with `DTWIZ_ONEAGENT_POC=true`, verify `InstallOneAgentV2` is called (and returns "not yet implemented")
+- [x] 1.19 Integration test: with `DTWIZ_ONEAGENT_POC=true`, verify `InstallOneAgentV2` is called (prints "under development" warning and returns `nil`; setup flow skips `WatchIngest`)
