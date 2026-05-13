@@ -27,10 +27,11 @@ Creating a well-structured issue can help us understand and complete a fix or a 
 
 Creating a PR that has a clear scope, passing CI/CD pipeline, and a matching conventional commit helps us reduce the back-and-forth communication between the contributors and the maintainers. Please make sure it fits the guide in [How to Contribute](#how-to-contribute) first, then you can see the full guide:
 
-- [Prerequisites & local environment setup](docs/contributing/pull-requests.md#prerequisites--local-environment-setup)
-- [Contributing changes](docs/contributing/pull-requests.md#contributing-changes)
-- [Conventional commits](docs/contributing/pull-requests.md#conventional-commits)
-- [Rebasing](docs/contributing/pull-requests.md#rebasing)
-- [Testing](docs/contributing/pull-requests.md#testing)
-- [Opening a Pull Request](docs/contributing/pull-requests.md#pushing-changes--opening-a-pr)
-- [CI/CD](docs/contributing/pull-requests.md#cicd)
+- [Step 1: Complete local setup](docs/contributing/pull-requests.md#step-1-complete-local-setup)
+- [Step 2: Branches](docs/contributing/pull-requests.md#step-2-branches)
+- [Step 3: OpenSpec](docs/contributing/pull-requests.md#step-3-openspec)
+- [Step 4: Development guide](docs/contributing/pull-requests.md#step-4-development-guide)
+- [Step 5: Conventional commits](docs/contributing/pull-requests.md#step-5-conventional-commits)
+- [Step 6: Rebasing](docs/contributing/pull-requests.md#step-6-rebasing)
+- [Step 7: Testing](docs/contributing/pull-requests.md#step-7-testing)
+- [Step 8: Opening a Pull Request](docs/contributing/pull-requests.md#step-8-opening-a-pull-request)
