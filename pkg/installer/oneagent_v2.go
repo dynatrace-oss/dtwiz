@@ -1,8 +1,6 @@
 package installer
 
 import (
-	"errors"
-
 	"github.com/dynatrace-oss/dtwiz/pkg/client"
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
@@ -46,5 +44,5 @@ func ResolveAgentConfig(opts InstallOptions) AgentConfig {
 // InstallOneAgentV2 is the entry point for the new OneAgent installer flow.
 func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 	display.PrintStatusLine("oneagent", "under development — set DTWIZ_ONEAGENT_POC=false to use the stable installer", display.ColorWarning)
-	return errors.New("oneagent v2 not yet implemented")
+	return nil
 }

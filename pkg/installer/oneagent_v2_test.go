@@ -48,16 +48,12 @@ func TestResolveAgentConfig_Override(t *testing.T) {
 	}
 }
 
-func TestInstallOneAgentV2_ReturnsNotImplemented(t *testing.T) {
+func TestInstallOneAgentV2_ExitsCleanly(t *testing.T) {
 	srv := newMockTenantServer(t, "/", http.StatusOK, `{}`)
 	defer srv.Close()
 
 	c := newMockClient(t, srv.URL)
-	err := InstallOneAgentV2(c, InstallOptions{MonitoringMode: "fullstack"})
-	if err == nil {
-		t.Fatal("expected error from stub, got nil")
-	}
-	if err.Error() != "oneagent v2 not yet implemented" {
-		t.Errorf("unexpected error: %v", err)
+	if err := InstallOneAgentV2(c, InstallOptions{MonitoringMode: "fullstack"}); err != nil {
+		t.Errorf("expected clean exit, got error: %v", err)
 	}
 }
