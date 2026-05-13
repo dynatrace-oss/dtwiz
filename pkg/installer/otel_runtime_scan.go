@@ -267,7 +267,7 @@ func detectProcessOrChildListeningPort(pid int) string {
 	return detectChildListeningPort(pid)
 }
 
-// stripping trailing CR characters (\r\n line endings).
+// parseWinProcessOutput splits raw Windows process output into non-empty lines, stripping trailing CR characters from CRLF line endings.
 func parseWinProcessOutput(raw string) []string {
 	var lines []string
 	for _, line := range strings.Split(strings.TrimSpace(raw), "\n") {
