@@ -12,6 +12,11 @@
 # ~/bin if /usr/local/bin is not writable.
 #
 # The script requires curl.
+#
+# Install channels:
+#   (default)            Latest stable release
+#   DTWIZ_CHANNEL=main   Latest snapshot from the main branch
+#   DTWIZ_TAG=<tag>      Specific snapshot/pre-release tag
 
 REPO="dynatrace-oss/dtwiz"
 
@@ -19,6 +24,14 @@ REPO="dynatrace-oss/dtwiz"
 # instead of the latest stable release. Set via the DTWIZ_TAG env variable.
 # Example: DTWIZ_TAG=snapshot-preview-my-branch source <(curl -sSL ...)
 TAG="${DTWIZ_TAG:-}"
+
+# Install channel. Set to "main" to install the latest snapshot from the main
+# branch. Overrides DTWIZ_TAG when set to a known channel name.
+# Example: DTWIZ_CHANNEL=main source <(curl -sSL ...)
+CHANNEL="${DTWIZ_CHANNEL:-}"
+if [ "$CHANNEL" = "main" ]; then
+    TAG="snapshot-main"
+fi
 
 # ── Parse known flags ──────────────────────────────────────────────────────────
 INSTALL_DIR=""
@@ -65,12 +78,21 @@ fi
 if [ -n "$TAG" ]; then
     # Use the provided release tag directly
     RELEASE_TAG="$TAG"
-    echo "Installing preview snapshot for tag: ${TAG}"
+    if [ "$TAG" = "snapshot-main" ]; then
+        echo "Installing latest snapshot from the main branch..."
+    else
+        echo "Installing preview snapshot for tag: ${TAG}"
+    fi
     VERSION="$(curl -fsSL \
         "https://github.com/${REPO}/releases/download/${RELEASE_TAG}/version.txt")"
     if [ -z "$VERSION" ]; then
-        echo "Error: could not find a snapshot release for tag '${TAG}'." >&2
-        echo "Make sure the tag exists and its release has been published." >&2
+        if [ "$TAG" = "snapshot-main" ]; then
+            echo "Error: could not find the main snapshot release." >&2
+            echo "The 'snapshot-main' release may not have been published yet." >&2
+        else
+            echo "Error: could not find a snapshot release for tag '${TAG}'." >&2
+            echo "Make sure the tag exists and its release has been published." >&2
+        fi
         exit 1
     fi
 else
@@ -97,7 +119,9 @@ fi
 # ── Confirm installation ───────────────────────────────────────────────────────
 echo ""
 echo "This will download and install dtwiz ${VERSION}:"
-if [ -n "$TAG" ]; then
+if [ "$TAG" = "snapshot-main" ]; then
+    echo "  - Channel:  main (pre-release snapshot)"
+elif [ -n "$TAG" ]; then
     echo "  - Tag:      ${TAG} (pre-release)"
 fi
 echo "  - Download from github.com/${REPO}"
