@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"errors"
+
 	"github.com/spf13/cobra"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
@@ -61,7 +63,13 @@ var uninstallAWSLambdaCmd = &cobra.Command{
 	Short: "Remove Dynatrace Lambda Layer from all functions",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return installer.UninstallAWSLambda(uninstallDryRun)
+		if err := installer.UninstallAWSLambda(uninstallDryRun); err != nil {
+			if errors.Is(err, installer.ErrInstallCancelled) {
+				return nil
+			}
+			return err
+		}
+		return nil // success path
 	},
 }
 

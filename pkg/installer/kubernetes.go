@@ -374,7 +374,7 @@ func InstallKubernetes(envURL, token, apiToken, name string, dryRun bool) error 
 	}
 	if !ok {
 		fmt.Println("  Installation cancelled.")
-		return nil
+		return ErrInstallCancelled
 	}
 	fmt.Println()
 

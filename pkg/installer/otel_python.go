@@ -333,7 +333,7 @@ func InstallOtelPython(envURL, token, platformToken, serviceName, projectPath st
 		return err
 	}
 	if !ok {
-		return nil
+		return ErrInstallCancelled
 	}
 
 	plan.EnvURL = envURL

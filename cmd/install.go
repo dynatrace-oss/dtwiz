@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"errors"
+
 	"github.com/spf13/cobra"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
@@ -59,6 +61,9 @@ var installKubernetesCmd = &cobra.Command{
 			return err
 		}
 		if err := installer.InstallKubernetes(envURL, accessTok, accessTok, "", installDryRun); err != nil {
+			if errors.Is(err, installer.ErrInstallCancelled) {
+				return nil
+			}
 			return err
 		}
 		if !installDryRun {
@@ -103,6 +108,9 @@ var installOtelCmd = &cobra.Command{
 			return err
 		}
 		if err := installer.InstallOtelCollectorWithProject(envURL, accessTok, accessTok, platformTok, otelProject, installDryRun); err != nil {
+			if errors.Is(err, installer.ErrInstallCancelled) {
+				return nil
+			}
 			return err
 		}
 		if !installDryRun {
@@ -125,6 +133,9 @@ var installOtelCollectorCmd = &cobra.Command{
 			return err
 		}
 		if err := installer.InstallOtelCollectorOnly(envURL, accessTok, accessTok, platformTok, installDryRun); err != nil {
+			if errors.Is(err, installer.ErrInstallCancelled) {
+				return nil
+			}
 			return err
 		}
 		if !installDryRun {
@@ -149,6 +160,9 @@ var installOtelPythonCmd = &cobra.Command{
 			return err
 		}
 		if err := installer.InstallOtelPython(envURL, accessTok, platformTok, otelPythonServiceName, otelProject, installDryRun); err != nil {
+			if errors.Is(err, installer.ErrInstallCancelled) {
+				return nil
+			}
 			return err
 		}
 		if !installDryRun {
@@ -171,7 +185,13 @@ var installOtelNodeCmd = &cobra.Command{
 		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
 			return err
 		}
-		return installer.InstallOtelNode(envURL, accessTok, platformTok, otelNodeServiceName, otelProject, installDryRun)
+		if err := installer.InstallOtelNode(envURL, accessTok, platformTok, otelNodeServiceName, otelProject, installDryRun); err != nil {
+			if errors.Is(err, installer.ErrInstallCancelled) {
+				return nil
+			}
+			return err
+		}
+		return nil
 	},
 }
 
@@ -189,6 +209,9 @@ var installOtelJavaCmd = &cobra.Command{
 			return err
 		}
 		if err := installer.InstallOtelJava(envURL, accessTok, otelJavaServiceName, otelProject, installDryRun); err != nil {
+			if errors.Is(err, installer.ErrInstallCancelled) {
+				return nil
+			}
 			return err
 		}
 		if !installDryRun {
@@ -234,6 +257,9 @@ var installAWSLambdaCmd = &cobra.Command{
 			return err
 		}
 		if err := installer.InstallAWSLambda(envURL, accessTok, platformTok, installDryRun, true); err != nil {
+			if errors.Is(err, installer.ErrInstallCancelled) {
+				return nil
+			}
 			return err
 		}
 		if !installDryRun {
@@ -274,6 +300,9 @@ var installDemoCmd = &cobra.Command{
 			return err
 		}
 		if err := installer.InstallDemo(envURL, accessTok, platformTok, installDryRun); err != nil {
+			if errors.Is(err, installer.ErrInstallCancelled) {
+				return nil
+			}
 			return err
 		}
 		if !installDryRun {

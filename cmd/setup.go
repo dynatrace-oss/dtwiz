@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -98,6 +99,9 @@ var setupCmd = &cobra.Command{
 				return err
 			}
 			if err := installer.InstallDemo(envURL, accessTok, platformTok, setupDryRun); err != nil {
+				if errors.Is(err, installer.ErrInstallCancelled) {
+					return nil
+				}
 				return err
 			}
 			if !setupDryRun {
@@ -150,6 +154,9 @@ var setupCmd = &cobra.Command{
 			return fmt.Errorf("unsupported method: %s", selected.Method)
 		}
 		if installErr != nil {
+			if errors.Is(installErr, installer.ErrInstallCancelled) {
+				return nil
+			}
 			return installErr
 		}
 		// AWS watch is started inside InstallAWS (runs in parallel with deploy).

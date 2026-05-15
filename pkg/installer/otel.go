@@ -285,7 +285,7 @@ func InstallOtelCollectorWithProject(envURL, token, ingestToken, platformToken, 
 	}
 	if !ok {
 		fmt.Println("  Installation cancelled.")
-		return nil
+		return ErrInstallCancelled
 	}
 	fmt.Println()
 

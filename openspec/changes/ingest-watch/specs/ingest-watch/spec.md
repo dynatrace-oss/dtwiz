@@ -16,6 +16,12 @@ The system SHALL provide a `dtwiz watch` command that polls the Dynatrace DQL AP
 - **WHEN** an installer (oneagent, kubernetes, docker, otel, aws) completes successfully
 - **THEN** the system automatically starts the ingest watch to show data flowing in
 
+#### Scenario: Watch does not start after cancelled install
+
+- **WHEN** the user selects `n` on the install confirmation prompt (`Proceed with installation?`)
+- **THEN** the installer exits cleanly
+- **AND** the system does not start ingest watch
+
 #### Scenario: Missing platform token
 
 - **WHEN** user runs `dtwiz watch` without a platform token configured

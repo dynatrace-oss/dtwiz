@@ -8,6 +8,7 @@ After installing a monitoring method, users have no visibility into whether data
 
 - New `dtwiz watch` standalone command that polls Dynatrace every 5 seconds and renders a live-updating terminal summary of ingested data
 - Each installer's success path calls `WatchIngest()` automatically so users see data flow immediately after installation
+- If a user declines an installation confirmation prompt, installers exit cleanly and `WatchIngest()` is not started
 - Seven data sections: Services, Cloud, Kubernetes, Relationships, Logs, Requests, Exceptions — each with counts, details, and deep links
 - Prominent QuickStart link always shown at the bottom
 - ANSI cursor-based in-place rendering (falls back to append-only if not a TTY)
@@ -25,6 +26,7 @@ After installing a monitoring method, users have no visibility into whether data
 
 - **New files**: `pkg/installer/ingest_watch.go`, `cmd/watch.go`
 - **Modified files**: Each installer file (`oneagent.go`, `kubernetes.go`, `docker.go`, `otel.go`, `aws.go`, etc.) gains a `WatchIngest()` call on success
+- **Modified files**: Installer and command layers additionally handle installer-cancelled flow so watch is skipped on user cancellation
 - **Dependencies**: Adds `golang.org/x/term` (already indirect via `golang.org/x/sys`)
 - **APIs**: Uses Dynatrace Platform DQL query API (`/platform/storage/query/v1/query:execute`) and Smartscape DQL commands (`smartscapeNodes`, `smartscapeEdges`)
 - **Auth**: Requires platform token (Bearer auth) for DQL queries

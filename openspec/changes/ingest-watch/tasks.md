@@ -24,6 +24,7 @@
 ## 4. Installer Integration
 
 - [ ] 4.1 Add `WatchIngest()` call to each installer's success path (oneagent, kubernetes, docker, otel, aws)
+- [ ] 4.2 Ensure installers return a cancellation sentinel when user declines confirmation, and skip `WatchIngest()` in callers on cancellation
 
 ## 5. Testing
 
