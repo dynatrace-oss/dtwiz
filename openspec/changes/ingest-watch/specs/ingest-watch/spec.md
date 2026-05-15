@@ -18,8 +18,9 @@ The system SHALL provide a `dtwiz watch` command that polls the Dynatrace DQL AP
 
 #### Scenario: Watch does not start after cancelled install
 
-- **WHEN** the user selects `n` on the install confirmation prompt (`Proceed with installation?`)
-- **THEN** the installer exits cleanly
+- **WHEN** the user selects `n` on the install confirmation prompt for any installer (oneagent, kubernetes, docker, otel, otel-collector, otel-python, otel-node, otel-java, aws, aws-lambda, demo)
+- **THEN** the installer returns `ErrInstallCancelled` and exits cleanly
+- **AND** the command layer treats `ErrInstallCancelled` as a non-error exit
 - **AND** the system does not start ingest watch
 
 #### Scenario: Missing platform token
@@ -52,12 +53,12 @@ The system SHALL display seven data sections, each showing counts, details, and 
 
 #### Scenario: Cloud section with data
 
-- **WHEN** Dynatrace returns AWS_* entity types
-- **THEN** the system displays section "Cloud" with total count, top 5 types by count with humanized names (strip AWS_ prefix, lowercase, pluralize), and a link to the clouds app
+- **WHEN** Dynatrace returns AWS\_\* entity types
+- **THEN** the system displays section "Cloud" with total count, top 5 types by count with humanized names (strip AWS\_ prefix, lowercase, pluralize), and a link to the clouds app
 
 #### Scenario: Kubernetes section with data
 
-- **WHEN** Dynatrace returns K8S_* or CONTAINER entity types
+- **WHEN** Dynatrace returns K8S\_\* or CONTAINER entity types
 - **THEN** the system displays section "Kubernetes" with total count, top 5 types by count with humanized names, and a link to the kubernetes app
 
 #### Scenario: Relationships section with data

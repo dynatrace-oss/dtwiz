@@ -1,46 +1,15 @@
 package cmd
 
 import (
-	"errors"
 	"testing"
-
-	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 )
-
-// applyInstallCancelGuard models the guard pattern used in every install/update/
-// uninstall subcommand RunE: ErrInstallCancelled is treated as a clean nil exit;
-// all other errors are propagated unchanged.
-func applyInstallCancelGuard(err error) error {
-	if errors.Is(err, installer.ErrInstallCancelled) {
-		return nil
-	}
-	return err
-}
-
-func TestInstallCancelledGuard_ReturnNilOnCancelled(t *testing.T) {
-	got := applyInstallCancelGuard(installer.ErrInstallCancelled)
-	if got != nil {
-		t.Errorf("expected nil, got %v", got)
-	}
-}
-
-func TestInstallCancelledGuard_PropagatesOtherErrors(t *testing.T) {
-	other := errors.New("real failure")
-	got := applyInstallCancelGuard(other)
-	if got != other {
-		t.Errorf("expected original error to be propagated, got %v", got)
-	}
-}
-
-func TestInstallCancelledGuard_NilPassesThrough(t *testing.T) {
-	got := applyInstallCancelGuard(nil)
-	if got != nil {
-		t.Errorf("expected nil, got %v", got)
-	}
-}
 
 // TestInstallCmd_CancelledSubcommands verifies each install subcommand that
 // carries a ErrInstallCancelled guard is actually registered.
+//
+// Note: these tests verify command registration (structural wiring), not that
+// the guard is present in RunE. Testing the real RunE paths requires injectable
+// installer dependencies; that is tracked as a separate refactor.
 func TestInstallCmd_CancelledSubcommands(t *testing.T) {
 	guarded := []string{
 		"kubernetes",
@@ -49,6 +18,7 @@ func TestInstallCmd_CancelledSubcommands(t *testing.T) {
 		"otel-python",
 		"otel-node",
 		"otel-java",
+		"aws",
 		"aws-lambda",
 		"demo",
 	}

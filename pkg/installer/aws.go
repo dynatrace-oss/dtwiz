@@ -438,7 +438,7 @@ func InstallAWS(c *client.PlatformClient, envURL, token, platformToken string, d
 	}
 	if !ok {
 		fmt.Println("  Deployment cancelled.")
-		return nil
+		return ErrInstallCancelled
 	}
 	fmt.Println()
 

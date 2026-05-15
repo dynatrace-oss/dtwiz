@@ -238,6 +238,9 @@ var installAWSCmd = &cobra.Command{
 			return err
 		}
 		if err := installer.InstallAWS(c.Platform, envURL, accessTok, platformTok, installDryRun, StartTime.UTC().Format("2006-01-02T15:04:05Z")); err != nil {
+			if errors.Is(err, installer.ErrInstallCancelled) {
+				return nil
+			}
 			return err
 		}
 		return nil
