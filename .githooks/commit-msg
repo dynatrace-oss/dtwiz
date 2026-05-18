@@ -65,7 +65,7 @@ else
     # ── rule: subject-case — must not start with an upper-case letter ──────────
     FIRST_CHAR=$(printf '%s' "$SUBJECT" | cut -c1)
     case "$FIRST_CHAR" in
-      [A-Z]) fail "subject '$SUBJECT' must not start with an upper-case letter" ;;
+      [[:upper:]]) fail "subject '$SUBJECT' must not start with an upper-case letter" ;;
     esac
 
     # ── rule: subject-full-stop — must not end with '.' ───────────────────────
@@ -77,7 +77,7 @@ else
 fi
 
 # ── rule: no ticket numbers (e.g. ABC-1234) anywhere in the header ────────────
-if printf '%s' "$HEADER" | grep -qE '\b[A-Z]{2,10}-[0-9]+\b'; then
+if printf '%s' "$HEADER" | grep -qE '[A-Z]{2,10}-[0-9]+'; then
   fail "commit message must not contain ticket numbers (e.g. ABC-1234)"
   hint "keep commit messages free of ticket numbers"
 fi

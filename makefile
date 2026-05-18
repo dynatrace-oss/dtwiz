@@ -40,8 +40,7 @@ test-coverage:
 	echo "OK: Coverage meets threshold"
 
 fmt:
-	@go fmt ./...
-	@goimports -local github.com/dynatrace-oss/dtwiz -w .
+	@golangci-lint fmt ./...
 
 lint:
 	golangci-lint run ./...
@@ -63,6 +62,6 @@ markdownlint-fix:
 
 setup:
 	git config --local core.hooksPath .githooks
-	chmod +x .githooks/*
+	chmod +x .githooks/* || true
 	@echo "Git hooks installed from .githooks/"
 
