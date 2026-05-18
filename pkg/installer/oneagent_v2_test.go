@@ -1,8 +1,11 @@
 package installer
 
 import (
+	"bytes"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/client"
@@ -45,6 +48,28 @@ func TestResolveAgentConfig_Override(t *testing.T) {
 	cfg := ResolveAgentConfig(InstallOptions{MonitoringMode: "infra-only"})
 	if cfg.MonitoringMode != "infra-only" {
 		t.Errorf("expected MonitoringMode infra-only, got %q", cfg.MonitoringMode)
+	}
+}
+
+func TestResolveAgentConfig_DebugLog(t *testing.T) {
+	var buf bytes.Buffer
+	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	orig := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	t.Cleanup(func() { slog.SetDefault(orig) })
+
+	ResolveAgentConfig(InstallOptions{})
+	ResolveAgentConfig(InstallOptions{MonitoringMode: "infra-only"})
+
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 debug lines, got %d:\n%s", len(lines), buf.String())
+	}
+	if !strings.Contains(lines[0], "resolved agent config") || !strings.Contains(lines[0], "monitoring-mode=fullstack") || !strings.Contains(lines[0], "override_set=false") {
+		t.Errorf("default path: unexpected log line: %s", lines[0])
+	}
+	if !strings.Contains(lines[1], "resolved agent config") || !strings.Contains(lines[1], "monitoring-mode=infra-only") || !strings.Contains(lines[1], "override_set=true") {
+		t.Errorf("override path: unexpected log line: %s", lines[1])
 	}
 }
 

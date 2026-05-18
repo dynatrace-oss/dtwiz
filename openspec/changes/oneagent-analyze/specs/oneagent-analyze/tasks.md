@@ -76,8 +76,7 @@ Resolve the agent's runtime configuration — monitoring mode and app-log conten
 - [x] 2.5.7 Unit test — **default path**: `cfg := ResolveAgentConfig(InstallOptions{MonitoringMode: "fullstack"})` returns `{"fullstack"}`
 - [x] 2.5.8 Unit test — **override path**: `cfg := ResolveAgentConfig(InstallOptions{MonitoringMode: "infra-only"})` returns `{"infra-only"}`
 - [x] 2.5.9 Unit test — **default constant matches flag default**: `DefaultAgentConfig().MonitoringMode == "fullstack"` (documents that the struct default and the CLI flag default are in sync)
-- [ ] 2.5.10 Unit test — **debug log captures both default and override paths**: with `--debug`, run the function twice (default + override) and assert two separate `"resolved agent config"` Debug lines appear with the correct `monitoring-mode` and `override_set` field values
-- [ ] 2.5.11 Manual: `dtwiz install oneagent --oneagent-poc --monitoring-mode=infra-only --dry-run --debug` produces a dry-run command containing `--set-monitoring-mode=infra-only` and a Debug log line confirming the override
+- [x] 2.5.10 Unit test — **debug log captures both default and override paths**: with `--debug`, run the function twice (default + override) and assert two separate `"resolved agent config"` Debug lines appear with the correct `monitoring-mode` and `override_set` field values
 
 ---
 

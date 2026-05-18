@@ -28,10 +28,12 @@ func DefaultAgentConfig() AgentConfig {
 
 func ResolveAgentConfig(opts InstallOptions) AgentConfig {
 	cfg := DefaultAgentConfig()
-	cfg.MonitoringMode = opts.MonitoringMode
+	if opts.MonitoringMode != "" {
+		cfg.MonitoringMode = opts.MonitoringMode
+	}
 	logger.Debug("resolved agent config",
 		"monitoring-mode", cfg.MonitoringMode,
-		"override_set", opts.MonitoringMode != string(InstallModeFullStack),
+		"override_set", cfg.MonitoringMode != string(InstallModeFullStack),
 	)
 	return cfg
 }
