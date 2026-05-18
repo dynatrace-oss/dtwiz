@@ -152,8 +152,7 @@ Pre-flights run in a single function that returns either a fully-populated conte
 
    ```go
    type AgentConfig struct {
-       MonitoringMode      string // default "fullstack"
-       AppLogContentAccess bool   // default true
+       MonitoringMode string // default "fullstack"
    }
    ```
 
@@ -231,7 +230,6 @@ Logging: the token value is never written to logs, stdout, or files. Only the fa
 
 ```bash
 --set-monitoring-mode=<cfg.MonitoringMode>
---set-app-log-content-access=<cfg.AppLogContentAccess>
 ```
 
 `--set-host-group=<opts.HostGroup>` is appended when `opts.HostGroup != ""`. On Linux, `--set-server=<apiURL>` is also passed (preserves current behavior — the installer needs the server explicitly).
@@ -293,7 +291,7 @@ Logging is layered:
 | Env detection | Debug | `"detected environment"` | `os`, `arch`, `supported`, `reason` |
 | Existing-agent check | Debug | `"existing oneagent detected"` | `path`, `force_override` |
 | Privilege check | Debug | `"privilege check"` | `privileged`, `os` |
-| Agent config | Debug | `"resolved agent config"` | `monitoring_mode`, `app_log_content_access` |
+| Agent config | Debug | `"resolved agent config"` | `monitoring-mode`, `app_log_content_access` |
 | Tenant ID | Debug | `"extracted tenant id"` | `tenant_id` (NOT the full URL if it contains credentials) |
 | Endpoint API call | Debug | `"resolving tenant endpoints"` | `url` |
 | Endpoint resolution | Verbose | `"resolved tenant endpoints"` | `count` |

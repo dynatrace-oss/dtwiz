@@ -3,11 +3,20 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 )
 
 var installDryRun bool
 var installAutoConfirm bool
+
+var (
+	flagMonitoringMode        string
+	flagNoVerifySignature     bool
+	flagSkipConnectivityCheck bool
+	flagConnectivityCheckOnly bool
+	flagPrintEndpoints        bool
+)
 
 var installCmd = &cobra.Command{
 	Use:   "install <method>",
@@ -36,6 +45,21 @@ var installOneAgentCmd = &cobra.Command{
 		}
 		quiet, _ := cmd.Flags().GetBool("quiet")
 		hostGroup, _ := cmd.Flags().GetString("host-group")
+
+		opts := installer.InstallOptions{
+			DryRun:                installDryRun,
+			MonitoringMode:        flagMonitoringMode,
+			NoVerifySignature:     flagNoVerifySignature,
+			SkipConnectivityCheck: flagSkipConnectivityCheck,
+			ConnectivityCheckOnly: flagConnectivityCheckOnly,
+			PrintEndpoints:        flagPrintEndpoints,
+			Quiet:                 quiet,
+		}
+
+		if featureflags.IsEnabled(featureflags.OneAgentPoC) {
+			return installer.InstallOneAgentV2(c, opts)
+		}
+
 		if err := installer.InstallOneAgent(c.Classic, installDryRun, quiet, hostGroup); err != nil {
 			return err
 		}
@@ -297,6 +321,11 @@ func init() {
 
 	installOneAgentCmd.Flags().Bool("quiet", false, "Run a silent/unattended installation with no output")
 	installOneAgentCmd.Flags().String("host-group", "", "Assign the host to a host group (--set-host-group)")
+	installOneAgentCmd.Flags().StringVar(&flagMonitoringMode, "monitoring-mode", string(installer.InstallModeFullStack), "OneAgent monitoring mode to pass to the installer")
+	installOneAgentCmd.Flags().BoolVar(&flagNoVerifySignature, "no-verify-signature", false, "Skip installer signature verification (Linux only)")
+	installOneAgentCmd.Flags().BoolVar(&flagSkipConnectivityCheck, "skip-connectivity-check", false, "Skip endpoint connectivity probe before installation")
+	installOneAgentCmd.Flags().BoolVar(&flagConnectivityCheckOnly, "connectivity-check-only", false, "Run connectivity probe and exit without installing")
+	installOneAgentCmd.Flags().BoolVar(&flagPrintEndpoints, "print-endpoints", false, "Print resolved communication endpoints and exit")
 	installCmd.AddCommand(installOneAgentCmd)
 	installCmd.AddCommand(installKubernetesCmd)
 	installCmd.AddCommand(installDockerCmd)

@@ -88,25 +88,25 @@
 
 ### Requirement: Agent configuration resolved before network work
 
-`InstallOneAgentV2` SHALL resolve agent configuration before any HTTP request. The resolved `AgentConfig` SHALL contain `MonitoringMode` (default `"fullstack"`) and `AppLogContentAccess` (default `true`). The `--monitoring-mode` CLI flag, when provided, SHALL override the default `MonitoringMode` and be passed through to the installer as `--set-monitoring-mode=<value>` without dtwiz-side allow-list validation.
+`InstallOneAgentV2` SHALL resolve agent configuration before any HTTP request. The resolved `AgentConfig` SHALL contain `MonitoringMode` (default `"fullstack"`). The `--monitoring-mode` CLI flag, when provided, SHALL override the default `MonitoringMode` and be passed through to the installer as `--set-monitoring-mode=<value>` without dtwiz-side allow-list validation.
 
 #### Scenario: Default configuration
 
 - **GIVEN** no `--monitoring-mode` flag is passed
 - **WHEN** `ResolveAgentConfig(opts)` is called
-- **THEN** it returns `{MonitoringMode: "fullstack", AppLogContentAccess: true}`
+- **THEN** it returns `{MonitoringMode: "fullstack"}`
 
 #### Scenario: Monitoring mode override
 
 - **GIVEN** `--monitoring-mode=infra-only` is passed
 - **WHEN** `ResolveAgentConfig(opts)` is called
-- **THEN** it returns `{MonitoringMode: "infra-only", AppLogContentAccess: true}`
+- **THEN** it returns `{MonitoringMode: "infra-only"}`
 
 #### Scenario: Empty override preserves default
 
 - **GIVEN** `--monitoring-mode=""` (empty string)
 - **WHEN** `ResolveAgentConfig(opts)` is called
-- **THEN** it returns `{MonitoringMode: "fullstack", AppLogContentAccess: true}`
+- **THEN** it returns `{MonitoringMode: "fullstack"}`
 
 ### Requirement: Pre-flight debug logging
 
@@ -142,7 +142,7 @@ Each pre-flight stage SHALL emit a `logger.Debug` line at completion using the p
 
 - **GIVEN** `--debug` is enabled
 - **WHEN** `ResolveAgentConfig` returns
-- **THEN** stderr contains a Debug line with message `"resolved agent config"` and keys `monitoring_mode`, `app_log_content_access`
+- **THEN** stderr contains a Debug line with message `"resolved agent config"` and keys `monitoring-mode`, `app_log_content_access`
 
 #### Scenario: Pre-flight logs suppressed without --debug
 

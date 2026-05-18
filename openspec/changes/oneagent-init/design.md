@@ -66,20 +66,17 @@ type Environment struct {
 }
 
 type AgentConfig struct {
-    MonitoringMode      string
-    AppLogContentAccess bool
+    MonitoringMode string
 }
 
 type InstallOptions struct {
-    DryRun                 bool
-    Force                  bool
-    MonitoringMode         string
-    NoVerifySignature      bool
-    SkipConnectivityCheck  bool
-    ConnectivityCheckOnly  bool
-    PrintEndpoints         bool
-    HostGroup              string
-    Quiet                  bool
+    DryRun                bool
+    MonitoringMode        string
+    NoVerifySignature     bool
+    SkipConnectivityCheck bool
+    ConnectivityCheckOnly bool
+    PrintEndpoints        bool
+    Quiet                 bool
 }
 
 type Endpoint struct {
@@ -108,14 +105,13 @@ All new flags are added to the `installOneAgentCmd` Cobra command definition (no
 
 | Flag | Type | Default |
 |---|---|---|
-| `--force` | bool | `false` |
 | `--monitoring-mode` | string | `"fullstack"` |
 | `--no-verify-signature` | bool | `false` |
 | `--skip-connectivity-check` | bool | `false` |
 | `--connectivity-check-only` | bool | `false` |
 | `--print-endpoints` | bool | `false` |
 
-Pre-existing flags (`--dry-run`, `--quiet`, `--host-group`) remain unchanged on their current parent command.
+ Pre-existing flags (`--dry-run`, `--quiet`, `--host-group`) remain unchanged on their current parent command(s). `--host-group` continues to apply to the existing v1 installer flow; the v2 scaffolding in this change does not model it in `InstallOptions` yet.
 
 ### 5. InstallOptions struct from CLI
 
@@ -123,15 +119,13 @@ Pre-existing flags (`--dry-run`, `--quiet`, `--host-group`) remain unchanged on 
 
 ```go
 opts := installer.InstallOptions{
-    DryRun:                 installDryRun,
-    Force:                  flagForce,
-    MonitoringMode:         flagMonitoringMode,
-    NoVerifySignature:      flagNoVerifySignature,
-    SkipConnectivityCheck:  flagSkipConnectivityCheck,
-    ConnectivityCheckOnly:  flagConnectivityCheckOnly,
-    PrintEndpoints:         flagPrintEndpoints,
-    HostGroup:              hostGroup,
-    Quiet:                  quiet,
+    DryRun:                installDryRun,
+    MonitoringMode:        flagMonitoringMode,
+    NoVerifySignature:     flagNoVerifySignature,
+    SkipConnectivityCheck: flagSkipConnectivityCheck,
+    ConnectivityCheckOnly: flagConnectivityCheckOnly,
+    PrintEndpoints:        flagPrintEndpoints,
+    Quiet:                 quiet,
 }
 ```
 

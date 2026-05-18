@@ -89,19 +89,18 @@ New flags SHALL be defined on `installOneAgentCmd` (not on the parent `installCm
 
 | Flag | Type | Default | Purpose | Task |
 |---|---|---|---|---|
-| `--force` | bool | `false` | Override existing-OneAgent preflight | 2 |
-| `--monitoring-mode` | string | `"fullstack"` | Passed through as `--set-monitoring-mode` | 2 |
+| `--monitoring-mode` | string | `"fullstack"` | Passed through as `--set-monitoring-mode`; value is not validated — the caller is responsible for passing a value that OneAgent accepts | 2 |
 | `--no-verify-signature` | bool | `false` | Skip Linux signature verification | 5 |
 | `--skip-connectivity-check` | bool | `false` | Skip connectivity probe | 9 |
 | `--connectivity-check-only` | bool | `false` | Run only probe, then exit | 9 |
 | `--print-endpoints` | bool | `false` | Print resolved endpoints, then exit | 9 |
 
-Pre-existing flags (`--dry-run`, `--quiet`, `--host-group`) remain unchanged.
+Pre-existing flags (`--dry-run`, `--quiet`) remain unchanged.
 
 #### Scenario: Flags are available on install-oneagent subcommand
 
 - **GIVEN** `--help` text is displayed for `dtwiz install oneagent`
-- **THEN** the flag list includes `--force`, `--monitoring-mode`, `--no-verify-signature`, `--skip-connectivity-check`, `--connectivity-check-only`, `--print-endpoints`
+- **THEN** the flag list includes `--monitoring-mode`, `--no-verify-signature`, `--skip-connectivity-check`, `--connectivity-check-only`, `--print-endpoints`
 
 ### Requirement: InstallOptions struct carries all CLI-derived inputs
 
@@ -109,15 +108,13 @@ Pre-existing flags (`--dry-run`, `--quiet`, `--host-group`) remain unchanged.
 
 ```go
 type InstallOptions struct {
-    DryRun                 bool
-    Force                  bool
-    MonitoringMode         string
-    NoVerifySignature      bool
-    SkipConnectivityCheck  bool
-    ConnectivityCheckOnly  bool
-    PrintEndpoints         bool
-    HostGroup              string
-    Quiet                  bool
+    DryRun                bool
+    MonitoringMode        string
+    NoVerifySignature     bool
+    SkipConnectivityCheck bool
+    ConnectivityCheckOnly bool
+    PrintEndpoints        bool
+    Quiet                 bool
 }
 ```
 
