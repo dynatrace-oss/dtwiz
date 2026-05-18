@@ -321,7 +321,7 @@ func init() {
 
 	installOneAgentCmd.Flags().Bool("quiet", false, "Run a silent/unattended installation with no output")
 	installOneAgentCmd.Flags().String("host-group", "", "Assign the host to a host group (--set-host-group)")
-	installOneAgentCmd.Flags().StringVar(&flagMonitoringMode, "monitoring-mode", "fullstack", "OneAgent monitoring mode to pass to the installer")
+	installOneAgentCmd.Flags().StringVar(&flagMonitoringMode, "monitoring-mode", string(installer.InstallModeFullStack), "OneAgent monitoring mode to pass to the installer")
 	installOneAgentCmd.Flags().BoolVar(&flagNoVerifySignature, "no-verify-signature", false, "Skip installer signature verification (Linux only)")
 	installOneAgentCmd.Flags().BoolVar(&flagSkipConnectivityCheck, "skip-connectivity-check", false, "Skip endpoint connectivity probe before installation")
 	installOneAgentCmd.Flags().BoolVar(&flagConnectivityCheckOnly, "connectivity-check-only", false, "Run connectivity probe and exit without installing")

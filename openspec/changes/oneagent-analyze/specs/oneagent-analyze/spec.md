@@ -142,7 +142,7 @@ Each pre-flight stage SHALL emit a `logger.Debug` line at completion using the p
 
 - **GIVEN** `--debug` is enabled
 - **WHEN** `ResolveAgentConfig` returns
-- **THEN** stderr contains a Debug line with message `"resolved agent config"` and keys `monitoring_mode`, `app_log_content_access`
+- **THEN** stderr contains a Debug line with message `"resolved agent config"` and keys `monitoring-mode`, `app_log_content_access`
 
 #### Scenario: Pre-flight logs suppressed without --debug
 

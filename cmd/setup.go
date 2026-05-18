@@ -135,7 +135,7 @@ var setupCmd = &cobra.Command{
 			if featureflags.IsEnabled(featureflags.OneAgentPoC) {
 				installErr = installer.InstallOneAgentV2(c, installer.InstallOptions{
 					DryRun:         setupDryRun,
-					MonitoringMode: "fullstack",
+					MonitoringMode: string(installer.InstallModeFullStack),
 				})
 			} else {
 				installErr = installer.InstallOneAgent(c.Classic, setupDryRun, false, "")

@@ -23,20 +23,20 @@ type AgentConfig struct {
 }
 
 func DefaultAgentConfig() AgentConfig {
-	return AgentConfig{MonitoringMode: "fullstack"}
+	return AgentConfig{MonitoringMode: string(InstallModeFullStack)}
 }
 
 func ResolveAgentConfig(opts InstallOptions) AgentConfig {
 	cfg := DefaultAgentConfig()
 	cfg.MonitoringMode = opts.MonitoringMode
 	logger.Debug("resolved agent config",
-		"monitoring_mode", cfg.MonitoringMode,
-		"override_set", opts.MonitoringMode != "fullstack",
+		"monitoring-mode", cfg.MonitoringMode,
+		"override_set", opts.MonitoringMode != string(InstallModeFullStack),
 	)
 	return cfg
 }
 
 func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
-	display.PrintStatusLine("oneagent", fmt.Sprintf("under development (monitoring-mode=%s) — set DTWIZ_ONEAGENT_POC=false to use the stable installer", opts.MonitoringMode), display.ColorWarning)
+	display.PrintStatusLine("oneagent", fmt.Sprintf("under development (monitoring-mode=%s) — use --oneagent-poc=false or set DTWIZ_ONEAGENT_POC=false to use the stable installer", opts.MonitoringMode), display.ColorWarning)
 	return nil
 }

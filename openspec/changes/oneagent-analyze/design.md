@@ -291,7 +291,7 @@ Logging is layered:
 | Env detection | Debug | `"detected environment"` | `os`, `arch`, `supported`, `reason` |
 | Existing-agent check | Debug | `"existing oneagent detected"` | `path`, `force_override` |
 | Privilege check | Debug | `"privilege check"` | `privileged`, `os` |
-| Agent config | Debug | `"resolved agent config"` | `monitoring_mode`, `app_log_content_access` |
+| Agent config | Debug | `"resolved agent config"` | `monitoring-mode`, `app_log_content_access` |
 | Tenant ID | Debug | `"extracted tenant id"` | `tenant_id` (NOT the full URL if it contains credentials) |
 | Endpoint API call | Debug | `"resolving tenant endpoints"` | `url` |
 | Endpoint resolution | Verbose | `"resolved tenant endpoints"` | `count` |
