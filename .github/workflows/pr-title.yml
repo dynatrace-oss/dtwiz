@@ -1,0 +1,25 @@
+name: PR Title Check
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  pr-title:
+    name: pr-title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          echo "Validating: $PR_TITLE"
+          if ! echo "$PR_TITLE" | grep -Eq '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([^)]+\))?: .+$'; then
+            echo "PR title must follow Conventional Commits format."
+            echo "Examples: feat: add login page, fix(auth): handle token expiry"
+            exit 1
+          fi
+          if echo "$PR_TITLE" | grep -Eq '\b[A-Z]{2,10}-[0-9]+\b'; then
+            echo "PR title must not contain ticket numbers (e.g. ABC-1234)."
+            exit 1
+          fi
