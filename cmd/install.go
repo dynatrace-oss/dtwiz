@@ -38,10 +38,11 @@ var installOneAgentCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
+		if err != nil {
 			return err
 		}
-		c, err := setupClient()
+		c, err := setupClientFromCreds(envURL, classicTok, platformTok)
 		if err != nil {
 			return err
 		}
@@ -81,10 +82,11 @@ var installKubernetesCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
+		if err != nil {
 			return err
 		}
-		if err := installer.InstallKubernetes(envURL, accessTok, accessTok, "", installDryRun); err != nil {
+		if err := installer.InstallKubernetes(envURL, classicTok, "", installDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
 				return nil
 			}
@@ -106,10 +108,11 @@ var installDockerCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
+		if err != nil {
 			return err
 		}
-		if err := installer.InstallDocker(envURL, accessTok, installDryRun); err != nil {
+		if err := installer.InstallDocker(envURL, classicTok, installDryRun); err != nil {
 			return err
 		}
 		if !installDryRun {
@@ -128,10 +131,11 @@ var installOtelCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
+		if err != nil {
 			return err
 		}
-		if err := installer.InstallOtelCollectorWithProject(envURL, accessTok, accessTok, platformTok, otelProject, installDryRun); err != nil {
+		if err := installer.InstallOtelCollectorWithProject(envURL, classicTok, platformTok, otelProject, installDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
 				return nil
 			}
@@ -153,10 +157,11 @@ var installOtelCollectorCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
+		if err != nil {
 			return err
 		}
-		if err := installer.InstallOtelCollectorOnly(envURL, accessTok, accessTok, platformTok, installDryRun); err != nil {
+		if err := installer.InstallOtelCollectorOnly(envURL, classicTok, platformTok, installDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
 				return nil
 			}
@@ -180,10 +185,11 @@ var installOtelPythonCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
+		if err != nil {
 			return err
 		}
-		if err := installer.InstallOtelPython(envURL, accessTok, platformTok, otelPythonServiceName, otelProject, installDryRun); err != nil {
+		if err := installer.InstallOtelPython(envURL, classicTok, platformTok, otelPythonServiceName, otelProject, installDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
 				return nil
 			}
@@ -206,10 +212,11 @@ var installOtelNodeCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
+		if err != nil {
 			return err
 		}
-		if err := installer.InstallOtelNode(envURL, accessTok, platformTok, otelNodeServiceName, otelProject, installDryRun); err != nil {
+		if err := installer.InstallOtelNode(envURL, classicTok, platformTok, otelNodeServiceName, otelProject, installDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
 				return nil
 			}
@@ -229,10 +236,11 @@ var installOtelJavaCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
+		if err != nil {
 			return err
 		}
-		if err := installer.InstallOtelJava(envURL, accessTok, otelJavaServiceName, otelProject, installDryRun); err != nil {
+		if err := installer.InstallOtelJava(envURL, classicTok, otelJavaServiceName, otelProject, installDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
 				return nil
 			}
@@ -254,14 +262,15 @@ var installAWSCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
-			return err
-		}
-		c, err := setupClient()
+		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
 		if err != nil {
 			return err
 		}
-		if err := installer.InstallAWS(c.Platform, envURL, accessTok, platformTok, installDryRun, StartTime.UTC().Format("2006-01-02T15:04:05Z")); err != nil {
+		c, err := setupClientFromCreds(envURL, classicTok, platformTok)
+		if err != nil {
+			return err
+		}
+		if err := installer.InstallAWS(c.Platform, envURL, platformTok, installDryRun, StartTime.UTC().Format("2006-01-02T15:04:05Z")); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
 				return nil
 			}
@@ -280,10 +289,11 @@ var installAWSLambdaCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
+		if err != nil {
 			return err
 		}
-		if err := installer.InstallAWSLambda(envURL, accessTok, platformTok, installDryRun, true); err != nil {
+		if err := installer.InstallAWSLambda(envURL, classicTok, installDryRun, true); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
 				return nil
 			}
@@ -323,10 +333,11 @@ var installDemoCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
+		if err != nil {
 			return err
 		}
-		if err := installer.InstallDemo(envURL, accessTok, platformTok, installDryRun); err != nil {
+		if err := installer.InstallDemo(envURL, classicTok, installDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
 				return nil
 			}

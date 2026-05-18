@@ -43,7 +43,7 @@ func TestOTelAutoInstrumentation(t *testing.T) {
 				}
 			},
 			install: func(env *integration.TestEnv, appDir, svcName string) error {
-				return installer.InstallOtelPython(env.EnvURL, env.AccessToken, env.PlatformToken, svcName, appDir, false)
+				return installer.InstallOtelPython(env.EnvURL, env.ClassicToken, env.PlatformToken, svcName, appDir, false)
 			},
 		},
 		{
@@ -66,7 +66,7 @@ func TestOTelAutoInstrumentation(t *testing.T) {
 				if err := os.MkdirAll(filepath.Join(appDir, "node_modules"), 0755); err != nil {
 					return err
 				}
-				return installer.InstallOtelNode(env.EnvURL, env.AccessToken, env.PlatformToken, svcName, appDir, false)
+				return installer.InstallOtelNode(env.EnvURL, env.ClassicToken, env.PlatformToken, svcName, appDir, false)
 			},
 		},
 		{
@@ -89,7 +89,7 @@ func TestOTelAutoInstrumentation(t *testing.T) {
 				if err != nil {
 					return fmt.Errorf("mvn build failed: %w\n%s", err, out)
 				}
-				return installer.InstallOtelJava(env.EnvURL, env.AccessToken, svcName, appDir, false)
+				return installer.InstallOtelJava(env.EnvURL, env.ClassicToken, svcName, appDir, false)
 			},
 		},
 	}

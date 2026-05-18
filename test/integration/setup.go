@@ -18,24 +18,32 @@ type TestEnv struct {
 	TestID        string
 	TempDir       string
 	EnvURL        string
-	AccessToken   string
-	PlatformToken string
+	PlatformToken string // required; used for Platform/DQL API calls
+	AccessToken   string // optional; used as Classic API token when set
+	ClassicToken  string // effective Classic API token: AccessToken if set, else PlatformToken
 }
 
 // SetupIntegration validates required environment variables, constructs a
 // *client.Client, generates a unique test ID, and returns a TestEnv.
-// It calls t.Fatal if any required variable is missing.
+// TEST_DT_PLATFORM_TOKEN is required. TEST_DT_ACCESS_TOKEN is optional; when
+// set it is used as the Classic API token, otherwise PlatformToken is used.
+// It calls t.Fatal if requirements are not met.
 func SetupIntegration(t *testing.T) *TestEnv {
 	t.Helper()
 
 	envUrl := requireEnv(t, "TEST_DT_ENVIRONMENT")
-	accessToken := requireEnv(t, "TEST_DT_ACCESS_TOKEN")
 	platformToken := requireEnv(t, "TEST_DT_PLATFORM_TOKEN")
+	accessToken := os.Getenv("TEST_DT_ACCESS_TOKEN")
+
+	classicToken := platformToken
+	if accessToken != "" {
+		classicToken = accessToken
+	}
 
 	classicURL := installer.APIURL(envUrl)
 	platformURL := installer.AppsURL(envUrl)
 
-	c, err := client.New(classicURL, accessToken, platformURL, platformToken, 0)
+	c, err := client.New(classicURL, platformURL, classicToken, platformToken, 0)
 	if err != nil {
 		t.Fatalf("SetupIntegration: failed to create client: %v", err)
 	}
@@ -47,8 +55,9 @@ func SetupIntegration(t *testing.T) *TestEnv {
 		TestID:        testID,
 		TempDir:       t.TempDir(),
 		EnvURL:        envUrl,
-		AccessToken:   accessToken,
 		PlatformToken: platformToken,
+		AccessToken:   accessToken,
+		ClassicToken:  classicToken,
 	}
 }
 

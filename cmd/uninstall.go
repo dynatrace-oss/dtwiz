@@ -47,10 +47,11 @@ var uninstallAWSCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
+		if err != nil {
 			return err
 		}
-		c, err := setupClient()
+		c, err := setupClientFromCreds(envURL, classicTok, platformTok)
 		if err != nil {
 			return err
 		}

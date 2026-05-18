@@ -32,8 +32,8 @@ var rootCmd = &cobra.Command{
 Set your Dynatrace credentials via environment variables:
 
   export DT_ENVIRONMENT=https://<your-tenant-domain>
-  export DT_ACCESS_TOKEN=dt0c01.****
-  export DT_PLATFORM_TOKEN=dt0s16.****
+  export DT_PLATFORM_TOKEN=dt0s16.****      # preferred
+  export DT_ACCESS_TOKEN=dt0c01.****        # optional fallback
 
 Then use dtwiz commands to analyze and instrument your system.`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
@@ -55,17 +55,26 @@ func printBanner() {
 	fmt.Printf("\n HASTA LA VISTA - BLIND SPOTS!\n\n")
 }
 
-// setupClient creates a Dynatrace API client from the current flag/env credentials.
-func setupClient() (*client.Client, error) {
-	envURL, aTok, pTok, err := getDtEnvironment()
-	if err != nil {
-		return nil, err
-	}
+// setupClientFromCreds creates a Dynatrace API client from already-resolved credentials.
+func setupClientFromCreds(envURL, classicTok, platformTok string) (*client.Client, error) {
 	level := verbosityFlag
 	if debugFlag {
 		level = 2
 	}
-	return client.New(installer.APIURL(envURL), aTok, installer.AppsURL(envURL), pTok, level)
+	return client.New(installer.APIURL(envURL), installer.AppsURL(envURL), classicTok, platformTok, level)
+}
+
+// setupClient creates a Dynatrace API client by resolving and validating credentials.
+func setupClient() (*client.Client, error) {
+	envURL, accessTok, platformTok, err := getDtEnvironment()
+	if err != nil {
+		return nil, err
+	}
+	classicTok, err := validateCredentials(envURL, accessTok, platformTok)
+	if err != nil {
+		return nil, err
+	}
+	return setupClientFromCreds(envURL, classicTok, platformTok)
 }
 
 // Execute runs the root command.
@@ -93,8 +102,8 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&debugFlag, "debug", false, "enable debug logging")
 	rootCmd.PersistentFlags().CountVarP(&verbosityFlag, "verbose", "v", "verbose output")
 	rootCmd.PersistentFlags().StringVar(&environmentFlag, "environment", "", "Dynatrace environment URL (also read from DT_ENVIRONMENT)")
-	rootCmd.PersistentFlags().StringVar(&accessTokenFlag, "access-token", "", "Dynatrace API access token (also read from DT_ACCESS_TOKEN)")
-	rootCmd.PersistentFlags().StringVar(&platformTokenFlag, "platform-token", "", "Dynatrace platform token (dt0s16.*) for AWS installer (also read from DT_PLATFORM_TOKEN)")
+	rootCmd.PersistentFlags().StringVar(&platformTokenFlag, "platform-token", "", "Dynatrace platform token, preferred (also read from DT_PLATFORM_TOKEN)")
+	rootCmd.PersistentFlags().StringVar(&accessTokenFlag, "access-token", "", "Dynatrace API access token, fallback (also read from DT_ACCESS_TOKEN)")
 
 	featureflags.RegisterFlags(rootCmd.PersistentFlags())
 

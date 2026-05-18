@@ -287,16 +287,11 @@ func fetchClusterName(fallback string) string {
 // InstallKubernetes deploys the Dynatrace Operator on a Kubernetes cluster.
 //
 // Parameters:
-//   - envURL:    Dynatrace environment URL
-//   - token:     data-ingest token (used as dataIngestToken in the Secret)
-//   - apiToken:  Classic Dynatrace access token (dt0c01.*) used as apiToken in the
-//     DynaKube Secret; falls back to token when empty
-//   - name:      DynaKube CR name (auto-derived from envURL if empty)
-//   - dryRun:    when true, only print what would be done
-func InstallKubernetes(envURL, token, apiToken, name string, dryRun bool) error {
-	if apiToken == "" {
-		apiToken = token
-	}
+//   - envURL:  Dynatrace environment URL
+//   - token:   platform token used for both apiToken and dataIngestToken in the DynaKube Secret
+//   - name:    DynaKube CR name (auto-derived from envURL if empty)
+//   - dryRun:  when true, only print what would be done
+func InstallKubernetes(envURL, token, name string, dryRun bool) error {
 	apiURL := APIURL(envURL)
 
 	if name == "" {
@@ -310,8 +305,8 @@ func InstallKubernetes(envURL, token, apiToken, name string, dryRun bool) error 
 	tmplData := dynakubeTemplateData{
 		ClusterName:     name,
 		APIURL:          apiURL + "/api",
-		APIToken:        apiToken,
-		DataIngestToken: apiToken,
+		APIToken:        token,
+		DataIngestToken: token,
 		EECRepository:   eecRepositoryFromAPIURL(apiURL + "/api"),
 	}
 	manifest, err := renderDynakubeTemplate(tmplData)

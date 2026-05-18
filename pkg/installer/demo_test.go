@@ -48,7 +48,7 @@ func TestInstallOtelCollectorWithProject_DryRun(t *testing.T) {
 
 	output := captureStdout(t, func() {
 		err := InstallOtelCollectorWithProject(
-			"https://fake.live.dynatrace.com", "tok", "tok", "plat", "", true,
+			"https://fake.live.dynatrace.com", "tok", "tok", "", true,
 		)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -66,7 +66,7 @@ func TestInstallOtelCollectorWithProject_DryRun(t *testing.T) {
 }
 
 func TestInstallOtelCollectorWithProjectPathNotFound(t *testing.T) {
-	err := InstallOtelCollectorWithProject("https://fake.live.dynatrace.com", "tok", "tok", "plat", "/nonexistent/path", false)
+	err := InstallOtelCollectorWithProject("https://fake.live.dynatrace.com", "tok", "tok", "/nonexistent/path", false)
 	if err == nil {
 		t.Fatal("expected error for non-existent project path")
 	}

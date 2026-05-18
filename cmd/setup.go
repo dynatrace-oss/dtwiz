@@ -96,10 +96,11 @@ var setupCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-			if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+			classicTok, err := validateCredentials(envURL, accessTok, platformTok)
+			if err != nil {
 				return err
 			}
-			if err := installer.InstallDemo(envURL, accessTok, platformTok, setupDryRun); err != nil {
+			if err := installer.InstallDemo(envURL, classicTok, setupDryRun); err != nil {
 				if errors.Is(err, installer.ErrInstallCancelled) {
 					return nil
 				}
@@ -124,11 +125,12 @@ var setupCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
+		if err != nil {
 			return err
 		}
 
-		c, err := setupClient()
+		c, err := setupClientFromCreds(envURL, classicTok, platformTok)
 		if err != nil {
 			return err
 		}
@@ -145,19 +147,19 @@ var setupCmd = &cobra.Command{
 				installErr = installer.InstallOneAgent(c.Classic, setupDryRun, false, "")
 			}
 		case recommender.MethodKubernetes:
-			installErr = installer.InstallKubernetes(envURL, accessTok, accessTok, "" /* name */, setupDryRun)
+			installErr = installer.InstallKubernetes(envURL, classicTok, "" /* name */, setupDryRun)
 		case recommender.MethodDocker:
-			installErr = installer.InstallDocker(envURL, accessTok, setupDryRun)
+			installErr = installer.InstallDocker(envURL, classicTok, setupDryRun)
 		case recommender.MethodOtelCollector:
-			installErr = installer.InstallOtelCollector(envURL, accessTok, accessTok, platformTok, setupDryRun)
+			installErr = installer.InstallOtelCollector(envURL, classicTok, platformTok, setupDryRun)
 		case recommender.MethodOtelUpdate:
 			cfgPath := selected.ConfigPath
 			if cfgPath == "" {
 				cfgPath = "config.yaml" // fall back to CWD default
 			}
-			installErr = installer.UpdateOtelConfig(cfgPath, envURL, accessTok, platformTok, setupDryRun)
+			installErr = installer.UpdateOtelConfig(cfgPath, envURL, classicTok, setupDryRun)
 		case recommender.MethodAWS:
-			installErr = installer.InstallAWS(c.Platform, envURL, accessTok, platformTok, setupDryRun, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
+			installErr = installer.InstallAWS(c.Platform, envURL, platformTok, setupDryRun, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
 		default:
 			return fmt.Errorf("unsupported method: %s", selected.Method)
 		}

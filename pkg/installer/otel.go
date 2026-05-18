@@ -190,11 +190,11 @@ func createRuntimePlan(proj detectedProject, apiURL, token, envURL, platformToke
 	return nil
 }
 
-func InstallOtelCollector(envURL, token, ingestToken, platformToken string, dryRun bool) error {
-	return InstallOtelCollectorWithProject(envURL, token, ingestToken, platformToken, "", dryRun)
+func InstallOtelCollector(envURL, token, platformToken string, dryRun bool) error {
+	return InstallOtelCollectorWithProject(envURL, token, platformToken, "", dryRun)
 }
 
-func InstallOtelCollectorWithProject(envURL, token, ingestToken, platformToken, projectPath string, dryRun bool) error {
+func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath string, dryRun bool) error {
 	if projectPath != "" {
 		if _, err := os.Stat(projectPath); err != nil {
 			return fmt.Errorf("project path not found: %s", projectPath)
@@ -205,7 +205,7 @@ func InstallOtelCollectorWithProject(envURL, token, ingestToken, platformToken, 
 	display.ColorMessage.Println("  Dynatrace OpenTelemetry Installation")
 	fmt.Println()
 
-	cp, err := prepareCollectorPlan(envURL, token, ingestToken)
+	cp, err := prepareCollectorPlan(envURL, token)
 	if err != nil {
 		return err
 	}

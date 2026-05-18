@@ -30,10 +30,11 @@ var updateOtelCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
+		if err != nil {
 			return err
 		}
-		if err := installer.UpdateOtelConfig(updateOtelConfigPath, envURL, accessTok, platformTok, updateDryRun); err != nil {
+		if err := installer.UpdateOtelConfig(updateOtelConfigPath, envURL, classicTok, updateDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
 				return nil
 			}

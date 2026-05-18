@@ -14,7 +14,7 @@ import (
 // newTestClassicClient creates a ClassicClient pointing at the given test server URL.
 func newTestClassicClient(t *testing.T, serverURL string) *client.ClassicClient {
 	t.Helper()
-	c, err := client.New(serverURL, "dt0c01.test", serverURL, "dt0s16.test", 0)
+	c, err := client.New(serverURL, serverURL, "dt0s16.test", "dt0s16.test", 0)
 	if err != nil {
 		t.Fatalf("create test client: %v", err)
 	}

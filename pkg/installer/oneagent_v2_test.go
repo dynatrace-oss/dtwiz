@@ -23,7 +23,7 @@ func newMockTenantServer(t *testing.T, path string, status int, body string) *ht
 
 func newMockClient(t *testing.T, serverURL string) *client.Client {
 	t.Helper()
-	c, err := client.New(serverURL, "dt0c01.testtoken", serverURL, "dt0s16.testtoken", 0)
+	c, err := client.New(serverURL, serverURL, "dt0s16.testtoken", "dt0s16.testtoken", 0)
 	if err != nil {
 		t.Fatalf("newMockClient: %v", err)
 	}

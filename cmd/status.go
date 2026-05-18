@@ -41,8 +41,8 @@ var statusCmd = &cobra.Command{
 		display.Header("Connection Status")
 
 		envURL := environmentHint()
-		accessTok := accessToken()
 		platformTok := platformToken()
+		accessTok := accessToken()
 
 		if envURL == "" {
 			display.PrintStatusLine(envLabel, "✗ not set (use --environment or DT_ENVIRONMENT)", display.ColorError)
@@ -50,20 +50,20 @@ var statusCmd = &cobra.Command{
 			display.PrintStatusLine(envLabel, fmt.Sprintf("✓ %s", envURL), display.ColorOK)
 		}
 
-		printCredentialStatus("Access Token", envURL, CredentialToken{
-			value:         accessTok,
-			cliName:       "access-token",
-			envName:       "DT_ACCESS_TOKEN",
-			tokenVerifyFn: checkAccessToken,
-			getUrlFn:      installer.APIURL,
-		})
-
 		printCredentialStatus("Platform Token", envURL, CredentialToken{
 			value:         platformTok,
 			cliName:       "platform-token",
 			envName:       "DT_PLATFORM_TOKEN",
 			tokenVerifyFn: checkPlatformToken,
 			getUrlFn:      installer.AppsURL,
+		})
+
+		printCredentialStatus("Access Token (fallback)", envURL, CredentialToken{
+			value:         accessTok,
+			cliName:       "access-token",
+			envName:       "DT_ACCESS_TOKEN",
+			tokenVerifyFn: checkAccessToken,
+			getUrlFn:      installer.APIURL,
 		})
 
 		if clientFlag {
