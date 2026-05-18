@@ -12,6 +12,7 @@
   - [Step 6: Rebasing](#step-6-rebasing)
   - [Step 7: Testing](#step-7-testing)
   - [Step 8: Opening a Pull Request](#step-8-opening-a-pull-request)
+  - [Step 9: Squash Merging](#step-9-squash-merging)
 
 ## Prerequisites
 
@@ -187,3 +188,7 @@ PR templates live in [`.github/PULL_REQUEST_TEMPLATE/`](../../.github/PULL_REQUE
 2. Fill in the template — description, motivation, and any other fields it asks for
 3. Complete the checklist in the template
 4. For `feature/*` and `bugfix/*` PRs, make sure Copilot has reviewed your code before requesting a maintainer review
+
+### Step 9: Squash Merging
+
+When a PR is approved and ready to merge, it should be **squash merged** into `main`. This means all commits in your branch should be combined into a single commit, preserving your PR description as the merge commit message.
