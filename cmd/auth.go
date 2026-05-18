@@ -80,7 +80,7 @@ func checkClassicAccess(envURL, token string) error {
 	req.Header.Set("Authorization", installer.AuthHeader(token))
 	resp, err := credentialHTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("Classic API not reachable (%s)", classicURL)
+		return fmt.Errorf("classic API not reachable (%s)", classicURL)
 	}
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, resp.Body)
