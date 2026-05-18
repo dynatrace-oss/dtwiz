@@ -32,6 +32,7 @@ This PR is a transitional step: platform token becomes the primary required cred
 ## Follow-up
 
 Once all Classic API endpoints accept platform tokens, a follow-up change should:
+
 1. Remove the Classic API probe and access token fallback logic
 2. Remove `DT_ACCESS_TOKEN` / `--access-token` flag support entirely
 3. Remove the `checkAccessToken` validation path from `dtwiz status`
