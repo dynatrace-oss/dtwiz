@@ -14,6 +14,7 @@ The codebase already has DQL query infrastructure (`dqlResponse` struct, HTTP PO
 - Work as both a standalone `dtwiz watch` command and auto-triggered post-install
 - Show direct deep links to relevant Dynatrace apps for each data category
 - Gracefully degrade to non-live output when stdout is not a TTY
+- Exit cleanly when an install is cancelled and do not start post-install watch
 
 **Non-Goals:**
 
@@ -48,6 +49,10 @@ Strip prefix (`AWS_`, `K8S_`), replace `_` with space, lowercase, pluralize. Sim
 ### 6. `golang.org/x/term` for TTY detection
 
 Already an indirect dependency via `golang.org/x/sys`. Lightweight, stdlib-adjacent. Only used for `term.IsTerminal(int(os.Stdout.Fd()))`.
+
+### 7. Cancellation sentinel between installers and callers
+
+Installers return a shared cancellation sentinel when a user declines confirmation prompts. Command callers treat this sentinel as a clean, non-error exit and skip `WatchIngest()`. This prevents the setup/install flows from showing watch output after the user explicitly chose not to proceed.
 
 ## Risks / Trade-offs
 

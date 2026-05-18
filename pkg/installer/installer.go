@@ -3,6 +3,7 @@ package installer
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -12,6 +13,10 @@ import (
 	"strings"
 	"time"
 )
+
+// ErrInstallCancelled is returned by installers when the user declines the
+// confirmation prompt. Callers should treat it as a clean exit, not an error.
+var ErrInstallCancelled = errors.New("installation cancelled by user")
 
 // AutoConfirm bypasses all confirmProceed prompts when set to true.
 // Set by the --yes / -y flag on install, update, and uninstall command groups.

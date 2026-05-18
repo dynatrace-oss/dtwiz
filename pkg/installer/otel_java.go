@@ -371,7 +371,7 @@ func InstallOtelJava(envURL, token, serviceName, projectPath string, dryRun bool
 		}
 		if !ok {
 			fmt.Println("  Installation cancelled.")
-			return nil
+			return ErrInstallCancelled
 		}
 
 		if len(proj.RunningProcessIDs) > 0 {
@@ -453,7 +453,7 @@ func InstallOtelJava(envURL, token, serviceName, projectPath string, dryRun bool
 	}
 	if !ok {
 		fmt.Println("  Installation cancelled.")
-		return nil
+		return ErrInstallCancelled
 	}
 
 	agentPath, err = downloadJavaAgent()

@@ -24,6 +24,9 @@
 ## 4. Installer Integration
 
 - [ ] 4.1 Add `WatchIngest()` call to each installer's success path (oneagent, kubernetes, docker, otel, aws)
+- [x] 4.2 Ensure installers return a cancellation sentinel when user declines confirmation, and skip `WatchIngest()` in callers on cancellation
+  - All installers (oneagent, kubernetes, docker, otel, otel-collector, otel-python, otel-node, otel-java, aws, aws-lambda, demo) return `ErrInstallCancelled`
+  - All install/update/uninstall cmd handlers guard with `errors.Is(err, installer.ErrInstallCancelled)`
 
 ## 5. Testing
 

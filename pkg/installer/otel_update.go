@@ -346,7 +346,7 @@ func UpdateOtelConfig(configPath, envURL, token, platformToken string, dryRun bo
 	}
 	if !ok {
 		display.ColorDefault.Println("  Cancelled — no changes written.")
-		return nil
+		return ErrInstallCancelled
 	}
 	fmt.Println()
 

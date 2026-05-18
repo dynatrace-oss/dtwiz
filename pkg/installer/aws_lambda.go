@@ -747,7 +747,7 @@ func InstallAWSLambda(envURL, token, platformToken string, dryRun, confirm bool)
 		}
 		if !ok {
 			fmt.Println("  Cancelled.")
-			return nil
+			return ErrInstallCancelled
 		}
 	}
 	fmt.Println()
@@ -833,7 +833,7 @@ func UninstallAWSLambda(dryRun bool) error {
 	}
 	if !ok {
 		fmt.Println("  Cancelled.")
-		return nil
+		return ErrInstallCancelled
 	}
 	fmt.Println()
 

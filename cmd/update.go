@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"errors"
+
 	"github.com/spf13/cobra"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
@@ -31,7 +33,13 @@ var updateOtelCmd = &cobra.Command{
 		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
 			return err
 		}
-		return installer.UpdateOtelConfig(updateOtelConfigPath, envURL, accessTok, platformTok, updateDryRun)
+		if err := installer.UpdateOtelConfig(updateOtelConfigPath, envURL, accessTok, platformTok, updateDryRun); err != nil {
+			if errors.Is(err, installer.ErrInstallCancelled) {
+				return nil
+			}
+			return err
+		}
+		return nil
 	},
 }
 

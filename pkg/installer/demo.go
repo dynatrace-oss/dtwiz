@@ -208,7 +208,7 @@ func InstallDemo(envURL, accessTok, platformTok string, dryRun bool) error {
 	}
 	if !ok {
 		fmt.Println("  Installation cancelled.")
-		return nil
+		return ErrInstallCancelled
 	}
 	fmt.Println()
 

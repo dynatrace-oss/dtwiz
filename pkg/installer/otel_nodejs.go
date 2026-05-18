@@ -609,7 +609,7 @@ func InstallOtelNode(envURL, token, platformToken, serviceName, projectPath stri
 		return err
 	}
 	if !ok {
-		return nil
+		return ErrInstallCancelled
 	}
 
 	plan.EnvURL = envURL
