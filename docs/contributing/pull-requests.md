@@ -13,6 +13,7 @@
   - [Step 7: Testing](#step-7-testing)
   - [Step 8: Opening a Pull Request](#step-8-opening-a-pull-request)
   - [Step 9: Squash Merging](#step-9-squash-merging)
+- [CI Workflows](#ci-workflows)
 
 ## Prerequisites
 
@@ -192,3 +193,19 @@ PR templates live in [`.github/PULL_REQUEST_TEMPLATE/`](../../.github/PULL_REQUE
 ### Step 9: Squash Merging
 
 When a PR is approved and ready to merge, it should be **squash merged** into `main`. This means all commits in your branch should be combined into a single commit, preserving your PR description as the merge commit message.
+
+## CI Workflows
+
+Every PR runs the following checks automatically. All of them must pass before merging.
+
+| Workflow | Trigger | What it does |
+|---|---|---|
+| **Build** | PR, manual | Compiles the binary with `make build` |
+| **Tests** | Push to `main`, PR, manual | Runs `make test-coverage` on Ubuntu, macOS, and Windows; enforces a minimum coverage threshold; uploads a coverage report as a build artifact |
+| **Go Lint** | PR, manual | Runs `golangci-lint` with the project's `.golangci.yml` configuration |
+| **Dependency Review** | PR | Checks that no new dependency introduces a known vulnerability |
+| **PR Checklist** | PR | Validates that the PR description checklist is filled out |
+
+Workflow definitions live in [`.github/workflows/`](../../.github/workflows/).
+
+The coverage threshold is defined in the **Tests** workflow and enforced by `make test-coverage`. It will be raised gradually over time as coverage improves.
