@@ -1,16 +1,40 @@
-# Spec: Python Install Validation
+# Spec: python install validation
 
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Pre-flight validation for Python installer
 
-The `InstallOtelPython()` function SHALL validate prerequisites before proceeding with installation.
+The `InstallOtelPython()` function SHALL validate prerequisites before proceeding with installation. If `python3` is not found on PATH, dtwiz SHALL install Python using the platform package manager rather than exiting with an error.
 
-#### Scenario: Python 3 not in PATH
+#### Scenario: Python 3 not in PATH — macOS with Homebrew
 
-- **WHEN** neither `python3` nor `python` is found in PATH (or both resolve to Python 2)
-- **THEN** the installer SHALL exit with a clear error message indicating Python 3 is required
-- **NOTE** `python3` is tried first; if absent, `python` is accepted provided it reports a Python 3.x version
+- **WHEN** neither `python3` nor `python` is found in PATH on macOS
+- **AND** `brew` is available
+- **THEN** the installer SHALL include `brew install python3` in the plan preview
+- **AND** execute it after user confirmation (or immediately if `--yes` is set)
+
+#### Scenario: Python 3 not in PATH — macOS without Homebrew
+
+- **WHEN** neither `python3` nor `python` is found in PATH on macOS
+- **AND** `brew` is not available
+- **THEN** the installer SHALL exit with: `Python 3 is required but not found. Install Homebrew first: https://brew.sh`
+
+#### Scenario: Python 3 not in PATH — Debian/Ubuntu Linux
+
+- **WHEN** neither `python3` nor `python` is found in PATH
+- **AND** `/etc/os-release` indicates a Debian/Ubuntu-based distro
+- **THEN** the installer SHALL run `sudo apt-get install -y python3`
+
+#### Scenario: Python 3 not in PATH — RHEL/Fedora/CentOS Linux
+
+- **WHEN** neither `python3` nor `python` is found in PATH
+- **AND** `/etc/os-release` indicates a RHEL/Fedora/CentOS-based distro
+- **THEN** the installer SHALL run `sudo dnf install -y python3`
+
+#### Scenario: Python 3 not in PATH — Windows
+
+- **WHEN** neither `python3` nor `python` is found in PATH on Windows
+- **THEN** the installer SHALL run `winget install Python.Python.3`
 
 #### Scenario: pip not available
 
@@ -52,49 +76,3 @@ The `InstallOtelPython()` function SHALL validate prerequisites before proceedin
 
 - **WHEN** a Python 3 interpreter (`python3` or `python`), `pip`, and `venv` are all available
 - **THEN** the installer SHALL proceed with the normal installation flow
-
----
-
-### Requirement: Process crash visibility
-
-When the installer launches instrumented processes, the user SHALL receive explicit feedback if a process exits early rather than silently seeing a missing URL.
-
-#### Scenario: Process crash status is queried more than once
-
-- **GIVEN** a process has crashed and its exit status has been read once (e.g. to print the summary line)
-- **WHEN** the exit status is queried a second time (e.g. to build the alive-process list)
-- **THEN** the second query SHALL return the same `(exited=true, err)` result as the first
-- **AND** SHALL NOT incorrectly report the process as still running
-- **NOTE** a Go channel value is consumed on receive; the implementation MUST cache the drained value on the struct to make `WaitResult()` idempotent
-
-#### Scenario: Process crashes within the startup settle window
-
-- **GIVEN** one or more processes have been started with `opentelemetry-instrument`
-- **WHEN** a process exits with a non-zero exit code before the settle period ends
-- **THEN** the summary line SHALL show `[crashed: <exit error> — check log for details]` and the log filename
-- **AND** the URL SHALL NOT be shown for that process
-- **AND** if ALL processes have crashed or exited, the installer SHALL print `No services are running — check the logs above for errors.` and SHALL NOT print the traffic-waiting prompt
-
-#### Scenario: Process exits cleanly within the startup settle window
-
-- **GIVEN** a process was started successfully
-- **WHEN** it exits with exit code 0 before the settle period ends (e.g. a one-shot script)
-- **THEN** the summary line SHALL show `[exited cleanly]` and the log filename
-
-#### Scenario: Process is running but has not bound a port
-
-- **GIVEN** a process is still alive after the settle period
-- **WHEN** no listening TCP port is detected for its PID
-- **THEN** the summary line SHALL show `[running, port not detected]` and the log filename
-
-#### Scenario: Process is running and has bound a port
-
-- **GIVEN** a process is still alive after the settle period
-- **WHEN** a listening TCP port is detected for its PID
-- **THEN** the summary line SHALL show `→ http://localhost:<port>` and the log filename
-
----
-
-### Requirement: Framework instrumentation verification after bootstrap
-
-`opentelemetry-bootstrap -a install` SHALL be verified after execution. If it exits 0 but installs no framework instrumentation packages, dtwiz SHALL install them directly.
