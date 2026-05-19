@@ -11,16 +11,10 @@ import (
 )
 
 const (
-	portPollInterval = 500 * time.Millisecond
-	// portPollTimeout has to outlast Maven compilation + Spring Boot startup.
-	// Typical projects take 20–45s on Unix; on slow Windows VMs Spring Boot
-	// can take 60–120s. Each probe iteration also burns ~5–10s to PowerShell
-	// startup, so the effective poll rate is much lower than portPollInterval.
-	// Services that legitimately do not expose a port make the user wait the
-	// full timeout before "port not detected" is shown.
-	portPollTimeout    = 3 * time.Minute
+	portPollInterval   = 500 * time.Millisecond
+	portPollTimeout    = 10 * time.Second
 	processSettleDelay = 3 * time.Second
-	slowHintDelay      = 10 * time.Second
+	slowHintDelay      = 5 * time.Second
 )
 
 type ManagedProcess struct {
@@ -165,7 +159,7 @@ func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) 
 		go func() {
 			select {
 			case <-time.After(slowHintDelay):
-				fmt.Println("  Still detecting ports — this may take a while.")
+				fmt.Println("  Still detecting ports...")
 			case <-hintDone:
 			}
 		}()
