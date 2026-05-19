@@ -17,7 +17,7 @@ import (
 )
 
 // awsTemplateURL is the pinned Dynatrace CloudFormation template.
-const awsTemplateURL = "https://dynatrace-data-acquisition.s3.amazonaws.com/aws/deployment/cfn/v1.0.0/da-aws-activation.yaml"
+const awsTemplateURL = "https://dynatrace-data-acquisition.s3.amazonaws.com/aws/deployment/cfn/v1.0.11/da-aws-activation.yaml"
 
 // awsStackConfig holds all values required to render aws.tmpl and drive the
 // CloudFormation deployment.
@@ -205,7 +205,7 @@ func createDTMonitoringConfig(c *client.PlatformClient, accountID, region string
 		"value": map[string]interface{}{
 			"enabled":           false,
 			"description":       desc,
-			"version":           "1.0.0",
+			"version":           "1.0.11",
 			"featureSets":       defaultFeatureSets,
 			"activationContext": "DATA_ACQUISITION",
 			"aws": map[string]interface{}{
