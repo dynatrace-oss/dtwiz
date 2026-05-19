@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.17] - 2026-05-19
+
+### Added
+
+- `dtwiz install otel-node` now auto-installs project dependencies (`npm install` / `yarn`) before instrumentation when `node_modules` is missing
+- Node.js OTel service names are now derived from the project directory name instead of the full path
+- E2E integration tests for Node.js and Java OTel instrumentation, with fixture apps (`test/fixtures/node-http`, `test/fixtures/java-maven`)
+- OneAgent v2 installer scaffold (`pkg/installer/oneagent_v2.go`) with `InstallOptions` / `AgentConfig` types and a `--oneagent-poc` feature flag
+- `main`-branch snapshot install channel: `install.sh` and `install.ps1` now support `DTWIZ_CHANNEL=main` for bleeding-edge builds
+- Contributing guide: feature and bug request issue descriptions (`docs/contributing/issues.md`)
+- Git hooks (`commit-msg`), `CODEOWNERS`, and PR-title enforcement workflow
+
+### Changed
+
+- OTel process wait timeout shortened to reduce time spent waiting for instrumented processes to start
+
+### Fixed
+
+- Ingest watch is now skipped when the user cancels an installation, instead of watching indefinitely after a no-op
+
 ## [0.2.16] - 2026-05-12
 
 ### Added
@@ -169,7 +189,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `dtwiz install aws-lambda` — instrument all Lambda functions in the current AWS region with the Dynatrace Lambda Layer (auto-detect runtime, fetch layer ARN from DT API, set connection env vars)
-- `dtwiz uninstall aws-lambda` — remove Dynatrace Lambda Layer and DT_* env vars from all instrumented functions
+- `dtwiz uninstall aws-lambda` — remove Dynatrace Lambda Layer and DT\_\* env vars from all instrumented functions
 - `dtwiz install aws` now runs Lambda instrumentation in parallel alongside CloudFormation deployment (non-fatal, skipped in dry-run)
 - Skip Dynatrace-internal Lambda functions (`DynatraceApiClientFunction`) during install and uninstall
 - Skip container image Lambda functions (layers not supported)
@@ -243,7 +263,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.16...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.17...HEAD
+[0.2.17]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.16...v0.2.17
 [0.2.16]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.15...v0.2.16
 [0.2.15]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.14...v0.2.15
 [0.2.14]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.13...v0.2.14
