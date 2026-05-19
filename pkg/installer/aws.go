@@ -162,7 +162,7 @@ func dtAuthHeader(token string) string {
 
 const (
 	daAWSExtension        = "com.dynatrace.extension.da-aws"
-	daAWSExtensionVersion = "1.0.0"
+	daAWSExtensionVersion = "1.0.11"
 )
 
 // awsMonitoringConfigValue is used to decode the value field of a da-aws
