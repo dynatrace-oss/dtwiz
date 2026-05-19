@@ -6,6 +6,16 @@ Thank you for your interest in contributing to dtwiz!
 
 This project follows our [Code of Conduct](CODE_OF_CONDUCT.md). All contributors are expected to read it before participating.
 
+## Getting Started
+
+After cloning the repository, run:
+
+```sh
+make setup
+```
+
+This configures Git to use the project's commit hooks from `.githooks/`, which enforce [Conventional Commits](https://www.conventionalcommits.org) format on every commit.
+
 ## How to Contribute
 
 | Contribution                              | Action                                                                                                                           |

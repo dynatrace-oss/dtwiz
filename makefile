@@ -1,4 +1,4 @@
-.PHONY: build install test test-coverage test-integration lint clean markdownlint markdownlint-fix
+.PHONY: build install test test-coverage test-integration lint fmt clean markdownlint markdownlint-fix setup
 
 ifneq (,$(wildcard .e2e.env))
 include .e2e.env
@@ -16,7 +16,7 @@ build:
 install:
 	$(GO) install .
 
-COVERAGE_THRESHOLD ?= 20
+COVERAGE_THRESHOLD ?= 30
 
 test:
 	$(GO) test ./pkg/... -coverprofile=coverage.out
@@ -39,6 +39,9 @@ test-coverage:
 	fi; \
 	echo "OK: Coverage meets threshold"
 
+fmt:
+	@golangci-lint fmt ./...
+
 lint:
 	golangci-lint run ./...
 
@@ -56,4 +59,9 @@ markdownlint:
 
 markdownlint-fix:
 	docker run -v $(CURDIR):/workdir --rm  $(MD_LINT_CLI_IMAGE)  "**/*.md" --fix
+
+setup:
+	git config --local core.hooksPath .githooks
+	chmod +x .githooks/* || true
+	@echo "Git hooks installed from .githooks/"
 
