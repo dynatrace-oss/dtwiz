@@ -196,14 +196,16 @@ When a PR is approved and ready to merge, it should be **squash merged** into `m
 
 ## CI Workflows
 
-Every PR runs the following checks automatically. All of them must pass before merging.
+The following checks run on every PR and must all pass before merging.
 
 | Workflow | Trigger | What it does |
 |---|---|---|
 | **Build** | PR, manual | Compiles the binary with `make build` |
 | **Tests** | Push to `main`, PR, manual | Runs `make test-coverage` on Ubuntu, macOS, and Windows; enforces a minimum coverage threshold; uploads a coverage report as a build artifact |
 | **Go Lint** | PR, manual | Runs `golangci-lint` with the project's `.golangci.yml` configuration |
+| **Markdown Linting** | PR, manual | Runs `make markdownlint` to lint Markdown files |
 | **Dependency Review** | PR | Checks that no new dependency introduces a known vulnerability |
+| **PR Title Check** | PR | Validates that the PR title follows Conventional Commits format and contains no ticket numbers |
 | **PR Checklist** | PR | Validates that the PR description checklist is filled out |
 
 Workflow definitions live in [`.github/workflows/`](../../.github/workflows/).
