@@ -32,8 +32,8 @@ var rootCmd = &cobra.Command{
 Set your Dynatrace credentials via environment variables:
 
   export DT_ENVIRONMENT=https://<your-tenant-domain>
-  export DT_PLATFORM_TOKEN=dt0s16.****      # preferred
-  export DT_ACCESS_TOKEN=dt0c01.****        # optional fallback
+  export DT_PLATFORM_TOKEN=dt0s16.****
+  export DT_ACCESS_TOKEN=dt0c01.****        # optional, for legacy environments
 
 Then use dtwiz commands to analyze and instrument your system.`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
@@ -102,8 +102,8 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&debugFlag, "debug", false, "enable debug logging")
 	rootCmd.PersistentFlags().CountVarP(&verbosityFlag, "verbose", "v", "verbose output")
 	rootCmd.PersistentFlags().StringVar(&environmentFlag, "environment", "", "Dynatrace environment URL (also read from DT_ENVIRONMENT)")
-	rootCmd.PersistentFlags().StringVar(&platformTokenFlag, "platform-token", "", "Dynatrace platform token, preferred (also read from DT_PLATFORM_TOKEN)")
-	rootCmd.PersistentFlags().StringVar(&accessTokenFlag, "access-token", "", "Dynatrace API access token, fallback (also read from DT_ACCESS_TOKEN)")
+	rootCmd.PersistentFlags().StringVar(&platformTokenFlag, "platform-token", "", "Dynatrace platform token (also read from DT_PLATFORM_TOKEN)")
+	rootCmd.PersistentFlags().StringVar(&accessTokenFlag, "access-token", "", "Dynatrace API access token for legacy environments (also read from DT_ACCESS_TOKEN)")
 
 	featureflags.RegisterFlags(rootCmd.PersistentFlags())
 

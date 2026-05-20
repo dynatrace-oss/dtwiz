@@ -740,7 +740,7 @@ func (cp *collectorPlan) printDryRun() {
 	fmt.Printf("  Config:       %s\n", cp.configPath)
 	assetName, _ := otelPlatformAssetName("latest")
 	fmt.Printf("  Asset:        %s\n", assetName)
-	fmt.Printf("  Ingest token: (from --platform-token)\n")
+	fmt.Printf("  Ingest token: (configured)\n")
 
 	cp.printConfigPreview(sep)
 }

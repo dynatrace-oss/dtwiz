@@ -5,7 +5,7 @@
 - [x] 1.1 Change `getDtEnvironment` to return `(envURL, accessTok, platformTok, err)` — raw tokens, no Classic API selection
 - [x] 1.2 Add `checkClassicAccess(envURL, token string) error` — probes `GET /api/v2/settings/schemas`, returns error on 401/403
 - [x] 1.3 Change `validateCredentials` to `(envURL, accessTok, platformTok string) (classicTok string, err error)` — validates platform token via DQL, probes Classic API, returns resolved classic token
-- [x] 1.4 Add debug log lines for each fallback outcome
+- [x] 1.4 Add debug log lines for each auth path outcome (explicit access token used, platform token accepted, platform token rejected but proceeding)
 
 ## 2. Client setup (`cmd/root.go`)
 

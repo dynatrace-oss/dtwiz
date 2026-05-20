@@ -9,17 +9,17 @@ This PR is a transitional step: platform token becomes the primary required cred
 ## What Changes
 
 - Platform token (`DT_PLATFORM_TOKEN`) becomes the only required credential
-- Access token (`DT_ACCESS_TOKEN`) becomes optional — used as a fallback for Classic API calls only when the platform token is rejected (401/403)
-- At startup, a lightweight probe determines which token to use for Classic API calls — no per-request retry logic needed
-- `dtwiz status` labels the access token as "(fallback)" to communicate its optional role
+- Access token (`DT_ACCESS_TOKEN`) becomes optional — when set (legacy customers), it takes precedence for Classic API calls; when absent, the platform token is used in its place and `"  Using platform token"` is printed
+- At startup, if an explicit access token is provided it is used directly for Classic API calls without probing; if absent, a lightweight probe determines whether the platform token is accepted by the Classic API
+- `dtwiz status` shows the access token section only when `DT_ACCESS_TOKEN` is set
 
 ## Capabilities
 
 ### Modified Capabilities
 
-- **Authentication resolution**: platform token is tried first for Classic API; access token is fallback
+- **Authentication resolution**: when access token is explicitly set it takes precedence for Classic API calls; otherwise platform token is used for both Platform and Classic APIs
 - **Credential validation**: only platform token is validated at startup (via DQL); access token is not required
-- **Status output**: access token shown as optional fallback, not a required credential
+- **Status output**: access token section shown only when `DT_ACCESS_TOKEN` is set; no "fallback" label
 
 ## Impact
 

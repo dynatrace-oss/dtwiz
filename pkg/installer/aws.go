@@ -151,15 +151,6 @@ var defaultFeatureSets = []string{
 	"SNS_essential", "SQS_essential",
 }
 
-// dtAuthHeader returns the correct Authorization header value for a Dynatrace
-// token. Used by aws_lambda.go which uses raw HTTP calls.
-func dtAuthHeader(token string) string {
-	if strings.HasPrefix(token, "dt0c01.") {
-		return "Api-Token " + token
-	}
-	return "Bearer " + token
-}
-
 const (
 	daAWSExtension        = "com.dynatrace.extension.da-aws"
 	daAWSExtensionVersion = "1.0.11"

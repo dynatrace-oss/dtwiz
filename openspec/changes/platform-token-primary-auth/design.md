@@ -29,17 +29,17 @@ This change makes platform token the primary credential. Access token stays as a
 
 ## Decisions
 
-### 1. Startup probe for Classic API token selection
+### 1. Access token takes precedence when set; platform token fills in when absent
 
-At credential validation time (`validateCredentials`), a `GET /api/v2/settings/schemas` request is made with the platform token. If this returns 401 or 403, the access token is used instead for Classic API calls. Any other response means authentication was accepted.
+At credential validation time (`validateCredentials`), if an explicit access token is set (different from the platform token), it is returned directly as `classicTok` for Classic API calls — no probe needed. When no explicit access token is configured, `getDtEnvironment` sets `accessTok = platformTok` and prints `"  Using platform token"`. `validateCredentials` then probes `GET /api/v2/settings/schemas` with the platform token; regardless of whether the probe passes or fails, the platform token is used for Classic API calls.
 
-**Why not per-request retry**: requires thread-safe token storage and retry logic in the HTTP client — significant complexity for a gap that will close once all Classic API endpoints accept platform tokens.
+**Why explicit access token wins without probing**: legacy customers who set `DT_ACCESS_TOKEN` know they need it — there is no value in probing the platform token first and potentially falling through to the access token anyway.
 
-### 2. `GET /api/v2/settings/schemas` as the probe endpoint
+**Why platform token is used even when the probe fails**: the probe failure may be transient or due to scope rather than auth. Using the platform token as best-effort is better than failing hard when no access token is available.
 
-Read-only metadata endpoint, no data-access scope requirements. Any non-401/403 response confirms authentication regardless of the token's data permissions.
+### 2. `GET /api/v2/settings/schemas` as the probe endpoint (platform-token-only path)
 
-**Risk**: if this endpoint requires `settings.read` scope and the token lacks it, the probe returns 403 for the wrong reason (scope, not auth), causing an unnecessary fallback. Acceptable trade-off.
+When no explicit access token is set, a read-only metadata probe is made with the platform token. Any non-401/403 response confirms Classic API authentication. Used only when `accessTok == platformTok` (i.e. no explicit access token was configured).
 
 ### 3. DQL validation is a hard requirement
 
@@ -55,6 +55,5 @@ Commands needing both resolved tokens and a `*client.Client` call `setupClientFr
 
 ## Risks / Trade-offs
 
-- **[Probe latency]** → Extra HTTP round-trip at startup. Acceptable for a startup credential check.
-- **[False fallback on scope 403]** → Access token used unnecessarily if probe endpoint returns 403 due to missing scope rather than auth failure. Low risk in practice.
+- **[Probe latency]** → Extra HTTP round-trip at startup when no explicit access token is set. Acceptable for a startup credential check.
 - **[Incomplete Classic API coverage]** → Only authentication is probed, not specific endpoint permissions. Some operations may still fail mid-install if the platform token lacks the required Classic API scopes. Users can set `DT_ACCESS_TOKEN` as a workaround in the meantime.

@@ -64,37 +64,30 @@ func TestValidateCredentials(t *testing.T) {
 		wantErr        bool
 	}{
 		{
-			name:           "platform token accepted by Classic API — no fallback",
+			name:           "no access token, platform token accepted by Classic API",
 			dqlStatus:      http.StatusOK,
 			classicStatus:  http.StatusOK,
 			accessTok:      "",
 			wantClassicTok: platformTok,
 		},
 		{
-			name:           "platform token accepted even when access token is also set",
+			name:           "access token set — takes precedence over platform token for Classic API",
 			dqlStatus:      http.StatusOK,
-			classicStatus:  http.StatusOK,
+			classicStatus:  http.StatusUnauthorized, // irrelevant, access token wins
 			accessTok:      accessTok,
+			wantClassicTok: accessTok,
+		},
+		{
+			name:           "no access token, platform token rejected by Classic API — still used",
+			dqlStatus:      http.StatusOK,
+			classicStatus:  http.StatusUnauthorized,
+			accessTok:      "",
 			wantClassicTok: platformTok,
 		},
 		{
-			name:           "platform token rejected by Classic API, falls back to access token",
-			dqlStatus:      http.StatusOK,
-			classicStatus:  http.StatusUnauthorized,
-			accessTok:      accessTok,
-			wantClassicTok: accessTok,
-		},
-		{
-			name:           "403 from Classic API also triggers fallback",
+			name:           "no access token, 403 from Classic API — platform token still used",
 			dqlStatus:      http.StatusOK,
 			classicStatus:  http.StatusForbidden,
-			accessTok:      accessTok,
-			wantClassicTok: accessTok,
-		},
-		{
-			name:           "platform token rejected, no access token — platform token used as best effort",
-			dqlStatus:      http.StatusOK,
-			classicStatus:  http.StatusUnauthorized,
 			accessTok:      "",
 			wantClassicTok: platformTok,
 		},

@@ -44,7 +44,8 @@ func platformToken() string {
 }
 
 // getDtEnvironment resolves the environment URL and raw tokens from flags/env vars.
-// platformTok is required. accessTok is optional (empty string when not set).
+// platformTok is required. accessTok is optional — when not set, the platform token
+// is used in its place.
 func getDtEnvironment() (envURL, accessTok, platformTok string, err error) {
 	envURL = environmentHint()
 	if envURL == "" {
@@ -64,7 +65,13 @@ func getDtEnvironment() (envURL, accessTok, platformTok string, err error) {
 		)
 	}
 
-	return envURL, accessToken(), platformTok, nil
+	accessTok = accessToken()
+	if accessTok == "" {
+		fmt.Println("  Using platform token")
+		accessTok = platformTok
+	}
+
+	return envURL, accessTok, platformTok, nil
 }
 
 var credentialHTTPClient = &http.Client{Timeout: 5 * time.Second}
@@ -91,23 +98,25 @@ func checkClassicAccess(envURL, token string) error {
 }
 
 // validateCredentials validates the platform token via DQL (required) and
-// determines the Classic API token. Tries the platform token against the Classic
-// API first; falls back to the access token if authentication fails there.
+// determines the Classic API token. When an explicit access token is provided
+// (old customers), it takes precedence for Classic API calls. Otherwise the
+// platform token is used for both Platform and Classic APIs.
 // Returns the classicTok to use for Classic API calls.
 func validateCredentials(envURL, accessTok, platformTok string) (classicTok string, err error) {
 	if err := checkPlatformToken(envURL, platformTok); err != nil {
 		return "", err
 	}
+	// When an explicit access token is set (different from platform token),
+	// it takes precedence for Classic API calls.
+	if accessTok != "" && accessTok != platformTok {
+		logger.Debug("classic API auth: using explicit access token")
+		return accessTok, nil
+	}
 	if err := checkClassicAccess(envURL, platformTok); err == nil {
 		logger.Debug("classic API auth: platform token accepted")
 		return platformTok, nil
 	}
-	logger.Debug("classic API auth: platform token rejected, trying access token fallback")
-	if accessTok != "" {
-		logger.Debug("classic API auth: using access token as fallback")
-		return accessTok, nil
-	}
-	logger.Debug("classic API auth: no access token configured, proceeding with platform token")
+	logger.Debug("classic API auth: platform token rejected by Classic API, proceeding anyway")
 	return platformTok, nil
 }
 

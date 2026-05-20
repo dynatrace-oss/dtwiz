@@ -58,13 +58,15 @@ var statusCmd = &cobra.Command{
 			getUrlFn:      installer.AppsURL,
 		})
 
-		printCredentialStatus("Access Token (fallback)", envURL, CredentialToken{
-			value:         accessTok,
-			cliName:       "access-token",
-			envName:       "DT_ACCESS_TOKEN",
-			tokenVerifyFn: checkAccessToken,
-			getUrlFn:      installer.APIURL,
-		})
+		if accessTok != "" {
+			printCredentialStatus("Access Token", envURL, CredentialToken{
+				value:         accessTok,
+				cliName:       "access-token",
+				envName:       "DT_ACCESS_TOKEN",
+				tokenVerifyFn: checkAccessToken,
+				getUrlFn:      installer.APIURL,
+			})
+		}
 
 		if clientFlag {
 			printExtensionsStatus()
