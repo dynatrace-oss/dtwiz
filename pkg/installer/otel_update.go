@@ -276,7 +276,7 @@ func PatchConfigFile(configPath, apiURL, token string) (*UpdateResult, error) {
 // If dryRun is true the preview is printed without prompting.
 // If configPath is empty or points to a non-existent file the user is prompted
 // to supply the correct path interactively.
-func UpdateOtelConfig(configPath, envURL, token string, dryRun bool) error {
+func UpdateOtelConfig(configPath, envURL, token, platformTok string, dryRun bool) error {
 	apiURL := APIURL(envURL)
 
 	// Resolve the config path: prompt when it's missing or the file doesn't exist.
@@ -388,7 +388,7 @@ func UpdateOtelConfig(configPath, envURL, token string, dryRun bool) error {
 	}
 
 	// Verify the restarted collector can deliver logs to Dynatrace.
-	if err := verifyOtelInstall(envURL, token, token, crashed); err != nil {
+	if err := verifyOtelInstall(envURL, platformTok, token, crashed); err != nil {
 		fmt.Printf("\n  Warning: log verification failed: %v\n", err)
 		fmt.Println("  The collector may still be working — check the Dynatrace UI.")
 		return nil

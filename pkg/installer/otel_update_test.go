@@ -410,7 +410,7 @@ service:
 		t.Fatal(err)
 	}
 
-	err := UpdateOtelConfig(configPath, "https://env.live.dynatrace.com", "mytoken", true)
+	err := UpdateOtelConfig(configPath, "https://env.live.dynatrace.com", "mytoken", "", true)
 	if err != nil {
 		t.Fatalf("UpdateOtelConfig dry-run error: %v", err)
 	}

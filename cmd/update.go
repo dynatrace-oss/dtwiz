@@ -34,7 +34,7 @@ var updateOtelCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := installer.UpdateOtelConfig(updateOtelConfigPath, envURL, classicTok, updateDryRun); err != nil {
+		if err := installer.UpdateOtelConfig(updateOtelConfigPath, envURL, classicTok, platformTok, updateDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
 				return nil
 			}

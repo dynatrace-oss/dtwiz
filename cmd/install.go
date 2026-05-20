@@ -337,7 +337,7 @@ var installDemoCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := installer.InstallDemo(envURL, classicTok, installDryRun); err != nil {
+		if err := installer.InstallDemo(envURL, classicTok, platformTok, installDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
 				return nil
 			}
