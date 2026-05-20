@@ -3,7 +3,7 @@
 ## 1. Auth layer (`cmd/auth.go`)
 
 - [x] 1.1 Change `getDtEnvironment` to return `(envURL, accessTok, platformTok, err)` — raw tokens, no Classic API selection
-- [x] 1.2 Add `checkClassicAccess(envURL, token string) error` — probes `GET /api/v2/settings/schemas`, returns error on 401/403
+- [x] 1.2 Add `checkPlatformTokenClassicAccess(envURL, token string) error` — probes `GET /api/v2/settings/schemas`, returns error on 401/403
 - [x] 1.3 Change `validateCredentials` to `(envURL, accessTok, platformTok string) (classicTok string, err error)` — validates platform token via DQL, probes Classic API, returns resolved classic token
 - [x] 1.4 Add debug log lines for each auth path outcome (explicit access token used, platform token accepted, platform token rejected but proceeding)
 
@@ -25,7 +25,7 @@
 
 ## 5. Tests
 
-- [x] 5.1 Add `cmd/auth_test.go` with `TestCheckClassicAccess` (200/404/500 pass; 401/403 fail; network failure)
+- [x] 5.1 Add `cmd/auth_test.go` with `TestCheckPlatformTokenClassicAccess` (200/404/500 pass; 401/403 fail; network failure)
 - [x] 5.2 Add `TestValidateCredentials` covering: platform token accepted, platform token rejected + access token fallback, platform token rejected + no access token, DQL failure
 - [x] 5.3 Update `test/integration/setup.go` — `TEST_DT_PLATFORM_TOKEN` required, `TEST_DT_ACCESS_TOKEN` optional
 - [x] 5.4 Update `test/e2e/otel_test.go` — use `env.ClassicToken` / `env.PlatformToken` instead of `env.Token`

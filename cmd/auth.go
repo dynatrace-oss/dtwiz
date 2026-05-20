@@ -76,9 +76,9 @@ func getDtEnvironment() (envURL, accessTok, platformTok string, err error) {
 
 var credentialHTTPClient = &http.Client{Timeout: 5 * time.Second}
 
-// checkClassicAccess probes the Classic API to determine whether token can
+// checkPlatformTokenClassicAccess probes the Classic API to determine whether token can
 // authenticate. Returns nil if any non-401/403 response is received.
-func checkClassicAccess(envURL, token string) error {
+func checkPlatformTokenClassicAccess(envURL, token string) error {
 	classicURL := strings.TrimRight(installer.APIURL(envURL), "/")
 	req, err := http.NewRequest(http.MethodGet, classicURL+"/api/v2/settings/schemas", nil)
 	if err != nil {
@@ -112,7 +112,7 @@ func validateCredentials(envURL, accessTok, platformTok string) (classicTok stri
 		logger.Debug("classic API auth: using explicit access token")
 		return accessTok, nil
 	}
-	if err := checkClassicAccess(envURL, platformTok); err == nil {
+	if err := checkPlatformTokenClassicAccess(envURL, platformTok); err == nil {
 		logger.Debug("classic API auth: platform token accepted")
 		return platformTok, nil
 	}

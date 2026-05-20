@@ -29,9 +29,9 @@ func TestCheckClassicAccess(t *testing.T) {
 			credentialHTTPClient = srv.Client()
 			defer func() { credentialHTTPClient = orig }()
 
-			err := checkClassicAccess(srv.URL, "dt0s16.testtoken")
+			err := checkPlatformTokenClassicAccess(srv.URL, "dt0s16.testtoken")
 			if (err != nil) != tt.wantErr {
-				t.Errorf("checkClassicAccess() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("checkPlatformTokenClassicAccess() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
@@ -46,7 +46,7 @@ func TestCheckClassicAccess_NetworkFailure(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
 	srv.Close()
 
-	if err := checkClassicAccess(srv.URL, "dt0s16.testtoken"); err == nil {
+	if err := checkPlatformTokenClassicAccess(srv.URL, "dt0s16.testtoken"); err == nil {
 		t.Error("expected error for unreachable server, got nil")
 	}
 }
