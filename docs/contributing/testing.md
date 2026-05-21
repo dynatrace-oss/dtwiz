@@ -5,6 +5,7 @@
 - [Running Tests](#running-tests)
 - [Writing Unit Tests](#writing-unit-tests)
 - [Writing Integration Tests](#writing-integration-tests)
+- [Mocking Conventions](#mocking-conventions)
 
 ## Running Tests
 
@@ -121,3 +122,20 @@ func TestMyInstaller(t *testing.T) {
 **Fixtures:** sample applications for language-specific OTel tests live in `test/fixtures/`. Each fixture is a minimal runnable app. Use them as the target directory when testing `install otel-*` commands.
 
 **Assertions:** use `test/integration/grail` helpers to query Dynatrace via DQL and verify that telemetry actually arrived. Poll with a timeout rather than sleeping — the `grail.WaitFor*` helpers handle this.
+
+## Mocking Conventions
+
+The following test helpers are defined in `pkg/installer/testhelpers_test.go` and `pkg/installer/otel_test.go`. Use them instead of reimplementing the same patterns.
+
+| Helper | Use when |
+|---|---|
+| `setTestWorkingDir(t, dir)` | Code under test uses `os.Getwd()` as a scan root (project detection functions) |
+| `setTestStdin(t, input)` | Code under test prompts the user for input |
+| `captureStdout(t, fn)` | Asserting on printed output |
+| `managedProcessHelperCommand(t, mode)` | Testing code that spawns and manages subprocesses |
+
+Both `setTestWorkingDir` and `captureStdout` hold a package-level mutex (`cwdMu` / `stdoutMu`) for the duration of the test because `os.Chdir` and `os.Stdout` are process-global. Tests using these helpers must not run in parallel.
+
+For **binary availability** (e.g. `java`, `node` on PATH), use `t.Setenv("PATH", "")` to simulate the binary being absent, or point PATH at a temp directory containing a stub script.
+
+For **HTTP calls**, use `httptest.NewServer` — pass `srv.URL` to the function under test instead of a real Dynatrace URL. See `pkg/installer/oneagent_test.go` for examples covering success, auth failure, and unexpected status codes.
