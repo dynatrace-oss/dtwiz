@@ -44,8 +44,7 @@ func platformToken() string {
 }
 
 // getDtEnvironment resolves the environment URL and raw tokens from flags/env vars.
-// platformTok is required. accessTok is optional — when not set, the platform token
-// is used in its place.
+// platformTok is required. accessTok may be empty when not configured.
 func getDtEnvironment() (envURL, accessTok, platformTok string, err error) {
 	envURL = environmentHint()
 	if envURL == "" {
@@ -66,10 +65,6 @@ func getDtEnvironment() (envURL, accessTok, platformTok string, err error) {
 	}
 
 	accessTok = accessToken()
-	if accessTok == "" {
-		fmt.Println("  Using platform token")
-		accessTok = platformTok
-	}
 
 	return envURL, accessTok, platformTok, nil
 }
@@ -112,6 +107,7 @@ func validateCredentials(envURL, accessTok, platformTok string) (classicTok stri
 		logger.Debug("classic API auth: using explicit access token")
 		return accessTok, nil
 	}
+	fmt.Println("  Using platform token")
 	if err := checkPlatformTokenClassicAccess(envURL, platformTok); err == nil {
 		logger.Debug("classic API auth: platform token accepted")
 		return platformTok, nil
