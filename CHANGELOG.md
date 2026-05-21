@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.18] - 2026-05-21
+
+### Changed
+
+- Platform token (`--platform-token` / `DT_PLATFORM_TOKEN`) is now the primary required credential; access token (`--access-token` / `DT_ACCESS_TOKEN`) is optional and used only when explicitly configured
+
 ## [0.2.17] - 2026-05-19
 
 ### Added
@@ -263,7 +269,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.17...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.18...HEAD
+[0.2.18]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.17...v0.2.18
 [0.2.17]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.16...v0.2.17
 [0.2.16]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.15...v0.2.16
 [0.2.15]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.14...v0.2.15
