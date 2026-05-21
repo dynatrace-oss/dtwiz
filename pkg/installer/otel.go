@@ -192,7 +192,7 @@ func createRuntimePlan(proj detectedProject, apiURL, token, envURL, platformToke
 }
 
 // inferRuntimeFromPath returns "Java", "Node.js", "Python", or "" based on which
-// marker files are present directly inside path.
+// marker files or directories are present directly inside path.
 func inferRuntimeFromPath(path string) string {
 	hasFile := func(name string) bool {
 		_, err := os.Stat(filepath.Join(path, name))

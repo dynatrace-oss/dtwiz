@@ -37,6 +37,7 @@ func TestInferRuntimeFromPath(t *testing.T) {
 	tests := []struct {
 		name  string
 		files []string
+		dirs  []string
 		want  string
 	}{
 		{name: "python requirements.txt", files: []string{"requirements.txt"}, want: "Python"},
@@ -45,6 +46,7 @@ func TestInferRuntimeFromPath(t *testing.T) {
 		{name: "java pom.xml", files: []string{"pom.xml"}, want: "Java"},
 		{name: "java build.gradle", files: []string{"build.gradle"}, want: "Java"},
 		{name: "java build.gradle.kts", files: []string{"build.gradle.kts"}, want: "Java"},
+		{name: "java .mvn directory", dirs: []string{".mvn"}, want: "Java"},
 		{name: "nodejs package.json", files: []string{"package.json"}, want: "Node.js"},
 		{name: "no markers", files: []string{"README.md"}, want: ""},
 		// Java wins over Node.js when both present (e.g. Spring with frontend tooling).
@@ -63,9 +65,14 @@ func TestInferRuntimeFromPath(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			for _, d := range tt.dirs {
+				if err := os.Mkdir(filepath.Join(dir, d), 0755); err != nil {
+					t.Fatal(err)
+				}
+			}
 			got := inferRuntimeFromPath(dir)
 			if got != tt.want {
-				t.Errorf("inferRuntimeFromPath(%v) = %q, want %q", tt.files, got, tt.want)
+				t.Errorf("inferRuntimeFromPath(%v, dirs=%v) = %q, want %q", tt.files, tt.dirs, got, tt.want)
 			}
 		})
 	}
