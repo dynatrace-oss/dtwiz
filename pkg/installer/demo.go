@@ -170,7 +170,7 @@ func extractZip(zipPath, destDir string) error {
 // 1. Download & extract schnitzel (if not already present)
 // 2. Install Python if missing
 // 3. Install OTel Collector + Python auto-instrumentation targeting ./schnitzel
-func InstallDemo(envURL, accessTok, platformTok string, dryRun bool) error {
+func InstallDemo(envURL, token, platformTok string, dryRun bool) error {
 	demoExists := checkDemoExists()
 	pythonCmd, err := pythonInstallPlan()
 	if err != nil {
@@ -238,5 +238,5 @@ func InstallDemo(envURL, accessTok, platformTok string, dryRun bool) error {
 		return fmt.Errorf("resolving demo directory path: %w", err)
 	}
 	AutoConfirm = true
-	return InstallOtelCollectorWithProject(envURL, accessTok, accessTok, platformTok, absDemoDir, dryRun)
+	return InstallOtelCollectorWithProject(envURL, token, platformTok, absDemoDir, dryRun)
 }

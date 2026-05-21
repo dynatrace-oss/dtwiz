@@ -178,7 +178,7 @@ func getDTConnectionInfo(envURL, token string) (*dtConnectionInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("building connection info request: %w", err)
 	}
-	req.Header.Set("Authorization", dtAuthHeader(token))
+	req.Header.Set("Authorization", AuthHeader(token))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -232,7 +232,7 @@ func getClusterID(envURL, token string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("building cluster ID request: %w", err)
 	}
-	req.Header.Set("Authorization", dtAuthHeader(token))
+	req.Header.Set("Authorization", AuthHeader(token))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -275,7 +275,7 @@ func getAgentConnectionToken(envURL, token string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("building agent connection token request: %w", err)
 	}
-	req.Header.Set("Authorization", dtAuthHeader(token))
+	req.Header.Set("Authorization", AuthHeader(token))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -332,7 +332,7 @@ func getLambdaLayerARN(cache layerARNCache, envURL, token, techtype, arch, regio
 	if err != nil {
 		return "", fmt.Errorf("building layer ARN request: %w", err)
 	}
-	req.Header.Set("Authorization", dtAuthHeader(token))
+	req.Header.Set("Authorization", AuthHeader(token))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -652,7 +652,7 @@ func updateFunctionConfig(functionName string, envVars map[string]string, layers
 // with the Dynatrace Lambda Layer. When confirm is true, the user is prompted
 // before applying changes; when false, changes are applied immediately after
 // the preview (used when called from install aws).
-func InstallAWSLambda(envURL, token, platformToken string, dryRun, confirm bool) error {
+func InstallAWSLambda(envURL, token string, dryRun, confirm bool) error {
 	fmt.Println()
 	display.ColorMessage.Println("  Dynatrace AWS Lambda Instrumentation")
 	fmt.Println()
@@ -663,7 +663,7 @@ func InstallAWSLambda(envURL, token, platformToken string, dryRun, confirm bool)
 		return fmt.Errorf("Dynatrace environment URL is required (--environment or DT_ENVIRONMENT)") //nolint:staticcheck // ST1005: keep brand capitalization
 	}
 	if token == "" {
-		return fmt.Errorf("access token is required (--access-token or DT_ACCESS_TOKEN)")
+		return fmt.Errorf("platform token is required (--platform-token or DT_PLATFORM_TOKEN)")
 	}
 
 	if !isAWSCLIInstalled() {

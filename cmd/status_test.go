@@ -42,16 +42,16 @@ func okVerify(_, _ string) error { return nil }
 // Auth Credential Status Printing
 func TestPrintCredentialStatus_TokenNotSet(t *testing.T) {
 	got := captureOutput(t, func() {
-		printCredentialStatus("Access Token", "https://abc.live.com", CredentialToken{
+		printCredentialStatus("Platform Token", "https://abc.apps.dynatrace.com", CredentialToken{
 			value:         "",
-			cliName:       "access-token",
-			envName:       "DT_ACCESS_TOKEN",
+			cliName:       "platform-token",
+			envName:       "DT_PLATFORM_TOKEN",
 			tokenVerifyFn: okVerify,
-			getUrlFn:      installer.APIURL,
+			getUrlFn:      installer.AppsURL,
 		})
 	})
 
-	want := "✗ not set (use --access-token or DT_ACCESS_TOKEN)"
+	want := "✗ not set (use --platform-token or DT_PLATFORM_TOKEN)"
 	if !strings.Contains(got, want) {
 		t.Errorf("expected output to contain %q, got %q", want, got)
 	}
@@ -59,12 +59,12 @@ func TestPrintCredentialStatus_TokenNotSet(t *testing.T) {
 
 func TestPrintCredentialStatus_TokenSetNoEnvURL(t *testing.T) {
 	got := captureOutput(t, func() {
-		printCredentialStatus("Access Token", "", CredentialToken{
-			value:         "dt0c01.some-token",
-			cliName:       "access-token",
-			envName:       "DT_ACCESS_TOKEN",
+		printCredentialStatus("Platform Token", "", CredentialToken{
+			value:         "dt0s16.some-token",
+			cliName:       "platform-token",
+			envName:       "DT_PLATFORM_TOKEN",
 			tokenVerifyFn: errVerify,
-			getUrlFn:      installer.APIURL,
+			getUrlFn:      installer.AppsURL,
 		})
 	})
 
@@ -76,31 +76,31 @@ func TestPrintCredentialStatus_TokenSetNoEnvURL(t *testing.T) {
 
 func TestPrintCredentialStatus_TokenSetEnvURLVerifyOK(t *testing.T) {
 	got := captureOutput(t, func() {
-		printCredentialStatus("Access Token", "https://abc.live.com", CredentialToken{
-			value:         "dt0c01.some-token",
-			cliName:       "access-token",
-			envName:       "DT_ACCESS_TOKEN",
+		printCredentialStatus("Platform Token", "https://abc.apps.dynatrace.com", CredentialToken{
+			value:         "dt0s16.some-token",
+			cliName:       "platform-token",
+			envName:       "DT_PLATFORM_TOKEN",
 			tokenVerifyFn: okVerify,
-			getUrlFn:      installer.APIURL,
+			getUrlFn:      installer.AppsURL,
 		})
 	})
 
 	if !strings.Contains(got, "✓ valid") {
 		t.Errorf("expected output to contain %q, got %q", "✓ valid", got)
 	}
-	if !strings.Contains(got, "abc.live.com") {
+	if !strings.Contains(got, "abc.apps.dynatrace.com") {
 		t.Errorf("expected output to contain the environment URL, got %q", got)
 	}
 }
 
 func TestPrintCredentialStatus_TokenSetEnvURLVerifyFails(t *testing.T) {
 	got := captureOutput(t, func() {
-		printCredentialStatus("Access Token", "https://abc.live.com", CredentialToken{
-			value:         "dt0c01.bad-token",
-			cliName:       "access-token",
-			envName:       "DT_ACCESS_TOKEN",
+		printCredentialStatus("Platform Token", "https://abc.apps.dynatrace.com", CredentialToken{
+			value:         "dt0s16.bad-token",
+			cliName:       "platform-token",
+			envName:       "DT_PLATFORM_TOKEN",
 			tokenVerifyFn: errVerify,
-			getUrlFn:      installer.APIURL,
+			getUrlFn:      installer.AppsURL,
 		})
 	})
 
@@ -134,12 +134,12 @@ func TestPrintCredentialStatus_VerifyNotCalledWhenNoEnvURL(t *testing.T) {
 	}
 
 	captureOutput(t, func() {
-		printCredentialStatus("Access Token", "", CredentialToken{
-			value:         "dt0c01.some-token",
-			cliName:       "access-token",
-			envName:       "DT_ACCESS_TOKEN",
+		printCredentialStatus("Platform Token", "", CredentialToken{
+			value:         "dt0s16.some-token",
+			cliName:       "platform-token",
+			envName:       "DT_PLATFORM_TOKEN",
 			tokenVerifyFn: spyVerify,
-			getUrlFn:      installer.APIURL,
+			getUrlFn:      installer.AppsURL,
 		})
 	})
 
@@ -149,8 +149,8 @@ func TestPrintCredentialStatus_VerifyNotCalledWhenNoEnvURL(t *testing.T) {
 }
 
 func TestPrintCredentialStatus_VerifyCalledWithCorrectArgs(t *testing.T) {
-	const wantEnvURL = "https://abc.live.com"
-	const wantToken = "dt0c01.my-token"
+	const wantEnvURL = "https://abc.apps.dynatrace.com"
+	const wantToken = "dt0s16.my-token"
 
 	var gotEnvURL, gotToken string
 	spyVerify := func(envURL, token string) error {
@@ -160,12 +160,12 @@ func TestPrintCredentialStatus_VerifyCalledWithCorrectArgs(t *testing.T) {
 	}
 
 	captureOutput(t, func() {
-		printCredentialStatus("Access Token", wantEnvURL, CredentialToken{
+		printCredentialStatus("Platform Token", wantEnvURL, CredentialToken{
 			value:         wantToken,
-			cliName:       "access-token",
-			envName:       "DT_ACCESS_TOKEN",
+			cliName:       "platform-token",
+			envName:       "DT_PLATFORM_TOKEN",
 			tokenVerifyFn: spyVerify,
-			getUrlFn:      installer.APIURL,
+			getUrlFn:      installer.AppsURL,
 		})
 	})
 

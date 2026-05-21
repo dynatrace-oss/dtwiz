@@ -17,7 +17,7 @@ import (
 )
 
 // awsTemplateURL is the pinned Dynatrace CloudFormation template.
-const awsTemplateURL = "https://dynatrace-data-acquisition.s3.amazonaws.com/aws/deployment/cfn/v1.0.0/da-aws-activation.yaml"
+const awsTemplateURL = "https://dynatrace-data-acquisition.s3.amazonaws.com/aws/deployment/cfn/v1.0.11/da-aws-activation.yaml"
 
 // awsStackConfig holds all values required to render aws.tmpl and drive the
 // CloudFormation deployment.
@@ -151,19 +151,9 @@ var defaultFeatureSets = []string{
 	"SNS_essential", "SQS_essential",
 }
 
-// dtAuthHeader returns the correct Authorization header value for a Dynatrace
-// token: Bearer for platform tokens (dt0s16.*), Api-Token otherwise.
-// Used by aws_lambda.go which still uses raw HTTP calls.
-func dtAuthHeader(token string) string {
-	if strings.HasPrefix(token, "dt0s16.") {
-		return "Bearer " + token
-	}
-	return "Api-Token " + token
-}
-
 const (
 	daAWSExtension        = "com.dynatrace.extension.da-aws"
-	daAWSExtensionVersion = "1.0.0"
+	daAWSExtensionVersion = "1.0.11"
 )
 
 // awsMonitoringConfigValue is used to decode the value field of a da-aws
@@ -206,7 +196,7 @@ func createDTMonitoringConfig(c *client.PlatformClient, accountID, region string
 		"value": map[string]interface{}{
 			"enabled":           false,
 			"description":       desc,
-			"version":           "1.0.0",
+			"version":           "1.0.11",
 			"featureSets":       defaultFeatureSets,
 			"activationContext": "DATA_ACQUISITION",
 			"aws": map[string]interface{}{
@@ -352,20 +342,13 @@ func buildDeployArgs(cfg awsStackConfig, templateFile string) []string {
 // InstallAWS deploys the Dynatrace AWS Data Acquisition CloudFormation stack.
 //
 // Parameters:
-//   - c:             Platform API client (Extensions monitoring configs via /platform/classic/environment/v2)
-//   - envURL:        Dynatrace Platform environment URL
-//   - token:         access token (used as default for settings/ingest token prompts)
-//   - platformToken: dt0s16.* token from --platform-token / DT_PLATFORM_TOKEN
-//   - dryRun:        when true, show what would be done without executing
-//   - startTime:     RFC3339 timestamp used as the from-clause for WatchIngest (empty = skip watch)
-func InstallAWS(c *client.PlatformClient, envURL, token, platformToken string, dryRun bool, startTime string) error {
+//   - c:         Platform API client (Extensions monitoring configs via /platform/classic/environment/v2)
+//   - envURL:    Dynatrace Platform environment URL
+//   - token:     platform token (dt0s16.*) used for settings, ingest, and watch
+//   - dryRun:    when true, show what would be done without executing
+//   - startTime: RFC3339 timestamp used as the from-clause for WatchIngest (empty = skip watch)
+func InstallAWS(c *client.PlatformClient, envURL, token string, dryRun bool, startTime string) error {
 	sep := strings.Repeat("─", 60)
-
-	// Prefer the explicit platform token; fall back to the access token.
-	defaultToken := platformToken
-	if defaultToken == "" {
-		defaultToken = token
-	}
 
 	fmt.Println()
 	display.ColorMessage.Println("  Dynatrace AWS CloudFormation Integration")
@@ -379,11 +362,11 @@ func InstallAWS(c *client.PlatformClient, envURL, token, platformToken string, d
 		return fmt.Errorf("Dynatrace environment URL is required (--environment or DT_ENVIRONMENT)") //nolint:staticcheck // ST1005: keep brand capitalization
 	}
 
-	if defaultToken == "" {
+	if token == "" {
 		return fmt.Errorf("platform token is required (--platform-token or DT_PLATFORM_TOKEN)")
 	}
-	settingsToken := defaultToken
-	ingestToken := defaultToken
+	settingsToken := token
+	ingestToken := token
 
 	// ── Preflight ─────────────────────────────────────────────────────────────
 
@@ -498,7 +481,7 @@ func InstallAWS(c *client.PlatformClient, envURL, token, platformToken string, d
 
 	// Run Lambda instrumentation on the main thread — it is quick but produces
 	// a lot of output, so let it finish before handing the terminal to watch.
-	lambdaErr := InstallAWSLambda(envURL, token, platformToken, false, false)
+	lambdaErr := InstallAWSLambda(envURL, token, false, false)
 	if lambdaErr != nil {
 		fmt.Printf("\n  Warning: Lambda instrumentation encountered an error: %s\n", lambdaErr)
 		fmt.Println("  You can retry with: dtwiz install aws-lambda")
@@ -506,8 +489,8 @@ func InstallAWS(c *client.PlatformClient, envURL, token, platformToken string, d
 
 	// Start watch after Lambda output is done — CFN deploy is still running
 	// in the background and will send its result into statusCh.
-	if startTime != "" && platformToken != "" {
-		WatchIngestWithStatus(envURL, platformToken, startTime, statusCh)
+	if startTime != "" && token != "" {
+		WatchIngestWithStatus(envURL, token, startTime, statusCh)
 	}
 
 	wg.Wait()

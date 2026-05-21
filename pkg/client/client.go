@@ -63,8 +63,11 @@ func authHeader(token string) string {
 }
 
 // New builds a Client with a ClassicClient and a PlatformClient.
-// classicURL and platformURL should already be in the correct URL families
-func New(classicURL, accessToken, platformURL, platformToken string, verbosityLevel int) (*Client, error) {
+// classicURL and platformURL should already be in the correct URL families.
+// classicToken is the access token when one is configured, otherwise the
+// platform token; platformToken is the platform token used for DQL/Grail
+// (always sent as Bearer regardless of prefix).
+func New(classicURL, platformURL, classicToken, platformToken string, verbosityLevel int) (*Client, error) {
 	if classicURL == "" {
 		return nil, fmt.Errorf("classic API URL is required")
 	}
@@ -74,7 +77,7 @@ func New(classicURL, accessToken, platformURL, platformToken string, verbosityLe
 
 	classic := &ClassicClient{
 		baseURL: classicURL,
-		http:    newRestyClient(classicURL, authHeader(accessToken), verbosityLevel),
+		http:    newRestyClient(classicURL, authHeader(classicToken), verbosityLevel),
 	}
 
 	platform := &PlatformClient{

@@ -78,7 +78,7 @@ func killAndWaitProcess(proc *os.Process) error {
 }
 
 // AuthHeader returns the correct Authorization header value for a given token.
-// API tokens (starting with "dt0c01.") use "Api-Token" scheme; all others use "Bearer".
+// API tokens (dt0c01.*) use the "Api-Token" scheme; all others use "Bearer".
 func AuthHeader(token string) string {
 	if strings.HasPrefix(token, "dt0c01.") {
 		return "Api-Token " + token

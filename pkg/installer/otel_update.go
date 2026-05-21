@@ -16,10 +16,11 @@ import (
 
 // exporterSnippetTemplate is the YAML block to inject into an existing OTel Collector
 // configuration as the `otlp_http/dynatrace` exporter.
+// The second %s receives the full Authorization header value (e.g. "Bearer …" or "Api-Token …").
 const exporterSnippetTemplate = `otlp_http/dynatrace:
   endpoint: %s
   headers:
-    Authorization: "Api-Token %s"
+    Authorization: "%s"
 `
 
 // backupFile writes data to a timestamped .bak.<unix> copy of path and returns
@@ -65,7 +66,7 @@ type UpdateResult struct {
 func GenerateExporterSnippet(apiURL, token string) string {
 	return fmt.Sprintf(exporterSnippetTemplate,
 		dtOTLPEndpoint(apiURL),
-		token,
+		AuthHeader(token),
 	)
 }
 
@@ -177,7 +178,7 @@ func mergeDynatraceExporter(cfg map[string]interface{}, apiURL, token string) {
 	exporters["otlp_http/dynatrace"] = map[string]interface{}{
 		"endpoint": dtOTLPEndpoint(apiURL),
 		"headers": map[string]interface{}{
-			"Authorization": "Api-Token " + token,
+			"Authorization": AuthHeader(token),
 		},
 	}
 
@@ -275,7 +276,7 @@ func PatchConfigFile(configPath, apiURL, token string) (*UpdateResult, error) {
 // If dryRun is true the preview is printed without prompting.
 // If configPath is empty or points to a non-existent file the user is prompted
 // to supply the correct path interactively.
-func UpdateOtelConfig(configPath, envURL, token, platformToken string, dryRun bool) error {
+func UpdateOtelConfig(configPath, envURL, token, platformTok string, dryRun bool) error {
 	apiURL := APIURL(envURL)
 
 	// Resolve the config path: prompt when it's missing or the file doesn't exist.
@@ -387,7 +388,7 @@ func UpdateOtelConfig(configPath, envURL, token, platformToken string, dryRun bo
 	}
 
 	// Verify the restarted collector can deliver logs to Dynatrace.
-	if err := verifyOtelInstall(envURL, platformToken, token, crashed); err != nil {
+	if err := verifyOtelInstall(envURL, platformTok, token, crashed); err != nil {
 		fmt.Printf("\n  Warning: log verification failed: %v\n", err)
 		fmt.Println("  The collector may still be working — check the Dynatrace UI.")
 		return nil

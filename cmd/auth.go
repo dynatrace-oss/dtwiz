@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 // environmentHint returns the Dynatrace environment URL from the --environment
@@ -43,10 +43,10 @@ func platformToken() string {
 	return os.Getenv("DT_PLATFORM_TOKEN")
 }
 
-// getDtEnvironment returns the environment URL, access token, and platform
-// token. All three must be configured or an error is returned.
-func getDtEnvironment() (environmentURL, accessTok, platformTok string, err error) {
-	envURL := environmentHint()
+// getDtEnvironment resolves the environment URL and raw tokens from flags/env vars.
+// platformTok is required. accessTok may be empty when not configured.
+func getDtEnvironment() (envURL, accessTok, platformTok string, err error) {
+	envURL = environmentHint()
 	if envURL == "" {
 		return "", "", "", fmt.Errorf(
 			"no Dynatrace environment URL configured\n\n" +
@@ -55,17 +55,8 @@ func getDtEnvironment() (environmentURL, accessTok, platformTok string, err erro
 		)
 	}
 
-	aTok := accessToken()
-	if aTok == "" {
-		return "", "", "", fmt.Errorf(
-			"no Dynatrace access token configured\n\n" +
-				"Set one with --access-token or the DT_ACCESS_TOKEN env var:\n" +
-				"  export DT_ACCESS_TOKEN=dt0c01.****",
-		)
-	}
-
-	pTok := platformToken()
-	if pTok == "" {
+	platformTok = platformToken()
+	if platformTok == "" {
 		return "", "", "", fmt.Errorf(
 			"no Dynatrace platform token configured\n\n" +
 				"Set one with --platform-token or the DT_PLATFORM_TOKEN env var:\n" +
@@ -73,48 +64,59 @@ func getDtEnvironment() (environmentURL, accessTok, platformTok string, err erro
 		)
 	}
 
-	return envURL, aTok, pTok, nil
+	accessTok = accessToken()
+
+	return envURL, accessTok, platformTok, nil
 }
 
 var credentialHTTPClient = &http.Client{Timeout: 5 * time.Second}
 
-// validateCredentials checks that the Dynatrace environment is reachable and
-// both the access token and platform token are valid. Both checks run in
-// parallel. Returns a combined error listing all failures.
-func validateCredentials(envURL, accessTok, platformTok string) error {
-	var mu sync.Mutex
-	var errs []string
-
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	go func() {
-		defer wg.Done()
-		if err := checkAccessToken(envURL, accessTok); err != nil {
-			mu.Lock()
-			errs = append(errs, err.Error())
-			mu.Unlock()
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		if err := checkPlatformToken(envURL, platformTok); err != nil {
-			mu.Lock()
-			errs = append(errs, err.Error())
-			mu.Unlock()
-		}
-	}()
-
-	wg.Wait()
-
-	if len(errs) > 0 {
-		return fmt.Errorf("%s", strings.Join(errs, "\n"))
+// checkPlatformTokenClassicAccess probes the Classic API to determine whether token can
+// authenticate. Returns nil if any non-401/403 response is received.
+func checkPlatformTokenClassicAccess(envURL, token string) error {
+	classicURL := strings.TrimRight(installer.APIURL(envURL), "/")
+	req, err := http.NewRequest(http.MethodGet, classicURL+"/api/v2/settings/schemas", nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", installer.AuthHeader(token))
+	resp, err := credentialHTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("classic API not reachable (%s)", classicURL)
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		return fmt.Errorf("authentication failed")
 	}
 	return nil
 }
 
-// checkAccessToken validates the access token via POST /api/v2/apiTokens/lookup.
+// validateCredentials validates the platform token via DQL (required) and
+// determines the Classic API token. When an explicit access token is provided
+// (old customers), it takes precedence for Classic API calls. Otherwise the
+// platform token is used for both Platform and Classic APIs.
+// Returns the classicTok to use for Classic API calls.
+func validateCredentials(envURL, accessTok, platformTok string) (classicTok string, err error) {
+	if err := checkPlatformToken(envURL, platformTok); err != nil {
+		return "", err
+	}
+	// When an explicit access token is set (different from platform token),
+	// it takes precedence for Classic API calls.
+	if accessTok != "" && accessTok != platformTok {
+		logger.Debug("classic API auth: using explicit access token")
+		return accessTok, nil
+	}
+	fmt.Println("  Using platform token")
+	if err := checkPlatformTokenClassicAccess(envURL, platformTok); err == nil {
+		logger.Debug("classic API auth: platform token accepted")
+		return platformTok, nil
+	}
+	logger.Debug("classic API auth: platform token rejected by Classic API, proceeding anyway")
+	return platformTok, nil
+}
+
+// checkAccessToken validates an access token via POST /api/v2/apiTokens/lookup.
 func checkAccessToken(envURL, token string) error {
 	classicURL := strings.TrimRight(installer.APIURL(envURL), "/")
 	lookupURL := classicURL + "/api/v2/apiTokens/lookup"

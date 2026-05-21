@@ -707,12 +707,9 @@ type collectorPlan struct {
 	runningPIDs    []runningCollector
 }
 
-func prepareCollectorPlan(envURL, token, ingestToken string) (*collectorPlan, error) {
+func prepareCollectorPlan(envURL, token string) (*collectorPlan, error) {
 	apiURL := APIURL(envURL)
-	collectorToken := ingestToken
-	if collectorToken == "" {
-		collectorToken = token
-	}
+	collectorToken := token
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, fmt.Errorf("getting working directory: %w", err)
@@ -734,7 +731,7 @@ func prepareCollectorPlan(envURL, token, ingestToken string) (*collectorPlan, er
 	}, nil
 }
 
-func (cp *collectorPlan) printDryRun(ingestToken string) {
+func (cp *collectorPlan) printDryRun() {
 	sep := strings.Repeat("─", 60)
 
 	fmt.Println("[dry-run] Would install Dynatrace OpenTelemetry Collector")
@@ -743,12 +740,7 @@ func (cp *collectorPlan) printDryRun(ingestToken string) {
 	fmt.Printf("  Config:       %s\n", cp.configPath)
 	assetName, _ := otelPlatformAssetName("latest")
 	fmt.Printf("  Asset:        %s\n", assetName)
-	fmt.Printf("  Ingest token: %s\n", func() string {
-		if ingestToken != "" {
-			return "(from --access-token)"
-		}
-		return "(from token)"
-	}())
+	fmt.Printf("  Ingest token: (configured)\n")
 
 	cp.printConfigPreview(sep)
 }
@@ -809,18 +801,18 @@ func (cp *collectorPlan) execute(envURL, platformToken string, skipVerification 
 
 // InstallOtelCollectorOnly installs the Dynatrace OTel Collector without
 // runtime instrumentation.
-func InstallOtelCollectorOnly(envURL, token, ingestToken, platformToken string, dryRun bool) error {
+func InstallOtelCollectorOnly(envURL, token, platformToken string, dryRun bool) error {
 	fmt.Println()
 	display.ColorMessage.Println("  Dynatrace OpenTelemetry Installation")
 	fmt.Println()
 
-	cp, err := prepareCollectorPlan(envURL, token, ingestToken)
+	cp, err := prepareCollectorPlan(envURL, token)
 	if err != nil {
 		return err
 	}
 
 	if dryRun {
-		cp.printDryRun(ingestToken)
+		cp.printDryRun()
 		return nil
 	}
 
