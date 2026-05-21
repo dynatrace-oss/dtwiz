@@ -35,9 +35,9 @@ func setTestStdin(t *testing.T, input string) {
 
 func TestInferRuntimeFromPath(t *testing.T) {
 	tests := []struct {
-		name    string
-		files   []string
-		want    string
+		name  string
+		files []string
+		want  string
 	}{
 		{name: "python requirements.txt", files: []string{"requirements.txt"}, want: "Python"},
 		{name: "python pyproject.toml", files: []string{"pyproject.toml"}, want: "Python"},
