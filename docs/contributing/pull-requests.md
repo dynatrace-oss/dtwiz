@@ -210,4 +210,4 @@ The following checks run on every PR and must all pass before merging.
 
 Workflow definitions live in [`.github/workflows/`](../../.github/workflows/).
 
-The coverage threshold is defined in the **Tests** workflow and enforced by `make test-coverage`. It will be raised gradually over time as coverage improves.
+The coverage threshold is defined in the [**Tests** workflow](../../.github/workflows/test.yml) and enforced by `make test-coverage`. It will be raised gradually over time as coverage improves.
