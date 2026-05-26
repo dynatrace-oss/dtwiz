@@ -181,6 +181,19 @@ try {
         Write-Host "  Added $InstallDir to your user PATH."
         Write-Host "  Open a new terminal for the change to take effect."
     }
+    Write-Host ""
+    Write-Host "┌────────────────────────────────────────────────────────────────┐"
+    Write-Host "│ ℹ️  In case dtwiz is blocked by Windows Security               │"
+    Write-Host "├────────────────────────────────────────────────────────────────┤"
+    Write-Host "│ 1. Run:                                                        │"
+    Write-Host "│    Start-Process `"windowsdefender://exclusions`"                │"
+    Write-Host "│                                                                │"
+    Write-Host "│ 2. Add this folder to exclusions:                              │"
+    $DefenderPad = " " * ([Math]::Max(0, 60 - $InstallDir.Length))
+    Write-Host "│    $InstallDir$DefenderPad│"
+    Write-Host "│                                                                │"
+    Write-Host "│ Then re-run `"dtwiz setup`".                                     │"
+    Write-Host "└────────────────────────────────────────────────────────────────┘"
 } finally {
     Remove-Item -Recurse -Force $TmpDir -ErrorAction SilentlyContinue
 }
