@@ -203,8 +203,10 @@ func inferRuntimeFromPath(path string) string {
 			return "Java"
 		}
 	}
-	if hasFile("package.json") {
-		return "Node.js"
+	for _, m := range nodeProjectMarkers {
+		if hasFile(m) {
+			return "Node.js"
+		}
 	}
 	for _, m := range pythonProjectMarkers {
 		if hasFile(m) {
