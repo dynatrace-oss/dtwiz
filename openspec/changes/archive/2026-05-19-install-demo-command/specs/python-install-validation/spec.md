@@ -1,40 +1,16 @@
 # Spec: python install validation
 
-## MODIFIED Requirements
+## Requirements
 
 ### Requirement: Pre-flight validation for Python installer
 
-The `InstallOtelPython()` function SHALL validate prerequisites before proceeding with installation. If `python3` is not found on PATH, dtwiz SHALL install Python using the platform package manager rather than exiting with an error.
+The `InstallOtelPython()` function SHALL validate prerequisites before proceeding with installation. If any prerequisite is missing, it exits with a clear error; it does not attempt to install Python automatically (auto-install is handled by the demo flow — see below).
 
-#### Scenario: Python 3 not in PATH — macOS with Homebrew
+#### Scenario: Python 3 not in PATH
 
-- **WHEN** neither `python3` nor `python` is found in PATH on macOS
-- **AND** `brew` is available
-- **THEN** the installer SHALL include `brew install python3` in the plan preview
-- **AND** execute it after user confirmation (or immediately if `--yes` is set)
-
-#### Scenario: Python 3 not in PATH — macOS without Homebrew
-
-- **WHEN** neither `python3` nor `python` is found in PATH on macOS
-- **AND** `brew` is not available
-- **THEN** the installer SHALL exit with: `Python 3 is required but not found. Install Homebrew first: https://brew.sh`
-
-#### Scenario: Python 3 not in PATH — Debian/Ubuntu Linux
-
-- **WHEN** neither `python3` nor `python` is found in PATH
-- **AND** `/etc/os-release` indicates a Debian/Ubuntu-based distro
-- **THEN** the installer SHALL run `sudo apt-get install -y python3`
-
-#### Scenario: Python 3 not in PATH — RHEL/Fedora/CentOS Linux
-
-- **WHEN** neither `python3` nor `python` is found in PATH
-- **AND** `/etc/os-release` indicates a RHEL/Fedora/CentOS-based distro
-- **THEN** the installer SHALL run `sudo dnf install -y python3`
-
-#### Scenario: Python 3 not in PATH — Windows
-
-- **WHEN** neither `python3` nor `python` is found in PATH on Windows
-- **THEN** the installer SHALL run `winget install Python.Python.3`
+- **WHEN** neither `python3` nor `python` is found in PATH, or both resolve to Python 2
+- **THEN** `InstallOtelPython()` SHALL exit with an error: `Python 3 interpreter not found: install Python 3 and ensure either 'python3' or 'python' is in PATH`
+- **NOTE** `python3` is tried first; `python` is accepted if it reports a Python 3.x version
 
 #### Scenario: pip not available
 
@@ -76,3 +52,43 @@ The `InstallOtelPython()` function SHALL validate prerequisites before proceedin
 
 - **WHEN** a Python 3 interpreter (`python3` or `python`), `pip`, and `venv` are all available
 - **THEN** the installer SHALL proceed with the normal installation flow
+
+---
+
+### Requirement: Python auto-install in the demo flow
+
+`dtwiz install demo` (`InstallDemo()`) SHALL attempt to install Python automatically when it is not found on PATH, using the platform package manager. This is implemented via `pythonInstallPlan()` in `pkg/installer/demo.go` and is separate from the `InstallOtelPython()` pre-flight check above.
+
+#### Scenario: Python 3 not in PATH — macOS with Homebrew
+
+- **WHEN** neither `python3` nor `python` is found in PATH on macOS
+- **AND** `brew` is available
+- **THEN** the demo installer SHALL include `brew install python3` in the plan preview and execute it
+
+#### Scenario: Python 3 not in PATH — macOS without Homebrew
+
+- **WHEN** neither `python3` nor `python` is found in PATH on macOS
+- **AND** `brew` is not available
+- **THEN** the demo installer SHALL exit with: `Python 3 is required but not found. Install Homebrew first: https://brew.sh, then re-run this command`
+
+#### Scenario: Python 3 not in PATH — Debian/Ubuntu Linux
+
+- **WHEN** neither `python3` nor `python` is found in PATH
+- **AND** `/etc/os-release` indicates a Debian/Ubuntu-based distro
+- **THEN** the demo installer SHALL run `sudo apt-get install -y python3`
+
+#### Scenario: Python 3 not in PATH — RHEL/Fedora/CentOS Linux
+
+- **WHEN** neither `python3` nor `python` is found in PATH
+- **AND** `/etc/os-release` indicates a RHEL/Fedora/CentOS-based distro
+- **THEN** the demo installer SHALL run `sudo dnf install -y python3`
+
+#### Scenario: Python 3 not in PATH — Windows
+
+- **WHEN** neither `python3` nor `python` is found in PATH on Windows
+- **THEN** the demo installer SHALL run `winget install Python.Python.3`
+
+#### Scenario: Python already present
+
+- **WHEN** `python3` or `python` (Python 3.x) is found in PATH
+- **THEN** `pythonInstallPlan()` SHALL return nil and no install step is added to the plan

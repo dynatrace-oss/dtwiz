@@ -134,12 +134,12 @@ Update the `dtwiz install otel` combined flow to pass required parameters to the
 
 ## 8. End-to-end Validation
 
-- [ ] 8.1 `make test` — all existing + new tests pass
-- [ ] 8.2 `make lint` — no new lint issues
-- [ ] 8.3 Manual: `dtwiz install otel-node --dry-run` shows correct preview for a regular Node.js project
-- [ ] 8.4 Manual: `dtwiz install otel-node` in a real Node.js project — creates `.otel/`, runs `npm install`, starts instrumented app, service appears in Dynatrace
-- [ ] 8.5 Manual: `dtwiz install otel-node` in a Next.js project — generates wrapper script, uses Next.js launch command
-- [ ] 8.6 Manual: `dtwiz install otel-node` in a Nuxt project — generates wrapper script, uses Nuxt launch command
-- [ ] 8.7 Manual: `dtwiz install otel-node` in a monorepo — child packages listed individually
-- [ ] 8.8 Manual: `dtwiz uninstall otel` removes `.otel/` dirs and kills instrumented node processes
-- [ ] 8.9 Manual: `dtwiz install otel` — Node.js projects appear in list by default (no feature flag needed)
+- [x] 8.1 `make test` — all existing + new tests pass
+- [x] 8.2 `make lint` — no new lint issues
+- [x] 8.3 Manual: `dtwiz install otel-node --dry-run` shows correct preview for a regular Node.js project
+- [x] 8.4 Manual: `dtwiz install otel-node` in a real Node.js project — creates `.otel/`, runs `npm install`, starts instrumented app, service appears in Dynatrace
+- [x] 8.5 Manual: `dtwiz install otel-node` in a Next.js project — generates wrapper script, uses Next.js launch command
+- [x] 8.6 Manual: `dtwiz install otel-node` in a Nuxt project — generates wrapper script, uses Nuxt launch command
+- [x] 8.7 Manual: `dtwiz install otel-node` in a monorepo — child packages listed individually
+- [x] 8.8 Manual: `dtwiz uninstall otel` removes `.otel/` dirs and kills instrumented node processes
+- [x] 8.9 Manual: `dtwiz install otel` — Node.js projects appear in list by default (no feature flag needed)

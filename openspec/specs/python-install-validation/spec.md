@@ -1,16 +1,16 @@
-# Spec: Python Install Validation
+# Spec: python install validation
 
 ## Requirements
 
 ### Requirement: Pre-flight validation for Python installer
 
-The `InstallOtelPython()` function SHALL validate prerequisites before proceeding with installation.
+The `InstallOtelPython()` function SHALL validate prerequisites before proceeding with installation. If any prerequisite is missing, it exits with a clear error; it does not attempt to install Python automatically (auto-install is handled by the demo flow — see below).
 
 #### Scenario: Python 3 not in PATH
 
-- **WHEN** neither `python3` nor `python` is found in PATH (or both resolve to Python 2)
-- **THEN** the installer SHALL exit with a clear error message indicating Python 3 is required
-- **NOTE** `python3` is tried first; if absent, `python` is accepted provided it reports a Python 3.x version
+- **WHEN** neither `python3` nor `python` is found in PATH, or both resolve to Python 2
+- **THEN** `InstallOtelPython()` SHALL exit with an error: `Python 3 interpreter not found: install Python 3 and ensure either 'python3' or 'python' is in PATH`
+- **NOTE** `python3` is tried first; `python` is accepted if it reports a Python 3.x version
 
 #### Scenario: pip not available
 
@@ -55,46 +55,40 @@ The `InstallOtelPython()` function SHALL validate prerequisites before proceedin
 
 ---
 
-### Requirement: Process crash visibility
+### Requirement: Python auto-install in the demo flow
 
-When the installer launches instrumented processes, the user SHALL receive explicit feedback if a process exits early rather than silently seeing a missing URL.
+`dtwiz install demo` (`InstallDemo()`) SHALL attempt to install Python automatically when it is not found on PATH, using the platform package manager. This is implemented via `pythonInstallPlan()` in `pkg/installer/demo.go` and is separate from the `InstallOtelPython()` pre-flight check above.
 
-#### Scenario: Process crash status is queried more than once
+#### Scenario: Python 3 not in PATH — macOS with Homebrew
 
-- **GIVEN** a process has crashed and its exit status has been read once (e.g. to print the summary line)
-- **WHEN** the exit status is queried a second time (e.g. to build the alive-process list)
-- **THEN** the second query SHALL return the same `(exited=true, err)` result as the first
-- **AND** SHALL NOT incorrectly report the process as still running
-- **NOTE** a Go channel value is consumed on receive; the implementation MUST cache the drained value on the struct to make `WaitResult()` idempotent
+- **WHEN** neither `python3` nor `python` is found in PATH on macOS
+- **AND** `brew` is available
+- **THEN** the demo installer SHALL include `brew install python3` in the plan preview and execute it
 
-#### Scenario: Process crashes within the startup settle window
+#### Scenario: Python 3 not in PATH — macOS without Homebrew
 
-- **GIVEN** one or more processes have been started with `opentelemetry-instrument`
-- **WHEN** a process exits with a non-zero exit code before the settle period ends
-- **THEN** the summary line SHALL show `[crashed: <exit error> — check log for details]` and the log filename
-- **AND** the URL SHALL NOT be shown for that process
-- **AND** if ALL processes have crashed or exited, the installer SHALL print `No services are running — check the logs above for errors.` and SHALL NOT print the traffic-waiting prompt
+- **WHEN** neither `python3` nor `python` is found in PATH on macOS
+- **AND** `brew` is not available
+- **THEN** the demo installer SHALL exit with: `Python 3 is required but not found. Install Homebrew first: https://brew.sh, then re-run this command`
 
-#### Scenario: Process exits cleanly within the startup settle window
+#### Scenario: Python 3 not in PATH — Debian/Ubuntu Linux
 
-- **GIVEN** a process was started successfully
-- **WHEN** it exits with exit code 0 before the settle period ends (e.g. a one-shot script)
-- **THEN** the summary line SHALL show `[exited cleanly]` and the log filename
+- **WHEN** neither `python3` nor `python` is found in PATH
+- **AND** `/etc/os-release` indicates a Debian/Ubuntu-based distro
+- **THEN** the demo installer SHALL run `sudo apt-get install -y python3`
 
-#### Scenario: Process is running but has not bound a port
+#### Scenario: Python 3 not in PATH — RHEL/Fedora/CentOS Linux
 
-- **GIVEN** a process is still alive after the settle period
-- **WHEN** no listening TCP port is detected for its PID
-- **THEN** the summary line SHALL show `[running, port not detected]` and the log filename
+- **WHEN** neither `python3` nor `python` is found in PATH
+- **AND** `/etc/os-release` indicates a RHEL/Fedora/CentOS-based distro
+- **THEN** the demo installer SHALL run `sudo dnf install -y python3`
 
-#### Scenario: Process is running and has bound a port
+#### Scenario: Python 3 not in PATH — Windows
 
-- **GIVEN** a process is still alive after the settle period
-- **WHEN** a listening TCP port is detected for its PID
-- **THEN** the summary line SHALL show `→ http://localhost:<port>` and the log filename
+- **WHEN** neither `python3` nor `python` is found in PATH on Windows
+- **THEN** the demo installer SHALL run `winget install Python.Python.3`
 
----
+#### Scenario: Python already present
 
-### Requirement: Framework instrumentation verification after bootstrap
-
-`opentelemetry-bootstrap -a install` SHALL be verified after execution. If it exits 0 but installs no framework instrumentation packages, dtwiz SHALL install them directly.
+- **WHEN** `python3` or `python` (Python 3.x) is found in PATH
+- **THEN** `pythonInstallPlan()` SHALL return nil and no install step is added to the plan
