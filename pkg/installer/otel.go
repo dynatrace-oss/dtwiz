@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -190,6 +191,31 @@ func createRuntimePlan(proj detectedProject, apiURL, token, envURL, platformToke
 	return nil
 }
 
+// inferRuntimeFromPath returns "Java", "Node.js", "Python", or "" based on which
+// marker files or directories are present directly inside path.
+func inferRuntimeFromPath(path string) string {
+	hasFile := func(name string) bool {
+		_, err := os.Stat(filepath.Join(path, name))
+		return err == nil
+	}
+	for _, m := range javaProjectMarkers {
+		if hasFile(m) {
+			return "Java"
+		}
+	}
+	for _, m := range nodeProjectMarkers {
+		if hasFile(m) {
+			return "Node.js"
+		}
+	}
+	for _, m := range pythonProjectMarkers {
+		if hasFile(m) {
+			return "Python"
+		}
+	}
+	return ""
+}
+
 func InstallOtelCollector(envURL, token, platformToken string, dryRun bool) error {
 	return InstallOtelCollectorWithProject(envURL, token, platformToken, "", dryRun)
 }
@@ -214,10 +240,20 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 
 	var plan InstrumentationPlan
 	if projectPath != "" {
-		// --project provided: skip scan, but still detect running processes to stop them.
+		runtime := inferRuntimeFromPath(projectPath)
+		if runtime == "" {
+			return fmt.Errorf("could not detect runtime from project path: %s", projectPath)
+		}
 		projects := []ScannedProject{{Path: projectPath}}
-		matchProcessesToProjects(projects, detectPythonProcesses())
-		proj := detectedProject{ScannedProject: projects[0], Runtime: "Python"}
+		switch runtime {
+		case "Java":
+			matchProcessesToProjects(projects, detectJavaProcesses())
+		case "Node.js":
+			matchProcessesToProjects(projects, detectNodeProcesses())
+		default:
+			matchProcessesToProjects(projects, detectPythonProcesses())
+		}
+		proj := detectedProject{ScannedProject: projects[0], Runtime: runtime}
 		plan = createRuntimePlan(proj, cp.apiURL, token, envURL, platformToken)
 	} else {
 		projects := detectAllProjects(runtimes)

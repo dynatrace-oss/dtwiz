@@ -33,6 +33,51 @@ func setTestStdin(t *testing.T, input string) {
 	})
 }
 
+func TestInferRuntimeFromPath(t *testing.T) {
+	tests := []struct {
+		name  string
+		files []string
+		dirs  []string
+		want  string
+	}{
+		{name: "python requirements.txt", files: []string{"requirements.txt"}, want: "Python"},
+		{name: "python pyproject.toml", files: []string{"pyproject.toml"}, want: "Python"},
+		{name: "python manage.py", files: []string{"manage.py"}, want: "Python"},
+		{name: "java pom.xml", files: []string{"pom.xml"}, want: "Java"},
+		{name: "java build.gradle", files: []string{"build.gradle"}, want: "Java"},
+		{name: "java build.gradle.kts", files: []string{"build.gradle.kts"}, want: "Java"},
+		{name: "java .mvn directory", dirs: []string{".mvn"}, want: "Java"},
+		{name: "nodejs package.json", files: []string{"package.json"}, want: "Node.js"},
+		{name: "no markers", files: []string{"README.md"}, want: ""},
+		// Java wins over Node.js when both present (e.g. Spring with frontend tooling).
+		{name: "java beats nodejs", files: []string{"pom.xml", "package.json"}, want: "Java"},
+		// Java wins over Python.
+		{name: "java beats python", files: []string{"build.gradle", "requirements.txt"}, want: "Java"},
+		// Node.js wins over Python.
+		{name: "nodejs beats python", files: []string{"package.json", "requirements.txt"}, want: "Node.js"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for _, f := range tt.files {
+				if err := os.WriteFile(filepath.Join(dir, f), []byte{}, 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for _, d := range tt.dirs {
+				if err := os.Mkdir(filepath.Join(dir, d), 0755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			got := inferRuntimeFromPath(dir)
+			if got != tt.want {
+				t.Errorf("inferRuntimeFromPath(%v, dirs=%v) = %q, want %q", tt.files, tt.dirs, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestDetectAvailableRuntimes_DefaultEnabled(t *testing.T) {
 	featureflags.ClearCLIOverrideForTest(t, featureflags.AllRuntimes)
 	t.Setenv("DTWIZ_ALL_RUNTIMES", "")

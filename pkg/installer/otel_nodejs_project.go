@@ -16,8 +16,18 @@ type packageJSON struct {
 	Workspaces      json.RawMessage   `json:"workspaces"`
 }
 
+var nodeProjectMarkers = []string{
+	"package.json",
+	"package-lock.json",
+	"yarn.lock",
+	"pnpm-lock.yaml",
+	"bun.lockb",
+	".nvmrc",
+	".node-version",
+}
+
 func detectNodeProjects() []ScannedProject {
-	projects := scanProjectDirs([]string{"package.json"}, []string{"node_modules"})
+	projects := scanProjectDirs(nodeProjectMarkers, []string{"node_modules"})
 
 	// Expand monorepo workspaces: for each project with a "workspaces" field,
 	// resolve workspace directories and add them as individual projects.
