@@ -13,14 +13,24 @@ func TestGenerateRecommendations_OneAgentAlreadyRunning(t *testing.T) {
 		OneAgentRunning: true,
 	}
 	recs := recommender.GenerateRecommendations(system)
-	if len(recs) != 1 {
-		t.Fatalf("expected 1 recommendation, got %d", len(recs))
+	if len(recs) < 2 {
+		t.Fatalf("expected at least 2 recommendations (already-installed + otel), got %d", len(recs))
 	}
 	if recs[0].Method != recommender.MethodAlreadyInstalled {
-		t.Errorf("expected method %q, got %q", recommender.MethodAlreadyInstalled, recs[0].Method)
+		t.Errorf("expected first method %q, got %q", recommender.MethodAlreadyInstalled, recs[0].Method)
 	}
 	if !recs[0].Done {
 		t.Error("expected Done=true for already-installed recommendation")
+	}
+	// OTel should still be recommended alongside OneAgent.
+	foundOtel := false
+	for _, r := range recs {
+		if r.Method == recommender.MethodOtelCollector {
+			foundOtel = true
+		}
+	}
+	if !foundOtel {
+		t.Error("expected otel recommendation even when OneAgent is running")
 	}
 }
 
