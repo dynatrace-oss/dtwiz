@@ -141,7 +141,14 @@ func DownloadInstaller(c *client.ClassicClient, env Environment) (string, error)
 	path := fmt.Sprintf("/api/v1/deployment/installer/agent/%s/default/latest?arch=%s", osSeg, env.Arch)
 	downloadURL := strings.TrimRight(c.BaseURL(), "/") + path
 
-	logger.Debug("downloading installer", "url", downloadURL, "os", env.OS, "arch", env.Arch)
+	// Log auth scheme (Bearer vs Api-Token) without exposing the token value.
+	authScheme := strings.SplitN(c.HTTP().Header.Get("Authorization"), " ", 2)[0]
+	logger.Debug("downloading installer",
+		"url", downloadURL,
+		"os", env.OS,
+		"arch", env.Arch,
+		"auth_scheme", authScheme,
+	)
 
 	resp, err := c.HTTP().R().SetDoNotParseResponse(true).Get(path)
 	if err != nil {
@@ -150,7 +157,22 @@ func DownloadInstaller(c *client.ClassicClient, env Environment) (string, error)
 	defer resp.RawBody().Close()
 
 	if resp.StatusCode() != http.StatusOK {
-		return "", fmt.Errorf("installer download failed with status %d", resp.StatusCode())
+		body, _ := io.ReadAll(io.LimitReader(resp.RawBody(), 2048))
+		logger.Debug("installer download failed",
+			"status", resp.StatusCode(),
+			"auth_scheme", authScheme,
+			"url", downloadURL,
+			"response_body", strings.TrimSpace(string(body)),
+		)
+		if resp.StatusCode() == http.StatusForbidden || resp.StatusCode() == http.StatusUnauthorized {
+			return "", fmt.Errorf( //nolint:staticcheck // ST1005: user-facing remediation hint with sentence structure
+				"installer download failed (%d) — if using a platform token, ensure it has the InstallerDownload scope; "+
+					"or pass a dt0c01.* access token with --access-token or DT_ACCESS_TOKEN.\n"+
+					"Run with --debug for the API error detail.",
+				resp.StatusCode(),
+			)
+		}
+		return "", fmt.Errorf("installer download failed with status %d: %s", resp.StatusCode(), strings.TrimSpace(string(body)))
 	}
 
 	tmpFile, err := os.CreateTemp("", "dynatrace-oneagent-*"+installerExtension(env.OS))
