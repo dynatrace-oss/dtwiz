@@ -58,8 +58,61 @@ func ResolveAgentConfig(opts InstallOptions) AgentConfig {
 }
 
 func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
-	display.PrintStatusLine("oneagent", fmt.Sprintf("under development (monitoring-mode=%s) — use --oneagent-poc=false or set DTWIZ_ONEAGENT_POC=false to use the stable installer", opts.MonitoringMode), display.ColorWarning)
+	display.PrintStatusLine("oneagent", fmt.Sprintf("PoC flow (monitoring-mode=%s)", opts.MonitoringMode), display.ColorWarning)
+
+	env, err := detectRuntimeEnvironment()
+	if err != nil {
+		return err
+	}
+	logger.Debug("detected environment", "os", env.OS, "arch", env.Arch)
+
+	cfg := ResolveAgentConfig(opts)
+	logger.Debug("install options",
+		"dry_run", opts.DryRun,
+		"no_verify_signature", opts.NoVerifySignature,
+		"monitoring_mode", cfg.MonitoringMode,
+	)
+
+	installerPath, err := DownloadInstaller(c.Classic, env)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(installerPath)
+
+	if err := VerifyInstallerSignature(env, installerPath, opts.NoVerifySignature); err != nil {
+		return err
+	}
+
+	// Task 6 — BuildInstallCommand + ExecuteInstallCommand — not yet implemented.
+	display.PrintStatusLine("oneagent", "download and verification complete; install execution not yet implemented (Task 6)", display.ColorWarning)
+	logger.Debug("install execution not yet implemented", "installer_path", installerPath)
 	return nil
+}
+
+// detectRuntimeEnvironment returns an Environment based on the current host
+// OS and architecture. Used as a stand-in until DetectEnvironment (Task 2) is
+// implemented.
+func detectRuntimeEnvironment() (Environment, error) {
+	var arch string
+	switch runtime.GOARCH {
+	case "amd64":
+		arch = "x86"
+	case "arm64":
+		arch = "arm"
+	default:
+		return Environment{}, fmt.Errorf("unsupported architecture for OneAgent: %s", runtime.GOARCH)
+	}
+
+	switch runtime.GOOS {
+	case "linux":
+		return Environment{OS: "linux", Arch: arch}, nil
+	case "windows":
+		return Environment{OS: "windows", Arch: arch}, nil
+	case "darwin":
+		return Environment{}, fmt.Errorf("OneAgent direct install is not supported on macOS; use Docker or Linux")
+	default:
+		return Environment{}, fmt.Errorf("unsupported OS for OneAgent: %s", runtime.GOOS)
+	}
 }
 
 // installerOSSegment maps Environment.OS to the URL path segment used by the

@@ -76,13 +76,20 @@ func TestResolveAgentConfig_DebugLog(t *testing.T) {
 	}
 }
 
-func TestInstallOneAgentV2_ExitsCleanly(t *testing.T) {
+func TestInstallOneAgentV2_UnsupportedPlatformReturnsError(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS-specific error path test")
+	}
 	srv := newMockTenantServer(t, "/", http.StatusOK, `{}`)
 	defer srv.Close()
 
 	c := newMockClient(t, srv.URL)
-	if err := InstallOneAgentV2(c, InstallOptions{MonitoringMode: "fullstack"}); err != nil {
-		t.Errorf("expected clean exit, got error: %v", err)
+	err := InstallOneAgentV2(c, InstallOptions{MonitoringMode: "fullstack"})
+	if err == nil {
+		t.Fatal("expected error on macOS, got nil")
+	}
+	if !strings.Contains(err.Error(), "macOS") {
+		t.Errorf("error = %q, want macOS message", err)
 	}
 }
 
