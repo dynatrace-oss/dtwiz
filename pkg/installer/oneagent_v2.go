@@ -117,12 +117,24 @@ func detectRuntimeEnvironment() (Environment, error) {
 }
 
 // readErrorBody reads up to 2 KB from a resty response body, decompressing
-// gzip if the server sent Content-Encoding: gzip. Used to surface API error
-// detail on non-200 responses where SetDoNotParseResponse(true) is active.
+// gzip when indicated by the Content-Encoding header OR by the gzip magic
+// bytes (1f 8b). The magic-byte fallback handles servers that compress the
+// body without setting Content-Encoding. Used on non-200 responses where
+// SetDoNotParseResponse(true) is active.
 func readErrorBody(resp *resty.Response) string {
-	var r io.Reader = resp.RawBody()
-	if strings.EqualFold(resp.Header().Get("Content-Encoding"), "gzip") {
-		gr, err := gzip.NewReader(r)
+	// Buffer the first 2 bytes to probe for the gzip magic number without
+	// consuming the reader irreversibly.
+	raw := resp.RawBody()
+	peek := make([]byte, 2)
+	n, _ := io.ReadFull(raw, peek)
+	combined := io.MultiReader(bytes.NewReader(peek[:n]), raw)
+
+	needsGzip := strings.EqualFold(resp.Header().Get("Content-Encoding"), "gzip") ||
+		(n == 2 && peek[0] == 0x1f && peek[1] == 0x8b)
+
+	var r io.Reader = combined
+	if needsGzip {
+		gr, err := gzip.NewReader(combined)
 		if err == nil {
 			defer gr.Close()
 			r = gr

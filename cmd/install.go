@@ -7,6 +7,7 @@ import (
 
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 var installDryRun bool
@@ -25,6 +26,11 @@ var installCmd = &cobra.Command{
 	Short: "Install a Dynatrace ingestion method",
 	Args:  cobra.MinimumNArgs(1),
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// installCmd.PersistentPreRun overrides root's, so reproduce its behaviour here.
+		logger.Init(debugFlag, verbosityFlag)
+		logger.Verbose("logging: verbose")
+		logger.Debug("logging: debug")
+		featureflags.ApplyCLIOverrides(cmd.Flags())
 		installer.AutoConfirm = installAutoConfirm
 	},
 }
