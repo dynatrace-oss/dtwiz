@@ -2,13 +2,13 @@
 
 ## Context
 
-The existing `downloadOneAgentInstaller` helper in `pkg/installer/oneagent.go` streams the installer to a temp file using the user's `--access-token`. There is no signature verification and no structured command representation — the install command is assembled inline from positional parameters. This change covers Tasks 5 and 6 of the OneAgent PoC: download (with minted token), Linux signature verification, command build, and command execution.
+The existing `downloadOneAgentInstaller` helper in `pkg/installer/oneagent.go` streams the installer to a temp file via the resty client and shells out with positional install arguments — no signature verification, no structured command representation. This change covers Tasks 5 and 6 of the OneAgent PoC: download, Linux signature verification, command build, and command execution.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- `DownloadInstaller` authenticates with the minted token, not the user's long-lived token.
+- `DownloadInstaller` uses the credentials already embedded in the ClassicClient (set upstream by `validateCredentials`) — no token extraction in installer code. Confirmed by `oneagent-configure`.
 - Linux signature verification is mandatory unless `--no-verify-signature` is passed; missing `openssl` is a hard error.
 - `BuildInstallCommand` produces a complete, testable argv slice from typed inputs.
 - `ExecuteInstallCommand` returns the subprocess exit code alongside any error; `--dry-run` previews without executing.
@@ -17,20 +17,21 @@ The existing `downloadOneAgentInstaller` helper in `pkg/installer/oneagent.go` s
 
 - Go-native CMS signature verification — `openssl cms -verify` against the published Dynatrace pipeline is the documented approach. A Go-crypto rewrite adds external dependency risk and divergence in PKCS#7 parsing.
 - Windows-specific installer URL, `.exe` extension, and Authenticode verification — covered in `oneagent-windows`.
+- Minting a separate installer-scoped token. Earlier drafts of this change planned a `MintInstallerToken` step; `oneagent-configure` eliminated that and standardised on the credential already embedded in `c.Classic`.
 
 ## Decisions
 
-### 1. Download: minted token override
+### 1. Download: reuse the ClassicClient credential
 
-`DownloadInstaller` overrides the resty client's default `Authorization` header for the single download request, using `Api-Token <mintedToken>`. The user's `--access-token` does not appear in the download request.
+`DownloadInstaller` calls `c.HTTP().R().SetDoNotParseResponse(true).Get(path)`. The resty client already carries the correct `Authorization` header set upstream by `setupClientFromCreds`. The token is never extracted to a variable in installer code, so it cannot accidentally appear in log lines.
 
 Download URL pattern:
 
 - Linux x86: `/api/v1/deployment/installer/agent/unix/default/latest?arch=x86`
 - Linux arm: `/api/v1/deployment/installer/agent/unix/default/latest?arch=arm`
-- Windows: handled in `oneagent-windows`
+- Windows: `/api/v1/deployment/installer/agent/windows/default/latest?arch=x86` (path-only; `.exe` extension and Windows execution flow are covered in `oneagent-windows`)
 
-Temp file: `os.CreateTemp("", "dynatrace-oneagent-*")` → `chmod 0o700` on Unix. On success, stdout outputs via `display.PrintStatusLine("installer", "<basename> (<size>)", display.ColorOK)`.
+Temp file: `os.CreateTemp("", "dynatrace-oneagent-*.sh")` (or `*.exe` for Windows env) → `chmod 0o700` on Unix. On success, stdout outputs via `display.PrintStatusLine("installer", "<basename> (<size>)", display.ColorOK)`.
 
 ### 2. Linux signature verification: openssl subprocess
 
@@ -42,10 +43,12 @@ The Dynatrace Linux installer ships with a CMS detached signature. Verification 
 | openssl cms -verify -CAfile <dt-root.cert.pem>
 ```
 
+In Go this is built without a shell: `cmd.Stdin = io.MultiReader(header, installerFile)` where `header` is the MIME prelude string and `installerFile` is the opened installer.
+
 Steps:
 
 1. `exec.LookPath("openssl")` — missing → hard error, no silent skip.
-2. Download `https://ca.dynatrace.com/dt-root.cert.pem` to a second temp file.
+2. Download `https://ca.dynatrace.com/dt-root.cert.pem` to a temp file with a standalone `resty.New()` client (no auth needed). The URL is held in a package-level var so tests can override it.
 3. Run pipeline via `exec.Command`; capture stderr.
 4. Non-zero exit → error wrapping the openssl stderr.
 
@@ -83,4 +86,4 @@ Linux argv:
 | Execute start | Debug | `"executing installer"` | `argv` |
 | Execute done | Verbose | `"installer exited"` | `exit_code`, `duration` |
 
-Token values are never placed in argv and therefore safe to log at Debug.
+The token is never extracted from the resty client into a Go variable, so no log key can ever carry it. The `Authorization` header is also redacted by `sensitiveHTTPHeaders` in the resty pre-request hook.

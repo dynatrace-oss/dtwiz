@@ -1,10 +1,10 @@
 # Why
 
-The existing OneAgent installer flow downloads the installer binary using the user's long-lived token without any signature verification, then shells out with positional arguments and no structured command representation. This change implements a secure download pipeline — using the minted token from `oneagent-configure` — followed by Linux signature verification and OS-specific command construction and execution.
+The existing OneAgent installer flow downloads the installer binary without any signature verification, then shells out with positional arguments and no structured command representation. This change implements a streamed download (reusing the credentials already embedded in the ClassicClient — same pattern as every other installer in the repo, confirmed by `oneagent-configure`), Linux signature verification against the published Dynatrace root CA, and OS-specific command construction and execution.
 
 ## What Changes
 
-- `DownloadInstaller(c *client.ClassicClient, mintedToken string, env Environment) (string, error)`: streams the installer to a temp file authenticated with the minted token. Temp file permissions are `0o700` on Unix.
+- `DownloadInstaller(c *client.ClassicClient, env Environment) (string, error)`: streams the installer to a temp file using `c.HTTP().R()` — the resty client already carries the correct `Authorization` header. Temp file permissions are tightened to `0o700` on Unix.
 - `VerifyInstallerSignature(env Environment, installerPath string, skip bool) error`: on Linux, verifies the installer's CMS signature against `https://ca.dynatrace.com/dt-root.cert.pem` via `openssl cms -verify`. Non-Linux and `--no-verify-signature` skip silently. Missing `openssl` is a hard error, not a silent skip.
 - `BuildInstallCommand(env Environment, cfg AgentConfig, opts InstallOptions, installerPath string) ([]string, error)`: constructs the OS-specific argv from `AgentConfig` (`--set-monitoring-mode`, `--set-app-log-content-access`) and options.
 - `ExecuteInstallCommand(argv []string, dryRun, quiet bool) (int, error)`: runs the installer subprocess, streaming output. `--dry-run` prints the command without executing.
@@ -13,7 +13,7 @@ The existing OneAgent installer flow downloads the installer binary using the us
 
 ### New Capabilities
 
-- `oneagent-installer-download`: Installer download authenticated with the minted token; Linux signature verification via `openssl cms -verify`.
+- `oneagent-installer-download`: Streamed installer download authenticated by the embedded ClassicClient credential; Linux signature verification via `openssl cms -verify`.
 - `oneagent-install-execution`: OS-specific install command construction from `AgentConfig`; sudo/UAC elevation; `--dry-run` support.
 
 ## Impact

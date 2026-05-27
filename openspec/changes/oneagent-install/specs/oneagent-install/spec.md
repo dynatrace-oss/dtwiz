@@ -2,16 +2,15 @@
 
 ## ADDED Requirements
 
-### Requirement: Installer download uses the minted token
+### Requirement: Installer download reuses the ClassicClient credential
 
-`InstallOneAgentV2` SHALL download the OneAgent installer using the minted token from `MintInstallerToken`, not the user-supplied access token. The download SHALL stream to a temporary file with `0o700` permissions on Unix (preventing other local users from reading the binary).
+`InstallOneAgentV2` SHALL download the OneAgent installer using the resty client embedded in `c.Classic`. The credential is set upstream by `validateCredentials` / `setupClientFromCreds` and SHALL NOT be extracted to a variable in installer code. The download SHALL stream to a temporary file with `0o700` permissions on Unix (preventing other local users from reading the binary).
 
-#### Scenario: Download authenticated with minted token
+#### Scenario: Download uses the embedded Authorization header
 
-- **GIVEN** `MintInstallerToken` returned `tok-installer-abc`
-- **WHEN** `DownloadInstaller(c, "tok-installer-abc", env)` is called
-- **THEN** the request `Authorization` header is `Api-Token tok-installer-abc`
-- **AND** the user's `--access-token` does NOT appear in the request
+- **WHEN** `DownloadInstaller(c, env)` is called
+- **THEN** the request `Authorization` header is the one configured on `c.HTTP()` upstream
+- **AND** no installer code extracts the raw token into a Go variable
 
 #### Scenario: Linux x86 installer URL
 
@@ -33,7 +32,7 @@
 
 #### Scenario: Temp file permissions on Unix
 
-- **GIVEN** the download succeeds on Linux
+- **GIVEN** the download succeeds on a Unix host
 - **WHEN** the temp file is created
 - **THEN** its permissions are `0o700`
 
@@ -45,19 +44,19 @@
 
 - **GIVEN** the installer downloads successfully
 - **WHEN** `DownloadInstaller` returns
-- **THEN** stdout contains exactly one line via `display.PrintStatusLine` showing the installer filename and size (e.g. `Dynatrace-OneAgent-Linux-x86-1.340.0.sh (245MB)`)
-- **AND** the filename is the OS-specific basename of the temp file (Unix: `.sh`, Windows: `.exe`)
+- **THEN** stdout contains exactly one line via `display.PrintStatusLine` showing the installer filename and size (e.g. `dynatrace-oneagent-1963786212.sh (245MB)`)
+- **AND** the filename is the OS-specific basename of the temp file (Unix env: `.sh`, Windows env: `.exe`)
 
 ### Requirement: Download debug logging
 
-`DownloadInstaller` SHALL emit `logger.Debug` for the download start (URL, OS, arch) and `logger.Verbose` for the download completion (path, size in bytes). Neither the minted token nor the user's access token SHALL appear in any log line. The `Authorization` request header SHALL NOT be logged.
+`DownloadInstaller` SHALL emit `logger.Debug` for the download start (URL, OS, arch) and `logger.Verbose` for the download completion (path, size in bytes). The credential SHALL NOT appear in any log line. The `Authorization` request header SHALL NOT be logged.
 
 #### Scenario: Download start logged at Debug
 
 - **GIVEN** `--debug` is enabled
 - **WHEN** `DownloadInstaller` issues the GET request
 - **THEN** stderr contains a Debug line with message `"downloading installer"` and keys `url`, `os`, `arch`
-- **AND** no log line contains the minted token value
+- **AND** no log line contains the raw credential value
 
 #### Scenario: Download completion logged at Verbose
 
@@ -226,7 +225,7 @@ When `opts.DryRun == true`, `ExecuteInstallCommand` SHALL print the argv (joined
 
 - **GIVEN** `--dry-run` is passed
 - **WHEN** `InstallOneAgentV2` runs end-to-end
-- **THEN** `DetectEnvironment`, `RunPreflightChecks`, `ResolveAgentConfig`, `ResolveEndpoints`, `MintInstallerToken`, `DownloadInstaller`, and `VerifyInstallerSignature` all run
+- **THEN** `DetectEnvironment`, `RunPreflightChecks`, `ResolveAgentConfig`, `ResolveEndpoints`, `DownloadInstaller`, and `VerifyInstallerSignature` all run
 - **AND** `ExecuteInstallCommand` only prints the command
 - **AND** `WaitForHostRegistration` is skipped (nothing to verify)
 
@@ -275,7 +274,7 @@ When `opts.DryRun == false`, `ExecuteInstallCommand` SHALL launch the installer 
 
 ### Requirement: Build and execution debug logging
 
-`BuildInstallCommand` SHALL emit a `logger.Debug` line capturing the full argv. `ExecuteInstallCommand` SHALL emit a `logger.Debug` line at execution start and a `logger.Verbose` line at completion with exit code and duration. Because the minted token is never placed into argv, the argv is safe to log at Debug. Token values from upstream stages SHALL still not appear in any log line.
+`BuildInstallCommand` SHALL emit a `logger.Debug` line capturing the full argv. `ExecuteInstallCommand` SHALL emit a `logger.Debug` line at execution start and a `logger.Verbose` line at completion with exit code and duration. The credential is never placed into argv, so the argv is safe to log at Debug.
 
 #### Scenario: Built command logged at Debug
 
