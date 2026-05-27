@@ -2,13 +2,13 @@
 
 ## Context
 
-The existing `InstallOneAgent` flow in `pkg/installer/oneagent.go` handles token extraction. No explicit token extraction is needed.
+The existing `InstallOneAgent` flow in `pkg/installer/oneagent.go` receives a `*client.ClassicClient` with auth already configured upstream — no token extraction at the installer layer.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- Confirm that no additional token resolution is needed at the installer layer — install step handles token extraction.
+- Confirm that no token resolution or extraction is needed at the installer layer — credentials are already embedded in `c.Classic` before reaching the installer.
 
 **Non-Goals:**
 
