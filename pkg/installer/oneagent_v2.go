@@ -2,6 +2,7 @@ package installer
 
 import (
 	"bytes"
+	"compress/gzip"
 	"errors"
 	"fmt"
 	"io"
@@ -115,6 +116,22 @@ func detectRuntimeEnvironment() (Environment, error) {
 	}
 }
 
+// readErrorBody reads up to 2 KB from a resty response body, decompressing
+// gzip if the server sent Content-Encoding: gzip. Used to surface API error
+// detail on non-200 responses where SetDoNotParseResponse(true) is active.
+func readErrorBody(resp *resty.Response) string {
+	var r io.Reader = resp.RawBody()
+	if strings.EqualFold(resp.Header().Get("Content-Encoding"), "gzip") {
+		gr, err := gzip.NewReader(r)
+		if err == nil {
+			defer gr.Close()
+			r = gr
+		}
+	}
+	body, _ := io.ReadAll(io.LimitReader(r, 2048))
+	return strings.TrimSpace(string(body))
+}
+
 // installerOSSegment maps Environment.OS to the URL path segment used by the
 // Dynatrace installer download API. Linux maps to "unix"; Windows maps to
 // "windows".
@@ -157,12 +174,12 @@ func DownloadInstaller(c *client.ClassicClient, env Environment) (string, error)
 	defer resp.RawBody().Close()
 
 	if resp.StatusCode() != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.RawBody(), 2048))
+		body := readErrorBody(resp)
 		logger.Debug("installer download failed",
 			"status", resp.StatusCode(),
 			"auth_scheme", authScheme,
 			"url", downloadURL,
-			"response_body", strings.TrimSpace(string(body)),
+			"response_body", body,
 		)
 		if resp.StatusCode() == http.StatusForbidden || resp.StatusCode() == http.StatusUnauthorized {
 			return "", fmt.Errorf( //nolint:staticcheck // ST1005: user-facing remediation hint with sentence structure
@@ -172,7 +189,7 @@ func DownloadInstaller(c *client.ClassicClient, env Environment) (string, error)
 				resp.StatusCode(),
 			)
 		}
-		return "", fmt.Errorf("installer download failed with status %d: %s", resp.StatusCode(), strings.TrimSpace(string(body)))
+		return "", fmt.Errorf("installer download failed with status %d: %s", resp.StatusCode(), body)
 	}
 
 	tmpFile, err := os.CreateTemp("", "dynatrace-oneagent-*"+installerExtension(env.OS))

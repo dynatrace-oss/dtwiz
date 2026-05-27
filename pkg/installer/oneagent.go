@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/client"
-	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 // InstallMode controls which OneAgent components are installed.
@@ -96,11 +95,6 @@ func downloadOneAgentInstaller(c *client.ClassicClient) (string, error) {
 		iType, arch,
 	)
 
-	authScheme := strings.SplitN(c.HTTP().Header.Get("Authorization"), " ", 2)[0]
-	logger.Debug("downloading installer",
-		"url", strings.TrimRight(c.BaseURL(), "/")+path,
-		"auth_scheme", authScheme,
-	)
 	fmt.Printf("  Downloading OneAgent installer from %s...\n", c.BaseURL())
 	resp, err := c.HTTP().R().SetDoNotParseResponse(true).Get(path)
 	if err != nil {
@@ -109,14 +103,7 @@ func downloadOneAgentInstaller(c *client.ClassicClient) (string, error) {
 	defer resp.RawBody().Close()
 
 	if resp.StatusCode() != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.RawBody(), 2048))
-		logger.Debug("installer download failed",
-			"status", resp.StatusCode(),
-			"auth_scheme", authScheme,
-			"response_body", strings.TrimSpace(string(body)),
-		)
-		return "", fmt.Errorf("installer download failed with status %d: %s",
-			resp.StatusCode(), strings.TrimSpace(string(body)))
+		return "", fmt.Errorf("installer download failed with status %d", resp.StatusCode())
 	}
 
 	tmpFile, err := os.CreateTemp("", oneAgentInstallerFilename())
