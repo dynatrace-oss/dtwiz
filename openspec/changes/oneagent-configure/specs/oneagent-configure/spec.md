@@ -2,46 +2,22 @@
 
 ## ADDED Requirements
 
-### Requirement: Installer token resolved from existing credentials
+### Requirement: Installer credential available via ClassicClient
 
-`InstallOneAgentV2` SHALL resolve the token used for the installer download from `InstallOptions.Token`, which is set upstream by `validateCredentials` in `cmd/install.go` (access token preferred, platform token fallback). If the token is empty, the install SHALL abort with a clear error.
+`DownloadInstaller` SHALL authenticate the installer download using `c.Classic.HTTP().R()`. The `ClassicClient` resty instance already carries the correct `Authorization` header — set upstream by `validateCredentials` (access token preferred, platform token fallback) and `setupClientFromCreds` — with no additional token resolution needed at the installer layer.
 
-#### Scenario: Access token resolved
+#### Scenario: Download authenticated automatically
 
-- **GIVEN** `opts.Token` holds a `dt0c01.*` access token
-- **WHEN** `ResolveInstallerToken(opts)` is called
-- **THEN** it returns the token value and logs `source=access`
-
-#### Scenario: Platform token resolved as fallback
-
-- **GIVEN** `opts.Token` holds a platform token (non-`dt0c01.*` prefix)
-- **WHEN** `ResolveInstallerToken(opts)` is called
-- **THEN** it returns the token value and logs `source=platform`
-
-#### Scenario: Empty token aborts install
-
-- **GIVEN** `opts.Token` is empty
-- **WHEN** `ResolveInstallerToken(opts)` is called inside `InstallOneAgentV2`
-- **THEN** `InstallOneAgentV2` returns an error indicating no credentials are available
-- **AND** no further install steps are executed
-
-### Requirement: Token resolution debug logging
-
-`ResolveInstallerToken` SHALL emit a `logger.Debug` line recording which credential source was selected (`access` or `platform`). The token value SHALL NEVER appear in any log line at any level.
-
-#### Scenario: Resolution logged at Debug
-
-- **GIVEN** `--debug` is enabled
-- **WHEN** `ResolveInstallerToken(opts)` returns successfully
-- **THEN** stderr contains a Debug line with message `"resolved installer token"` and key `source` (value `"access"` or `"platform"`)
-- **AND** no log line contains the token value
+- **GIVEN** `validateCredentials` resolved `classicTok` and passed it to `setupClientFromCreds`
+- **WHEN** `DownloadInstaller` calls `c.Classic.HTTP().R().Get(url)`
+- **THEN** the request carries the correct `Authorization` header
+- **AND** no token value is extracted or passed explicitly in installer code
 
 ### Requirement: Token confidentiality
 
-The resolved token SHALL be held only in memory. The token value SHALL NOT be logged at any level (`logger.Debug`, `logger.Info`, stdout, stderr).
+The credential is embedded in the resty HTTP client and never extracted to a variable in installer code. The resty client redacts the `Authorization` header in verbose output via `sensitiveHTTPHeaders` in `pkg/client/client.go`.
 
 #### Scenario: Token not logged
 
 - **GIVEN** `dtwiz install oneagent --verbose --debug` is run
-- **WHEN** `ResolveInstallerToken(opts)` returns successfully
-- **THEN** no log line contains the token value
+- **THEN** no log line in the installer layer contains the raw token value
