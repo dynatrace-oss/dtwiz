@@ -30,7 +30,7 @@ type ScannedProject struct {
 }
 
 // maxScanDepth caps recursion to prevent runaway traversal of deep trees.
-const maxScanDepth = 15
+const maxScanDepth = 150
 
 var ignoredProjectDirNames = map[string]bool{
 	// Project build/dependency artifacts
