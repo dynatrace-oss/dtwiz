@@ -66,4 +66,3 @@ func TestGenerateOtelConfig_ContainsMetricsPort(t *testing.T) {
 		t.Errorf("generated config missing readers section:\n%s", cfg)
 	}
 }
-
