@@ -48,7 +48,16 @@ func TestInferRuntimeFromPath(t *testing.T) {
 		{name: "java build.gradle.kts", files: []string{"build.gradle.kts"}, want: "Java"},
 		{name: "java .mvn directory", dirs: []string{".mvn"}, want: "Java"},
 		{name: "nodejs package.json", files: []string{"package.json"}, want: "Node.js"},
+		{name: "nodejs yarn.lock", files: []string{"yarn.lock"}, want: "Node.js"},
+		{name: "nodejs pnpm-lock.yaml", files: []string{"pnpm-lock.yaml"}, want: "Node.js"},
+		{name: "nodejs bun.lockb", files: []string{"bun.lockb"}, want: "Node.js"},
+		{name: "nodejs .nvmrc", files: []string{".nvmrc"}, want: "Node.js"},
+		{name: "nodejs .node-version", files: []string{".node-version"}, want: "Node.js"},
+		{name: "java gradlew", files: []string{"gradlew"}, want: "Java"},
+		{name: "java gradlew.bat", files: []string{"gradlew.bat"}, want: "Java"},
+		{name: "java mvnw.cmd", files: []string{"mvnw.cmd"}, want: "Java"},
 		{name: "no markers", files: []string{"README.md"}, want: ""},
+		{name: "empty directory", files: []string{}, want: ""},
 		// Java wins over Node.js when both present (e.g. Spring with frontend tooling).
 		{name: "java beats nodejs", files: []string{"pom.xml", "package.json"}, want: "Java"},
 		// Java wins over Python.

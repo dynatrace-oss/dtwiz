@@ -34,6 +34,21 @@ func TestGenerateRecommendations_OneAgentAlreadyRunning(t *testing.T) {
 	}
 }
 
+func TestGenerateRecommendations_OneAgentRunning_NoOneAgentRec(t *testing.T) {
+	system := &analyzer.SystemInfo{
+		Platform:         analyzer.PlatformLinux,
+		ContainerRuntime: analyzer.ContainerRuntimeNone,
+		Orchestrator:     analyzer.OrchestratorNone,
+		OneAgentRunning:  true,
+	}
+	recs := recommender.GenerateRecommendations(system)
+	for _, r := range recs {
+		if r.Method == recommender.MethodOneAgent {
+			t.Error("should not recommend OneAgent install when OneAgent is already running")
+		}
+	}
+}
+
 func TestGenerateRecommendations_Kubernetes(t *testing.T) {
 	system := &analyzer.SystemInfo{
 		Platform:     analyzer.PlatformLinux,
