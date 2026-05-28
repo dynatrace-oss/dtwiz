@@ -186,7 +186,7 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 	}
 
 	shouldSkipDir := func(name string) bool {
-		return strings.HasPrefix(name, ".") || excludedDirNames[name] || ignoredProjectDirNames[name]
+		return strings.HasPrefix(name, ".") || strings.HasPrefix(name, "$") || excludedDirNames[name] || ignoredProjectDirNames[name]
 	}
 
 	workingDir, err := os.Getwd()
