@@ -88,10 +88,12 @@ func runInParallel[A any, B any](left func() A, right func() B) (A, B) {
 
 // walkCandidateDirs scans root and its descendants in parallel, then walks up
 // to parentLevels ancestor directories doing the same scan. visit is called
-// for every candidate directory; returning true means "matched — skip
-// children". shouldSkip decides whether a child entry name is skipped
-// entirely. The parent walk stops as soon as a level produces a match.
-func walkCandidateDirs(root string, parentLevels int, visit func(dir string) bool, shouldSkip func(name string) bool) {
+// for every candidate directory with that directory's entries (read once per
+// dir and reused for both marker matching and child recursion). Returning true
+// means "matched — skip children". shouldSkip decides whether a child entry
+// name is skipped entirely. The parent walk stops as soon as a level produces
+// a match.
+func walkCandidateDirs(root string, parentLevels int, visit func(dir string, entries []os.DirEntry) bool, shouldSkip func(name string) bool) {
 	concurrency := runtime.NumCPU() * 2
 	if concurrency < 4 {
 		concurrency = 4
@@ -110,7 +112,9 @@ func walkCandidateDirs(root string, parentLevels int, visit func(dir string) boo
 	scanDir = func(dir string, depth int, anyFound *atomic.Bool) {
 		defer wg.Done()
 
-		if visit(dir) {
+		entries, _ := os.ReadDir(dir)
+
+		if visit(dir, entries) {
 			if anyFound != nil {
 				anyFound.Store(true)
 			}
@@ -120,7 +124,6 @@ func walkCandidateDirs(root string, parentLevels int, visit func(dir string) boo
 			return
 		}
 
-		entries, _ := os.ReadDir(dir)
 		for _, entry := range entries {
 			if !entry.IsDir() || shouldSkip(entry.Name()) {
 				continue
@@ -177,7 +180,7 @@ func walkCandidateDirs(root string, parentLevels int, visit func(dir string) boo
 // largeScanThreshold is the number of directories checked before printing a
 // progress notice. Trees this large are unusual for normal project directories
 // but common in system paths (C:\Windows, /usr, etc.).
-const largeScanThreshold = 200
+const largeScanThreshold = 10000
 
 // globalScanCount is shared across all scanProjectDirs calls so progress
 // messages are only printed once even when scanning for multiple runtimes.
@@ -198,39 +201,30 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 		return nil
 	}
 
+	markerSet := make(map[string]struct{}, len(markers))
+	for _, m := range markers {
+		markerSet[m] = struct{}{}
+	}
+
 	var mu sync.Mutex
 	discoveredProjects := make([]ScannedProject, 0)
-	visitedDirs := make(map[string]bool) // normalised path → matched
+	// matchedProjects dedups recorded projects when the same physical directory
+	// is reached via multiple paths (symlinks). Resolved lazily — only when
+	// markers actually match.
+	var matchedProjects sync.Map // lowercased resolved path → struct{}
 
 	// Track scan counts per immediate subdirectory for summarised debug output.
 	var subtreeCounts sync.Map // relative top-level child → *atomic.Int64
 
-	dirMatches := func(dir string) bool {
+	dirMatches := func(dir string, entries []os.DirEntry) bool {
 		if shouldSkipDir(filepath.Base(dir)) {
 			return false
 		}
 
-		resolvedDir, err := filepath.EvalSymlinks(dir)
-		if err != nil {
-			resolvedDir = dir
-		}
-		normalizedDir := strings.ToLower(resolvedDir)
-
-		mu.Lock()
-		if matched, seen := visitedDirs[normalizedDir]; seen {
-			mu.Unlock()
-			return matched
-		}
-		// Pre-mark as unmatched so concurrent goroutines skip this dir rather
-		// than duplicating the stat calls. The value is updated below if markers
-		// are found.
-		visitedDirs[normalizedDir] = false
-		mu.Unlock()
-
 		n := globalScanCount.Add(1)
 		if n == largeScanThreshold {
 			fmt.Printf("  Scanning a large directory tree, this may take a moment...\n")
-		} else if n == 1000 {
+		} else if n == 20000 {
 			fmt.Printf("  Tip: run dtwiz from the directory where your code lives for a faster scan.\n")
 		}
 
@@ -241,10 +235,11 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 			val.(*atomic.Int64).Add(1)
 		}
 
+		// Marker matching via entry-name lookup — no stat syscalls per marker.
 		matchedMarkers := make([]string, 0, len(markers))
-		for _, marker := range markers {
-			if _, statErr := os.Stat(filepath.Join(dir, marker)); statErr == nil {
-				matchedMarkers = append(matchedMarkers, marker)
+		for _, e := range entries {
+			if _, ok := markerSet[e.Name()]; ok {
+				matchedMarkers = append(matchedMarkers, e.Name())
 			}
 		}
 
@@ -252,10 +247,23 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 			return false
 		}
 
+		// Markers matched — resolve symlinks and dedup against prior matches.
+		// EvalSymlinks is deferred to here so the cost is paid only for the
+		// handful of dirs that actually contain a project, not every visited
+		// directory.
+		resolvedDir, err := filepath.EvalSymlinks(dir)
+		if err != nil {
+			resolvedDir = dir
+		}
+		if _, loaded := matchedProjects.LoadOrStore(strings.ToLower(resolvedDir), struct{}{}); loaded {
+			// Same physical dir recorded via another path — skip children but
+			// don't add a duplicate.
+			return true
+		}
+
 		logger.Debug("project dir matched", "path", dir, "markers", strings.Join(matchedMarkers, ","))
 		mu.Lock()
 		discoveredProjects = append(discoveredProjects, ScannedProject{Path: dir, Markers: matchedMarkers})
-		visitedDirs[normalizedDir] = true
 		mu.Unlock()
 		return true
 	}
