@@ -57,6 +57,7 @@ var ignoredProjectDirNames = map[string]bool{
 	"SysWOW64":     true,
 	"WinSxS":       true,
 	"ProgramData":  true,
+	"AppData":      true,
 	"$Recycle.Bin": true,
 }
 
@@ -192,13 +193,20 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 		return strings.HasPrefix(name, ".") || excludedDirNames[name] || ignoredProjectDirNames[name]
 	}
 
+	workingDir, err := os.Getwd()
+	if err != nil {
+		return nil
+	}
+
 	var mu sync.Mutex
 	discoveredProjects := make([]ScannedProject, 0)
 	visitedDirs := make(map[string]bool) // normalised path → matched
 
+	// Track scan counts per immediate subdirectory for summarised debug output.
+	var subtreeCounts sync.Map // relative top-level child → *atomic.Int64
+
 	dirMatches := func(dir string) bool {
 		if shouldSkipDir(filepath.Base(dir)) {
-			logger.Debug("skipping ignored dir", "path", dir)
 			return false
 		}
 
@@ -226,6 +234,13 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 			fmt.Printf("  Tip: run dtwiz from the directory where your code lives for a faster scan.\n")
 		}
 
+		// Count directories per immediate child of workingDir for debug summary.
+		if rel, relErr := filepath.Rel(workingDir, dir); relErr == nil && rel != "." {
+			topChild := strings.SplitN(rel, string(filepath.Separator), 2)[0]
+			val, _ := subtreeCounts.LoadOrStore(topChild, &atomic.Int64{})
+			val.(*atomic.Int64).Add(1)
+		}
+
 		matchedMarkers := make([]string, 0, len(markers))
 		for _, marker := range markers {
 			if _, statErr := os.Stat(filepath.Join(dir, marker)); statErr == nil {
@@ -234,7 +249,6 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 		}
 
 		if len(matchedMarkers) == 0 {
-			logger.Debug("project dir scanned, no markers", "path", dir, "looking_for", strings.Join(markers, ","))
 			return false
 		}
 
@@ -246,12 +260,13 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 		return true
 	}
 
-	workingDir, err := os.Getwd()
-	if err != nil {
-		return discoveredProjects
-	}
-
 	walkCandidateDirs(workingDir, 2, dirMatches, shouldSkipDir)
+
+	// Emit a single debug summary per top-level subdirectory.
+	subtreeCounts.Range(func(key, value any) bool {
+		logger.Debug("scan summary", "subdir", key.(string), "dirs_checked", value.(*atomic.Int64).Load())
+		return true
+	})
 
 	return discoveredProjects
 }
