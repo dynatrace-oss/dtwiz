@@ -228,7 +228,7 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 			return false
 		}
 
-		// EvalSymlinks is paid only on actual matches (rare), not every visited dir.
+		// EvalSymlinks runs only on actual matches (rare), not every visited dir.
 		resolvedDir, err := filepath.EvalSymlinks(dir)
 		if err != nil {
 			resolvedDir = dir
