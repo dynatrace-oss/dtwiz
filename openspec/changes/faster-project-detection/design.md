@@ -1,3 +1,5 @@
+# Design
+
 ## Context
 
 The scanner in `pkg/installer/otel_runtime_scan.go` is invoked once per runtime (Node/Python/Java/Go) by `dtwiz analyze`, `dtwiz setup`, `dtwiz recommend`, and `dtwiz install otel`. Each call recursively walks the CWD subtree plus two ancestor levels looking for marker files (`package.json`, `pyproject.toml`, etc.). Before this change the walk was sequential, paid `os.Stat` for every marker on every visited directory, called `filepath.EvalSymlinks` on every visited directory for dedup, and stopped at depth 15.
@@ -5,11 +7,13 @@ The scanner in `pkg/installer/otel_runtime_scan.go` is invoked once per runtime 
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Reduce duration of project detection on large home directories and monorepos.
 - Avoid missing deeply nested projects.
 - Keep behavior cross-platform and avoid scanning Windows system directories that produced no useful matches.
 
 **Non-Goals:**
+
 - Changing the public API of `scanProjectDirs` or any caller signatures.
 - Sharing one tree walk across multiple runtimes. Each runtime (Node, Python, Java, Go) still issues its own walk; in practice these run concurrently via `detectAllProjects` and walks after the first benefit from the OS cache populated by the earlier ones, so the overhead is much less than 4×. Merging them into a single walk that checks all marker sets per directory is a potential follow-up.
 - Recommender behavior (separate PR).

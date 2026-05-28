@@ -1,3 +1,5 @@
+# Tasks
+
 ## 1. Walker — parallel traversal
 
 - [x] 1.1 Change `walkCandidateDirs` in `pkg/installer/otel_runtime_scan.go` to scan with a bounded worker pool sized at `max(NumCPU*scanConcurrencyPerCPU, minScanConcurrency)`, falling back to synchronous execution when the semaphore is full

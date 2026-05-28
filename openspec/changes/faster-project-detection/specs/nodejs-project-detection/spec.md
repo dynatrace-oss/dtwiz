@@ -1,3 +1,5 @@
+# Node.js Project Detection
+
 ## ADDED Requirements
 
 ### Requirement: Deeply nested projects are discovered

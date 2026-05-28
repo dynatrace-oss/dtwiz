@@ -1,3 +1,5 @@
+# Proposal
+
 ## Why
 
 Project detection (`scanProjectDirs` in `pkg/installer/otel_runtime_scan.go`) was slow on large directory trees and missed deeply nested projects. The scan ran sequentially, paid `os.Stat` for every marker on every directory, resolved symlinks even when no project was found, and capped recursion at 15 levels — combining to make `dtwiz analyze` / `dtwiz setup` noticeably slow when run from a directory above many subprojects, while still missing some.
