@@ -140,6 +140,9 @@ func candidateOtelDirs(infos []otelProcessInfo) []string {
 func killCollectorProcesses(procs []otelProcessInfo) string {
 	var restartBinary string
 	for _, p := range procs {
+		if p.pid <= 0 {
+			continue // installed but not running — nothing to kill
+		}
 		proc, err := os.FindProcess(p.pid)
 		if err != nil {
 			fmt.Printf("  Warning: could not find process %d: %v\n", p.pid, err)
@@ -287,14 +290,46 @@ func printCollectorUninstallPreview(processes []otelProcessInfo, dirs []string) 
 	}
 }
 
-// UninstallOtelCollector kills all running Dynatrace OTel Collector processes
-// and removes the installation directories created by dtwiz. It also detects
-// and removes Node.js OTel instrumentation artifacts (.otel/ directories and
-// instrumented Node.js processes).
-func UninstallOtelCollector(dryRun bool) error {
+// collectorToProcessInfo converts a collectorInstance to the otelProcessInfo type
+// used by the kill/remove helpers.
+func collectorToProcessInfo(c collectorInstance) otelProcessInfo {
+	installDir := ""
+	if c.binaryPath != "" {
+		installDir = filepath.Dir(c.binaryPath)
+	}
+	return otelProcessInfo{
+		pid:        c.pid,
+		binaryPath: c.binaryPath,
+		installDir: installDir,
+	}
+}
 
-	// Collector artifacts.
-	processes := findRunningOtelProcesses()
+// UninstallOtelCollector shows a list of Dynatrace OTel Collector instances,
+// lets the user select which to remove, then kills the selected process(es) and
+// deletes their installation directories.  It also removes dtwiz-installed
+// runtime instrumentation artifacts (Node.js, Python, Java).
+func UninstallOtelCollector(dryRun bool) error {
+	display.Header("Dynatrace OTel Collector Uninstall")
+
+	// Find and select Dynatrace OTel Collectors to uninstall.
+	dtCollectors := findDynatraceOtelCollectors()
+	var processes []otelProcessInfo
+
+	if len(dtCollectors) > 0 {
+		selected, err := selectCollectorForUninstall(dtCollectors)
+		if err != nil {
+			return err
+		}
+		if len(selected) == 0 {
+			display.ColorDefault.Println("  Uninstall cancelled.")
+			return ErrInstallCancelled
+		}
+		for _, c := range selected {
+			processes = append(processes, collectorToProcessInfo(c))
+		}
+	}
+
+	// Collector install directories derived from the selected processes.
 	dirs := candidateOtelDirs(processes)
 
 	// Node.js .otel/ directory artifacts.
@@ -335,10 +370,8 @@ func UninstallOtelCollector(dryRun bool) error {
 	}
 	hasJavaCleanup := len(javaProcs) > 0 || agentDirExists
 
-	display.Header("Dynatrace OTel Collector Uninstall")
-
 	if len(processes) == 0 && len(dirs) == 0 && !anyRuntimeProcs && !hasJavaCleanup && len(nodeOtelDirs) == 0 {
-		display.ColorDefault.Println("  Nothing to remove — no running collector and no install directories found.")
+		display.ColorDefault.Println("  Nothing to remove — no Dynatrace OTel Collectors or instrumentation artifacts found.")
 		return nil
 	}
 

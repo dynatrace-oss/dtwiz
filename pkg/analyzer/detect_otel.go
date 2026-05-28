@@ -8,7 +8,7 @@ import "strings"
 // Returns (running, binaryPath, configPath).
 func detectOtelCollector() (bool, string, string) {
 	// First try exact process name matches for standard distributions.
-	for _, bin := range []string{"otelcol", "otelcol-contrib"} {
+	for _, bin := range []string{"otelcorecol", "otelcol", "otelcol-contrib"} {
 		ok, pidStr := runCmd("pgrep", "-x", bin)
 		if ok {
 			binPath, configPath := otelInfoFromPID(strings.TrimSpace(pidStr))
@@ -17,7 +17,7 @@ func detectOtelCollector() (bool, string, string) {
 	}
 	// Fall back to full command-line search to catch custom builds
 	// like dynatrace-otel-collector, opentelemetry-collector, etc.
-	for _, pattern := range []string{"otel-collector", "otelcol"} {
+	for _, pattern := range []string{"otel-collector", "otelcorecol", "otelcol"} {
 		ok, pidStr := runCmd("pgrep", "-f", pattern)
 		if ok {
 			// pgrep may return multiple PIDs; use the first one.

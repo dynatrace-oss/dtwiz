@@ -154,11 +154,9 @@ var setupCmd = &cobra.Command{
 		case recommender.MethodOtelCollector:
 			installErr = installer.InstallOtelCollector(envURL, classicTok, platformTok, setupDryRun)
 		case recommender.MethodOtelUpdate:
-			cfgPath := selected.ConfigPath
-			if cfgPath == "" {
-				cfgPath = "config.yaml" // fall back to CWD default
-			}
-			installErr = installer.UpdateOtelConfig(cfgPath, envURL, classicTok, platformTok, setupDryRun)
+			// Pass empty config path so UpdateOtelConfig always shows the full
+			// interactive list of running collectors — the user picks which one to patch.
+			installErr = installer.UpdateOtelConfig("", envURL, classicTok, platformTok, setupDryRun)
 		case recommender.MethodAWS:
 			installErr = installer.InstallAWS(c.Platform, envURL, platformTok, setupDryRun, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
 		default:

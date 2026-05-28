@@ -271,34 +271,85 @@ func PatchConfigFile(configPath, apiURL, token string) (*UpdateResult, error) {
 
 // UpdateOtelConfig updates an existing OTel Collector config file with the
 // Dynatrace exporter.  Shows a coloured diff preview and asks for confirmation
-// before writing.  After patching, any running collector processes are killed
-// and restarted with the updated config, and a verification log is sent.
+// before writing.  After patching, the selected running collector is killed and
+// restarted with the updated config, and a verification log is sent.
 // If dryRun is true the preview is printed without prompting.
-// If configPath is empty or points to a non-existent file the user is prompted
-// to supply the correct path interactively.
+// When configPath is empty (no --config flag), running collectors are listed so
+// the user can pick one; the selected collector's config path is used
+// automatically when detectable.
 func UpdateOtelConfig(configPath, envURL, token, platformTok string, dryRun bool) error {
 	apiURL := APIURL(envURL)
 
-	// Resolve the config path: prompt when it's missing or the file doesn't exist.
-	for {
-		if configPath != "" {
-			if _, err := os.Stat(configPath); err == nil {
-				break // file exists — proceed
-			}
-			fmt.Printf("  Config file not found: %s\n", configPath)
+	// runningProcs tracks which collector to restart after the config is patched.
+	var runningProcs []otelProcessInfo
+
+	if configPath != "" {
+		// --config provided: skip selection UI, validate file exists, then find
+		// any running collector whose detected config path matches.
+		if _, err := os.Stat(configPath); err != nil {
+			return fmt.Errorf("config file not found: %s", configPath)
 		}
-		var err error
-		configPath, err = promptLine("  Path to OTel Collector config file", "config.yaml")
-		if err != nil {
-			return fmt.Errorf("reading config path: %w", err)
+		absConfig, _ := filepath.Abs(configPath)
+		for _, inst := range findAllRunningOtelCollectors() {
+			if inst.configPath == "" || inst.pid <= 0 {
+				continue
+			}
+			instAbs, _ := filepath.Abs(inst.configPath)
+			if instAbs == absConfig {
+				installDir := ""
+				if inst.binaryPath != "" {
+					installDir = filepath.Dir(inst.binaryPath)
+				}
+				runningProcs = append(runningProcs, otelProcessInfo{
+					pid:        inst.pid,
+					binaryPath: inst.binaryPath,
+					installDir: installDir,
+				})
+			}
+		}
+	} else {
+		// No --config: show running collector list and let the user pick.
+		allProcs := findAllRunningOtelCollectors()
+		if len(allProcs) > 0 {
+			display.ColorMessage.Println("  Running OTel Collectors:")
+			fmt.Println()
+			selected, err := selectCollector(allProcs)
+			if err != nil {
+				return err // includes ErrInstallCancelled
+			}
+			if selected != nil {
+				if selected.configPath != "" {
+					configPath = selected.configPath
+				}
+				installDir := ""
+				if selected.binaryPath != "" {
+					installDir = filepath.Dir(selected.binaryPath)
+				}
+				runningProcs = []otelProcessInfo{{
+					pid:        selected.pid,
+					binaryPath: selected.binaryPath,
+					installDir: installDir,
+				}}
+			}
+		} else {
+			display.ColorMuted.Println("  No running OTel Collectors found.")
+			fmt.Println()
+		}
+
+		if configPath == "" {
+			if len(allProcs) == 0 {
+				return fmt.Errorf("no running OTel Collectors found — use --config to specify the config file path")
+			}
+			return fmt.Errorf("could not determine config path for the selected collector — use --config to specify it")
+		}
+		if _, err := os.Stat(configPath); err != nil {
+			return fmt.Errorf("config file not found: %s", configPath)
 		}
 	}
 
-	// Discover running collectors now so we can include them in the preview.
-	runningProcs := findRunningOtelProcesses()
-	logger.Debug("running collectors found", "count", len(runningProcs))
+	logger.Debug("running collectors for restart", "count", len(runningProcs))
 	for _, p := range runningProcs {
-		logger.Debug("running collector", "pid", p.pid, "binary", p.binaryPath)
+		logger.Debug("collector for restart", "pid", p.pid, "binary", p.binaryPath)
 	}
 
 	// Build a preview of the updated config so we can diff it against the original.

@@ -13,6 +13,7 @@ import (
 func detectOtelCollector() (bool, string, string) {
 	// Patterns to search for in the process list.
 	processNames := []string{
+		"otelcorecol.exe",
 		"otelcol.exe",
 		"otelcol-contrib.exe",
 		"dynatrace-otel-collector.exe",
@@ -45,7 +46,7 @@ func detectOtelCollector() (bool, string, string) {
 	// Exclude shell processes (powershell, pwsh, cmd) and the current process
 	// to avoid matching dtwiz's own detection commands whose arguments contain
 	// the search patterns.
-	for _, pattern := range []string{"otel-collector", "otelcol"} {
+	for _, pattern := range []string{"otel-collector", "otelcorecol", "otelcol"} {
 		ok, output := runCmd("powershell", "-NoProfile", "-Command",
 			"Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match '"+pattern+"' -and $_.Name -notmatch 'powershell|pwsh|cmd' -and $_.ProcessId -ne $PID } | Select-Object -First 1 -ExpandProperty CommandLine")
 		if ok && output != "" {
