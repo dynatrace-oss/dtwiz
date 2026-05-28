@@ -423,19 +423,20 @@ service:
 }
 
 func TestFindExistingCollectorConfig_HomeWins(t *testing.T) {
-	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(origDir) })
-
 	homeDir := t.TempDir()
 	cwdDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	t.Setenv("USERPROFILE", homeDir) // os.UserHomeDir() reads USERPROFILE on Windows
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Chdir(cwdDir); err != nil {
 		t.Fatal(err)
 	}
+	// Registered after t.TempDir() so it runs first (LIFO): restores cwd before
+	// the temp dirs are removed, avoiding a Windows file-lock on the cwd.
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
 
 	// Create config in both locations.
 	homeConfig := filepath.Join(homeDir, "opentelemetry", "config.yaml")
@@ -460,19 +461,20 @@ func TestFindExistingCollectorConfig_HomeWins(t *testing.T) {
 }
 
 func TestFindExistingCollectorConfig_FallsBackToCWD(t *testing.T) {
-	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(origDir) })
-
 	homeDir := t.TempDir()
 	cwdDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	t.Setenv("USERPROFILE", homeDir) // os.UserHomeDir() reads USERPROFILE on Windows
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Chdir(cwdDir); err != nil {
 		t.Fatal(err)
 	}
+	// Registered after t.TempDir() so it runs first (LIFO): restores cwd before
+	// the temp dirs are removed, avoiding a Windows file-lock on the cwd.
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
 
 	// Only create config in CWD — home path absent.
 	cwdConfig := filepath.Join(cwdDir, "opentelemetry", "config.yaml")
@@ -500,19 +502,20 @@ func TestFindExistingCollectorConfig_FallsBackToCWD(t *testing.T) {
 }
 
 func TestFindExistingCollectorConfig_NoneFound(t *testing.T) {
-	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(origDir) })
-
 	homeDir := t.TempDir()
 	cwdDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	t.Setenv("USERPROFILE", homeDir) // os.UserHomeDir() reads USERPROFILE on Windows
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Chdir(cwdDir); err != nil {
 		t.Fatal(err)
 	}
+	// Registered after t.TempDir() so it runs first (LIFO): restores cwd before
+	// the temp dirs are removed, avoiding a Windows file-lock on the cwd.
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
 
 	got := findExistingCollectorConfig()
 	if got != "" {
