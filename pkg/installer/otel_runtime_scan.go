@@ -29,9 +29,6 @@ type ScannedProject struct {
 	RunningProcessIDs []int
 }
 
-// maxScanDepth caps recursion to prevent runaway traversal of deep trees.
-const maxScanDepth = 150
-
 var ignoredProjectDirNames = map[string]bool{
 	// Project build/dependency artifacts
 	"node_modules": true,
@@ -108,8 +105,8 @@ func walkCandidateDirs(root string, parentLevels int, visit func(dir string, ent
 	var queued sync.Map
 	var wg sync.WaitGroup
 
-	var scanDir func(dir string, depth int, anyFound *atomic.Bool)
-	scanDir = func(dir string, depth int, anyFound *atomic.Bool) {
+	var scanDir func(dir string, anyFound *atomic.Bool)
+	scanDir = func(dir string, anyFound *atomic.Bool) {
 		defer wg.Done()
 
 		entries, _ := os.ReadDir(dir)
@@ -120,9 +117,6 @@ func walkCandidateDirs(root string, parentLevels int, visit func(dir string, ent
 			}
 			return // matched: skip children
 		}
-		if depth >= maxScanDepth {
-			return
-		}
 
 		for _, entry := range entries {
 			if !entry.IsDir() || shouldSkip(entry.Name()) {
@@ -132,18 +126,17 @@ func walkCandidateDirs(root string, parentLevels int, visit func(dir string, ent
 			if _, loaded := queued.LoadOrStore(childPath, struct{}{}); loaded {
 				continue
 			}
-			nextDepth := depth + 1
 			select {
 			case sem <- struct{}{}:
 				wg.Add(1)
 				go func(p string) {
 					defer func() { <-sem }()
-					scanDir(p, nextDepth, anyFound)
+					scanDir(p, anyFound)
 				}(childPath)
 			default:
 				// Pool saturated — run synchronously.
 				wg.Add(1)
-				scanDir(childPath, nextDepth, anyFound)
+				scanDir(childPath, anyFound)
 			}
 		}
 	}
@@ -156,7 +149,7 @@ func walkCandidateDirs(root string, parentLevels int, visit func(dir string, ent
 		}
 		var found atomic.Bool
 		wg.Add(1)
-		scanDir(dir, 0, &found)
+		scanDir(dir, &found)
 		wg.Wait()
 		return found.Load()
 	}
