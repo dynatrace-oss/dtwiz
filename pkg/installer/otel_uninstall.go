@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
@@ -191,6 +192,8 @@ func findNodeOtelDirs() []string {
 	// Node.js OTel directory. Returns true if found (and appends to dirs).
 	// Deduplication uses the symlink-resolved path so that /tmp/.otel and
 	// /private/tmp/.otel (same directory on macOS) are not listed twice.
+	// mu guards dirs and seen since walkCandidateDirs calls this concurrently.
+	var mu sync.Mutex
 	checkDir := func(dir string) bool {
 		otelDir := filepath.Join(dir, ".otel")
 		// Only bother with dedup and validation if .otel/ actually exists.
@@ -201,13 +204,18 @@ func findNodeOtelDirs() []string {
 		if resolved, err := filepath.EvalSymlinks(otelDir); err == nil {
 			key = resolved
 		}
+		mu.Lock()
 		if seen[key] {
+			mu.Unlock()
 			return false
 		}
 		seen[key] = true
+		mu.Unlock()
 		if isNodeOtelDir(otelDir) {
 			logger.Debug("found Node.js .otel/ directory", "dir", otelDir)
+			mu.Lock()
 			dirs = append(dirs, otelDir)
+			mu.Unlock()
 			return true
 		}
 		return false
