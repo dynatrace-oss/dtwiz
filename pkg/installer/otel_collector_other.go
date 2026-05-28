@@ -35,12 +35,6 @@ func findRunningOtelCollectors() []runningCollector {
 	return result
 }
 
-// findAllRunningOtelCollectors returns all running OTel Collector processes
-// on this host, including both Dynatrace and non-Dynatrace distributions.
-// It uses pgrep to locate candidate PIDs by binary name pattern, then verifies
-// that the process binary name actually matches an OTel collector (to avoid
-// false positives from processes that merely have a collector name in their args).
-// Binary patterns are sourced from otelCollectorBinaryPatterns (otel_collector_select.go).
 // processWorkingDir returns the working directory of the given PID.
 // Tries /proc/<pid>/cwd (Linux) first, then falls back to lsof (macOS).
 // Returns empty string when the CWD cannot be determined.
@@ -69,6 +63,12 @@ func resolveRelativePath(path, baseDir string) string {
 	return filepath.Join(baseDir, path)
 }
 
+// findAllRunningOtelCollectors returns all running OTel Collector processes
+// on this host, including both Dynatrace and non-Dynatrace distributions.
+// It uses pgrep to locate candidate PIDs by binary name pattern, then verifies
+// that the process binary name actually matches an OTel collector (to avoid
+// false positives from processes that merely have a collector name in their args).
+// Binary patterns are sourced from otelCollectorBinaryPatterns (otel_collector_select.go).
 func findAllRunningOtelCollectors() []collectorInstance {
 	seen := map[int]bool{}
 	currentPID := os.Getpid()

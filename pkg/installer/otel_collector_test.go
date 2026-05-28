@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 	"net"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -32,7 +33,7 @@ func TestFindFreePort_ReturnsFreePort(t *testing.T) {
 		t.Fatalf("expected port >= 8888, got %d", port)
 	}
 	// The returned port must actually be bindable.
-	l, err := net.Listen("tcp", "localhost:"+itoa(port))
+	l, err := net.Listen("tcp", "localhost:"+strconv.Itoa(port))
 	if err != nil {
 		t.Fatalf("port %d returned by findFreePort is not free: %v", port, err)
 	}
@@ -66,15 +67,3 @@ func TestGenerateOtelConfig_ContainsMetricsPort(t *testing.T) {
 	}
 }
 
-// itoa is a tiny helper so this file has no strconv import.
-func itoa(n int) string {
-	s := ""
-	if n == 0 {
-		return "0"
-	}
-	for n > 0 {
-		s = string(rune('0'+n%10)) + s
-		n /= 10
-	}
-	return s
-}

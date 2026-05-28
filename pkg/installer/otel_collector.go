@@ -627,11 +627,15 @@ func generateOtelConfig(apiURL, token string) (string, error) {
 	if httpPort == grpcPort {
 		httpPort = findFreePort(grpcPort + 1)
 	}
+	metricsPort := findFreePort(8888)
+	if metricsPort == grpcPort || metricsPort == httpPort {
+		metricsPort = findFreePort(httpPort + 1)
+	}
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, otelConfigData{
 		Endpoint:    strings.TrimRight(apiURL, "/"),
 		AuthHeader:  AuthHeader(token),
-		MetricsPort: findFreePort(8888),
+		MetricsPort: metricsPort,
 		GRPCPort:    grpcPort,
 		HTTPPort:    httpPort,
 	}); err != nil {

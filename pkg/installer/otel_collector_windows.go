@@ -49,12 +49,13 @@ func findAllRunningOtelCollectors() []collectorInstance {
 	currentPID := os.Getpid()
 
 	// Query processes whose name or executable path contains an OTel collector pattern.
-	// Patterns mirror otelCollectorBinaryPatterns (otel_collector_select.go).
+	// Built from otelCollectorBinaryPatterns so both lists stay in sync automatically.
+	psPattern := strings.Join(otelCollectorBinaryPatterns, "|")
 	script := `Get-CimInstance Win32_Process | Where-Object {` +
 		` $n = $_.Name.ToLower();` +
 		` $e = if ($_.ExecutablePath) { $_.ExecutablePath.ToLower() } else { '' };` +
-		` ($n -match 'dynatrace-otel-collector|otelcorecol|otelcol|opentelemetry-collector') -or` +
-		` ($e -match 'dynatrace-otel-collector|otelcorecol|otelcol|opentelemetry-collector')` +
+		` ($n -match '` + psPattern + `') -or` +
+		` ($e -match '` + psPattern + `')` +
 		` } | ForEach-Object { "$($_.ProcessId)|$($_.ExecutablePath)|$($_.CommandLine)" }`
 
 	out, err := exec.Command("powershell", "-NoProfile", "-Command", script).Output()

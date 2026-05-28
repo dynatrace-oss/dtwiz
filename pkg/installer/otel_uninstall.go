@@ -1,6 +1,7 @@
 package installer
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -297,8 +298,11 @@ func UninstallOtelCollector(dryRun bool) error {
 		display.ColorMessage.Println("  Collectors available for uninstall:")
 		selected, err := selectCollectorForUninstall(dtCollectors)
 		if err != nil {
-			display.ColorDefault.Println("  Uninstall cancelled.")
-			return ErrInstallCancelled
+			if errors.Is(err, ErrInstallCancelled) {
+				display.ColorDefault.Println("  Uninstall cancelled.")
+				return ErrInstallCancelled
+			}
+			return fmt.Errorf("reading selection: %w", err)
 		}
 		for _, c := range selected {
 			processes = append(processes, collectorToProcessInfo(c))
