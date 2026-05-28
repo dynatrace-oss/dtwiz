@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- OTel Collector is now installed to `~/opentelemetry/` (user home directory) instead of the current working directory to avoid permission issues
+
 ## [0.2.18] - 2026-05-21
 
 ### Changed
