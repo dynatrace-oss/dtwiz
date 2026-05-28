@@ -52,15 +52,16 @@ var ignoredProjectDirNames = map[string]bool{
 	"Pictures":     true,
 	"Public":       true,
 	// Windows system directories — scanning these is slow and never productive
-	"Windows":     true,
-	"System32":    true,
-	"SysWOW64":    true,
-	"WinSxS":      true,
-	"ProgramData": true,
+	"Windows":      true,
+	"System32":     true,
+	"SysWOW64":     true,
+	"WinSxS":       true,
+	"ProgramData":  true,
+	"$Recycle.Bin": true,
 }
 
 func isIgnoredDir(name string) bool {
-	return strings.HasPrefix(name, ".") || ignoredProjectDirNames[name]
+	return strings.HasPrefix(name, ".") || strings.HasPrefix(name, "$") || ignoredProjectDirNames[name]
 }
 
 func runInParallel[A any, B any](left func() A, right func() B) (A, B) {
@@ -177,6 +178,10 @@ func walkCandidateDirs(root string, parentLevels int, visit func(dir string) boo
 // but common in system paths (C:\Windows, /usr, etc.).
 const largeScanThreshold = 200
 
+// globalScanCount is shared across all scanProjectDirs calls so progress
+// messages are only printed once even when scanning for multiple runtimes.
+var globalScanCount atomic.Int64
+
 func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 	excludedDirNames := make(map[string]bool, len(excludeNames))
 	for _, name := range excludeNames {
@@ -190,8 +195,6 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 	var mu sync.Mutex
 	discoveredProjects := make([]ScannedProject, 0)
 	visitedDirs := make(map[string]bool) // normalised path → matched
-
-	var scannedCount atomic.Int64
 
 	dirMatches := func(dir string) bool {
 		if shouldSkipDir(filepath.Base(dir)) {
@@ -216,10 +219,10 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 		visitedDirs[normalizedDir] = false
 		mu.Unlock()
 
-		n := scannedCount.Add(1)
+		n := globalScanCount.Add(1)
 		if n == largeScanThreshold {
 			fmt.Printf("  Scanning a large directory tree, this may take a moment...\n")
-		} else if n == 500 {
+		} else if n == 1000 {
 			fmt.Printf("  Tip: run dtwiz from the directory where your code lives for a faster scan.\n")
 		}
 
