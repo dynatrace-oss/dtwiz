@@ -399,25 +399,44 @@ func UpdateOtelConfig(configPath, envURL, token, platformTok string, dryRun bool
 }
 
 // updateOtelCollectorIfPresent checks for a dtwiz-managed OTel Collector config
-// at the well-known path and silently patches it with the Dynatrace exporter if found.
-// No output if the file is absent.
+// at the well-known paths and silently patches it with the Dynatrace exporter if found.
+// Checks the home-based path first, then falls back to the legacy CWD-based path for
+// collectors installed with older versions of dtwiz. No output if the file is absent.
 func updateOtelCollectorIfPresent(envURL, token string, dryRun bool) {
-	installDir, err := otelCollectorInstallDir()
-	if err != nil {
-		return
-	}
-	configPath := filepath.Join(installDir, "config.yaml")
-	if !fileExists(configPath) {
-		logger.Debug("otel collector config not found, skipping update", "path", configPath)
+	configPath := findExistingCollectorConfig()
+	if configPath == "" {
 		return
 	}
 	if dryRun {
 		return
 	}
-	_, err = PatchConfigFile(configPath, APIURL(envURL), token)
+	_, err := PatchConfigFile(configPath, APIURL(envURL), token)
 	if err != nil {
 		logger.Debug("failed to update OTel Collector config", "path", configPath, "error", err)
 		return
 	}
 	display.PrintStatusLine("collector", "config updated", display.ColorOK)
+}
+
+// findExistingCollectorConfig returns the path to a dtwiz-managed OTel Collector
+// config.yaml if one exists, checking the home-based path first, then the legacy
+// CWD-based path. Returns "" if neither exists.
+func findExistingCollectorConfig() string {
+	var candidates []string
+
+	if home, err := os.UserHomeDir(); err == nil {
+		candidates = append(candidates, filepath.Join(home, "opentelemetry", "config.yaml"))
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		candidates = append(candidates, filepath.Join(cwd, "opentelemetry", "config.yaml"))
+	}
+
+	for _, p := range candidates {
+		if fileExists(p) {
+			logger.Debug("otel collector config found", "path", p)
+			return p
+		}
+		logger.Debug("otel collector config not found, skipping", "path", p)
+	}
+	return ""
 }
