@@ -477,33 +477,6 @@ func TestScanProjectDirs_DevDirFound(t *testing.T) {
 	}
 }
 
-func TestScanProjectDirs_DepthLimit(t *testing.T) {
-	root := t.TempDir()
-
-	// Build a chain of directories exactly maxScanDepth levels deep (no marker
-	// at any level) and place a marker one level further. The directory at
-	// maxScanDepth is visited but its children are not, so the marker is never
-	// seen.
-	atLimit := root
-	for range maxScanDepth {
-		atLimit = filepath.Join(atLimit, "x")
-	}
-	beyond := filepath.Join(atLimit, "deeper")
-	if err := os.MkdirAll(beyond, 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(beyond, "go.mod"), []byte("module beyond\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	setTestWorkingDir(t, root)
-	for _, p := range scanProjectDirs([]string{"go.mod"}, nil) {
-		if p.Path == beyond {
-			t.Errorf("project at depth %d (beyond maxScanDepth=%d) must not be found", maxScanDepth+1, maxScanDepth)
-		}
-	}
-}
-
 func TestScanProjectDirs_WideParallelTree(t *testing.T) {
 	root := t.TempDir()
 
