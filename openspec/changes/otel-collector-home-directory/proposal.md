@@ -1,3 +1,5 @@
+# Proposal: OTel Collector Home Directory
+
 ## Why
 
 The OTel Collector install previously used the current working directory (`<cwd>/opentelemetry/`) as the installation path. This causes permission errors when the user runs `dtwiz install otel` from a directory they don't fully own (e.g., `/opt/`, system paths, or restricted project roots). Using the user's home directory (`~/opentelemetry/`) eliminates permission issues on all platforms and provides a stable, predictable install location regardless of where the CLI is invoked.

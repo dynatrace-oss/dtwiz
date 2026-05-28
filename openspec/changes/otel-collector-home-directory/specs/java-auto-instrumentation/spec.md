@@ -1,3 +1,5 @@
+# Spec delta: java-auto-instrumentation
+
 ## MODIFIED Requirements
 
 ### Requirement: OTel Collector config update

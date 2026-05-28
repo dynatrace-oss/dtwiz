@@ -1,3 +1,5 @@
+# Design: OTel Collector Home Directory
+
 ## Context
 
 The `dtwiz install otel` command downloads and runs the Dynatrace OTel Collector. Previously, the binary and config were placed in `<cwd>/opentelemetry/`. This is problematic because:
@@ -11,11 +13,13 @@ The uninstall flow (`candidateOtelDirs`) already checked `~/opentelemetry` as a 
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Use `~/opentelemetry` as the single install directory on all platforms
 - Avoid permission errors on any OS without requiring elevated privileges
 - Provide a stable, predictable install location independent of CWD
 
 **Non-Goals:**
+
 - Custom install path via flag (can be added later if needed)
 - Migrating existing installations from `<cwd>/opentelemetry` to `~/opentelemetry`
 - Changing the uninstall discovery logic (it already checks both paths)
@@ -27,6 +31,7 @@ The uninstall flow (`candidateOtelDirs`) already checked `~/opentelemetry` as a 
 **Choice**: A single `otelCollectorInstallDir()` function returns `filepath.Join(home, "opentelemetry")` unconditionally.
 
 **Alternatives considered**:
+
 - Windows-only change (home dir on Windows, CWD elsewhere) — rejected because Linux/macOS have the same permission issues
 - `os.UserConfigDir()` (`~/.config/` on Linux, `~/Library/Application Support/` on macOS) — rejected because this is a runtime binary, not a config file; the home directory is more intuitive and discoverable
 

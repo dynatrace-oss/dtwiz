@@ -1,3 +1,5 @@
+# Tasks: OTel Collector Home Directory
+
 ## 1. Core Implementation
 
 - [x] 1.1 Add `otelCollectorInstallDir()` helper to `pkg/installer/otel_collector.go` that returns `filepath.Join(os.UserHomeDir(), "opentelemetry")` with proper error handling
