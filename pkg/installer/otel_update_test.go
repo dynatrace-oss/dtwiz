@@ -423,9 +423,16 @@ service:
 }
 
 func TestFindExistingCollectorConfig_HomeWins(t *testing.T) {
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
 	homeDir := t.TempDir()
 	cwdDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir) // os.UserHomeDir() reads USERPROFILE on Windows
 	if err := os.Chdir(cwdDir); err != nil {
 		t.Fatal(err)
 	}
@@ -453,9 +460,16 @@ func TestFindExistingCollectorConfig_HomeWins(t *testing.T) {
 }
 
 func TestFindExistingCollectorConfig_FallsBackToCWD(t *testing.T) {
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
 	homeDir := t.TempDir()
 	cwdDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir) // os.UserHomeDir() reads USERPROFILE on Windows
 	if err := os.Chdir(cwdDir); err != nil {
 		t.Fatal(err)
 	}
@@ -469,11 +483,15 @@ func TestFindExistingCollectorConfig_FallsBackToCWD(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Resolve symlinks so the comparison works on macOS (/var → /private/var).
-	wantConfig, err := filepath.EvalSymlinks(cwdConfig)
+	// Build the expected path from os.Getwd() so it matches exactly what
+	// findExistingCollectorConfig() will see — on Windows, os.Getwd() can
+	// return the 8.3 short-path form (RUNNER~1) while t.TempDir() returns
+	// the long form; using os.Getwd() keeps both sides consistent.
+	cwd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
+	wantConfig := filepath.Join(cwd, "opentelemetry", "config.yaml")
 
 	got := findExistingCollectorConfig()
 	if got != wantConfig {
@@ -482,9 +500,16 @@ func TestFindExistingCollectorConfig_FallsBackToCWD(t *testing.T) {
 }
 
 func TestFindExistingCollectorConfig_NoneFound(t *testing.T) {
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
 	homeDir := t.TempDir()
 	cwdDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir) // os.UserHomeDir() reads USERPROFILE on Windows
 	if err := os.Chdir(cwdDir); err != nil {
 		t.Fatal(err)
 	}
