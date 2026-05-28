@@ -203,16 +203,14 @@ func selectCollectorForUninstall(instances []collectorInstance) ([]collectorInst
 		if c.pid == 0 {
 			status = "not running"
 		}
-		fmt.Printf("  [%d]  %s  (%s)", i+1, c.displayName(), status)
+		fmt.Printf("  [%d]  %-36s  (%s)\n", i+1, c.displayName(), status)
 		if c.binaryPath != "" {
-			fmt.Printf("  —  %s", c.binaryPath)
+			display.ColorMuted.Printf("       %s\n", c.binaryPath)
 		}
-		fmt.Println()
 		if c.configPath != "" {
-			fmt.Printf("       Config: %s\n", c.configPath)
+			display.ColorMuted.Printf("       Config: %s\n", c.configPath)
 		}
 	}
-
 	allIdx := 0
 	if len(instances) > 1 {
 		allIdx = len(instances) + 1
@@ -226,24 +224,20 @@ func selectCollectorForUninstall(instances []collectorInstance) ([]collectorInst
 	if !scanner.Scan() {
 		return nil, scanner.Err()
 	}
-	answer := strings.TrimSpace(scanner.Text())
 	upperBound := len(instances)
 	if allIdx != 0 {
 		upperBound = allIdx
 	}
-	num, err := strconv.Atoi(answer)
+	num, err := strconv.Atoi(strings.TrimSpace(scanner.Text()))
 	if err != nil || num < 0 || num > upperBound {
-		display.ColorMuted.Println("  Invalid selection — cancelled.")
-		return nil, nil
+		return nil, ErrInstallCancelled
 	}
 	switch {
 	case num == 0:
-		return nil, nil
+		return nil, ErrInstallCancelled
 	case num >= 1 && num <= len(instances):
 		return []collectorInstance{instances[num-1]}, nil
-	case allIdx != 0 && num == allIdx:
+	default: // allIdx
 		return instances, nil
-	default:
-		return nil, nil
 	}
 }

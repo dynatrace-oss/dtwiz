@@ -23,28 +23,6 @@ type otelProcessInfo struct {
 	workingDir string
 }
 
-func findRunningOtelProcesses() []otelProcessInfo {
-	procs := findRunningOtelCollectors()
-	var infos []otelProcessInfo
-	for _, rc := range procs {
-		binPath := rc.path
-		if binPath == "" {
-			binPath = binaryPathFromPID(rc.pid)
-		}
-		installDir := ""
-		if binPath != "" {
-			installDir = filepath.Dir(binPath)
-		}
-		logger.Debug("running OTel Collector process", "pid", rc.pid, "binary", binPath, "installDir", installDir)
-		infos = append(infos, otelProcessInfo{
-			pid:        rc.pid,
-			binaryPath: binPath,
-			installDir: installDir,
-		})
-	}
-	return infos
-}
-
 func binaryPathFromPID(pid int) string {
 	pidStr := strconv.Itoa(pid)
 	var out []byte
@@ -311,16 +289,14 @@ func collectorToProcessInfo(c collectorInstance) otelProcessInfo {
 func UninstallOtelCollector(dryRun bool) error {
 	display.Header("Dynatrace OTel Collector Uninstall")
 
-	// Find and select Dynatrace OTel Collectors to uninstall.
+	// Find all Dynatrace OTel Collectors and let the user choose which to uninstall.
 	dtCollectors := findDynatraceOtelCollectors()
 	var processes []otelProcessInfo
 
 	if len(dtCollectors) > 0 {
+		display.ColorMessage.Println("  Collectors available for uninstall:")
 		selected, err := selectCollectorForUninstall(dtCollectors)
 		if err != nil {
-			return err
-		}
-		if len(selected) == 0 {
 			display.ColorDefault.Println("  Uninstall cancelled.")
 			return ErrInstallCancelled
 		}

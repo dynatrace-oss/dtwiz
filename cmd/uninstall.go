@@ -79,7 +79,13 @@ var uninstallOtelCmd = &cobra.Command{
 	Short: "Kill running OTel Collector processes and remove installation files",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return installer.UninstallOtelCollector(uninstallDryRun)
+		if err := installer.UninstallOtelCollector(uninstallDryRun); err != nil {
+			if errors.Is(err, installer.ErrInstallCancelled) {
+				return nil
+			}
+			return err
+		}
+		return nil
 	},
 }
 
