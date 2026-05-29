@@ -148,6 +148,8 @@ var setupCmd = &cobra.Command{
 			installErr = installer.InstallKubernetes(envURL, accessTok, accessTok, "" /* name */, setupDryRun)
 		case recommender.MethodDocker:
 			installErr = installer.InstallDocker(envURL, accessTok, setupDryRun)
+		case recommender.MethodPodman:
+			installErr = installer.InstallPodman(envURL, accessTok, setupDryRun)
 		case recommender.MethodOtelCollector:
 			installErr = installer.InstallOtelCollector(envURL, accessTok, accessTok, platformTok, setupDryRun)
 		case recommender.MethodOtelUpdate:

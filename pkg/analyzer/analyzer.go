@@ -210,6 +210,18 @@ func (s *SystemInfo) Summary() string {
 			display.ColorMuted.Sprint("<none>")))
 	}
 
+	if s.Podman != nil && s.Podman.Available {
+		podmanDesc := fmt.Sprintf("version %s, %d containers running", s.Podman.ServerVersion, s.Podman.RunningContainerCount)
+		if s.Podman.Variant != "" {
+			podmanDesc = s.Podman.Variant + "  " + podmanDesc
+		}
+		sb.WriteString(fmt.Sprintf("  %s %s\n", label("Podman"), podmanDesc))
+	} else {
+		sb.WriteString(fmt.Sprintf("  %s %s\n",
+			label("Podman"),
+			display.ColorMuted.Sprint("<none>")))
+	}
+
 	if s.Kubernetes != nil && s.Kubernetes.Available {
 		sb.WriteString(fmt.Sprintf("  %s %s  context=%s  nodes=%d\n",
 			label("Kubernetes"),
