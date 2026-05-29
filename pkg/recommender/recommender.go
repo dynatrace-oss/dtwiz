@@ -18,6 +18,7 @@ const (
 	MethodOneAgent         IngestMethod = "oneagent"
 	MethodKubernetes       IngestMethod = "kubernetes"
 	MethodDocker           IngestMethod = "docker"
+	MethodPodman           IngestMethod = "podman"
 	MethodOtelCollector    IngestMethod = "otel"
 	MethodOtelUpdate       IngestMethod = "otel-update"
 	MethodAWS              IngestMethod = "aws"
@@ -127,7 +128,22 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 		})
 	}
 
-	// 6. Bare metal / VM (Linux or Windows, no containers) → host OneAgent.
+	// 6. Podman without Kubernetes → Podman OneAgent.
+	if system.ContainerRuntime == analyzer.ContainerRuntimePodman &&
+		system.Orchestrator != analyzer.OrchestratorKubernetes {
+		recs = append(recs, Recommendation{
+			Method:        MethodPodman,
+			Priority:      20,
+			Title:         "Podman host + containers (via OneAgent)",
+			Description:   "Podman is running without Kubernetes orchestration. Deploy OneAgent as a container for host + container monitoring.",
+			Prerequisites: []string{"Podman daemon access", "Dynatrace API token"},
+			Steps: []string{
+				"dtwiz install podman",
+			},
+		})
+	}
+
+	// 8. Bare metal / VM (Linux or Windows, no containers) → host OneAgent.
 	if system.ContainerRuntime == analyzer.ContainerRuntimeNone &&
 		system.Orchestrator == analyzer.OrchestratorNone &&
 		(system.Platform == analyzer.PlatformLinux || system.Platform == analyzer.PlatformWindows) {
@@ -143,7 +159,7 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 		})
 	}
 
-	// 7. AWS detected → CloudFormation integration.
+	// 9. AWS detected → CloudFormation integration.
 	if system.AWS != nil && system.AWS.Available {
 		recs = append(recs, Recommendation{
 			Method:        MethodAWS,
@@ -157,7 +173,7 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 		})
 	}
 
-	// 8. Azure detected — coming soon.
+	// 10. Azure detected — coming soon.
 	if system.Azure != nil && system.Azure.Available {
 		recs = append(recs, Recommendation{
 			Method:      MethodAzure,
@@ -168,7 +184,7 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 		})
 	}
 
-	// 9. GCP detected — coming soon.
+	// 11. GCP detected — coming soon.
 	if system.GCP != nil && system.GCP.Available {
 		recs = append(recs, Recommendation{
 			Method:      MethodGCP,

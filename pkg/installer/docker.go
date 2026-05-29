@@ -28,6 +28,8 @@ func InstallDocker(envURL, token string, dryRun bool) error {
 
 	containerName := "dynatrace-oneagent"
 
+	installerURL := fmt.Sprintf("%s/api/v1/deployment/installer/agent/unix/default/latest?Api-Token=%s", apiURL, token)
+
 	dockerArgs := []string{
 		"run",
 		"--detach",
@@ -37,15 +39,13 @@ func InstallDocker(envURL, token string, dryRun bool) error {
 		"--privileged",
 		"--restart=always",
 		"-v", "/:/mnt/root",
-		"-e", fmt.Sprintf("DT_SERVER=%s/communication", apiURL),
-		"-e", fmt.Sprintf("DT_TENANT=%s", ExtractTenantID(envURL)),
-		"-e", fmt.Sprintf("DT_TENANT_TOKEN=%s", token),
+		"-e", fmt.Sprintf("ONEAGENT_INSTALLER_SCRIPT_URL=%s", installerURL),
 		"dynatrace/oneagent",
 	}
 
 	if dryRun {
 		fmt.Println("[dry-run] Would install Dynatrace OneAgent as a Docker container")
-		fmt.Printf("  API URL:        %s\n", apiURL)
+		fmt.Printf("  Installer URL:  %s\n", installerURL)
 		fmt.Printf("  Container name: %s\n", containerName)
 		fmt.Printf("  Command:        docker %v\n", dockerArgs)
 		return nil

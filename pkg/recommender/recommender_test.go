@@ -234,3 +234,63 @@ func TestGenerateRecommendations_macOSGetsOtel(t *testing.T) {
 		t.Error("expected otel-collector recommendation on macOS")
 	}
 }
+
+func TestGenerateRecommendations_PodmanOnly(t *testing.T) {
+	system := &analyzer.SystemInfo{
+		Platform:         analyzer.PlatformLinux,
+		ContainerRuntime: analyzer.ContainerRuntimePodman,
+		Podman:           &analyzer.PodmanInfo{Available: true},
+		Orchestrator:     analyzer.OrchestratorNone,
+	}
+	recs := recommender.GenerateRecommendations(system)
+	found := false
+	for _, r := range recs {
+		if r.Method == recommender.MethodPodman {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected podman recommendation")
+	}
+}
+
+func TestGenerateRecommendations_PodmanWithKubernetes(t *testing.T) {
+	system := &analyzer.SystemInfo{
+		Platform:         analyzer.PlatformLinux,
+		ContainerRuntime: analyzer.ContainerRuntimePodman,
+		Podman:           &analyzer.PodmanInfo{Available: true},
+		Orchestrator:     analyzer.OrchestratorKubernetes,
+		Kubernetes:       &analyzer.KubernetesInfo{Available: true, Distribution: "k3s"},
+	}
+	recs := recommender.GenerateRecommendations(system)
+	for _, r := range recs {
+		if r.Method == recommender.MethodPodman {
+			t.Error("expected no podman recommendation when Kubernetes is present")
+		}
+	}
+}
+
+func TestGenerateRecommendations_DockerWinsOverPodman(t *testing.T) {
+	system := &analyzer.SystemInfo{
+		Platform:         analyzer.PlatformLinux,
+		ContainerRuntime: analyzer.ContainerRuntimeDocker,
+		Docker:           &analyzer.DockerInfo{Available: true},
+		Podman:           &analyzer.PodmanInfo{Available: true},
+		Orchestrator:     analyzer.OrchestratorNone,
+	}
+	recs := recommender.GenerateRecommendations(system)
+	for _, r := range recs {
+		if r.Method == recommender.MethodPodman {
+			t.Error("expected no podman recommendation when Docker is the active runtime")
+		}
+	}
+	found := false
+	for _, r := range recs {
+		if r.Method == recommender.MethodDocker {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected docker recommendation when ContainerRuntime is docker")
+	}
+}

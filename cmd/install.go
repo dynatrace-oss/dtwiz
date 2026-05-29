@@ -122,6 +122,28 @@ var installDockerCmd = &cobra.Command{
 	},
 }
 
+var installPodmanCmd = &cobra.Command{
+	Use:   "podman",
+	Short: "Install Dynatrace OneAgent for Podman",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		envURL, accessTok, platformTok, err := getDtEnvironment()
+		if err != nil {
+			return err
+		}
+		if err := validateCredentials(envURL, accessTok, platformTok); err != nil {
+			return err
+		}
+		if err := installer.InstallPodman(envURL, accessTok, installDryRun); err != nil {
+			return err
+		}
+		if !installDryRun {
+			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
+		}
+		return nil
+	},
+}
+
 var installOtelCmd = &cobra.Command{
 	Use:   "otel",
 	Short: "Install OTel Collector and instrument your application",
@@ -372,6 +394,7 @@ func init() {
 	installCmd.AddCommand(installOneAgentCmd)
 	installCmd.AddCommand(installKubernetesCmd)
 	installCmd.AddCommand(installDockerCmd)
+	installCmd.AddCommand(installPodmanCmd)
 	installCmd.AddCommand(installOtelCmd)
 	installCmd.AddCommand(installOtelCollectorCmd)
 	installCmd.AddCommand(installOtelPythonCmd)
