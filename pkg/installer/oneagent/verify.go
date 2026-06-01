@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 
@@ -23,6 +24,11 @@ var dtRootCertURL = "https://ca.dynatrace.com/dt-root.cert.pem"
 // openSSLMissingError is the user-facing message returned when openssl is not
 // found on a Linux host where signature verification is required.
 const openSSLMissingError = "openssl is required to verify the installer signature. Install openssl or pass --no-verify-signature to skip."
+
+// rootCAFetchTimeout caps the time allowed to download the Dynatrace root CA
+// certificate. Kept short because the file is tiny (~2 KB); a stalled
+// connection should not block the install indefinitely.
+const rootCAFetchTimeout = 30 * time.Second
 
 // VerifyInstallerSignature verifies a Linux installer's CMS signature against
 // the published Dynatrace root CA. It returns nil when skip is true or
@@ -71,7 +77,7 @@ func fetchDynatraceRootCA(caURL string) (string, error) {
 
 	logger.Debug("fetching dynatrace root ca", "url", caURL, "path", certPath)
 
-	resp, err := resty.New().R().SetOutput(certPath).Get(caURL)
+	resp, err := resty.New().SetTimeout(rootCAFetchTimeout).R().SetOutput(certPath).Get(caURL)
 	if err != nil {
 		_ = os.Remove(certPath)
 		return "", fmt.Errorf("downloading Dynatrace root CA: %w", err)

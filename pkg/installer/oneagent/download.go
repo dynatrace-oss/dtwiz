@@ -1,6 +1,7 @@
 package oneagent
 
 import (
+	"compress/gzip"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,11 +18,18 @@ import (
 )
 
 // readErrorBody reads up to 2 KB from a resty response body. Used on non-200
-// responses where SetDoNotParseResponse(true) is active. Go's net/http
-// transport handles transparent gzip decompression at the transport level, so
-// no manual decompression is needed here.
+// responses where SetDoNotParseResponse(true) is active. Because the shared
+// resty client sets Accept-Encoding: gzip explicitly, Go's transport does not
+// decompress automatically — we must do it here when the server signals gzip.
 func readErrorBody(resp *resty.Response) string {
-	body, _ := io.ReadAll(io.LimitReader(resp.RawBody(), 2048))
+	var r io.Reader = resp.RawBody()
+	if resp.Header().Get("Content-Encoding") == "gzip" {
+		if gz, err := gzip.NewReader(r); err == nil {
+			defer gz.Close()
+			r = gz
+		}
+	}
+	body, _ := io.ReadAll(io.LimitReader(r, 2048))
 	return strings.TrimSpace(string(body))
 }
 

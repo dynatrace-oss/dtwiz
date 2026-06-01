@@ -49,8 +49,6 @@ func ResolveAgentConfig(opts InstallOptions) AgentConfig {
 }
 
 func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
-	display.PrintStatusLine("oneagent", fmt.Sprintf("PoC flow (monitoring-mode=%s)", opts.MonitoringMode), display.ColorWarning)
-
 	env, err := detectRuntimeEnvironment()
 	if err != nil {
 		return err
@@ -58,6 +56,7 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 	logger.Debug("detected environment", "os", env.OS, "arch", env.Arch)
 
 	cfg := ResolveAgentConfig(opts)
+	display.PrintStatusLine("oneagent", fmt.Sprintf("PoC flow (monitoring-mode=%s)", cfg.MonitoringMode), display.ColorWarning)
 	logger.Debug("install options",
 		"dry_run", opts.DryRun,
 		"no_verify_signature", opts.NoVerifySignature,
