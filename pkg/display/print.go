@@ -50,7 +50,7 @@ func PrintFlagLine(label, message string, colorFunc *color.Color) {
 // is not a TTY to avoid polluting CI logs.
 func PrintPending(label, message string) {
 	if isTTY() {
-		fmt.Fprintf(os.Stderr, "\r  %s:  %s", label, message)
+		fmt.Fprintf(os.Stderr, "\r\033[2K  %s:  %s", label, message)
 	}
 }
 
