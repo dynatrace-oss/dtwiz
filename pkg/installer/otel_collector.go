@@ -38,12 +38,13 @@ type otelConfigData struct {
 	HTTPPort    int
 }
 
-// findFreePort returns the lowest port >= startPort on which localhost is not
-// already listening.  Falls back to startPort if no free port is found within
-// 100 attempts (avoids an infinite loop on pathological systems).
+// findFreePort returns the lowest port >= startPort that is free on all
+// interfaces (0.0.0.0), matching how the collector binds its receivers.
+// Falls back to startPort if no free port is found within 100 attempts
+// (avoids an infinite loop on pathological systems).
 func findFreePort(startPort int) int {
 	for port := startPort; port < startPort+100; port++ {
-		addr := fmt.Sprintf("localhost:%d", port)
+		addr := fmt.Sprintf("0.0.0.0:%d", port)
 		l, err := net.Listen("tcp", addr)
 		if err != nil {
 			continue

@@ -289,12 +289,18 @@ func UpdateOtelConfig(configPath, envURL, token, platformTok string, dryRun bool
 		if _, err := os.Stat(configPath); err != nil {
 			return fmt.Errorf("config file not found: %s", configPath)
 		}
-		absConfig, _ := filepath.Abs(configPath)
+		absConfig, err := filepath.Abs(configPath)
+		if err != nil {
+			return fmt.Errorf("failed to resolve config path: %w", err)
+		}
 		for _, inst := range findAllRunningOtelCollectors() {
 			if inst.configPath == "" || inst.pid <= 0 {
 				continue
 			}
-			instAbs, _ := filepath.Abs(inst.configPath)
+			instAbs, err := filepath.Abs(inst.configPath)
+			if err != nil {
+				continue
+			}
 			if instAbs == absConfig {
 				installDir := ""
 				if inst.binaryPath != "" {

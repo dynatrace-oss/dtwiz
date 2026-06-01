@@ -31,25 +31,49 @@ func TestFindFreePort_ReturnsFreePort(t *testing.T) {
 	if port < 8888 {
 		t.Fatalf("expected port >= 8888, got %d", port)
 	}
-	// The returned port must actually be bindable.
-	l, err := net.Listen("tcp", "localhost:"+strconv.Itoa(port))
+	// Verify the returned port is bindable on all interfaces, matching collector behaviour.
+	l, err := net.Listen("tcp", "0.0.0.0:"+strconv.Itoa(port))
 	if err != nil {
-		t.Fatalf("port %d returned by findFreePort is not free: %v", port, err)
+		t.Fatalf("port %d returned by findFreePort is not free on 0.0.0.0: %v", port, err)
 	}
 	l.Close()
 }
 
 func TestFindFreePort_SkipsOccupied(t *testing.T) {
-	// Occupy 8888; findFreePort should hand back the next free port.
-	l, err := net.Listen("tcp", "localhost:8888")
+	// Occupy 8888 on all interfaces so findFreePort's 0.0.0.0 probe sees it as taken.
+	l, err := net.Listen("tcp", "0.0.0.0:8888")
 	if err != nil {
-		t.Skip("cannot bind to localhost:8888 — skipping")
+		t.Skip("cannot bind to 0.0.0.0:8888 — skipping")
 	}
 	defer l.Close()
 
 	port := findFreePort(8888)
 	if port == 8888 {
 		t.Fatal("expected findFreePort to skip the occupied 8888 port")
+	}
+}
+
+func TestDetectConfigFromArgs(t *testing.T) {
+	tests := []struct {
+		name string
+		args string
+		want string
+	}{
+		{"unquoted path", "otelcol --config /etc/otel/config.yaml", "/etc/otel/config.yaml"},
+		{"double-quoted path with spaces", `otelcol.exe --config "C:\Program Files\otelcol\config.yaml"`, `C:\Program Files\otelcol\config.yaml`},
+		{"single-quoted path with spaces", "otelcol --config '/etc/otel/my config.yaml'", "/etc/otel/my config.yaml"},
+		{"inline = form", "otelcol --config=/etc/otel/config.yaml", "/etc/otel/config.yaml"},
+		{"inline = with double quotes", `otelcol --config="C:\Program Files\config.yaml"`, `C:\Program Files\config.yaml`},
+		{"short flag -c", "otelcol -c /etc/otel/config.yaml", "/etc/otel/config.yaml"},
+		{"no config flag", "otelcol --other-flag value", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := detectConfigFromArgs(tc.args)
+			if got != tc.want {
+				t.Errorf("detectConfigFromArgs(%q) = %q, want %q", tc.args, got, tc.want)
+			}
+		})
 	}
 }
 

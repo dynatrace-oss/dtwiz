@@ -34,7 +34,7 @@ func (c collectorInstance) displayName() string {
 // detectConfigFromArgs parses a process command line and extracts the value of
 // --config (or -c).  Returns empty string when no config flag is found.
 func detectConfigFromArgs(args string) string {
-	fields := strings.Fields(args)
+	fields := splitArgs(args)
 	for i, f := range fields {
 		if (f == "--config" || f == "-c") && i+1 < len(fields) {
 			return fields[i+1]
@@ -44,6 +44,37 @@ func detectConfigFromArgs(args string) string {
 		}
 	}
 	return ""
+}
+
+// splitArgs splits a command-line string into tokens with basic quote handling.
+// Both single and double quotes are supported; quotes are stripped from the result.
+func splitArgs(s string) []string {
+	var tokens []string
+	var cur strings.Builder
+	inQuote := rune(0)
+	for _, r := range s {
+		switch {
+		case inQuote != 0:
+			if r == inQuote {
+				inQuote = 0
+			} else {
+				cur.WriteRune(r)
+			}
+		case r == '"' || r == '\'':
+			inQuote = r
+		case r == ' ' || r == '\t':
+			if cur.Len() > 0 {
+				tokens = append(tokens, cur.String())
+				cur.Reset()
+			}
+		default:
+			cur.WriteRune(r)
+		}
+	}
+	if cur.Len() > 0 {
+		tokens = append(tokens, cur.String())
+	}
+	return tokens
 }
 
 // otelCollectorBinaryPatterns lists the binary name substrings that identify
@@ -149,8 +180,8 @@ func findDynatraceOtelCollectors() []collectorInstance {
 }
 
 // selectCollector prints a numbered list of all discovered OTel collectors and
-// prompts the user to select one.  Returns (nil, ErrInstallCancelled) when the
-// user selects [0] Cancel, and (nil, nil) when they choose to enter a path manually.
+// prompts the user to select one.  Returns (nil, nil) when instances is empty,
+// and (nil, ErrInstallCancelled) when the user selects [0] Cancel or enters invalid input.
 func selectCollector(instances []collectorInstance) (*collectorInstance, error) {
 	if len(instances) == 0 {
 		return nil, nil
@@ -191,7 +222,7 @@ func selectCollector(instances []collectorInstance) (*collectorInstance, error) 
 // selectCollectorForUninstall prints a numbered list of Dynatrace OTel
 // Collectors with a note that non-Dynatrace collectors are not shown, then
 // prompts the user to select one (or all when multiple are available).
-// Returns an empty slice when the user cancels.
+// Returns ErrInstallCancelled when the user cancels or enters invalid input.
 func selectCollectorForUninstall(instances []collectorInstance) ([]collectorInstance, error) {
 	fmt.Println()
 	display.ColorMuted.Println("  Note: Only Dynatrace OTel Collectors are shown here.")

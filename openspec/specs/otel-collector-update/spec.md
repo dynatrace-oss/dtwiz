@@ -83,6 +83,12 @@ resolves to the same absolute path. The matching collector is used for the resta
 - **WHEN** `dtwiz update otel --config /nonexistent/config.yaml` is run
 - **THEN** the command exits with error: "config file not found: /nonexistent/config.yaml"
 
+#### Scenario: Config path cannot be resolved to an absolute path
+
+- **GIVEN** `--config` is provided with a relative path and the working directory cannot be determined
+- **WHEN** `dtwiz update otel --config <path>` is run
+- **THEN** the command exits with error: "failed to resolve config path: ..."
+
 ---
 
 ### Requirement: Relative config paths from running processes are resolved against the process CWD
@@ -99,6 +105,12 @@ this is an acceptable limitation because Windows collectors typically use absolu
 - **GIVEN** a collector was launched as `./otelcol --config config.yaml` from `/opt/otel/`
 - **WHEN** `findAllRunningOtelCollectors()` discovers the process
 - **THEN** the detected config path is `/opt/otel/config.yaml` (resolved against the process CWD)
+
+#### Scenario: Collector started with a quoted config path containing spaces
+
+- **GIVEN** a collector was launched as `otelcol.exe --config "C:\Program Files\otelcol\config.yaml"`
+- **WHEN** `findAllRunningOtelCollectors()` discovers the process
+- **THEN** the detected config path is `C:\Program Files\otelcol\config.yaml` (quotes stripped, path preserved intact)
 
 ---
 
