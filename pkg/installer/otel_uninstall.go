@@ -194,12 +194,20 @@ func findNodeOtelDirs() []string {
 	// /private/tmp/.otel (same directory on macOS) are not listed twice.
 	// mu guards dirs and seen since walkCandidateDirs calls this concurrently.
 	var mu sync.Mutex
-	checkDir := func(dir string) bool {
-		otelDir := filepath.Join(dir, ".otel")
-		// Only bother with dedup and validation if .otel/ actually exists.
-		if _, err := os.Stat(otelDir); err != nil {
+	checkDir := func(dir string, entries []os.DirEntry) bool {
+		// Use entries (already read by walkCandidateDirs) to check for .otel/
+		// without an extra Stat syscall.
+		hasOtel := false
+		for _, e := range entries {
+			if e.Name() == ".otel" && e.IsDir() {
+				hasOtel = true
+				break
+			}
+		}
+		if !hasOtel {
 			return false
 		}
+		otelDir := filepath.Join(dir, ".otel")
 		key := otelDir
 		if resolved, err := filepath.EvalSymlinks(otelDir); err == nil {
 			key = resolved
@@ -224,7 +232,7 @@ func findNodeOtelDirs() []string {
 	// walkCandidateDirs recursively checks dir and its children (skipping the
 	// same ignored directories as scanProjectDirs).
 	walkCandidateDirs(cwd, 2, func(dir string, entries []os.DirEntry) bool {
-		checkDir(dir)
+		checkDir(dir, entries)
 		return false
 	}, isIgnoredDir)
 
