@@ -45,13 +45,17 @@ func VerifyInstallerSignature(env Environment, installerPath string, skip bool) 
 		return errors.New(openSSLMissingError) //nolint:staticcheck // ST1005: exact wording is required by spec (user-facing remediation hint)
 	}
 
+	display.PrintPending("signature", "fetching root CA...")
 	certPath, err := fetchDynatraceRootCA(dtRootCertURL)
 	if err != nil {
+		display.ClearPending()
 		return err
 	}
 	defer os.Remove(certPath)
 
+	display.PrintPending("signature", "verifying...")
 	code, stderr, err := runOpensslVerify(opensslPath, installerPath, certPath)
+	display.ClearPending()
 	if err != nil {
 		return fmt.Errorf("running openssl: %w", err)
 	}

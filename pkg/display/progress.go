@@ -5,8 +5,6 @@ import (
 	"io"
 	"os"
 	"time"
-
-	"golang.org/x/term"
 )
 
 const progressPrintInterval = 100 * time.Millisecond
@@ -30,7 +28,7 @@ func NewProgressReader(r io.Reader, total int64) *ProgressReader {
 		r:     r,
 		w:     os.Stderr,
 		total: total,
-		isTTY: term.IsTerminal(int(os.Stderr.Fd())),
+		isTTY: isTTY(),
 	}
 }
 

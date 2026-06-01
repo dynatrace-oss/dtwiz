@@ -2,6 +2,7 @@ package display
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/fatih/color"
@@ -41,6 +42,22 @@ func PrintFlagLine(label, message string, colorFunc *color.Color) {
 	_, err := fmt.Fprintf(color.Output, "  %s  %s\n", ColorDefault.Sprint(label), colorFunc.Sprint(message))
 	if err != nil {
 		PrintError(label, err)
+	}
+}
+
+// PrintPending writes an in-progress status to stderr using \r so a subsequent
+// ClearPending or PrintStatusLine starts on a clean line. No-ops when stderr
+// is not a TTY to avoid polluting CI logs.
+func PrintPending(label, message string) {
+	if isTTY() {
+		fmt.Fprintf(os.Stderr, "\r  %s:  %s", label, message)
+	}
+}
+
+// ClearPending erases the line written by PrintPending.
+func ClearPending() {
+	if isTTY() {
+		fmt.Fprint(os.Stderr, "\r\033[2K")
 	}
 }
 
