@@ -123,6 +123,8 @@ When `env.OS == "linux"` and `--no-verify-signature` is not passed, `VerifyInsta
 
 `VerifyInstallerSignature` SHALL output to stdout on successful Linux verification via `display.PrintStatusLine("signature", "Installer signature verified", display.ColorOK)`. The skip paths (`--no-verify-signature` set, or non-Linux OS) SHALL produce no stdout output. Verification failure produces an error returned to the caller, not stdout output.
 
+During verification, TTY-only `\r`-overwriting pending lines MAY be emitted to stderr via `display.PrintPending` at two milestones: before the root CA is fetched (`"fetching root CA..."`) and before openssl runs (`"verifying..."`). These lines are suppressed automatically when stderr is not a terminal (CI, pipes) and are erased with `display.ClearPending` before `VerifyInstallerSignature` returns (on both success and failure paths), so the net visible output remains a single `PrintStatusLine` on success.
+
 #### Scenario: Successful Linux verification outputs status line
 
 - **GIVEN** `env.OS == "linux"`
