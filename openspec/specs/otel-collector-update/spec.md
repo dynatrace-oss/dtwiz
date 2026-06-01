@@ -114,6 +114,23 @@ this is an acceptable limitation because Windows collectors typically use absolu
 
 ---
 
+### Requirement: Generated config ports must not conflict with already-running collectors
+
+When generating a new collector config, `dtwiz` SHALL probe `localhost:<port>` to find a
+free port for the Prometheus metrics endpoint (which also binds on `localhost`). On macOS,
+probing on `0.0.0.0` does not detect a conflict when `localhost:<port>` is already taken
+by another process — the probe would succeed yet the collector would fail to start.
+
+#### Scenario: Another collector already occupies the default Prometheus metrics port
+
+- **GIVEN** a collector process is running and has bound `localhost:8888` for its Prometheus metrics endpoint
+- **WHEN** a new collector config is generated
+- **THEN** `findFreePort(8888)` probes `localhost:8888`, detects the conflict, and selects the next available port (e.g. 8889)
+- **THEN** the generated config contains the conflict-free port
+- **THEN** the new collector starts successfully
+
+---
+
 ### Requirement: All running OTel Collector distributions are shown in the picker
 
 The picker SHALL include both Dynatrace and upstream OTel Collector distributions.

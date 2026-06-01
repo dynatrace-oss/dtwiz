@@ -31,19 +31,19 @@ func TestFindFreePort_ReturnsFreePort(t *testing.T) {
 	if port < 8888 {
 		t.Fatalf("expected port >= 8888, got %d", port)
 	}
-	// Verify the returned port is bindable on all interfaces, matching collector behaviour.
-	l, err := net.Listen("tcp", "0.0.0.0:"+strconv.Itoa(port))
+	// The returned port must actually be bindable on localhost (matching the collector's Prometheus bind address).
+	l, err := net.Listen("tcp", "localhost:"+strconv.Itoa(port))
 	if err != nil {
-		t.Fatalf("port %d returned by findFreePort is not free on 0.0.0.0: %v", port, err)
+		t.Fatalf("port %d returned by findFreePort is not free: %v", port, err)
 	}
 	l.Close()
 }
 
 func TestFindFreePort_SkipsOccupied(t *testing.T) {
-	// Occupy 8888 on all interfaces so findFreePort's 0.0.0.0 probe sees it as taken.
-	l, err := net.Listen("tcp", "0.0.0.0:8888")
+	// Occupy 8888 on localhost; findFreePort should hand back the next free port.
+	l, err := net.Listen("tcp", "localhost:8888")
 	if err != nil {
-		t.Skip("cannot bind to 0.0.0.0:8888 — skipping")
+		t.Skip("cannot bind to localhost:8888 — skipping")
 	}
 	defer l.Close()
 
