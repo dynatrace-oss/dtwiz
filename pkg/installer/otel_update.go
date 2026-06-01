@@ -399,15 +399,17 @@ func UpdateOtelConfig(configPath, envURL, token, platformTok string, dryRun bool
 }
 
 // updateOtelCollectorIfPresent checks for a dtwiz-managed OTel Collector config
-// at the well-known paths and silently patches it with the Dynatrace exporter if found.
+// at the well-known paths and patches it with the Dynatrace exporter if found.
 // Checks the home-based path first, then falls back to the legacy CWD-based path for
 // collectors installed with older versions of dtwiz. No output if the file is absent.
+// If dryRun is true, prints what would be updated without making changes.
 func updateOtelCollectorIfPresent(envURL, token string, dryRun bool) {
 	configPath := findExistingCollectorConfig()
 	if configPath == "" {
 		return
 	}
 	if dryRun {
+		display.PrintStatusLine("collector", fmt.Sprintf("would update config: %s", configPath), display.ColorMuted)
 		return
 	}
 	_, err := PatchConfigFile(configPath, APIURL(envURL), token)
