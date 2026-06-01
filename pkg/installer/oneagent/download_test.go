@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 )
 
 func TestInstallerOSSegment(t *testing.T) {
@@ -64,7 +66,7 @@ func TestHumanBytes(t *testing.T) {
 		{3 * 1024 * 1024 * 1024, "3GB"},
 	}
 	for _, c := range cases {
-		if got := humanBytes(c.in); got != c.want {
+		if got := display.HumanBytes(c.in); got != c.want {
 			t.Errorf("humanBytes(%d) = %q, want %q", c.in, got, c.want)
 		}
 	}

@@ -31,7 +31,7 @@ Download URL pattern:
 - Linux arm: `/api/v1/deployment/installer/agent/unix/default/latest?arch=arm`
 - Windows: `/api/v1/deployment/installer/agent/windows/default/latest?arch=x86` (path-only; `.exe` extension and Windows execution flow are covered in `oneagent-windows`)
 
-Temp file: `os.CreateTemp("", "dynatrace-oneagent-*.sh")` (or `*.exe` for Windows env) → `chmod 0o700` on Unix. On success, stdout outputs via `display.PrintStatusLine("installer", "<basename> (<size>)", display.ColorOK)`.
+Temp file: `os.CreateTemp("", "dynatrace-oneagent-*.sh")` (or `*.exe` for Windows env) → `chmod 0o700` on Unix. During streaming, a `display.ProgressReader` wraps the response body and emits a `\r`-overwriting progress line to stderr (TTY-only, suppressed in CI/pipes, throttled to ≤10 Hz). On success, stderr is cleared and stdout outputs via `display.PrintStatusLine("installer", "<basename> (<size>)", display.ColorOK)`.
 
 ### 2. Linux signature verification: openssl subprocess
 

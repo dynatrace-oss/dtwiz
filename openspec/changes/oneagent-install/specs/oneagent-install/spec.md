@@ -38,7 +38,9 @@
 
 ### Requirement: User-facing download output
 
-`DownloadInstaller` SHALL output to stdout (visible at default verbosity, no `-v` required) a one-line confirmation on success via `display.PrintStatusLine("installer", "<filename> (<size>)", display.ColorOK)`. Progress detail SHALL NOT be printed at default verbosity beyond this single line — finer detail belongs in `logger.Debug`/`logger.Verbose`.
+`DownloadInstaller` SHALL output to stdout (visible at default verbosity, no `-v` required) a one-line confirmation on success via `display.PrintStatusLine("installer", "<filename> (<size>)", display.ColorOK)`. Multi-line or log-style progress output SHALL NOT be printed at default verbosity — finer detail belongs in `logger.Debug`/`logger.Verbose`.
+
+During the download, a TTY-only `\r`-overwriting progress indicator MAY be emitted to stderr showing bytes received (and percentage when `Content-Length` is known). This indicator is suppressed automatically when stderr is not a terminal (CI, pipes). It does not appear on stdout and is erased before the final `PrintStatusLine` confirmation, so the net visible output remains a single line.
 
 #### Scenario: Successful download produces one stdout line
 
@@ -46,6 +48,19 @@
 - **WHEN** `DownloadInstaller` returns
 - **THEN** stdout contains exactly one line via `display.PrintStatusLine` showing the installer filename and size (e.g. `dynatrace-oneagent-1963786212.sh (245MB)`)
 - **AND** the filename is the OS-specific basename of the temp file (Unix env: `.sh`, Windows env: `.exe`)
+
+#### Scenario: TTY progress indicator during download
+
+- **GIVEN** stderr is a terminal
+- **WHEN** `DownloadInstaller` is streaming the installer body
+- **THEN** a `\r`-overwriting progress line is emitted to stderr at most once per 100 ms showing bytes downloaded and, when `Content-Length` is known, the percentage
+- **AND** the progress line is erased (ANSI `\r\033[2K`) before `DownloadInstaller` returns
+
+#### Scenario: Progress suppressed in non-TTY environments
+
+- **GIVEN** stderr is not a terminal (e.g. CI, pipe)
+- **WHEN** `DownloadInstaller` streams the installer body
+- **THEN** no progress output is emitted to stderr
 
 ### Requirement: Download debug logging
 
