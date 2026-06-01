@@ -1,14 +1,10 @@
 package installer
 
 import (
-	"bytes"
-	"compress/gzip"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -84,7 +80,6 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 		return err
 	}
 
-	// Task 6 — BuildInstallCommand + ExecuteInstallCommand — not yet implemented.
 	display.PrintStatusLine("oneagent", "download and verification complete; install execution not yet implemented (Task 6)", display.ColorWarning)
 	logger.Debug("install execution not yet implemented", "installer_path", installerPath)
 	return nil
@@ -116,31 +111,12 @@ func detectRuntimeEnvironment() (Environment, error) {
 	}
 }
 
-// readErrorBody reads up to 2 KB from a resty response body, decompressing
-// gzip when indicated by the Content-Encoding header OR by the gzip magic
-// bytes (1f 8b). The magic-byte fallback handles servers that compress the
-// body without setting Content-Encoding. Used on non-200 responses where
-// SetDoNotParseResponse(true) is active.
+// readErrorBody reads up to 2 KB from a resty response body. Used on non-200
+// responses where SetDoNotParseResponse(true) is active. Go's net/http
+// transport handles transparent gzip decompression at the transport level, so
+// no manual decompression is needed here.
 func readErrorBody(resp *resty.Response) string {
-	// Buffer the first 2 bytes to probe for the gzip magic number without
-	// consuming the reader irreversibly.
-	raw := resp.RawBody()
-	peek := make([]byte, 2)
-	n, _ := io.ReadFull(raw, peek)
-	combined := io.MultiReader(bytes.NewReader(peek[:n]), raw)
-
-	needsGzip := strings.EqualFold(resp.Header().Get("Content-Encoding"), "gzip") ||
-		(n == 2 && peek[0] == 0x1f && peek[1] == 0x8b)
-
-	var r io.Reader = combined
-	if needsGzip {
-		gr, err := gzip.NewReader(combined)
-		if err == nil {
-			defer gr.Close()
-			r = gr
-		}
-	}
-	body, _ := io.ReadAll(io.LimitReader(r, 2048))
+	body, _ := io.ReadAll(io.LimitReader(resp.RawBody(), 2048))
 	return strings.TrimSpace(string(body))
 }
 
@@ -253,109 +229,4 @@ func humanBytes(n int64) string {
 	default:
 		return fmt.Sprintf("%dB", n)
 	}
-}
-
-// dtRootCertURL is the published Dynatrace root CA used to verify the
-// signature of downloaded installers. Overridable in tests.
-var dtRootCertURL = "https://ca.dynatrace.com/dt-root.cert.pem"
-
-// openSSLMissingError is the user-facing message returned when openssl is not
-// found on a Linux host where signature verification is required.
-const openSSLMissingError = "openssl is required to verify the installer signature. Install openssl or pass --no-verify-signature to skip."
-
-// VerifyInstallerSignature verifies a Linux installer's CMS signature against
-// the published Dynatrace root CA. It returns nil when skip is true or
-// env.OS != "linux". Missing openssl on Linux is a hard error; verification
-// failure aborts the install with the captured openssl stderr.
-func VerifyInstallerSignature(env Environment, installerPath string, skip bool) error {
-	if skip || env.OS != "linux" {
-		return nil
-	}
-
-	opensslPath, err := exec.LookPath("openssl")
-	logger.Debug("openssl lookup", "path", opensslPath, "found", err == nil)
-	if err != nil {
-		return errors.New(openSSLMissingError) //nolint:staticcheck // ST1005: exact wording is required by spec (user-facing remediation hint)
-	}
-
-	certPath, err := fetchDynatraceRootCA(dtRootCertURL)
-	if err != nil {
-		return err
-	}
-	defer os.Remove(certPath)
-
-	code, stderr, err := runOpensslVerify(opensslPath, installerPath, certPath)
-	if err != nil {
-		return fmt.Errorf("running openssl: %w", err)
-	}
-	if code != 0 {
-		logger.Debug("signature verification failed", "exit_code", code, "stderr", stderr)
-		return fmt.Errorf("installer signature verification failed (openssl exit %d): %s", code, stderr)
-	}
-
-	logger.Verbose("installer signature verified")
-	display.PrintStatusLine("signature", "Installer signature verified", display.ColorOK)
-	return nil
-}
-
-// fetchDynatraceRootCA downloads the published Dynatrace root certificate to a
-// temp file and returns its path. The caller owns the file.
-func fetchDynatraceRootCA(caURL string) (string, error) {
-	tmp, err := os.CreateTemp("", "dt-root-cert-*.pem")
-	if err != nil {
-		return "", fmt.Errorf("creating temp file for root CA: %w", err)
-	}
-	certPath := tmp.Name()
-	_ = tmp.Close()
-
-	logger.Debug("fetching dynatrace root ca", "url", caURL, "path", certPath)
-
-	resp, err := resty.New().R().SetOutput(certPath).Get(caURL)
-	if err != nil {
-		_ = os.Remove(certPath)
-		return "", fmt.Errorf("downloading Dynatrace root CA: %w", err)
-	}
-	if resp.StatusCode() != http.StatusOK {
-		_ = os.Remove(certPath)
-		return "", fmt.Errorf("downloading Dynatrace root CA: status %d", resp.StatusCode())
-	}
-	return certPath, nil
-}
-
-// runOpensslVerify runs the documented Dynatrace CMS verification pipeline:
-//
-//	( echo "Content-Type: multipart/signed; ... boundary=--SIGNED-INSTALLER" ;
-//	  echo ; echo "----SIGNED-INSTALLER" ; cat <installer> )
-//	| openssl cms -verify -CAfile <certPath>
-//
-// It returns the openssl exit code and captured stderr. The error return is
-// non-nil only when the subprocess could not be started.
-func runOpensslVerify(opensslPath, installerPath, certPath string) (int, string, error) {
-	installer, err := os.Open(installerPath)
-	if err != nil {
-		return 0, "", fmt.Errorf("opening installer: %w", err)
-	}
-	defer installer.Close()
-
-	header := strings.NewReader(
-		"Content-Type: multipart/signed; protocol=\"application/x-pkcs7-signature\"; " +
-			"micalg=\"sha-256\"; boundary=\"--SIGNED-INSTALLER\"\n\n" +
-			"----SIGNED-INSTALLER\n",
-	)
-
-	cmd := exec.Command(opensslPath, "cms", "-verify", "-CAfile", certPath)
-	cmd.Stdin = io.MultiReader(header, installer)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	cmd.Stdout = io.Discard
-
-	err = cmd.Run()
-	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			return exitErr.ExitCode(), strings.TrimSpace(stderr.String()), nil
-		}
-		return 0, strings.TrimSpace(stderr.String()), err
-	}
-	return 0, "", nil
 }
