@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
@@ -29,15 +30,7 @@ type ScannedProject struct {
 }
 
 var ignoredProjectDirNames = map[string]bool{
-	"Library":      true,
-	"Applications": true,
-	"System":       true,
-	"Movies":       true,
-	"Music":        true,
-	"Pictures":     true,
-	"Public":       true,
-	".git":         true,
-	".svn":         true,
+	// Project build/dependency artifacts
 	"node_modules": true,
 	"vendor":       true,
 	"venv":         true,
@@ -47,10 +40,26 @@ var ignoredProjectDirNames = map[string]bool{
 	"build":        true,
 	"target":       true,
 	"out":          true,
+	// macOS system directories
+	"Library":      true,
+	"Applications": true,
+	"System":       true,
+	"Movies":       true,
+	"Music":        true,
+	"Pictures":     true,
+	"Public":       true,
+	// Windows system directories — scanning these is slow and never productive
+	"Windows":      true,
+	"System32":     true,
+	"SysWOW64":     true,
+	"WinSxS":       true,
+	"ProgramData":  true,
+	"AppData":      true,
+	"$Recycle.Bin": true,
 }
 
 func isIgnoredDir(name string) bool {
-	return strings.HasPrefix(name, ".") || ignoredProjectDirNames[name]
+	return strings.HasPrefix(name, ".") || strings.HasPrefix(name, "$") || ignoredProjectDirNames[name]
 }
 
 func runInParallel[A any, B any](left func() A, right func() B) (A, B) {
@@ -74,31 +83,73 @@ func runInParallel[A any, B any](left func() A, right func() B) (A, B) {
 	return leftResult, rightResult
 }
 
-// walkCandidateDirs scans root and its descendants, then walks up to
-// parentLevels ancestor directories doing the same scan. visit is called
-// for every candidate directory; returning true means "matched — skip
-// children". shouldSkip decides whether a child entry name is skipped
-// entirely. The parent walk stops as soon as a level produces a match.
-func walkCandidateDirs(root string, parentLevels int, visit func(dir string) bool, shouldSkip func(name string) bool) {
-	var scan func(dir string) bool
-	scan = func(dir string) bool {
-		found := visit(dir)
-		if found {
-			return true
-		}
+// Directory scanning is syscall-bound, so oversubscribe CPUs; the floor keeps
+// 1–2 core VMs from going effectively serial.
+const (
+	scanConcurrencyPerCPU = 2
+	minScanConcurrency    = 4
+)
+
+// walkCandidateDirs scans root + descendants in parallel and walks up to
+// parentLevels ancestors. visit receives each dir's entries (read once, reused
+// for matching and recursion); returning true means matched — skip children.
+func walkCandidateDirs(root string, parentLevels int, visit func(dir string, entries []os.DirEntry) bool, shouldSkip func(name string) bool) {
+	concurrency := max(runtime.NumCPU()*scanConcurrencyPerCPU, minScanConcurrency)
+	// When full, child scans run synchronously instead of spawning more goroutines.
+	sem := make(chan struct{}, concurrency)
+
+	// Dedup across scanTree calls (symlinks and ancestor revisits).
+	var queued sync.Map
+	var wg sync.WaitGroup
+
+	var scanDir func(dir string, anyFound *atomic.Bool)
+	scanDir = func(dir string, anyFound *atomic.Bool) {
+		defer wg.Done()
+
 		entries, _ := os.ReadDir(dir)
+
+		if visit(dir, entries) {
+			if anyFound != nil {
+				anyFound.Store(true)
+			}
+			return // matched: skip children
+		}
+
 		for _, entry := range entries {
 			if !entry.IsDir() || shouldSkip(entry.Name()) {
 				continue
 			}
-			if scan(filepath.Join(dir, entry.Name())) {
-				found = true
+			childPath := filepath.Join(dir, entry.Name())
+			if _, loaded := queued.LoadOrStore(childPath, struct{}{}); loaded {
+				continue
+			}
+			select {
+			case sem <- struct{}{}:
+				wg.Add(1)
+				go func(p string) {
+					defer func() { <-sem }()
+					scanDir(p, anyFound)
+				}(childPath)
+			default:
+				// Pool saturated — run synchronously.
+				wg.Add(1)
+				scanDir(childPath, anyFound)
 			}
 		}
-		return found
 	}
 
-	scan(root)
+	scanTree := func(dir string) bool {
+		if _, loaded := queued.LoadOrStore(dir, struct{}{}); loaded {
+			return false
+		}
+		var found atomic.Bool
+		wg.Add(1)
+		scanDir(dir, &found)
+		wg.Wait()
+		return found.Load()
+	}
+
+	scanTree(root)
 
 	currentDir := root
 	for range parentLevels {
@@ -107,12 +158,19 @@ func walkCandidateDirs(root string, parentLevels int, visit func(dir string) boo
 			break
 		}
 		logger.Debug("scanning ancestor dir", "path", parentDir)
-		if scan(parentDir) {
+		if scanTree(parentDir) {
 			break
 		}
 		currentDir = parentDir
 	}
 }
+
+// Trees this large are normal for system paths (C:\Windows, /usr) but unusual
+// for project dirs — print a progress notice when crossed.
+const largeScanThreshold = 10000
+
+// Shared across runtimes so the progress notice prints at most once per session.
+var globalScanCount atomic.Int64
 
 func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 	excludedDirNames := make(map[string]bool, len(excludeNames))
@@ -121,53 +179,78 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 	}
 
 	shouldSkipDir := func(name string) bool {
-		return strings.HasPrefix(name, ".") || excludedDirNames[name] || ignoredProjectDirNames[name]
-	}
-
-	discoveredProjects := make([]ScannedProject, 0)
-	visitedDirs := make(map[string]bool) // present=visited, value=matched
-
-	dirMatches := func(dir string) bool {
-		if shouldSkipDir(filepath.Base(dir)) {
-			logger.Debug("skipping ignored dir", "path", dir)
-			return false
-		}
-
-		resolvedDir, err := filepath.EvalSymlinks(dir)
-		if err != nil {
-			resolvedDir = dir
-		}
-
-		normalizedDir := strings.ToLower(resolvedDir)
-		if matched, seen := visitedDirs[normalizedDir]; seen {
-			return matched
-		}
-
-		matchedMarkers := make([]string, 0, len(markers))
-		for _, marker := range markers {
-			if _, err := os.Stat(filepath.Join(dir, marker)); err == nil {
-				matchedMarkers = append(matchedMarkers, marker)
-			}
-		}
-
-		if len(matchedMarkers) == 0 {
-			logger.Debug("project dir scanned, no markers", "path", dir, "looking_for", strings.Join(markers, ","))
-			visitedDirs[normalizedDir] = false
-			return false
-		}
-
-		logger.Debug("project dir matched", "path", dir, "markers", strings.Join(matchedMarkers, ","))
-		discoveredProjects = append(discoveredProjects, ScannedProject{Path: dir, Markers: matchedMarkers})
-		visitedDirs[normalizedDir] = true
-		return true
+		return strings.HasPrefix(name, ".") || strings.HasPrefix(name, "$") || excludedDirNames[name] || ignoredProjectDirNames[name]
 	}
 
 	workingDir, err := os.Getwd()
 	if err != nil {
-		return discoveredProjects
+		return nil
+	}
+
+	markerSet := make(map[string]struct{}, len(markers))
+	for _, m := range markers {
+		markerSet[m] = struct{}{}
+	}
+
+	var mu sync.Mutex
+	discoveredProjects := make([]ScannedProject, 0)
+	// Dedup matches when the same physical dir is reached via different symlink
+	// paths. Lazy: only resolved on actual match.
+	var matchedProjects sync.Map // lowercased resolved path → struct{}
+	var subtreeCounts sync.Map   // relative top-level child → *atomic.Int64
+
+	dirMatches := func(dir string, entries []os.DirEntry) bool {
+		if shouldSkipDir(filepath.Base(dir)) {
+			return false
+		}
+
+		n := globalScanCount.Add(1)
+		if n == largeScanThreshold {
+			fmt.Printf("  Scanning a large directory tree, this may take a moment...\n")
+		} else if n == 2*largeScanThreshold {
+			fmt.Printf("  Tip: run dtwiz from the directory where your code lives for a faster scan.\n")
+		}
+
+		if rel, relErr := filepath.Rel(workingDir, dir); relErr == nil && rel != "." {
+			topChild := strings.SplitN(rel, string(filepath.Separator), 2)[0]
+			val, _ := subtreeCounts.LoadOrStore(topChild, &atomic.Int64{})
+			val.(*atomic.Int64).Add(1)
+		}
+
+		matchedMarkers := make([]string, 0, len(markers))
+		for _, e := range entries {
+			if _, ok := markerSet[e.Name()]; ok {
+				matchedMarkers = append(matchedMarkers, e.Name())
+			}
+		}
+
+		if len(matchedMarkers) == 0 {
+			return false
+		}
+
+		// EvalSymlinks runs only on actual matches (rare), not every visited dir.
+		resolvedDir, err := filepath.EvalSymlinks(dir)
+		if err != nil {
+			resolvedDir = dir
+		}
+		if _, loaded := matchedProjects.LoadOrStore(strings.ToLower(resolvedDir), struct{}{}); loaded {
+			return true // dup via symlink: skip children but don't re-record
+		}
+
+		logger.Debug("project dir matched", "path", dir, "markers", strings.Join(matchedMarkers, ","))
+		mu.Lock()
+		discoveredProjects = append(discoveredProjects, ScannedProject{Path: dir, Markers: matchedMarkers})
+		mu.Unlock()
+		return true
 	}
 
 	walkCandidateDirs(workingDir, 2, dirMatches, shouldSkipDir)
+
+	subtreeCounts.Range(func(key, value any) bool {
+		logger.Debug("scan summary", "subdir", key.(string), "dirs_checked", value.(*atomic.Int64).Load())
+		return true
+	})
+	logger.Debug("scan complete", "total_dirs_checked", globalScanCount.Load())
 
 	return discoveredProjects
 }

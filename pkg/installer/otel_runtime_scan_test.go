@@ -1,6 +1,7 @@
 package installer
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -413,6 +414,99 @@ func TestScanProjectDirs_AncestorWalk(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("expected sibling project to be found via ancestor walk, got %v", projects)
+	}
+}
+
+func TestIsIgnoredDir_WindowsSystemDirs(t *testing.T) {
+	for _, name := range []string{"Windows", "System32", "SysWOW64", "WinSxS", "ProgramData"} {
+		if !isIgnoredDir(name) {
+			t.Errorf("isIgnoredDir(%q) = false, want true (Windows system dir)", name)
+		}
+	}
+}
+
+func TestIsIgnoredDir_CommonNamesNotIgnored(t *testing.T) {
+	// dev, sys, proc are Linux virtual filesystem names at the root level, but
+	// they are also common project subdirectory names. They must NOT be ignored.
+	for _, name := range []string{"dev", "sys", "proc", "src", "lib", "cmd"} {
+		if isIgnoredDir(name) {
+			t.Errorf("isIgnoredDir(%q) = true, want false (valid project dir name)", name)
+		}
+	}
+}
+
+func TestScanProjectDirs_WindowsSystemDirSkipped(t *testing.T) {
+	dir := t.TempDir()
+
+	sysDir := filepath.Join(dir, "System32")
+	if err := os.Mkdir(sysDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sysDir, "go.mod"), []byte("module sys\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	setTestWorkingDir(t, dir)
+	for _, p := range scanProjectDirs([]string{"go.mod"}, nil) {
+		if strings.Contains(p.Path, "System32") {
+			t.Errorf("Windows system dir 'System32' must be skipped, got %s", p.Path)
+		}
+	}
+}
+
+func TestScanProjectDirs_DevDirFound(t *testing.T) {
+	dir := t.TempDir()
+
+	devDir := filepath.Join(dir, "dev")
+	if err := os.Mkdir(devDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(devDir, "go.mod"), []byte("module dev\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	setTestWorkingDir(t, dir)
+	found := false
+	for _, p := range scanProjectDirs([]string{"go.mod"}, nil) {
+		if strings.HasSuffix(filepath.ToSlash(p.Path), "/dev") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("project inside 'dev' directory must be found (not ignored)")
+	}
+}
+
+func TestScanProjectDirs_WideParallelTree(t *testing.T) {
+	root := t.TempDir()
+
+	// Create 20 sibling project directories. The parallel scan must find all of
+	// them (no goroutine races or lost updates).
+	const siblings = 20
+	names := make([]string, siblings)
+	for i := range siblings {
+		name := fmt.Sprintf("svc-%02d", i)
+		names[i] = name
+		sub := filepath.Join(root, name)
+		if err := os.Mkdir(sub, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(sub, "go.mod"), []byte("module "+name+"\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	setTestWorkingDir(t, root)
+	projects := scanProjectDirs([]string{"go.mod"}, nil)
+
+	found := make(map[string]bool, siblings)
+	for _, p := range projects {
+		found[filepath.Base(p.Path)] = true
+	}
+	for _, name := range names {
+		if !found[name] {
+			t.Errorf("parallel scan missed project %q; found: %v", name, projects)
+		}
 	}
 }
 
