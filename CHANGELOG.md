@@ -7,11 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.19] - 2026-06-01
+
+### Added
+
+- Windows install script (`install.ps1`) now adds Windows Security exclusion instructions and handles long path enablement to prevent the binary from being blocked
+- Contributing docs for testing (`docs/contributing/testing.md`) and pull requests (`docs/contributing/pull-requests.md`)
+
 ### Changed
 
 - OTel Collector is now installed to `~/opentelemetry/` (user home directory) instead of the current working directory to avoid permission issues
 - Recommender doesn't exit early when OneAgent is installed
 - Project detection is faster on large directory trees, no longer depth-limited, skips Windows system directories
+- `install otel` and `install otel-node` now wire the `--project` flag through to the Node.js OTel installer
 
 ## [0.2.18] - 2026-05-21
 
@@ -275,7 +283,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.18...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.19...HEAD
+[0.2.19]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.18...v0.2.19
 [0.2.18]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.17...v0.2.18
 [0.2.17]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.16...v0.2.17
 [0.2.16]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.15...v0.2.16
