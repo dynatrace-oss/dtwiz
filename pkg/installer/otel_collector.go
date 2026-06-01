@@ -44,6 +44,16 @@ func otelCollectorBinaryName() string {
 	return "dynatrace-otel-collector"
 }
 
+// otelCollectorInstallDir returns the directory where the OTel Collector is installed.
+// Uses the user's home directory on all platforms to avoid permission issues.
+func otelCollectorInstallDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("getting user home directory: %w", err)
+	}
+	return filepath.Join(home, "opentelemetry"), nil
+}
+
 // otelLatestReleaseVersion resolves the latest release tag (e.g. "v0.44.0")
 // for the Dynatrace OTel Collector by following the /releases/latest redirect
 // on github.com. This avoids the GitHub REST API entirely, sidestepping the
@@ -710,11 +720,10 @@ type collectorPlan struct {
 func prepareCollectorPlan(envURL, token string) (*collectorPlan, error) {
 	apiURL := APIURL(envURL)
 	collectorToken := token
-	cwd, err := os.Getwd()
+	installDir, err := otelCollectorInstallDir()
 	if err != nil {
-		return nil, fmt.Errorf("getting working directory: %w", err)
+		return nil, err
 	}
-	installDir := filepath.Join(cwd, "opentelemetry")
 	configContent, err := generateOtelConfig(apiURL, collectorToken)
 	if err != nil {
 		return nil, fmt.Errorf("generating OTel Collector config: %w", err)

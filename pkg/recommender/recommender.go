@@ -48,7 +48,7 @@ type Recommendation struct {
 func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 	var recs []Recommendation
 
-	// 1. OneAgent already running — nothing to do.
+	// 1. OneAgent already running — mark as done but continue with other recommendations.
 	if system.OneAgentRunning {
 		recs = append(recs, Recommendation{
 			Method:      MethodAlreadyInstalled,
@@ -57,7 +57,6 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 			Description: "OneAgent is detected on this host.  No additional installation is needed.",
 			Done:        true,
 		})
-		return recs
 	}
 
 	// 2. OTel Collector found → configure existing exporter (highest priority).
@@ -128,7 +127,8 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 	}
 
 	// 6. Bare metal / VM (Linux or Windows, no containers) → host OneAgent.
-	if system.ContainerRuntime == analyzer.ContainerRuntimeNone &&
+	if !system.OneAgentRunning &&
+		system.ContainerRuntime == analyzer.ContainerRuntimeNone &&
 		system.Orchestrator == analyzer.OrchestratorNone &&
 		(system.Platform == analyzer.PlatformLinux || system.Platform == analyzer.PlatformWindows) {
 		recs = append(recs, Recommendation{

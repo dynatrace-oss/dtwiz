@@ -184,7 +184,7 @@ After launching the instrumented Java process, the installer SHALL update the lo
 
 #### Scenario: OTel Collector config found
 
-- **GIVEN** the dtwiz well-known collector config path (`<cwd>/opentelemetry/config.yaml`) exists on the machine
+- **GIVEN** the dtwiz well-known collector config path (`~/opentelemetry/config.yaml`) exists on the machine
 - **WHEN** the instrumented Java process has been started successfully
 - **THEN** the installer SHALL patch the collector config silently using `PatchConfigFile` — no interactive prompt, no restart
 - **AND** SHALL output a single summary line via `display.PrintStatusLine("collector", "config updated", display.ColorOK)` indicating the config was updated

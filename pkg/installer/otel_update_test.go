@@ -421,3 +421,104 @@ service:
 		t.Error("config file was modified during dry-run")
 	}
 }
+
+func TestFindExistingCollectorConfig_HomeWins(t *testing.T) {
+	homeDir := t.TempDir()
+	cwdDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir) // os.UserHomeDir() reads USERPROFILE on Windows
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(cwdDir); err != nil {
+		t.Fatal(err)
+	}
+	// Registered after t.TempDir() so it runs first (LIFO): restores cwd before
+	// the temp dirs are removed, avoiding a Windows file-lock on the cwd.
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	// Create config in both locations.
+	homeConfig := filepath.Join(homeDir, "opentelemetry", "config.yaml")
+	cwdConfig := filepath.Join(cwdDir, "opentelemetry", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(homeConfig), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(cwdConfig), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(homeConfig, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cwdConfig, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got := findExistingCollectorConfig()
+	if got != homeConfig {
+		t.Errorf("expected home config %q, got %q", homeConfig, got)
+	}
+}
+
+func TestFindExistingCollectorConfig_FallsBackToCWD(t *testing.T) {
+	homeDir := t.TempDir()
+	cwdDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir) // os.UserHomeDir() reads USERPROFILE on Windows
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(cwdDir); err != nil {
+		t.Fatal(err)
+	}
+	// Registered after t.TempDir() so it runs first (LIFO): restores cwd before
+	// the temp dirs are removed, avoiding a Windows file-lock on the cwd.
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	// Only create config in CWD — home path absent.
+	cwdConfig := filepath.Join(cwdDir, "opentelemetry", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(cwdConfig), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cwdConfig, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Build the expected path from os.Getwd() so it matches exactly what
+	// findExistingCollectorConfig() will see — on Windows, os.Getwd() can
+	// return the 8.3 short-path form (RUNNER~1) while t.TempDir() returns
+	// the long form; using os.Getwd() keeps both sides consistent.
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantConfig := filepath.Join(cwd, "opentelemetry", "config.yaml")
+
+	got := findExistingCollectorConfig()
+	if got != wantConfig {
+		t.Errorf("expected cwd config %q, got %q", wantConfig, got)
+	}
+}
+
+func TestFindExistingCollectorConfig_NoneFound(t *testing.T) {
+	homeDir := t.TempDir()
+	cwdDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir) // os.UserHomeDir() reads USERPROFILE on Windows
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(cwdDir); err != nil {
+		t.Fatal(err)
+	}
+	// Registered after t.TempDir() so it runs first (LIFO): restores cwd before
+	// the temp dirs are removed, avoiding a Windows file-lock on the cwd.
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	got := findExistingCollectorConfig()
+	if got != "" {
+		t.Errorf("expected empty string, got %q", got)
+	}
+}
