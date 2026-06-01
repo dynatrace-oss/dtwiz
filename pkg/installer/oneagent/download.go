@@ -99,7 +99,11 @@ func DownloadInstaller(c *client.ClassicClient, env Environment) (string, error)
 	}
 	defer tmpFile.Close()
 
-	n, err := io.Copy(tmpFile, resp.RawBody())
+	totalBytes := resp.RawResponse.ContentLength // -1 when unknown
+	src := display.NewProgressReader(resp.RawBody(), totalBytes)
+
+	n, err := io.Copy(tmpFile, src)
+	src.Clear()
 	if err != nil {
 		_ = os.Remove(tmpFile.Name())
 		return "", fmt.Errorf("writing installer to disk: %w", err)
@@ -114,7 +118,7 @@ func DownloadInstaller(c *client.ClassicClient, env Environment) (string, error)
 
 	logger.Verbose("installer downloaded", "path", tmpFile.Name(), "size_bytes", n)
 	display.PrintStatusLine("installer",
-		fmt.Sprintf("%s (%s)", filepath.Base(tmpFile.Name()), humanBytes(n)),
+		fmt.Sprintf("%s (%s)", filepath.Base(tmpFile.Name()), display.HumanBytes(n)),
 		display.ColorOK)
 	return tmpFile.Name(), nil
 }
@@ -124,22 +128,4 @@ func installerExtension(os string) string {
 		return ".exe"
 	}
 	return ".sh"
-}
-
-func humanBytes(n int64) string {
-	const (
-		kb = 1024
-		mb = kb * 1024
-		gb = mb * 1024
-	)
-	switch {
-	case n >= gb:
-		return fmt.Sprintf("%dGB", n/gb)
-	case n >= mb:
-		return fmt.Sprintf("%dMB", n/mb)
-	case n >= kb:
-		return fmt.Sprintf("%dKB", n/kb)
-	default:
-		return fmt.Sprintf("%dB", n)
-	}
 }
