@@ -216,6 +216,6 @@ Windows-specific code shall use consistent Go build tags and file naming convent
 #### Scenario: Shared code handles both platforms
 
 - **GIVEN** functions like `CheckPrivilege` that have platform-specific implementations
-- **WHEN** the shared `oneagent_v2.go` calls the function
+- **WHEN** the shared `pkg/installer/oneagent/` calls the function
 - **THEN** the function dispatch is automatic via build tags
 - **AND** no runtime platform checks are needed within the function call site

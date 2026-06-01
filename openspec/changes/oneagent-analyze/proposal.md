@@ -37,7 +37,7 @@ The new flow is gated behind `ONEAGENT_POC` during development. Once Task 8 land
 
 ## Impact
 
-- **New files:** `pkg/installer/oneagent_v2.go`, `pkg/installer/oneagent_v2_test.go`, `test/e2e/oneagent_test.go` (optional, Task 11).
+- **New package:** `pkg/installer/oneagent/` (source split across `oneagent.go`, `download.go`, `verify.go`; tests in `oneagent_test.go`), `test/e2e/oneagent_test.go` (optional, Task 11).
 - **Modified files:**
   - `pkg/installer/oneagent.go` — extended in Task 2 to return the `Environment` struct; replaced entirely in Task 8.
   - `pkg/featureflags/featureflags.go` — `ONEAGENT_POC` added in Task 1; removed in Task 8.
@@ -46,6 +46,6 @@ The new flow is gated behind `ONEAGENT_POC` during development. Once Task 8 land
 - **Breaking change:** `InstallOneAgent`'s signature changes in Task 8 (struct-based options). All callers (`cmd/install.go`, `cmd/setup.go`) update together.
 - **Rollback:**
   - During development: set `DTWIZ_ONEAGENT_POC=false` (default) to fall back to the existing flow.
-  - Pre-Task-8: delete `pkg/installer/oneagent_v2.go` and revert `cmd/install.go`/`pkg/featureflags/featureflags.go`.
+  - Pre-Task-8: delete `pkg/installer/oneagent/` and revert `cmd/install.go`/`pkg/featureflags/featureflags.go`.
   - Post-Task-8: the old flow no longer exists; rollback is a git revert of the Task-8 commit.
 - **Feature flag:** `ONEAGENT_POC` (env `DTWIZ_ONEAGENT_POC`, CLI `--oneagent-poc`) — temporary, removed at the end of Task 8.

@@ -16,7 +16,7 @@ Before implementing, review the design and spec documents to understand the requ
 
 Confirm the agent has registered with the tenant. Timeout is a warning, not a failure.
 
-**Files:** `pkg/installer/oneagent_v2.go` (extend — scaffolded in Task 1), `pkg/installer/oneagent_v2_test.go` (extend — scaffolded in Task 1)
+**Files:** `pkg/installer/oneagent/oneagent.go` (extend — scaffolded in Task 1), `pkg/installer/oneagent/oneagent_test.go` (extend — scaffolded in Task 1)
 
 - [ ] 7.1 Implement `WaitForHostRegistration(p *client.PlatformClient, hostname string, timeout time.Duration) (string, error)` polling Grail via `POST <p.BaseURL()>/platform/storage/query/v1/query:execute` every 5s. The DQL query is approximately:
 

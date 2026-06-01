@@ -12,7 +12,7 @@ The existing `InstallOneAgent` flow in `pkg/installer/oneagent.go` receives a `*
 
 **Non-Goals:**
 
-- Implementing a separate token resolution or extraction step in `oneagent_v2.go`.
+- Implementing a separate token resolution or extraction step in `pkg/installer/oneagent/`.
 - Minting or exchanging tokens via any external API.
 
 ## Decisions

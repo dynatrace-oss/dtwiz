@@ -1,4 +1,4 @@
-package installer
+package oneagent
 
 import (
 	"bytes"
@@ -13,6 +13,27 @@ import (
 
 	"github.com/dynatrace-oss/dtwiz/pkg/client"
 )
+
+// newTestClassicClient creates a ClassicClient pointing at the given test server URL.
+func newTestClassicClient(t *testing.T, serverURL string) *client.ClassicClient {
+	t.Helper()
+	c, err := client.New(serverURL, serverURL, "dt0s16.test", "dt0s16.test", 0)
+	if err != nil {
+		t.Fatalf("create test client: %v", err)
+	}
+	return c.Classic
+}
+
+// createStubFile writes content to path (creating parent directories as needed).
+func createStubFile(t *testing.T, path, content string, mode os.FileMode) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, []byte(content), mode); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
 
 func newMockTenantServer(t *testing.T, path string, status int, body string) *httptest.Server {
 	t.Helper()
@@ -93,7 +114,7 @@ func TestInstallOneAgentV2_UnsupportedPlatformReturnsError(t *testing.T) {
 	}
 }
 
-// --- Task 5 Part A: DownloadInstaller ---
+// --- DownloadInstaller ---
 
 func TestDownloadInstaller_LinuxX86_StreamsAndStores(t *testing.T) {
 	content := []byte("fake-installer-binary-content")
@@ -236,7 +257,7 @@ func TestDownloadInstaller_DebugLogLineRedactsToken(t *testing.T) {
 	}
 }
 
-// --- Task 5 Part B: VerifyInstallerSignature ---
+// --- VerifyInstallerSignature ---
 
 func TestVerifyInstallerSignature_SkipFlag(t *testing.T) {
 	if err := VerifyInstallerSignature(Environment{OS: "linux"}, "/nonexistent", true); err != nil {

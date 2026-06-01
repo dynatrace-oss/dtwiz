@@ -15,7 +15,7 @@ Before implementing, review the design and spec documents to understand the requ
 
 Complete Windows-specific implementation not covered inline by earlier tasks: correct installer download URL/extension, Authenticode signature verification via PowerShell, and temp-file permission handling. Earlier tasks (2.7b, 5.3, 6.2, 7) reference Windows but leave the platform-specific logic as stubs or TODOs. This spec consolidates all Windows-specific work.
 
-**Files:** `pkg/installer/oneagent_v2.go` (extend), `pkg/installer/oneagent_v2_test.go` (extend), `pkg/installer/preflight_windows.go` (create or extend), `pkg/installer/sudo_windows.go` (extend)
+**Files:** `pkg/installer/oneagent/` (extend), `pkg/installer/oneagent/oneagent_test.go` (extend), `pkg/installer/preflight_windows.go` (create or extend), `pkg/installer/sudo_windows.go` (extend)
 
 ### Part A — Windows installer download
 
@@ -43,6 +43,6 @@ Complete Windows-specific implementation not covered inline by earlier tasks: co
 
 ### Part D — Windows integration test
 
-- [ ] 11.16 Add `TestInstallOneAgentV2_HappyPath_Windows` to `oneagent_v2_test.go`: mock tenant API, mock download returns a `.exe` body, Authenticode check mocked as `Valid`, install command starts with the installer path then `--quiet` as first flag (no `/bin/sh` prefix, no `sudo`), executor returns exit code 0
+- [ ] 11.16 Add `TestInstallOneAgentV2_HappyPath_Windows` to `pkg/installer/oneagent/oneagent_test.go`: mock tenant API, mock download returns a `.exe` body, Authenticode check mocked as `Valid`, install command starts with the installer path then `--quiet` as first flag (no `/bin/sh` prefix, no `sudo`), executor returns exit code 0
 - [ ] 11.17 Assert no `chmod`-equivalent is called on the downloaded installer path in the Windows happy-path flow
 - [ ] 11.18 Assert the download URL contains the Windows path segment and the temp file name ends in `.exe`

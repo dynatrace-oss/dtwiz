@@ -67,7 +67,7 @@ Platform-specific code goes in:
 - `pkg/installer/preflight_windows.go` (`//go:build windows`) — `isAdminWindows`, Windows privilege check.
 - `pkg/installer/preflight_unix.go` (`//go:build !windows`) — `needsSudo`-based check (already exists as `sudo_unix.go`; extend or add file as needed).
 
-Shared code in `oneagent_v2.go` calls `CheckPrivilege()` without a runtime `GOOS` check — the build tag dispatch handles it.
+Shared code in `pkg/installer/oneagent/` calls `CheckPrivilege()` without a runtime `GOOS` check — the build tag dispatch handles it.
 
 ### 6. Logging
 

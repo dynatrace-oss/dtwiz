@@ -14,13 +14,13 @@ Before implementing, review the design and spec documents to understand the requ
 > **Findings (Task 0 outcome):**
 >
 > - The earlier draft of this change planned a minted installer-scoped token (`DownloadInstaller(c, mintedToken, env)`). `oneagent-configure` later eliminated minting and standardised on the credential already embedded in `c.Classic`. This change has been updated to match: `DownloadInstaller(c *client.ClassicClient, env Environment)`. The token is never extracted to a Go variable in installer code.
-> - The `Environment` type referenced by Task 5/6 was planned in `oneagent-init` Task 1.5 but was not actually added to `pkg/installer/oneagent_v2.go`. It is introduced here as a minimal `{OS, Arch}` struct.
+> - The `Environment` type referenced by Task 5/6 was planned in `oneagent-init` Task 1.5 and is defined in `pkg/installer/oneagent/oneagent.go` as `{OS, Arch, Supported, Reason}`.
 
 ## 5. Download Installer + Linux Signature Verification
 
 Use the credentials embedded in the ClassicClient to download the installer. On Linux, verify the signature against the published Dynatrace root CA.
 
-**Files:** `pkg/installer/oneagent_v2.go` (extend), `pkg/installer/oneagent_v2_test.go` (extend)
+**Files:** `pkg/installer/oneagent/download.go` (extend), `pkg/installer/oneagent/oneagent_test.go` (extend)
 
 ### Part A — Download
 
@@ -51,7 +51,7 @@ Use the credentials embedded in the ClassicClient to download the installer. On 
 
 Build the OS-specific install command from `AgentConfig` and execute it (or preview under `--dry-run`).
 
-**Files:** `pkg/installer/oneagent_v2.go` (extend), `pkg/installer/sudo_unix.go` / `_windows.go` (reuse), `pkg/installer/oneagent_v2_test.go` (extend)
+**Files:** `pkg/installer/oneagent/oneagent.go` (extend), `pkg/installer/sudo_unix.go` / `_windows.go` (reuse), `pkg/installer/oneagent/oneagent_test.go` (extend)
 
 ### Part A — Build command
 

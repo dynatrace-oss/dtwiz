@@ -15,6 +15,6 @@ The v2 OneAgent installer flow uses the credentials already carried by `c.Classi
 
 ## Impact
 
-- **Modified files:** `pkg/installer/oneagent_v2.go` (extend), `pkg/installer/oneagent_v2_test.go` (extend)
+- **Modified files:** `pkg/installer/oneagent/` (extend), `pkg/installer/oneagent/oneagent_test.go` (extend)
 - **No breaking changes** to existing callers during development — the new flow is behind `ONEAGENT_POC`.
 - **No new scope requirements:** unlike token minting, this requires no `tokens.write` permission.

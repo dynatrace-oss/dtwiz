@@ -15,7 +15,7 @@ Before implementing, review the design and spec documents to understand the requ
 
 Set up the foundational structure for the OneAgent PoC implementation: feature flag, stub files, type definitions, CLI flags, and feature-flag branching.
 
-**Files:** `pkg/featureflags/featureflags.go` (extend), `pkg/installer/oneagent_v2.go` (create), `pkg/installer/oneagent_v2_test.go` (create), `cmd/install.go` (extend)
+**Files:** `pkg/featureflags/featureflags.go` (extend), `pkg/installer/oneagent/oneagent.go` (create), `pkg/installer/oneagent/download.go` (create), `pkg/installer/oneagent/verify.go` (create), `pkg/installer/oneagent/oneagent_test.go` (create), `cmd/install.go` (extend), `cmd/setup.go` (extend)
 
 ### Feature Flag
 
@@ -24,19 +24,19 @@ Set up the foundational structure for the OneAgent PoC implementation: feature f
 - [x] 1.3 Unit test: `IsEnabled(featureflags.OneAgentPoC)` returns `false` by default
 - [x] 1.4 Unit test: set `DTWIZ_ONEAGENT_POC=true` and verify `IsEnabled` returns `true`
 
-### Scaffolding: pkg/installer/oneagent_v2.go
+### Package: pkg/installer/oneagent/
 
-- [x] 1.5 Create `pkg/installer/oneagent_v2.go` with type definitions: `Environment`, `AgentConfig`, `InstallOptions`, `Endpoint`, `ConnectivityReport`, `ConnectivityResult`
+- [x] 1.5 Create `pkg/installer/oneagent/oneagent.go` with type definitions: `Environment`, `AgentConfig`, `InstallOptions`
 - [x] 1.6 Define `InstallOptions` struct carrying `DryRun`, `MonitoringMode`, `NoVerifySignature`, `SkipConnectivityCheck`, `ConnectivityCheckOnly`, `PrintEndpoints`, `Quiet`
-- [x] 1.7 Implement stub entry point `InstallOneAgentV2(c *client.Client, opts InstallOptions) error` that prints a "under development" warning and returns `nil` (not an error, to avoid showing help output in the setup flow)
-- [x] 1.8 Add stub function signatures (not implemented) for: `DetectEnvironment()`, `RunPreflightChecks()`, `ResolveAgentConfig()`, `ResolveEndpoints()`, `MintInstallerToken()`, `DownloadInstaller()`, `VerifyInstallerSignature()`, `BuildInstallCommand()`, `ExecuteInstallCommand()`, `WaitForHostRegistration()`, `CheckAllEndpoints()`
+- [x] 1.7 Implement `InstallOneAgentV2(c *client.Client, opts InstallOptions) error` — full implementation, not a stub
+- [x] 1.8 Implement `DefaultAgentConfig()`, `ResolveAgentConfig()`, `detectRuntimeEnvironment()` in `oneagent.go`; `DownloadInstaller()` in `download.go`; `VerifyInstallerSignature()` in `verify.go`
 - [x] 1.9 Ensure code compiles with `go build ./...`
 
-### Scaffolding: pkg/installer/oneagent_v2_test.go
+### Tests: pkg/installer/oneagent/oneagent_test.go
 
-- [x] 1.10 Create `pkg/installer/oneagent_v2_test.go` with skeleton structure
-- [x] 1.11 Add test helper functions for mocking HTTP responses (placeholder comments for Tasks 2–7)
-- [x] 1.12 Ensure tests compile with `go test ./... -v` (mark pending tests with `t.Skip()` if needed)
+- [x] 1.10 Create `pkg/installer/oneagent/oneagent_test.go` with full test coverage
+- [x] 1.11 Add test helper functions: `newMockTenantServer`, `newMockClient`, `newTestClassicClient`, `createStubFile`, `withRootCertURL`
+- [x] 1.12 Ensure all tests pass with `go test ./pkg/installer/oneagent/... -v`
 
 ### CLI Flags
 
@@ -50,11 +50,11 @@ Set up the foundational structure for the OneAgent PoC implementation: feature f
 
   ```go
   if featureflags.IsEnabled(featureflags.OneAgentPoC) {
-      return installer.InstallOneAgentV2(c, opts)
+      return oneagent.InstallOneAgentV2(c, opts)
   }
   return installer.InstallOneAgent(c.Classic, installDryRun, quiet, hostGroup)
   ```
 
 - [x] 1.17 Add a comment marking the branching point: `// Task 1 — feature-flag branching; remove at Task 8`
 - [x] 1.18 Verify existing `InstallOneAgent` call path is unchanged when the flag is disabled (default)
-- [x] 1.19 Integration test: with `DTWIZ_ONEAGENT_POC=true`, verify `InstallOneAgentV2` is called (prints "under development" warning and returns `nil`; setup flow skips `WatchIngest`)
+- [x] 1.19 Update `cmd/setup.go` to import `pkg/installer/oneagent` and call `oneagent.InstallOneAgentV2(c, oneagent.InstallOptions{...})`

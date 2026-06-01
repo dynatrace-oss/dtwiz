@@ -43,19 +43,19 @@ const (
 
 Default-false means existing behavior is preserved. At Task 8, the constant and registry entry are deleted in a single mechanical commit; no search-and-replace needed.
 
-### 2. New file: pkg/installer/oneagent_v2.go
+### 2. New package: pkg/installer/oneagent/
 
-All new scaffolding lives in a new file, leaving `oneagent.go` untouched (until Task 8 replacement). This keeps the diff reviewable and makes rollback mechanical (delete one file).
+All new code lives in a dedicated `oneagent` package, leaving the rest of `pkg/installer/` untouched. The package is split into three files for clarity:
 
-File structure:
+- `oneagent.go` — types (`Environment`, `AgentConfig`, `InstallOptions`), entry point `InstallOneAgentV2`, `DefaultAgentConfig`, `ResolveAgentConfig`, `detectRuntimeEnvironment`
+- `download.go` — `DownloadInstaller`, `readErrorBody`, `installerOSSegment`, `installerExtension`, `humanBytes`
+- `verify.go` — `VerifyInstallerSignature`, `fetchDynatraceRootCA`, `runOpensslVerify`, `dtRootCertURL`
 
-- Type definitions (exported)
-- Entry point: `InstallOneAgentV2(c *client.Client, opts InstallOptions) error` — returns `errors.New("oneagent v2 not yet implemented")`
-- Stub functions for Tasks 2–7 — each returns a placeholder error and is documented with the task number
+This keeps each concern isolated and makes rollback mechanical (delete the package directory).
 
-### 3. Type definitions: `Environment`, `AgentConfig`, `InstallOptions`, etc.
+### 3. Type definitions: `Environment`, `AgentConfig`, `InstallOptions`
 
-All types are exported and structured so subsequent tasks can populate and test them independently:
+All types are exported from `pkg/installer/oneagent` and structured so they can be populated and tested independently:
 
 ```go
 type Environment struct {
@@ -78,25 +78,6 @@ type InstallOptions struct {
     PrintEndpoints        bool
     Quiet                 bool
 }
-
-type Endpoint struct {
-    Host string
-    Port int
-}
-
-type ConnectivityReport struct {
-    AllPassed  bool
-    FailedCount int
-    Results    []ConnectivityResult
-}
-
-type ConnectivityResult struct {
-    Host      string
-    Port      int
-    Reachable bool
-    Latency   time.Duration
-    Error     error
-}
 ```
 
 ### 4. CLI flag definitions on `installOneAgentCmd`
@@ -118,7 +99,7 @@ All new flags are added to the `installOneAgentCmd` Cobra command definition (no
 `cmd/install.go`'s `installOneAgentCmd.RunE` constructs an `InstallOptions` struct from the flags:
 
 ```go
-opts := installer.InstallOptions{
+opts := oneagent.InstallOptions{
     DryRun:                installDryRun,
     MonitoringMode:        flagMonitoringMode,
     NoVerifySignature:     flagNoVerifySignature,
@@ -138,7 +119,7 @@ The command handler branches based on the feature flag:
 ```go
 // Task 1 — feature-flag branching; remove at Task 8
 if featureflags.IsEnabled(featureflags.OneAgentPoC) {
-    return installer.InstallOneAgentV2(c, opts)
+    return oneagent.InstallOneAgentV2(c, opts)
 }
 
 // Existing flow (default)
@@ -147,13 +128,13 @@ return installer.InstallOneAgent(c.Classic, installDryRun, quiet, hostGroup)
 
 The comment is a clear marker for Task 8 search-and-replace: remove the if-block, keep only the existing `InstallOneAgent` call, then replace it with the `InstallOneAgentV2` code at Task 8.
 
-### 7. Stub test file: pkg/installer/oneagent_v2_test.go
+### 7. Test file: pkg/installer/oneagent/oneagent_test.go
 
 Created with:
 
-- Helper functions for mocking HTTP server responses (httptest setup, mock tenant API, etc.)
-- Skeleton test cases with `t.Skip()` and TODO comments indicating which task each batch covers
-- Compilable structure so `go test ./...` passes even with unimplemented tests
+- Helper functions for mocking HTTP server responses (`newMockTenantServer`, `newMockClient`, `newTestClassicClient`, `createStubFile`)
+- Full test coverage for `ResolveAgentConfig`, `DownloadInstaller`, `VerifyInstallerSignature`, and `InstallOneAgentV2`
+- All tests compilable and passing with `go test ./...`
 
 ### 8. No breaking changes during development
 

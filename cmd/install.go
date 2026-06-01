@@ -7,6 +7,7 @@ import (
 
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -55,7 +56,7 @@ var installOneAgentCmd = &cobra.Command{
 		quiet, _ := cmd.Flags().GetBool("quiet")
 		hostGroup, _ := cmd.Flags().GetString("host-group")
 
-		opts := installer.InstallOptions{
+		opts := oneagent.InstallOptions{
 			DryRun:                installDryRun,
 			MonitoringMode:        flagMonitoringMode,
 			NoVerifySignature:     flagNoVerifySignature,
@@ -66,7 +67,7 @@ var installOneAgentCmd = &cobra.Command{
 		}
 
 		if featureflags.IsEnabled(featureflags.OneAgentPoC) {
-			return installer.InstallOneAgentV2(c, opts)
+			return oneagent.InstallOneAgentV2(c, opts)
 		}
 
 		if err := installer.InstallOneAgent(c.Classic, installDryRun, quiet, hostGroup); err != nil {

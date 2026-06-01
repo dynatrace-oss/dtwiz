@@ -18,6 +18,6 @@ The existing OneAgent installer flow downloads the installer binary without any 
 
 ## Impact
 
-- **Modified files:** `pkg/installer/oneagent_v2.go` (extend — download, verification, build, execute), `pkg/installer/oneagent_v2_test.go` (extend)
+- **Modified files:** `pkg/installer/oneagent/` (extend — download in `download.go`, verification in `verify.go`, build/execute in `oneagent.go`), `pkg/installer/oneagent/oneagent_test.go` (extend)
 - **New flag:** `--no-verify-signature` on `installOneAgentCmd` (skip Linux signature check).
 - **Dependency:** `openssl` must be present on Linux unless `--no-verify-signature` is passed. Missing `openssl` aborts the install with a clear error.
