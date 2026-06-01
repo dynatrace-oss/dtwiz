@@ -38,13 +38,13 @@ The `--config` flag default is empty — the picker is the primary interaction p
 - **GIVEN** no OTel Collector processes are running
 - **WHEN** `dtwiz update otel` is run without `--config`
 - **THEN** "No running OTel Collectors found." is printed
-- **THEN** the command exits with an error: "use --config to specify the config file path"
+- **THEN** the command exits with an error: "no running OTel Collectors found — use --config to specify the config file path"
 
 #### Scenario: Collector is running but config path cannot be detected
 
 - **GIVEN** a collector process is running without a `--config` flag in its command line
 - **WHEN** the user selects that collector
-- **THEN** the command exits with an error: "could not determine config path — use --config to specify it"
+- **THEN** the command exits with an error: "could not determine config path for the selected collector — use --config to specify it"
 
 #### Scenario: User cancels at the picker
 
@@ -105,14 +105,17 @@ this is an acceptable limitation because Windows collectors typically use absolu
 ### Requirement: All running OTel Collector distributions are shown in the picker
 
 The picker SHALL include both Dynatrace and upstream OTel Collector distributions.
-Binary name patterns: `dynatrace-otel-collector`, `otelcorecol`, `otelcol`,
-`otelcol-contrib`, `opentelemetry-collector`.
+The binary name patterns used are: `dynatrace-otel-collector`, `otelcorecol`, `otelcol`,
+`opentelemetry-collector`. These are substring matches against the binary base name
+(case-insensitive). `otelcol-contrib` is implicitly matched by the `otelcol` pattern
+and does not require a separate entry.
 
-The `otelcorecol` pattern SHALL be detected separately from `otelcol` because
-`"otelcol"` is not a substring of `"otelcorecol"`.
+The `otelcorecol` pattern SHALL be listed separately from `otelcol` because
+`"otelcol"` is not a substring of `"otelcorecol"` — without the explicit entry,
+`otelcorecol` binaries would be missed.
 
 #### Scenario: `otelcorecol` binary is running
 
 - **GIVEN** a process named `otelcorecol_darwin_arm64` is running
 - **WHEN** `findAllRunningOtelCollectors()` scans
-- **THEN** the process is included in the result list
+- **THEN** the process is included in the result list (matched by the explicit `otelcorecol` pattern, not by `otelcol`)

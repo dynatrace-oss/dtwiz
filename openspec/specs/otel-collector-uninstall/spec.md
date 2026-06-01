@@ -41,13 +41,21 @@ Non-Dynatrace upstream collectors are explicitly excluded.
 - **THEN** the command skips the selection prompt and proceeds to check for runtime
   instrumentation artifacts (Node.js, Python, Java)
 
-#### Scenario: Non-Dynatrace collectors are running
+#### Scenario: Non-Dynatrace collectors are running alongside a Dynatrace collector
 
 - **GIVEN** an upstream `otelcol` or `otelcol-contrib` process is running
-- **AND** no Dynatrace-branded collector is running
+- **AND** at least one Dynatrace-branded collector is also running
 - **WHEN** `dtwiz uninstall otel` is run
 - **THEN** the non-Dynatrace collector is NOT listed in the selection UI
-- **THEN** the note "Only Dynatrace OTel Collectors are shown here" is printed
+- **THEN** the note "Only Dynatrace OTel Collectors are shown here" is printed as a preamble to the selection list
+
+#### Scenario: Only non-Dynatrace collectors are running
+
+- **GIVEN** an upstream `otelcol` or `otelcol-contrib` process is running
+- **AND** no Dynatrace-branded collector is running or installed in well-known directories
+- **WHEN** `dtwiz uninstall otel` is run
+- **THEN** the selection prompt is skipped entirely (no selection UI is shown, no note is printed)
+- **THEN** the command proceeds directly to check for runtime instrumentation artifacts
 
 ---
 

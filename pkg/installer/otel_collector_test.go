@@ -1,10 +1,9 @@
 package installer
 
 import (
+	"net"
 	"os"
 	"path/filepath"
-	"testing"
-	"net"
 	"strconv"
 	"strings"
 	"testing"
