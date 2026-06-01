@@ -13,7 +13,7 @@ Before implementing, review the design and spec documents to understand the requ
 
 > **Findings (Task 0 outcome):**
 >
-> - The earlier draft of this change planned a minted installer-scoped token (`DownloadInstaller(c, mintedToken, env)`). `oneagent-configure` later eliminated minting and standardised on the credential already embedded in `c.Classic`. This change has been updated to match: `DownloadInstaller(c *client.ClassicClient, env Environment)`. The token is never extracted to a Go variable in installer code.
+> - The earlier draft of this change planned a minted installer-scoped token (`DownloadInstaller(c, mintedToken, env)`). `oneagent-configure` later eliminated minting and standardised on the credential already embedded in `c.Classic`. This change has been updated to match: `DownloadInstaller(c *client.ClassicClient, env Environment)`.
 > - The `Environment` type referenced by Task 5/6 was planned in `oneagent-init` Task 1.5 and is defined in `pkg/installer/oneagent/oneagent.go` as `{OS, Arch, Supported, Reason}`.
 
 ## 5. Download Installer + Linux Signature Verification

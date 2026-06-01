@@ -1,6 +1,6 @@
 # Why
 
-The existing OneAgent installer flow downloads the installer binary without any signature verification, then shells out with positional arguments and no structured command representation. This change implements a streamed download (reusing the credentials already embedded in the ClassicClient — same pattern as every other installer in the repo, confirmed by `oneagent-configure`), Linux signature verification against the published Dynatrace root CA, and OS-specific command construction and execution.
+The existing OneAgent installer flow downloads the installer binary without any signature verification, then shells out with positional arguments and no structured command representation. This change implements a streamed download (reusing the credentials already embedded in the ClassicClient — same pattern as every other installer in the repo, confirmed by `oneagent-configure`), Linux signature verification against the published Dynatrace root Certificate Authority, and OS-specific command construction and execution.
 
 ## What Changes
 
