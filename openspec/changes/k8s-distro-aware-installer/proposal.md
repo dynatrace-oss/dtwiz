@@ -2,12 +2,12 @@
 
 ## Why
 
-`dtwiz install kubernetes` applies a single generic DynaKube manifest regardless of which Kubernetes distribution is running. This causes silent failures on IKS and TKGI (wrong kubelet path), rejected pods on OpenShift (missing SCC annotation), and broken CSI injection on EKS Bottlerocket (immutable rootfs requires read-only volume mode). The installer must detect the distribution and generate a manifest tailored to its constraints.
+`dtwiz install kubernetes` applies a single generic DynaKube manifest regardless of which Kubernetes distribution is running. This causes silent failures on IKS and TKGI (wrong kubelet path), rejected pods on OpenShift (missing privileged annotation needed for SCC), and broken CSI injection on EKS Bottlerocket (immutable rootfs requires read-only volume mode). The installer must detect the distribution and generate a manifest tailored to its constraints.
 
 ## What Changes
 
 - `DetectK8sDistribution()` extended with 5 missing distributions: GKE Autopilot, EKS Bottlerocket, IKS, RKE2, TKGI — including sub-variant probing via live kubectl calls (node osImage, namespace existence)
-- Detection order enforced: sub-variants checked before their parent (GKE Autopilot before GKE, EKS Bottlerocket before EKS)
+- Detection order enforced: parent distro confirmed first, sub-variant probed only when parent matches (GKE confirmed → Autopilot probe; EKS confirmed → Bottlerocket probe)
 - `InstallKubernetes()` accepts a `distro` parameter; `installKubernetesCmd` passes the detected distribution
 - `dynakubeTemplateData` gains four new fields: `EnableKSPM`, `PrivilegedAnnotation`, `ReadOnlyVolume`, `KubeletPath`
 - `dynakube.tmpl` gains conditional blocks driven by the new fields: KSPM section, per-DynaKube annotations, kubelet path override

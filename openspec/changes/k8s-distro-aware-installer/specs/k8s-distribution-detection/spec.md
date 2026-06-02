@@ -8,16 +8,19 @@ The system SHALL identify a GKE Autopilot cluster by probing the `kube-system` n
 
 #### Scenario: Autopilot cluster detected
 
-- **WHEN** `DetectK8sDistribution` returns `"GKE"` AND `kubectl get namespace kube-system` annotations contain `autopilot.gke.io`
+- **GIVEN** `DetectK8sDistribution` has returned `"GKE"`
+- **WHEN** `kubectl get namespace kube-system` annotations contain `autopilot.gke.io`
 - **THEN** `ProbeK8sSubVariant` returns `"GKE-Autopilot"`
 
 #### Scenario: Standard GKE cluster unchanged
 
-- **WHEN** `DetectK8sDistribution` returns `"GKE"` AND `kube-system` annotations do NOT contain `autopilot.gke.io`
+- **GIVEN** `DetectK8sDistribution` has returned `"GKE"`
+- **WHEN** `kube-system` annotations do NOT contain `autopilot.gke.io`
 - **THEN** `ProbeK8sSubVariant` returns `"GKE"`
 
 #### Scenario: Probe fails gracefully
 
+- **GIVEN** `DetectK8sDistribution` has returned `"GKE"`
 - **WHEN** the `kubectl get namespace kube-system` call returns an error or times out
 - **THEN** `ProbeK8sSubVariant` returns the parent distro unchanged (`"GKE"`)
 
@@ -27,16 +30,19 @@ The system SHALL identify an EKS Bottlerocket cluster by checking node `osImage`
 
 #### Scenario: Bottlerocket nodes detected
 
-- **WHEN** `DetectK8sDistribution` returns `"EKS"` AND `kubectl get nodes -o jsonpath={.items[*].status.nodeInfo.osImage}` output contains "Bottlerocket"
+- **GIVEN** `DetectK8sDistribution` has returned `"EKS"`
+- **WHEN** `kubectl get nodes -o jsonpath={.items[*].status.nodeInfo.osImage}` output contains "Bottlerocket"
 - **THEN** `ProbeK8sSubVariant` returns `"EKS-Bottlerocket"`
 
 #### Scenario: Standard EKS nodes unchanged
 
-- **WHEN** `DetectK8sDistribution` returns `"EKS"` AND node osImage output does NOT contain "Bottlerocket"
+- **GIVEN** `DetectK8sDistribution` has returned `"EKS"`
+- **WHEN** node osImage output does NOT contain "Bottlerocket"
 - **THEN** `ProbeK8sSubVariant` returns `"EKS"`
 
 #### Scenario: Probe fails gracefully
 
+- **GIVEN** `DetectK8sDistribution` has returned `"EKS"`
 - **WHEN** the node osImage kubectl call returns an error or times out
 - **THEN** `ProbeK8sSubVariant` returns `"EKS"`
 
@@ -46,6 +52,7 @@ The system SHALL identify an IBM Kubernetes Service cluster when the API server 
 
 #### Scenario: IKS server URL matched
 
+- **GIVEN** the kubeconfig current context points to a cluster
 - **WHEN** the cluster server URL contains `.containers.cloud.ibm.com`
 - **THEN** `DetectK8sDistribution` returns `"IKS"`
 
@@ -55,6 +62,7 @@ The system SHALL identify an RKE2 cluster when the server gitVersion contains `+
 
 #### Scenario: RKE2 gitVersion matched
 
+- **GIVEN** the cluster is reachable and `kubectl version` succeeds
 - **WHEN** the server gitVersion string contains `+rke2`
 - **THEN** `DetectK8sDistribution` returns `"RKE2"`
 
@@ -64,11 +72,13 @@ The system SHALL identify a TKGI cluster by checking whether the `pks-system` na
 
 #### Scenario: TKGI namespace found
 
-- **WHEN** no other distro signal matches AND `kubectl get namespace pks-system --ignore-not-found` returns a non-empty result
+- **GIVEN** no other distro signal matches the cluster
+- **WHEN** `kubectl get namespace pks-system --ignore-not-found` returns a non-empty result
 - **THEN** `ProbeK8sSubVariant` (or a fallback probe) returns `"TKGI"`
 
 #### Scenario: Namespace absent
 
+- **GIVEN** no other distro signal matches the cluster
 - **WHEN** `pks-system` namespace does not exist
 - **THEN** detection falls through to `"kubernetes"` default
 
@@ -78,10 +88,12 @@ The system SHALL invoke sub-variant kubectl probes only after the parent distrib
 
 #### Scenario: Autopilot probe skipped on non-GKE cluster
 
+- **GIVEN** the cluster has been analyzed
 - **WHEN** `DetectK8sDistribution` returns any value other than `"GKE"`
 - **THEN** the `kube-system` annotation probe is NOT executed
 
 #### Scenario: Bottlerocket probe skipped on non-EKS cluster
 
+- **GIVEN** the cluster has been analyzed
 - **WHEN** `DetectK8sDistribution` returns any value other than `"EKS"`
 - **THEN** the node osImage probe is NOT executed

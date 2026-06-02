@@ -43,7 +43,7 @@ Alternative considered: per-distro YAML files embedded as separate `//go:embed` 
 
 These probes run only after the parent distro is confirmed (GKE or EKS), keeping the happy path fast. The pure `DetectK8sDistribution()` function remains unchanged for unit-testability; a new `ProbeK8sSubVariant(distro string) string` function wraps the kubectl calls.
 
-### 4. Detection order: sub-variants before parents
+### 4. Detection order: resolve sub-variants after parent match
 
 `ProbeK8sSubVariant` is called after `DetectK8sDistribution` returns the parent distro. This keeps the existing pure function contract intact and avoids adding kubectl calls to every detection path.
 
