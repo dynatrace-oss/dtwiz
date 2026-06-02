@@ -120,6 +120,7 @@ func DownloadInstaller(c *client.ClassicClient, env Environment) (string, error)
 	n, err := io.Copy(tmpFile, src)
 	src.Clear()
 	if err != nil {
+		tmpFile.Close()
 		_ = os.Remove(tmpFile.Name())
 		return "", fmt.Errorf("writing installer to disk: %w", err)
 	}
