@@ -33,6 +33,15 @@ Non-Dynatrace upstream collectors are explicitly excluded.
 - **THEN** all three instances are listed with their status (`PID N` or `not running`)
 - **THEN** an "Uninstall all [N]" option is shown in addition to individual options
 
+#### Scenario: Container-based Dynatrace collector is running
+
+- **GIVEN** a `dynatrace-otel-collector` container is running via docker
+- **WHEN** `dtwiz uninstall otel` is run
+- **THEN** the container appears in the selection list with status `container (docker)`
+- **THEN** the display name is the container name (not the image path)
+- **THEN** if the config is bind-mounted from the host, it is shown as the config path
+- **THEN** if the config is only inside the container, it is shown as `<path> (inside container, not host-mounted)`
+
 #### Scenario: No Dynatrace collectors found
 
 - **GIVEN** no Dynatrace OTel Collector processes are running and no binaries exist in
@@ -101,6 +110,10 @@ to remove before any action is taken.
 After selection, the standard uninstall preview SHALL be shown before prompting for
 confirmation, consistent with the existing preview format for processes and directories.
 
+The `collectorInstance` selected by the user is converted to `otelProcessInfo` via
+`collectorToProcessInfo`, which propagates `containerRuntime` and `containerName` fields
+so that the uninstall execution layer can handle both native processes and containers.
+
 #### Scenario: Selected collector is running
 
 - **GIVEN** the user selects a running collector (PID > 0)
@@ -114,6 +127,13 @@ confirmation, consistent with the existing preview format for processes and dire
 - **WHEN** the preview is rendered
 - **THEN** no kill line appears (nothing to kill)
 - **THEN** its install directory is listed under "Directories that will be removed"
+
+#### Scenario: Selected collector is a container
+
+- **GIVEN** the user selects a container-based collector
+- **WHEN** `collectorToProcessInfo` converts it
+- **THEN** the resulting `otelProcessInfo` has `containerRuntime` and `containerName` set
+- **THEN** `pid` is 0 (containers have no native PID in dtwiz's process model)
 
 ---
 

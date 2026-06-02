@@ -16,14 +16,20 @@ import (
 
 // collectorInstance represents a discovered OTel Collector process (running or installed).
 type collectorInstance struct {
-	pid         int    // 0 if the collector is installed but not currently running
-	binaryPath  string // absolute path to the collector binary
-	configPath  string // config file path parsed from --config arg; empty if unknown
-	isDynatrace bool   // true for dynatrace-otel-collector binaries
+	pid                 int    // 0 if the collector is installed but not currently running
+	binaryPath          string // absolute path to the collector binary, or container image name
+	configPath          string // host-accessible config file path; used for patching operations
+	isDynatrace         bool   // true for dynatrace-otel-collector binaries
+	containerRuntime    string // non-empty when the collector runs inside a container (docker/podman/nerdctl)
+	containerName       string // container name when containerRuntime is set
+	containerConfigPath string // container-internal config path; shown when configPath is empty
 }
 
 // displayName returns a short human-readable label for the collector.
 func (c collectorInstance) displayName() string {
+	if c.containerName != "" {
+		return c.containerName
+	}
 	base := filepath.Base(c.binaryPath)
 	if base == "" || base == "." {
 		return "(unknown)"
@@ -76,6 +82,10 @@ func splitArgs(s string) []string {
 	}
 	return tokens
 }
+
+// findAllRunningOtelCollectorsFunc is the function used to enumerate all running
+// OTel Collector instances. Overridable in tests.
+var findAllRunningOtelCollectorsFunc = findAllRunningOtelCollectors
 
 // otelCollectorBinaryPatterns lists the binary name substrings that identify
 // OTel Collector processes (Dynatrace and upstream distributions).
@@ -187,16 +197,24 @@ func selectCollector(instances []collectorInstance) (*collectorInstance, error) 
 		return nil, nil
 	}
 	for i, c := range instances {
-		status := fmt.Sprintf("PID %d", c.pid)
-		if c.pid == 0 {
+		var status string
+		switch {
+		case c.containerRuntime != "":
+			status = "container (" + c.containerRuntime + ")"
+		case c.pid > 0:
+			status = fmt.Sprintf("PID %d", c.pid)
+		default:
 			status = "not running"
 		}
 		fmt.Printf("  [%d]  %-36s  (%s)\n", i+1, c.displayName(), status)
 		if c.binaryPath != "" {
 			display.ColorMuted.Printf("       %s\n", c.binaryPath)
 		}
-		if c.configPath != "" {
+		switch {
+		case c.configPath != "":
 			display.ColorMuted.Printf("       Config: %s\n", c.configPath)
+		case c.containerConfigPath != "":
+			display.ColorMuted.Printf("       Config: %s (inside container, not host-mounted)\n", c.containerConfigPath)
 		}
 	}
 	fmt.Printf("  [0]  Cancel\n")
@@ -230,16 +248,24 @@ func selectCollectorForUninstall(instances []collectorInstance) ([]collectorInst
 	fmt.Println()
 
 	for i, c := range instances {
-		status := fmt.Sprintf("PID %d", c.pid)
-		if c.pid == 0 {
+		var status string
+		switch {
+		case c.containerRuntime != "":
+			status = "container (" + c.containerRuntime + ")"
+		case c.pid > 0:
+			status = fmt.Sprintf("PID %d", c.pid)
+		default:
 			status = "not running"
 		}
 		fmt.Printf("  [%d]  %-36s  (%s)\n", i+1, c.displayName(), status)
 		if c.binaryPath != "" {
 			display.ColorMuted.Printf("       %s\n", c.binaryPath)
 		}
-		if c.configPath != "" {
+		switch {
+		case c.configPath != "":
 			display.ColorMuted.Printf("       Config: %s\n", c.configPath)
+		case c.containerConfigPath != "":
+			display.ColorMuted.Printf("       Config: %s (inside container, not host-mounted)\n", c.containerConfigPath)
 		}
 	}
 	allIdx := 0

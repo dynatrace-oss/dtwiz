@@ -17,11 +17,14 @@ import (
 )
 
 type otelProcessInfo struct {
-	pid        int
-	binaryPath string
-	installDir string
-	command    string
-	workingDir string
+	pid              int
+	binaryPath       string
+	installDir       string
+	command          string
+	workingDir       string
+	containerRuntime string // non-empty when the collector runs inside a container
+	containerName    string // container name/ID used for restart
+	containerCfgPath string // container-internal config path for copy-back after patch
 }
 
 func binaryPathFromPID(pid int) string {
@@ -277,9 +280,11 @@ func collectorToProcessInfo(c collectorInstance) otelProcessInfo {
 		installDir = filepath.Dir(c.binaryPath)
 	}
 	return otelProcessInfo{
-		pid:        c.pid,
-		binaryPath: c.binaryPath,
-		installDir: installDir,
+		pid:              c.pid,
+		binaryPath:       c.binaryPath,
+		installDir:       installDir,
+		containerRuntime: c.containerRuntime,
+		containerName:    c.containerName,
 	}
 }
 

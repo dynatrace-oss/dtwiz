@@ -46,7 +46,7 @@ func detectOtelCollector() (bool, string, string) {
 	// Exclude shell processes (powershell, pwsh, cmd) and the current process
 	// to avoid matching dtwiz's own detection commands whose arguments contain
 	// the search patterns.
-	for _, pattern := range []string{"otel-collector", "otelcorecol", "otelcol"} {
+	for _, pattern := range []string{"otel-collector", "otelcorecol", "otelcol", "opentelemetry-collector"} {
 		ok, output := runCmd("powershell", "-NoProfile", "-Command",
 			"Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match '"+pattern+"' -and $_.Name -notmatch 'powershell|pwsh|cmd' -and $_.ProcessId -ne $PID } | Select-Object -First 1 -ExpandProperty CommandLine")
 		if ok && output != "" {
@@ -54,6 +54,10 @@ func detectOtelCollector() (bool, string, string) {
 			binPath, configPath := parseWindowsCommandLine(output)
 			return true, binPath, configPath
 		}
+	}
+	// Fall back to container runtime detection (docker/podman/nerdctl).
+	if found, image := detectOtelCollectorContainer(); found {
+		return true, image, ""
 	}
 	logger.Debug("detectOtelCollector: no collector found")
 	return false, "", ""

@@ -98,5 +98,6 @@ func findAllRunningOtelCollectors() []collectorInstance {
 			isDynatrace: isDynatraceOtelCollector(binaryPath),
 		})
 	}
+	result = append(result, findContainerOtelCollectors()...)
 	return result
 }

@@ -130,5 +130,6 @@ func findAllRunningOtelCollectors() []collectorInstance {
 			result = append(result, inst)
 		}
 	}
+	result = append(result, findContainerOtelCollectors()...)
 	return result
 }

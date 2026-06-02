@@ -293,8 +293,14 @@ func UpdateOtelConfig(configPath, envURL, token, platformTok string, dryRun bool
 		if err != nil {
 			return fmt.Errorf("failed to resolve config path: %w", err)
 		}
-		for _, inst := range findAllRunningOtelCollectors() {
-			if inst.configPath == "" || inst.pid <= 0 {
+		for _, inst := range findAllRunningOtelCollectorsFunc() {
+			if inst.configPath == "" {
+				continue
+			}
+			// Skip non-running native processes (pid == 0 with no container runtime).
+			// Containers always have pid == 0 but are running — include them when their
+			// host-mounted config path matches.
+			if inst.containerRuntime == "" && inst.pid <= 0 {
 				continue
 			}
 			instAbs, err := filepath.Abs(inst.configPath)
@@ -307,15 +313,18 @@ func UpdateOtelConfig(configPath, envURL, token, platformTok string, dryRun bool
 					installDir = filepath.Dir(inst.binaryPath)
 				}
 				runningProcs = append(runningProcs, otelProcessInfo{
-					pid:        inst.pid,
-					binaryPath: inst.binaryPath,
-					installDir: installDir,
+					pid:              inst.pid,
+					binaryPath:       inst.binaryPath,
+					installDir:       installDir,
+					containerRuntime: inst.containerRuntime,
+					containerName:    inst.containerName,
+					// containerCfgPath not needed: config is already on the host
 				})
 			}
 		}
 	} else {
 		// No --config: show running collector list and let the user pick.
-		allProcs := findAllRunningOtelCollectors()
+		allProcs := findAllRunningOtelCollectorsFunc()
 		if len(allProcs) > 0 {
 			display.ColorMessage.Println("  Running OTel Collectors:")
 			fmt.Println()
@@ -331,11 +340,19 @@ func UpdateOtelConfig(configPath, envURL, token, platformTok string, dryRun bool
 				if selected.binaryPath != "" {
 					installDir = filepath.Dir(selected.binaryPath)
 				}
-				runningProcs = []otelProcessInfo{{
-					pid:        selected.pid,
-					binaryPath: selected.binaryPath,
-					installDir: installDir,
-				}}
+				proc := otelProcessInfo{
+					pid:              selected.pid,
+					binaryPath:       selected.binaryPath,
+					installDir:       installDir,
+					containerRuntime: selected.containerRuntime,
+					containerName:    selected.containerName,
+				}
+				// Track container-internal config path for copy-back only when
+				// the config is not host-mounted (configPath is still empty here).
+				if configPath == "" && selected.containerRuntime != "" {
+					proc.containerCfgPath = selected.containerConfigPath
+				}
+				runningProcs = []otelProcessInfo{proc}
 			}
 		} else {
 			display.ColorMuted.Println("  No running OTel Collectors found.")
@@ -346,7 +363,23 @@ func UpdateOtelConfig(configPath, envURL, token, platformTok string, dryRun bool
 			if len(allProcs) == 0 {
 				return fmt.Errorf("no running OTel Collectors found — use --config to specify the config file path")
 			}
-			return fmt.Errorf("could not determine config path for the selected collector — use --config to specify it")
+			// Container with config inside the image: extract to a temp file so we
+			// can patch it, then copy it back and restart the container.
+			if len(runningProcs) == 1 && runningProcs[0].containerRuntime != "" && runningProcs[0].containerCfgPath != "" {
+				tmpPath, err := extractContainerConfig(
+					runningProcs[0].containerRuntime,
+					runningProcs[0].containerName,
+					runningProcs[0].containerCfgPath,
+				)
+				if err != nil {
+					return fmt.Errorf("extracting config from container %s: %w", runningProcs[0].containerName, err)
+				}
+				defer os.Remove(tmpPath)
+				configPath = tmpPath
+				fmt.Printf("  Extracted config from container (%s → temp file)\n", runningProcs[0].containerCfgPath)
+			} else {
+				return fmt.Errorf("could not determine config path for the selected collector — use --config to specify it")
+			}
 		}
 		if _, err := os.Stat(configPath); err != nil {
 			return fmt.Errorf("config file not found: %s", configPath)
@@ -381,11 +414,17 @@ func UpdateOtelConfig(configPath, envURL, token, platformTok string, dryRun bool
 	if len(runningProcs) > 0 {
 		display.ColorBold.Println("  Running collectors that will be restarted:")
 		for _, p := range runningProcs {
-			hint := p.binaryPath
-			if hint == "" {
-				hint = "(unknown binary)"
+			if p.containerRuntime != "" {
+				fmt.Printf("    • %s  %s\n",
+					p.containerName,
+					display.ColorMuted.Sprint("("+p.containerRuntime+" restart)"))
+			} else {
+				hint := p.binaryPath
+				if hint == "" {
+					hint = "(unknown binary)"
+				}
+				fmt.Printf("    • PID %d  %s\n", p.pid, display.ColorDefault.Sprint(hint))
 			}
-			fmt.Printf("    • PID %d  %s\n", p.pid, display.ColorDefault.Sprint(hint))
 		}
 	} else {
 		display.ColorDefault.Println("  No running collector found — config will be updated on disk only.")
@@ -428,27 +467,65 @@ func UpdateOtelConfig(configPath, envURL, token, platformTok string, dryRun bool
 		return nil
 	}
 
-	// Kill all running collectors (shared helper) and get the binary for restart.
-	restartBinary := killCollectorProcesses(runningProcs)
-	fmt.Println()
-
-	if restartBinary == "" {
-		display.ColorDefault.Println("  Could not determine binary path — skipping restart.")
-		display.ColorDefault.Println("  Start the collector manually with the updated config.")
-		return nil
+	// Partition into container and native-process restarts.
+	var nativeProcs []otelProcessInfo
+	var containerProcs []otelProcessInfo
+	for _, p := range runningProcs {
+		if p.containerRuntime != "" {
+			containerProcs = append(containerProcs, p)
+		} else {
+			nativeProcs = append(nativeProcs, p)
+		}
 	}
 
-	fmt.Printf("  Restarting collector with updated config...\n")
-	crashed, err := startOtelCollector(restartBinary, configPath)
-	if err != nil {
-		return fmt.Errorf("restarting collector: %w", err)
+	// Container restart: copy patched config back (when not host-mounted), then restart.
+	for _, p := range containerProcs {
+		if p.containerCfgPath != "" {
+			fmt.Printf("  Copying updated config into container %s...\n", p.containerName)
+			if err := copyFileToContainer(p.containerRuntime, p.containerName, configPath, p.containerCfgPath); err != nil {
+				return fmt.Errorf("copying config to container %s: %w", p.containerName, err)
+			}
+		}
+		fmt.Printf("  Restarting container %s...\n", p.containerName)
+		if err := restartContainer(p.containerRuntime, p.containerName); err != nil {
+			return fmt.Errorf("restarting container %s: %w", p.containerName, err)
+		}
+		fmt.Printf("  Container %s restarted.\n", p.containerName)
 	}
 
-	// Verify the restarted collector can deliver logs to Dynatrace.
-	if err := verifyOtelInstall(envURL, platformTok, token, crashed); err != nil {
-		fmt.Printf("\n  Warning: log verification failed: %v\n", err)
-		fmt.Println("  The collector may still be working — check the Dynatrace UI.")
-		return nil
+	// Native process restart: kill old process, start new one.
+	if len(nativeProcs) > 0 {
+		restartBinary := killCollectorProcesses(nativeProcs)
+		fmt.Println()
+
+		if restartBinary == "" {
+			display.ColorDefault.Println("  Could not determine binary path — skipping restart.")
+			display.ColorDefault.Println("  Start the collector manually with the updated config.")
+			return nil
+		}
+
+		fmt.Printf("  Restarting collector with updated config...\n")
+		crashed, err := startOtelCollector(restartBinary, configPath)
+		if err != nil {
+			return fmt.Errorf("restarting collector: %w", err)
+		}
+
+		if err := verifyOtelInstall(envURL, platformTok, token, crashed); err != nil {
+			fmt.Printf("\n  Warning: log verification failed: %v\n", err)
+			fmt.Println("  The collector may still be working — check the Dynatrace UI.")
+			return nil
+		}
+	}
+
+	if len(containerProcs) > 0 {
+		// Best-effort verification for containers: port 4318 may or may not be
+		// exposed to the host depending on how the container was started.
+		noCrash := make(chan error) // never sends — no process to monitor
+		if err := verifyOtelInstall(envURL, platformTok, token, noCrash); err != nil {
+			fmt.Printf("\n  Warning: log verification failed: %v\n", err)
+			fmt.Println("  The collector may still be working — check the Dynatrace UI.")
+			return nil
+		}
 	}
 
 	display.ColorOK.Println("  ✓ Collector restarted and verified.")

@@ -422,6 +422,91 @@ service:
 	}
 }
 
+// TestUpdateOtelConfig_ContainerDryRun_HostMounted verifies that when --config is
+// provided and a container has that file host-mounted, the container appears in the
+// "will be restarted" section of the dry-run preview as "container (<runtime>)"
+// rather than "PID 0".
+func TestUpdateOtelConfig_ContainerDryRun_HostMounted(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+	initial := "receivers:\n  otlp: {}\n"
+	if err := os.WriteFile(configPath, []byte(initial), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Override the collector discovery to return a container whose host-mounted
+	// config path matches the file we're about to update.
+	orig := findAllRunningOtelCollectorsFunc
+	t.Cleanup(func() { findAllRunningOtelCollectorsFunc = orig })
+	findAllRunningOtelCollectorsFunc = func() []collectorInstance {
+		return []collectorInstance{
+			{
+				pid:              0,
+				binaryPath:       "docker.io/otel/opentelemetry-collector:0.153.0",
+				configPath:       configPath, // host-mounted path matches --config
+				containerRuntime: "podman",
+				containerName:    "competent_shirley",
+			},
+		}
+	}
+
+	output := captureStdout(t, func() {
+		_ = UpdateOtelConfig(configPath, "https://env.live.dynatrace.com", "mytoken", "", true)
+	})
+
+	// The restart plan line uses fmt.Printf so it IS captured by the pipe.
+	// Format: "    • <name>  (<runtime> restart)"
+	if !strings.Contains(output, "competent_shirley") {
+		t.Errorf("expected container name 'competent_shirley' in restart plan, got:\n%s", output)
+	}
+	if !strings.Contains(output, "podman restart") {
+		t.Errorf("expected 'podman restart' in restart plan, got:\n%s", output)
+	}
+	// "PID 0" must NOT appear — that was the old broken behaviour.
+	if strings.Contains(output, "PID 0") {
+		t.Errorf("'PID 0' must not appear for a container in the restart plan, got:\n%s", output)
+	}
+}
+
+// TestUpdateOtelConfig_ContainerDryRun_NotInRestartPlan verifies that a container
+// whose config does NOT match the provided --config path is excluded from the restart
+// plan (no spurious restarts).
+func TestUpdateOtelConfig_ContainerDryRun_NotInRestartPlan(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte("receivers:\n  otlp: {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	orig := findAllRunningOtelCollectorsFunc
+	t.Cleanup(func() { findAllRunningOtelCollectorsFunc = orig })
+	findAllRunningOtelCollectorsFunc = func() []collectorInstance {
+		return []collectorInstance{
+			{
+				pid:              0,
+				binaryPath:       "docker.io/otel/opentelemetry-collector:0.153.0",
+				configPath:       "/some/other/config.yaml", // different path
+				containerRuntime: "docker",
+				containerName:    "other-collector",
+			},
+		}
+	}
+
+	output := captureStdout(t, func() {
+		_ = UpdateOtelConfig(configPath, "https://env.live.dynatrace.com", "mytoken", "", true)
+	})
+
+	// The restart plan lines use fmt.Printf, so if the container were included
+	// its name would appear. Verify it is absent.
+	if strings.Contains(output, "other-collector") {
+		t.Errorf("container with non-matching config must not appear in restart plan, got:\n%s", output)
+	}
+	// The diff output is captured via fmt.Println — verify the update ran.
+	if !strings.Contains(output, "otlp_http/dynatrace") {
+		t.Errorf("expected DT exporter in diff output (update ran), got:\n%s", output)
+	}
+}
+
 func TestFindExistingCollectorConfig_HomeWins(t *testing.T) {
 	homeDir := t.TempDir()
 	cwdDir := t.TempDir()
