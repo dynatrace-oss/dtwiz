@@ -55,17 +55,17 @@ Build the OS-specific install command from `AgentConfig` and execute it (or prev
 
 ### Part A — Build command
 
-- [ ] 6.1 Implement `BuildInstallCommand(env Environment, cfg AgentConfig, opts InstallOptions, installerPath string) ([]string, error)`
-- [ ] 6.2 Windows: emit `{installerPath, --quiet?, --set-monitoring-mode=<cfg.MonitoringMode>, --set-app-log-content-access=<cfg.AppLogContentAccess>, --set-host-group=<opts.HostGroup>?}` (Windows `--quiet` MUST be the first flag; Windows-specific implementation in Task 11)
-- [ ] 6.3 Linux: emit `{/bin/sh, installerPath, --set-server=<apiURL>, --set-monitoring-mode=..., --set-app-log-content-access=..., --set-host-group=<opts.HostGroup>?}`; prepend `sudo` when `needsSudo()` is true
-- [ ] 6.4 Unit tests covering both OS branches, `--monitoring-mode` override, host-group present/absent, `--quiet` flag ordering on Windows
-- [ ] 6.4a Emit `logger.Debug("built install command", "argv", argv)` once the argv slice is final — the credential is not in argv, so this is safe
+- [x] 6.1 Implement `BuildInstallCommand(env Environment, cfg AgentConfig, opts InstallOptions, installerPath string) ([]string, error)`
+- [x] 6.2 Windows: emit `{installerPath, --quiet?, --set-monitoring-mode=<cfg.MonitoringMode>, --set-app-log-content-access=<cfg.AppLogContentAccess>, --set-host-group=<opts.HostGroup>?}` (Windows `--quiet` MUST be the first flag; Windows-specific implementation in Task 11)
+- [x] 6.3 Linux: emit `{/bin/sh, installerPath, --set-server=<apiURL>, --set-monitoring-mode=..., --set-app-log-content-access=..., --set-host-group=<opts.HostGroup>?}`; prepend `sudo` when `needsSudo()` is true
+- [x] 6.4 Unit tests covering both OS branches, `--monitoring-mode` override, host-group present/absent, `--quiet` flag ordering on Windows
+- [x] 6.4a Emit `logger.Debug("built install command", "argv", argv)` once the argv slice is final — the credential is not in argv, so this is safe
 
 ### Part B — Execute command
 
-- [ ] 6.5 Implement `ExecuteInstallCommand(argv []string, quiet bool) (int, error)` — no `dryRun` parameter; dry-run is checked beforehand in `InstallOneAgentV2` before this function is ever called
-- [ ] 6.6 Execute: stream stdout/stderr when `quiet == false`; capture when `quiet == true`
-- [ ] 6.7 Return the subprocess exit code alongside any wrapping error; non-zero exit code is an error with the installer output included
-- [ ] 6.8 Unit tests: executor returns exit code, stderr captured on failure
-- [ ] 6.9 Emit `logger.Debug("executing installer", "argv", argv)` immediately before spawning the subprocess
-- [ ] 6.10 Emit `logger.Verbose("installer exited", "exit_code", code, "duration", time.Since(start))` after the subprocess returns
+- [x] 6.5 Implement `ExecuteInstallCommand(argv []string, quiet bool) (int, error)` — no `dryRun` parameter; dry-run is checked beforehand in `InstallOneAgentV2` before this function is ever called
+- [x] 6.6 Execute: stream stdout/stderr when `quiet == false`; capture when `quiet == true`
+- [x] 6.7 Return the subprocess exit code alongside any wrapping error; non-zero exit code is an error with the installer output included
+- [x] 6.8 Unit tests: executor returns exit code, stderr captured on failure
+- [x] 6.9 Emit `logger.Debug("executing installer", "argv", argv)` immediately before spawning the subprocess
+- [x] 6.10 Emit `logger.Verbose("installer exited", "exit_code", code, "duration", time.Since(start))` after the subprocess returns
