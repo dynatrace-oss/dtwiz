@@ -232,6 +232,7 @@ When `openssl cms -verify` returns a non-zero exit code, `VerifyInstallerSignatu
 When `opts.DryRun == true`, `InstallOneAgentV2` SHALL print a human-readable plan and return immediately after environment detection and config resolution. No installer SHALL be downloaded, no signature SHALL be verified, and no subprocess SHALL be spawned.
 
 The plan SHALL include:
+
 - The full installer download URL (computed locally from `c.Classic.BaseURL()` and the detected environment)
 - Whether signature verification would run and against which CA, or that it is skipped
 - The resolved monitoring mode
