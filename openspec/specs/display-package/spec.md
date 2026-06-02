@@ -46,13 +46,14 @@ Any new color or print need SHALL be evaluated against this palette first. A new
 
 ### Requirement: Print helpers for common output patterns
 
-The `pkg/display` package SHALL expose `Header(message string)`, `PrintSectionDivider()`, `PrintStatusLine(label, message string, c *color.Color)`, `PrintFlagLine(label, message string, c *color.Color)`, and `PrintError(label string, err error)` as helpers for recurring output patterns used across commands and installers.
+The `pkg/display` package SHALL expose `Header(message string)`, `PrintSectionDivider()`, `PrintStatusLine(label, message string, c *color.Color)`, `PrintFlagLine(label, message string, c *color.Color)`, `PrintError(label string, err error)`, `PrintPending(label, message string)`, and `ClearPending()` as helpers for recurring output patterns used across commands and installers.
 
 `Header` SHALL print the message indented with two spaces using `ColorHeader`, followed immediately by a section divider — callers SHALL NOT call `PrintSectionDivider()` after `Header()`. Callers SHALL NOT add leading spaces to the message argument; `Header` applies indentation itself.
 `PrintSectionDivider` SHALL print a `─` separator of `DividerLineLength` characters indented with two spaces using `ColorMuted`. It is available for use outside of `Header` where a standalone divider is needed.
 `PrintStatusLine` SHALL print a line of the form `<label>:  <message>` (indented two spaces) where the label is styled with `ColorDefault` and the message is styled with the provided color.
 `PrintFlagLine` SHALL print a line of the form `<label>  <message>` (no colon, indented two spaces) where the label is styled with `ColorDefault` and the message is styled with the provided color.
 `PrintError` SHALL print a line of the form `<label>: ✗ <err>` (indented two spaces) where the error text is styled with `ColorError`.
+`PrintPending` SHALL write a `\r`-prefixed in-progress line of the form `<label>:  <message>` to stderr without a trailing newline, allowing a subsequent call to overwrite it. It SHALL be a no-op when stderr is not a TTY. `ClearPending` SHALL erase the line written by `PrintPending` using ANSI `\r\033[2K` and SHALL also be a no-op on non-TTY stderr. Callers MUST call `ClearPending` (or allow `PrintStatusLine` to start a new line) before returning — a pending line SHALL never be left on screen.
 
 Any print pattern that recurs across two or more files SHALL be extracted into `pkg/display/print.go`. Print patterns that are specific to a single installer or command MAY remain in that file but MUST reuse `display.Color*` variables and MUST NOT construct their own `color.New(...)` instances for roles already covered by the palette.
 

@@ -2,16 +2,15 @@
 
 ## ADDED Requirements
 
-### Requirement: Installer download uses the minted token
+### Requirement: Installer download reuses the ClassicClient credential
 
-`InstallOneAgentV2` SHALL download the OneAgent installer using the minted token from `MintInstallerToken`, not the user-supplied access token. The download SHALL stream to a temporary file with `0o700` permissions on Unix (preventing other local users from reading the binary).
+`InstallOneAgentV2` SHALL download the OneAgent installer using the resty client embedded in `c.Classic`. The credential is set upstream by `validateCredentials` / `setupClientFromCreds` and SHALL NOT be extracted to a variable in installer code. The download SHALL stream to a temporary file with `0o700` permissions on Unix (preventing other local users from reading the binary).
 
-#### Scenario: Download authenticated with minted token
+#### Scenario: Download uses the embedded Authorization header
 
-- **GIVEN** `MintInstallerToken` returned `tok-installer-abc`
-- **WHEN** `DownloadInstaller(c, "tok-installer-abc", env)` is called
-- **THEN** the request `Authorization` header is `Api-Token tok-installer-abc`
-- **AND** the user's `--access-token` does NOT appear in the request
+- **WHEN** `DownloadInstaller(c, env)` is called
+- **THEN** the request `Authorization` header is the one configured on `c.HTTP()` upstream
+- **AND** no installer code extracts the raw token into a Go variable
 
 #### Scenario: Linux x86 installer URL
 
@@ -33,31 +32,46 @@
 
 #### Scenario: Temp file permissions on Unix
 
-- **GIVEN** the download succeeds on Linux
+- **GIVEN** the download succeeds on a Unix host
 - **WHEN** the temp file is created
 - **THEN** its permissions are `0o700`
 
 ### Requirement: User-facing download output
 
-`DownloadInstaller` SHALL output to stdout (visible at default verbosity, no `-v` required) a one-line confirmation on success via `display.PrintStatusLine("installer", "<filename> (<size>)", display.ColorOK)`. Progress detail SHALL NOT be printed at default verbosity beyond this single line — finer detail belongs in `logger.Debug`/`logger.Verbose`.
+`DownloadInstaller` SHALL output to stdout (visible at default verbosity, no `-v` required) a one-line confirmation on success via `display.PrintStatusLine("installer", "<filename> (<size>)", display.ColorOK)`. Multi-line or log-style progress output SHALL NOT be printed at default verbosity — finer detail belongs in `logger.Debug`/`logger.Verbose`.
+
+During the download, a TTY-only `\r`-overwriting progress indicator MAY be emitted to stderr showing bytes received (and percentage when `Content-Length` is known). This indicator is suppressed automatically when stderr is not a terminal (CI, pipes). It does not appear on stdout and is erased before the final `PrintStatusLine` confirmation, so the net visible output remains a single line.
 
 #### Scenario: Successful download produces one stdout line
 
 - **GIVEN** the installer downloads successfully
 - **WHEN** `DownloadInstaller` returns
-- **THEN** stdout contains exactly one line via `display.PrintStatusLine` showing the installer filename and size (e.g. `Dynatrace-OneAgent-Linux-x86-1.340.0.sh (245MB)`)
-- **AND** the filename is the OS-specific basename of the temp file (Unix: `.sh`, Windows: `.exe`)
+- **THEN** stdout contains exactly one line via `display.PrintStatusLine` showing the installer filename and size (e.g. `dynatrace-oneagent-1963786212.sh (245MB)`)
+- **AND** the filename is the OS-specific basename of the temp file (Unix env: `.sh`, Windows env: `.exe`)
+
+#### Scenario: TTY progress indicator during download
+
+- **GIVEN** stderr is a terminal
+- **WHEN** `DownloadInstaller` is streaming the installer body
+- **THEN** a `\r`-overwriting progress line is emitted to stderr at most once per 100 ms showing bytes downloaded and, when `Content-Length` is known, the percentage
+- **AND** the progress line is erased (ANSI `\r\033[2K`) before `DownloadInstaller` returns
+
+#### Scenario: Progress suppressed in non-TTY environments
+
+- **GIVEN** stderr is not a terminal (e.g. CI, pipe)
+- **WHEN** `DownloadInstaller` streams the installer body
+- **THEN** no progress output is emitted to stderr
 
 ### Requirement: Download debug logging
 
-`DownloadInstaller` SHALL emit `logger.Debug` for the download start (URL, OS, arch) and `logger.Verbose` for the download completion (path, size in bytes). Neither the minted token nor the user's access token SHALL appear in any log line. The `Authorization` request header SHALL NOT be logged.
+`DownloadInstaller` SHALL emit `logger.Debug` for the download start (URL, OS, arch) and `logger.Verbose` for the download completion (path, size in bytes). The credential SHALL NOT appear in any log line. The `Authorization` request header SHALL NOT be logged.
 
 #### Scenario: Download start logged at Debug
 
 - **GIVEN** `--debug` is enabled
 - **WHEN** `DownloadInstaller` issues the GET request
 - **THEN** stderr contains a Debug line with message `"downloading installer"` and keys `url`, `os`, `arch`
-- **AND** no log line contains the minted token value
+- **AND** no log line contains the raw credential value
 
 #### Scenario: Download completion logged at Verbose
 
@@ -108,6 +122,8 @@ When `env.OS == "linux"` and `--no-verify-signature` is not passed, `VerifyInsta
 ### Requirement: User-facing signature verification output
 
 `VerifyInstallerSignature` SHALL output to stdout on successful Linux verification via `display.PrintStatusLine("signature", "Installer signature verified", display.ColorOK)`. The skip paths (`--no-verify-signature` set, or non-Linux OS) SHALL produce no stdout output. Verification failure produces an error returned to the caller, not stdout output.
+
+During verification, TTY-only `\r`-overwriting pending lines MAY be emitted to stderr via `display.PrintPending` at two milestones: before the root CA is fetched (`"fetching root CA..."`) and before openssl runs (`"verifying..."`). These lines are suppressed automatically when stderr is not a terminal (CI, pipes) and are erased with `display.ClearPending` before `VerifyInstallerSignature` returns (on both success and failure paths), so the net visible output remains a single `PrintStatusLine` on success.
 
 #### Scenario: Successful Linux verification outputs status line
 
@@ -211,24 +227,37 @@ When `openssl cms -verify` returns a non-zero exit code, `VerifyInstallerSignatu
 - **WHEN** `BuildInstallCommand` runs
 - **THEN** the argv contains `"--set-monitoring-mode=infra-only"`
 
-### Requirement: --dry-run prints command without executing
+### Requirement: --dry-run prints a plan without any network calls or disk writes
 
-When `opts.DryRun == true`, `ExecuteInstallCommand` SHALL print the argv (joined with single spaces) prefixed with `"Command: "` and return `(0, nil)` without launching any subprocess.
+When `opts.DryRun == true`, `InstallOneAgentV2` SHALL print a human-readable plan and return immediately after environment detection and config resolution. No installer SHALL be downloaded, no signature SHALL be verified, and no subprocess SHALL be spawned.
 
-#### Scenario: Dry-run does not execute
+The plan SHALL include:
+
+- The full installer download URL (computed locally from `c.Classic.BaseURL()` and the detected environment)
+- Whether signature verification would run and against which CA, or that it is skipped
+- The resolved monitoring mode
+
+#### Scenario: Dry-run prints plan and returns without network calls
 
 - **GIVEN** `opts.DryRun == true`
-- **WHEN** `ExecuteInstallCommand(argv, true, false)` is called
-- **THEN** stdout contains `"Command: " + strings.Join(argv, " ")`
-- **AND** no subprocess is spawned
+- **WHEN** `InstallOneAgentV2` is called
+- **THEN** stdout contains `[dry-run] Would install Dynatrace OneAgent` followed by the installer URL, signature note, and monitoring mode
+- **AND** `DownloadInstaller` is NOT called
+- **AND** `VerifyInstallerSignature` is NOT called
+- **AND** `ExecuteInstallCommand` is NOT called
+- **AND** no HTTP requests are made
 
-#### Scenario: Dry-run still confirms preflight passed
+#### Scenario: Dry-run signature line reflects --no-verify-signature
 
-- **GIVEN** `--dry-run` is passed
-- **WHEN** `InstallOneAgentV2` runs end-to-end
-- **THEN** `DetectEnvironment`, `RunPreflightChecks`, `ResolveAgentConfig`, `ResolveEndpoints`, `MintInstallerToken`, `DownloadInstaller`, and `VerifyInstallerSignature` all run
-- **AND** `ExecuteInstallCommand` only prints the command
-- **AND** `WaitForHostRegistration` is skipped (nothing to verify)
+- **GIVEN** `opts.DryRun == true` and `opts.NoVerifySignature == true` (or `env.OS != "linux"`)
+- **WHEN** `InstallOneAgentV2` prints the plan
+- **THEN** the signature line reads `Signature:  skipped`
+
+#### Scenario: Dry-run signature line shows CA URL on Linux without --no-verify-signature
+
+- **GIVEN** `opts.DryRun == true` and `env.OS == "linux"` and `opts.NoVerifySignature == false`
+- **WHEN** `InstallOneAgentV2` prints the plan
+- **THEN** the signature line reads `Signature:  would verify against https://ca.dynatrace.com/dt-root.cert.pem`
 
 ### Requirement: Execute streams output and captures exit code
 
@@ -275,7 +304,7 @@ When `opts.DryRun == false`, `ExecuteInstallCommand` SHALL launch the installer 
 
 ### Requirement: Build and execution debug logging
 
-`BuildInstallCommand` SHALL emit a `logger.Debug` line capturing the full argv. `ExecuteInstallCommand` SHALL emit a `logger.Debug` line at execution start and a `logger.Verbose` line at completion with exit code and duration. Because the minted token is never placed into argv, the argv is safe to log at Debug. Token values from upstream stages SHALL still not appear in any log line.
+`BuildInstallCommand` SHALL emit a `logger.Debug` line capturing the full argv. `ExecuteInstallCommand` SHALL emit a `logger.Debug` line at execution start and a `logger.Verbose` line at completion with exit code and duration. The credential is never placed into argv, so the argv is safe to log at Debug.
 
 #### Scenario: Built command logged at Debug
 

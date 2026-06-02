@@ -19,7 +19,7 @@ Gaps relative to the production requirements for this rework:
 - No post-install confirmation. The function returns success as soon as the installer subprocess exits 0. (The caller wires `WatchIngest` from `pkg/installer/ingest_watch.go` which polls Grail via DQL for general data flow, but it does not confirm that *this specific host* has registered.)
 - `--monitoring-mode` is not user-configurable — the flow always behaves as full-stack.
 
-The existing implementation is not assumed correct; this change rebuilds the flow in `oneagent_v2.go` and replaces the old function at the end.
+The existing implementation is not assumed correct; this change rebuilds the flow in `pkg/installer/oneagent/` and replaces the old function at the end.
 
 The codebase already has:
 
@@ -32,7 +32,7 @@ The codebase already has:
 
 **Goals:**
 
-- A new `InstallOneAgentV2` flow in `pkg/installer/oneagent_v2.go` covering the eight critical tasks documented in [tasks.md](../tasks.md).
+- A new `InstallOneAgentV2` flow in `pkg/installer/oneagent/` covering the eight critical tasks documented in [tasks.md](../tasks.md).
 - Fail-fast pre-flights before any network work.
 - Mandatory installer-token minting with no fallback.
 - Linux signature verification gated only by the explicit `--no-verify-signature` flag.
@@ -50,15 +50,17 @@ The codebase already has:
 
 ## Decisions
 
-### 1. Two-file split: `oneagent.go` + `oneagent_v2.go`
+### 1. Package split: `pkg/installer/oneagent/`
 
-During Tasks 1–7, the new flow lives entirely in `pkg/installer/oneagent_v2.go`. The existing `oneagent.go` is left untouched (apart from a small extension in Task 2 to expose `oneAgentInstallerType` results in the new `Environment` struct shape, behind a new helper that does not break existing callers).
+The new flow lives entirely in `pkg/installer/oneagent/` (Go package `oneagent`), leaving the rest of `pkg/installer/` unchanged until Task 8. The package is split across three source files:
 
-At Task 8, `oneagent_v2.go`'s functions are renamed/moved into `oneagent.go`, replacing the old implementations entirely. `oneagent_v2.go` is deleted.
+- `oneagent.go` — types, entry point `InstallOneAgentV2`, `DefaultAgentConfig`, `ResolveAgentConfig`, `detectRuntimeEnvironment`
+- `download.go` — `DownloadInstaller`, `readErrorBody`, OS/arch helpers
+- `verify.go` — `VerifyInstallerSignature`, CA fetch, openssl invocation
 
-This split keeps the diff reviewable, makes the rollback path mechanical, and avoids touching the old call sites until they are ready to be cut over.
+At Task 8, the `pkg/installer/oneagent/` package replaces the old `InstallOneAgent` entirely and the feature flag is removed.
 
-**Alternative considered:** Build the new flow incrementally inside `oneagent.go` by toggling code paths on the feature flag inside individual functions. Rejected — interleaved code paths make the rollback and the eventual cleanup much more invasive.
+This split keeps each concern isolated, makes rollback mechanical (delete the directory), and avoids touching the old call sites until Task 8.
 
 ### 2. Feature flag: `ONEAGENT_POC`, removed at Task 8
 
@@ -77,7 +79,7 @@ During Tasks 1–7, `cmd/install.go`'s `installOneAgentCmd.RunE` branches:
 
 ```go
 if featureflags.IsEnabled(featureflags.OneAgentPoC) {
-    return installer.InstallOneAgentV2(c.Classic, opts)
+    return oneagent.InstallOneAgentV2(c, opts)
 }
 return installer.InstallOneAgent(c.Classic, installDryRun, quiet, hostGroup)
 ```

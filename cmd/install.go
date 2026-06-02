@@ -7,6 +7,8 @@ import (
 
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 var installDryRun bool
@@ -25,6 +27,11 @@ var installCmd = &cobra.Command{
 	Short: "Install a Dynatrace ingestion method",
 	Args:  cobra.MinimumNArgs(1),
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// installCmd.PersistentPreRun overrides root's, so reproduce its behaviour here.
+		logger.Init(debugFlag, verbosityFlag)
+		logger.Verbose("logging: verbose")
+		logger.Debug("logging: debug")
+		featureflags.ApplyCLIOverrides(cmd.Flags())
 		installer.AutoConfirm = installAutoConfirm
 	},
 }
@@ -49,9 +56,10 @@ var installOneAgentCmd = &cobra.Command{
 		quiet, _ := cmd.Flags().GetBool("quiet")
 		hostGroup, _ := cmd.Flags().GetString("host-group")
 
-		opts := installer.InstallOptions{
+		opts := oneagent.InstallOptions{
 			DryRun:                installDryRun,
 			MonitoringMode:        flagMonitoringMode,
+			HostGroup:             hostGroup,
 			NoVerifySignature:     flagNoVerifySignature,
 			SkipConnectivityCheck: flagSkipConnectivityCheck,
 			ConnectivityCheckOnly: flagConnectivityCheckOnly,
@@ -60,7 +68,7 @@ var installOneAgentCmd = &cobra.Command{
 		}
 
 		if featureflags.IsEnabled(featureflags.OneAgentPoC) {
-			return installer.InstallOneAgentV2(c, opts)
+			return oneagent.InstallOneAgentV2(c, opts)
 		}
 
 		if err := installer.InstallOneAgent(c.Classic, installDryRun, quiet, hostGroup); err != nil {

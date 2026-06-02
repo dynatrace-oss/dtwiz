@@ -13,6 +13,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
 	"github.com/dynatrace-oss/dtwiz/pkg/recommender"
 )
 
@@ -139,7 +140,7 @@ var setupCmd = &cobra.Command{
 		switch selected.Method {
 		case recommender.MethodOneAgent:
 			if featureflags.IsEnabled(featureflags.OneAgentPoC) {
-				installErr = installer.InstallOneAgentV2(c, installer.InstallOptions{
+				installErr = oneagent.InstallOneAgentV2(c, oneagent.InstallOptions{
 					DryRun:         setupDryRun,
 					MonitoringMode: string(installer.InstallModeFullStack),
 				})

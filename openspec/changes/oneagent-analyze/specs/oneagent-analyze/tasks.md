@@ -21,13 +21,13 @@ Before implementing, review the design and spec documents to understand the requ
 
 Detect OS/arch and run the existing-OneAgent and privilege pre-flights before any network work. Fail fast with clear, actionable errors. Agent configuration (default + `--monitoring-mode` override) is a separate concern owned by Task 2.5.
 
-**Files:** `pkg/installer/oneagent.go` (extend), `pkg/installer/oneagent_v2.go` (extend — created in Task 1), `pkg/installer/oneagent_v2_test.go` (extend — created in Task 1), `pkg/analyzer/detect_oneagent_unix.go` / `_windows.go` (reuse)
+**Files:** `pkg/installer/oneagent.go` (extend), `pkg/installer/oneagent/` (extend — created in Task 1), `pkg/analyzer/detect_oneagent_unix.go` / `_windows.go` (reuse)
 
-Task 1 has already created `oneagent_v2.go` with the `InstallOptions` struct and the stub `InstallOneAgentV2` entry function. This task fills in the stub with the OS-detection + preflight stages.
+Task 1 has already created the `pkg/installer/oneagent/` package with the `InstallOptions` struct and the full `InstallOneAgentV2` entry function. This task fills in the OS-detection + preflight stages.
 
 ### Part A — OS/Arch detection
 
-- [ ] 2.1 Define `Environment` struct (`OS`, `Arch`, `Supported`, `Reason`) in `oneagent_v2.go`
+- [ ] 2.1 Define `Environment` struct (`OS`, `Arch`, `Supported`, `Reason`) in `pkg/installer/oneagent/oneagent.go` (if not already present from Task 1)
 - [ ] 2.2 Implement `DetectEnvironment() Environment` mapping `runtime.GOOS`/`runtime.GOARCH` → `OS` ("windows"/"linux"/"aix"/"other") and `Arch` ("x86" for `amd64`/`386`, "arm" for `arm64`/`arm`, "other" otherwise)
 - [ ] 2.3 Mark AIX as `Supported: false` with `Reason: "AIX is not supported"`; preserve the existing macOS rejection message
 - [ ] 2.4 Unit tests covering Linux/amd64, Linux/arm64, Windows/amd64, AIX rejection, and unknown OS
@@ -55,9 +55,9 @@ Resolve the agent's runtime configuration — monitoring mode and app-log conten
 - **Default path** — when no flag is passed, `ResolveAgentConfig` returns `{MonitoringMode: "fullstack"}` exactly. This is the zero-config default for OneAgent installs per `AGENTS.md`.
 - **Override path** — when `--monitoring-mode <value>` is passed (or `opts.MonitoringMode != ""`), the field is overridden. No allow-list — the value is passed through verbatim to the installer's `--set-monitoring-mode=<value>` flag in Task 6.
 
-**Files:** `pkg/installer/oneagent_v2.go` (extend — scaffolded in Task 1), `pkg/installer/oneagent_v2_test.go` (extend — scaffolded in Task 1), `cmd/install.go` (modify — wire `--monitoring-mode`)
+**Files:** `pkg/installer/oneagent/` (extend — scaffolded in Task 1), `cmd/install.go` (modify — wire `--monitoring-mode`)
 
-- [x] 2.5.1 Define the `AgentConfig` struct in `oneagent_v2.go`:
+- [x] 2.5.1 Define the `AgentConfig` struct in `pkg/installer/oneagent/oneagent.go`:
 
   ```go
   type AgentConfig struct {
@@ -84,7 +84,7 @@ Resolve the agent's runtime configuration — monitoring mode and app-log conten
 
 Resolve agent communication endpoints dynamically from the tenant API. Drop the hardcoded fallback used by the old flow. After resolving, probe each endpoint for TCP reachability. Connectivity failures are warnings, not blockers.
 
-**Files:** `pkg/installer/oneagent_v2.go` (extend — scaffolded in Task 1), `pkg/installer/oneagent_v2_test.go` (extend — scaffolded in Task 1), `pkg/installer/installer.go` (reuse `ExtractTenantID`)
+**Files:** `pkg/installer/oneagent/` (extend — scaffolded in Task 1), `pkg/installer/installer.go` (reuse `ExtractTenantID`)
 
 ### Part A — Endpoint resolution
 

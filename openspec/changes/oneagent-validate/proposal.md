@@ -6,7 +6,7 @@ This change adds post-install verification: `WaitForHostRegistration` polls Grai
 
 ## What Changes
 
-- `WaitForHostRegistration(p *client.PlatformClient, hostname string, timeout time.Duration) (string, error)` added to `pkg/installer/oneagent_v2.go`.
+- `WaitForHostRegistration(p *client.PlatformClient, hostname string, timeout time.Duration) (string, error)` added to `pkg/installer/oneagent/oneagent.go`.
 - Uses the Platform API / Grail DQL stack already used by `WatchIngest` (`pkg/installer/ingest_watch.go`) — no new URL family or auth scheme.
 - Timeout (2 minutes) is a warning, not a failure: the installer subprocess already exited 0, and host registration is eventually consistent.
 - If no platform token is configured, the step is skipped with a clear warning — the install still reports success.
@@ -19,6 +19,6 @@ This change adds post-install verification: `WaitForHostRegistration` polls Grai
 
 ## Impact
 
-- **Modified files:** `pkg/installer/oneagent_v2.go` (extend), `pkg/installer/oneagent_v2_test.go` (extend)
+- **Modified files:** `pkg/installer/oneagent/` (extend), `pkg/installer/oneagent/oneagent_test.go` (extend)
 - **No new flags** — verification is automatic; the only opt-out is not supplying a platform token.
 - **No breaking change** — the function is called after `ExecuteInstallCommand` returns 0; timeout returns `("", nil)` so the overall install exit code remains 0.

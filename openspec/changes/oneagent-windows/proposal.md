@@ -24,5 +24,5 @@ Tasks 2–7 of the OneAgent PoC implement the core install flow with Linux as th
 ## Impact
 
 - **New files:** `pkg/installer/preflight_windows.go` (`//go:build windows`), corresponding `preflight_unix.go` stub if needed.
-- **Modified files:** `pkg/installer/oneagent_v2.go` (extend download, verify, build paths), `pkg/installer/oneagent_v2_test.go` (extend with Windows happy-path and PowerShell mock tests).
+- **Modified files:** `pkg/installer/oneagent/` (extend download in `download.go`, verify in `verify.go`, build paths in `oneagent.go`), `pkg/installer/oneagent/oneagent_test.go` (extend with Windows happy-path and PowerShell mock tests).
 - **New dependency:** `golang.org/x/sys/windows` for process token / SID inspection (may already be present transitively).

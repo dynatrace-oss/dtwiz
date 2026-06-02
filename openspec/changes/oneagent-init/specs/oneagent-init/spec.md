@@ -24,39 +24,41 @@
 - **WHEN** `dtwiz --help` runs and `dtwiz status` is executed
 - **THEN** the flag appears in `dtwiz status` output showing its enabled/disabled state, and in help text if feature-flag listing is exposed
 
-### Requirement: Scaffold oneagent_v2.go with stub functions
+### Requirement: New package pkg/installer/oneagent/ with core installer logic
 
-`pkg/installer/oneagent_v2.go` SHALL be created with:
+`pkg/installer/oneagent/` SHALL be created as a standalone Go package (`package oneagent`) with the installer split across three source files:
 
-- Entry point: `InstallOneAgentV2(c *client.Client, opts InstallOptions) error` — documented but not implemented (returns `errors.New("not yet implemented")`)
-- Type definitions: `Environment`, `AgentConfig`, `InstallOptions`, `Endpoint`, `ConnectivityReport`, `ConnectivityResult`
-- Stub function signatures (not implemented) for all Tasks 2–7 functions: `DetectEnvironment()`, `RunPreflightChecks()`, `ResolveAgentConfig()`, `ResolveEndpoints()`, `MintInstallerToken()`, `DownloadInstaller()`, `VerifyInstallerSignature()`, `BuildInstallCommand()`, `ExecuteInstallCommand()`, `WaitForHostRegistration()`, `CheckAllEndpoints()`
+- `oneagent.go`: types, entry point `InstallOneAgentV2`, `DefaultAgentConfig`, `ResolveAgentConfig`, `detectRuntimeEnvironment`
+- `download.go`: `DownloadInstaller`, `readErrorBody`, `installerOSSegment`, `installerExtension`, `humanBytes`
+- `verify.go`: `VerifyInstallerSignature`, `fetchDynatraceRootCA`, `runOpensslVerify`
 
-#### Scenario: oneagent_v2.go compiles
+Type definitions: `Environment`, `AgentConfig`, `InstallOptions`
 
-- **GIVEN** `pkg/installer/oneagent_v2.go` is created with stub function signatures
+#### Scenario: package compiles
+
+- **GIVEN** `pkg/installer/oneagent/` is created
 - **WHEN** `go build ./...` runs
 - **THEN** the code compiles without errors
 
 #### Scenario: Type definitions are exported
 
-- **GIVEN** `Environment`, `AgentConfig`, `InstallOptions`, and `Endpoint` are defined as public types
-- **WHEN** test code imports `pkg/installer`
+- **GIVEN** `Environment`, `AgentConfig`, `InstallOptions` are defined as public types
+- **WHEN** test code imports `github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent`
 - **THEN** it can construct and reference these types
 
-### Requirement: Scaffold oneagent_v2_test.go with test structure
+### Requirement: Test file pkg/installer/oneagent/oneagent_test.go
 
-`pkg/installer/oneagent_v2_test.go` SHALL be created with:
+`pkg/installer/oneagent/oneagent_test.go` SHALL be created with:
 
-- Test helper functions for mocking HTTP server responses (tenant API, token mint, installer download, etc.)
-- Skeleton test cases with TODO placeholders for Tasks 2–7 unit tests
-- Comment blocks indicating which task each test batch covers
+- Test helper functions for mocking HTTP server responses (`newMockTenantServer`, `newMockClient`, `newTestClassicClient`, `createStubFile`)
+- Full test coverage for `ResolveAgentConfig`, `DownloadInstaller`, `VerifyInstallerSignature`, and `InstallOneAgentV2`
+- All tests passing with `go test ./pkg/installer/oneagent/...`
 
-#### Scenario: Test file compiles
+#### Scenario: Test file compiles and all tests pass
 
-- **GIVEN** `pkg/installer/oneagent_v2_test.go` is created with skeleton test structure
-- **WHEN** `go test ./... -v` runs
-- **THEN** the tests compile without errors (and any TODO tests are skipped or marked as `t.Skip()`)
+- **GIVEN** `pkg/installer/oneagent/oneagent_test.go` exists
+- **WHEN** `go test ./pkg/installer/oneagent/... -v` runs
+- **THEN** all tests pass without errors
 
 ### Requirement: Feature-flag branching in cmd/install.go
 
@@ -64,7 +66,7 @@
 
 ```go
 if featureflags.IsEnabled(featureflags.OneAgentPoC) {
-    return installer.InstallOneAgentV2(c, opts)
+    return oneagent.InstallOneAgentV2(c, opts)
 }
 return installer.InstallOneAgent(c.Classic, installDryRun, quiet, hostGroup)
 ```
@@ -104,7 +106,7 @@ Pre-existing flags (`--dry-run`, `--quiet`) remain unchanged.
 
 ### Requirement: InstallOptions struct carries all CLI-derived inputs
 
-`InstallOptions` struct in `pkg/installer/oneagent_v2.go` SHALL carry all CLI flags and options:
+`InstallOptions` struct in `pkg/installer/oneagent/oneagent.go` SHALL carry all CLI flags and options:
 
 ```go
 type InstallOptions struct {
@@ -126,12 +128,18 @@ This struct is populated from `cmd/install.go` and passed to `InstallOneAgentV2`
 - **WHEN** `cmd/install.go` constructs an `InstallOptions` from the flags
 - **THEN** the struct carries all values correctly
 
-### Requirement: Minimal type signatures for all Task 2–7 functions
+### Requirement: Core functions implemented in pkg/installer/oneagent/
 
-All stub functions in `oneagent_v2.go` SHALL have signatures matching their design, so they can be called during integration-test setup even if not yet implemented. Each stub returns a documented placeholder error.
+The following functions SHALL be implemented (not stubs) in `pkg/installer/oneagent/`:
 
-#### Scenario: Function signatures match design
+- `DefaultAgentConfig() AgentConfig` — returns config with `MonitoringMode: "fullstack"`
+- `ResolveAgentConfig(opts InstallOptions) AgentConfig` — applies opts overrides over defaults
+- `DownloadInstaller(c *client.ClassicClient, env Environment) (string, error)` — downloads installer binary
+- `VerifyInstallerSignature(env Environment, installerPath string, skip bool) error` — CMS signature verification via openssl
+- `detectRuntimeEnvironment() (Environment, error)` — detects OS/arch at runtime
 
-- **GIVEN** the design.md describes `func ResolveEndpoints(c *client.ClassicClient) ([]Endpoint, error)`
-- **WHEN** `pkg/installer/oneagent_v2.go` is examined
-- **THEN** the function signature matches exactly
+#### Scenario: Functions are implemented and testable
+
+- **GIVEN** `pkg/installer/oneagent/` is built
+- **WHEN** tests call `ResolveAgentConfig`, `DownloadInstaller`, or `VerifyInstallerSignature`
+- **THEN** the functions execute real logic (not placeholder errors)
