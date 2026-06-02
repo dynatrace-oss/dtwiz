@@ -79,7 +79,7 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 		return err
 	}
 
-	display.PrintStatusLine("oneagent", "download and verification complete; install execution not yet implemented (Task 6)", display.ColorWarning)
+	display.PrintStatusLine("oneagent", "install execution not yet implemented", display.ColorWarning)
 	logger.Debug("install execution not yet implemented", "installer_path", installerPath)
 	return nil
 }
