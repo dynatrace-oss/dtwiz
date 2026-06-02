@@ -47,16 +47,31 @@ func installerOSSegment(os string) (string, error) {
 	}
 }
 
+func installerAPIPath(env Environment) (string, error) {
+	osSeg, err := installerOSSegment(env.OS)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("/api/v1/deployment/installer/agent/%s/default/latest?arch=%s", osSeg, env.Arch), nil
+}
+
+func InstallerDownloadURL(baseURL string, env Environment) (string, error) {
+	path, err := installerAPIPath(env)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(baseURL, "/") + path, nil
+}
+
 // DownloadInstaller streams the OneAgent installer to a temporary file using
 // the credentials already embedded in the ClassicClient (set upstream by
 // validateCredentials). On Unix the file permissions are tightened to 0o700.
 // The caller owns the returned path and is responsible for removing it.
 func DownloadInstaller(c *client.ClassicClient, env Environment) (string, error) {
-	osSeg, err := installerOSSegment(env.OS)
+	path, err := installerAPIPath(env)
 	if err != nil {
 		return "", err
 	}
-	path := fmt.Sprintf("/api/v1/deployment/installer/agent/%s/default/latest?arch=%s", osSeg, env.Arch)
 	downloadURL := strings.TrimRight(c.BaseURL(), "/") + path
 
 	// Log auth scheme (Bearer vs Api-Token) without exposing the token value.

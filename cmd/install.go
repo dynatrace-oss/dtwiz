@@ -59,6 +59,7 @@ var installOneAgentCmd = &cobra.Command{
 		opts := oneagent.InstallOptions{
 			DryRun:                installDryRun,
 			MonitoringMode:        flagMonitoringMode,
+			HostGroup:             hostGroup,
 			NoVerifySignature:     flagNoVerifySignature,
 			SkipConnectivityCheck: flagSkipConnectivityCheck,
 			ConnectivityCheckOnly: flagConnectivityCheckOnly,

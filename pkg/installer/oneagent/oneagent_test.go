@@ -97,6 +97,23 @@ func TestResolveAgentConfig_DebugLog(t *testing.T) {
 	}
 }
 
+func TestInstallOneAgentV2_DryRun_NoDownload(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("OneAgent not supported on macOS")
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("dry-run made a real HTTP request: %s %s", r.Method, r.URL.Path)
+		http.Error(w, "should not be called", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	c := newMockClient(t, srv.URL)
+	if err := InstallOneAgentV2(c, InstallOptions{DryRun: true, MonitoringMode: "fullstack"}); err != nil {
+		t.Fatalf("dry-run returned unexpected error: %v", err)
+	}
+}
+
 func TestInstallOneAgentV2_UnsupportedPlatformReturnsError(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("macOS-specific error path test")

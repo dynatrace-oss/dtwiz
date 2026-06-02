@@ -13,6 +13,7 @@ import (
 type InstallOptions struct {
 	DryRun                bool
 	MonitoringMode        string
+	HostGroup             string
 	NoVerifySignature     bool
 	SkipConnectivityCheck bool
 	ConnectivityCheckOnly bool
@@ -63,6 +64,11 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 		"monitoring_mode", cfg.MonitoringMode,
 	)
 
+	if opts.DryRun {
+		printDryRun(c.Classic.BaseURL(), env, cfg, opts)
+		return nil
+	}
+
 	installerPath, err := DownloadInstaller(c.Classic, env)
 	if err != nil {
 		return err
@@ -76,6 +82,23 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 	display.PrintStatusLine("oneagent", "download and verification complete; install execution not yet implemented (Task 6)", display.ColorWarning)
 	logger.Debug("install execution not yet implemented", "installer_path", installerPath)
 	return nil
+}
+
+func printDryRun(baseURL string, env Environment, cfg AgentConfig, opts InstallOptions) {
+	fmt.Println("[dry-run] Would install Dynatrace OneAgent")
+	if url, err := InstallerDownloadURL(baseURL, env); err == nil {
+		fmt.Printf("  Installer:  %s\n", url)
+	}
+	if opts.NoVerifySignature || env.OS != "linux" {
+		fmt.Printf("  Signature:  skipped\n")
+	} else {
+		fmt.Printf("  Signature:  would verify against %s\n", dtRootCertURL)
+	}
+	fmt.Printf("  Mode:       %s\n", cfg.MonitoringMode)
+	if opts.HostGroup != "" {
+		fmt.Printf("  Host group: %s\n", opts.HostGroup)
+	}
+	display.PrintStatusLine("dry-run", "no changes made", display.ColorMuted)
 }
 
 // detectRuntimeEnvironment returns an Environment based on the current host

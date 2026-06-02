@@ -227,24 +227,36 @@ When `openssl cms -verify` returns a non-zero exit code, `VerifyInstallerSignatu
 - **WHEN** `BuildInstallCommand` runs
 - **THEN** the argv contains `"--set-monitoring-mode=infra-only"`
 
-### Requirement: --dry-run prints command without executing
+### Requirement: --dry-run prints a plan without any network calls or disk writes
 
-When `opts.DryRun == true`, `ExecuteInstallCommand` SHALL print the argv (joined with single spaces) prefixed with `"Command: "` and return `(0, nil)` without launching any subprocess.
+When `opts.DryRun == true`, `InstallOneAgentV2` SHALL print a human-readable plan and return immediately after environment detection and config resolution. No installer SHALL be downloaded, no signature SHALL be verified, and no subprocess SHALL be spawned.
 
-#### Scenario: Dry-run does not execute
+The plan SHALL include:
+- The full installer download URL (computed locally from `c.Classic.BaseURL()` and the detected environment)
+- Whether signature verification would run and against which CA, or that it is skipped
+- The resolved monitoring mode
+
+#### Scenario: Dry-run prints plan and returns without network calls
 
 - **GIVEN** `opts.DryRun == true`
-- **WHEN** `ExecuteInstallCommand(argv, true, false)` is called
-- **THEN** stdout contains `"Command: " + strings.Join(argv, " ")`
-- **AND** no subprocess is spawned
+- **WHEN** `InstallOneAgentV2` is called
+- **THEN** stdout contains `[dry-run] Would install Dynatrace OneAgent` followed by the installer URL, signature note, and monitoring mode
+- **AND** `DownloadInstaller` is NOT called
+- **AND** `VerifyInstallerSignature` is NOT called
+- **AND** `ExecuteInstallCommand` is NOT called
+- **AND** no HTTP requests are made
 
-#### Scenario: Dry-run still confirms preflight passed
+#### Scenario: Dry-run signature line reflects --no-verify-signature
 
-- **GIVEN** `--dry-run` is passed
-- **WHEN** `InstallOneAgentV2` runs end-to-end
-- **THEN** `DetectEnvironment`, `RunPreflightChecks`, `ResolveAgentConfig`, `ResolveEndpoints`, `DownloadInstaller`, and `VerifyInstallerSignature` all run
-- **AND** `ExecuteInstallCommand` only prints the command
-- **AND** `WaitForHostRegistration` is skipped (nothing to verify)
+- **GIVEN** `opts.DryRun == true` and `opts.NoVerifySignature == true` (or `env.OS != "linux"`)
+- **WHEN** `InstallOneAgentV2` prints the plan
+- **THEN** the signature line reads `Signature:  skipped`
+
+#### Scenario: Dry-run signature line shows CA URL on Linux without --no-verify-signature
+
+- **GIVEN** `opts.DryRun == true` and `env.OS == "linux"` and `opts.NoVerifySignature == false`
+- **WHEN** `InstallOneAgentV2` prints the plan
+- **THEN** the signature line reads `Signature:  would verify against https://ca.dynatrace.com/dt-root.cert.pem`
 
 ### Requirement: Execute streams output and captures exit code
 

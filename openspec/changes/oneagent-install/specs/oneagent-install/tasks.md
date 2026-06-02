@@ -63,10 +63,9 @@ Build the OS-specific install command from `AgentConfig` and execute it (or prev
 
 ### Part B — Execute command
 
-- [ ] 6.5 Implement `ExecuteInstallCommand(argv []string, dryRun, quiet bool) (int, error)`
-- [ ] 6.6 Dry-run: print `Command: <argv joined>`, return `(0, nil)`, do NOT shell out
-- [ ] 6.7 Execute: stream stdout/stderr when `quiet == false`; capture when `quiet == true`
-- [ ] 6.8 Return the subprocess exit code alongside any wrapping error; non-zero exit code is an error with the installer output included
-- [ ] 6.9 Unit tests: dry-run produces no subprocess, executor returns exit code, stderr captured on failure
-- [ ] 6.10 Emit `logger.Debug("executing installer", "argv", argv)` immediately before spawning the subprocess (NOT in the dry-run branch)
-- [ ] 6.11 Emit `logger.Verbose("installer exited", "exit_code", code, "duration", time.Since(start))` after the subprocess returns
+- [ ] 6.5 Implement `ExecuteInstallCommand(argv []string, quiet bool) (int, error)` — no `dryRun` parameter; dry-run is checked beforehand in `InstallOneAgentV2` before this function is ever called
+- [ ] 6.6 Execute: stream stdout/stderr when `quiet == false`; capture when `quiet == true`
+- [ ] 6.7 Return the subprocess exit code alongside any wrapping error; non-zero exit code is an error with the installer output included
+- [ ] 6.8 Unit tests: executor returns exit code, stderr captured on failure
+- [ ] 6.9 Emit `logger.Debug("executing installer", "argv", argv)` immediately before spawning the subprocess
+- [ ] 6.10 Emit `logger.Verbose("installer exited", "exit_code", code, "duration", time.Since(start))` after the subprocess returns
