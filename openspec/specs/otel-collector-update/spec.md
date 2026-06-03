@@ -12,10 +12,14 @@ running-collector picker is shown so the user can select which instance to patch
 
 ### Requirement: When `--config` is omitted, show running collector picker
 
-When `UpdateOtelConfig` is called with an empty `configPath`, it SHALL discover all
-running OTel Collector processes on the host (both Dynatrace and upstream distributions,
-including container-based collectors) and present them in a numbered selection list. The
-user picks one; its detected config path is used as the config to patch.
+When `dtwiz update otel` is run without `--config`, or when `dtwiz setup` selects the
+OTel-update path, `UpdateOtelConfigInteractive` SHALL be called. It discovers all running
+OTel Collector processes on the host (both Dynatrace and upstream distributions, including
+container-based collectors) and presents them in a numbered selection list. The user picks
+one; its detected config path is used as the config to patch.
+
+`UpdateOtelConfig` requires a non-empty `configPath` and returns an error if given an
+empty string — callers that do not have a path must use `UpdateOtelConfigInteractive`.
 
 The `--config` flag default is empty — the picker is the primary interaction path.
 
@@ -116,6 +120,11 @@ host. Containers whose config is only inside the container are not matched via `
 - **THEN** the config is patched on disk
 - **THEN** "No running collector found — config will be updated on disk only." is printed
 - **THEN** no restart is attempted
+
+#### Scenario: `UpdateOtelConfig` called with empty path
+
+- **GIVEN** `UpdateOtelConfig` is called programmatically with an empty `configPath`
+- **THEN** the function returns immediately with error: "config path must not be empty — use --config or UpdateOtelConfigInteractive"
 
 #### Scenario: Config file does not exist
 
@@ -225,14 +234,14 @@ port 4318 may or may not be exposed to the host depending on the container's por
 The picker SHALL include both Dynatrace and upstream OTel Collector distributions,
 including container-based collectors detected via docker/podman/nerdctl.
 
-For native processes, the binary name patterns are: `dynatrace-otel-collector`,
-`otelcorecol`, `otelcol`, `opentelemetry-collector`. These are substring matches against
-the binary base name (case-insensitive). `otelcol-contrib` is implicitly matched by the
-`otelcol` pattern and does not require a separate entry.
+For native processes, the binary name patterns are defined in the shared
+`otelCollectorNames` slice: `otelcorecol`, `otel-collector`, `otelcol`, `otelcol-contrib`,
+`opentelemetry-collector`, `dynatrace-otel-collector`. This single list is used for both
+exact process name matching (`pgrep -x`, `Get-Process`) and command-line substring
+searches (`pgrep -f`, WMI `CommandLine`).
 
-The `otelcorecol` pattern SHALL be listed separately from `otelcol` because
-`"otelcol"` is not a substring of `"otelcorecol"` — without the explicit entry,
-`otelcorecol` binaries would be missed.
+`otelcorecol` and `otelcol-contrib` are listed explicitly because neither is a substring
+of the other patterns — without separate entries they would be missed by substring search.
 
 For containers, any running container whose image name or container name matches the
 pattern `otel.+collector` or `opentelemetry.+collector` (case-insensitive regex) is
@@ -242,7 +251,7 @@ included. Container runtimes probed (in order): `docker`, `podman`, `nerdctl`.
 
 - **GIVEN** a process named `otelcorecol_darwin_arm64` is running
 - **WHEN** `findAllRunningOtelCollectors()` scans
-- **THEN** the process is included in the result list (matched by the explicit `otelcorecol` pattern, not by `otelcol`)
+- **THEN** the process is included in the result list (matched by the explicit `otelcorecol` entry in `otelCollectorNames`)
 
 #### Scenario: Container collector found via podman
 

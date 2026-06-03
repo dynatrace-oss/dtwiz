@@ -66,6 +66,7 @@ func isAWSCLIInstalled() bool {
 	return err == nil
 }
 
+// promptLine prints a prompt, reads a single line from stdin and trims
 // classicAPIURL strips the ".apps." segment from a Dynatrace apps URL so that
 // requests target the classic /api/v2 endpoint.
 //

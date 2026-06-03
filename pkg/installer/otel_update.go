@@ -269,122 +269,136 @@ func PatchConfigFile(configPath, apiURL, token string) (*UpdateResult, error) {
 	return result, nil
 }
 
-// UpdateOtelConfig updates an existing OTel Collector config file with the
-// Dynatrace exporter.  Shows a coloured diff preview and asks for confirmation
-// before writing.  After patching, the selected running collector is killed and
-// restarted with the updated config, and a verification log is sent.
-// If dryRun is true the preview is printed without prompting.
-// When configPath is empty (no --config flag), running collectors are listed so
-// the user can pick one; the selected collector's config path is used
-// automatically when detectable.
-func UpdateOtelConfig(configPath, envURL, token, platformTok string, dryRun bool) error {
-	apiURL := APIURL(envURL)
-
-	// runningProcs tracks which collector to restart after the config is patched.
+// UpdateOtelConfigInteractive presents a list of running OTel Collectors, lets
+// the user pick one, resolves its config path, and then delegates to
+// UpdateOtelConfig to apply the Dynatrace exporter patch.
+func UpdateOtelConfigInteractive(envURL, token, platformTok string, dryRun bool) error {
+	var configPath string
 	var runningProcs []otelProcessInfo
 
-	if configPath != "" {
-		// --config provided: skip selection UI, validate file exists, then find
-		// any running collector whose detected config path matches.
-		if _, err := os.Stat(configPath); err != nil {
-			return fmt.Errorf("config file not found: %s", configPath)
-		}
-		absConfig, err := filepath.Abs(configPath)
+	allProcs := findAllRunningOtelCollectorsFunc()
+	if len(allProcs) > 0 {
+		display.ColorMessage.Println("  Running OTel Collectors:")
+		fmt.Println()
+		selected, err := selectCollector(allProcs)
 		if err != nil {
-			return fmt.Errorf("failed to resolve config path: %w", err)
+			return err // includes ErrInstallCancelled
 		}
-		for _, inst := range findAllRunningOtelCollectorsFunc() {
-			if inst.configPath == "" {
-				continue
+		if selected != nil {
+			if selected.configPath != "" {
+				configPath = selected.configPath
 			}
-			// Skip non-running native processes (pid == 0 with no container runtime).
-			// Containers always have pid == 0 but are running — include them when their
-			// host-mounted config path matches.
-			if inst.containerRuntime == "" && inst.pid <= 0 {
-				continue
+			installDir := ""
+			if selected.binaryPath != "" {
+				installDir = filepath.Dir(selected.binaryPath)
 			}
-			instAbs, err := filepath.Abs(inst.configPath)
-			if err != nil {
-				continue
+			proc := otelProcessInfo{
+				pid:              selected.pid,
+				binaryPath:       selected.binaryPath,
+				installDir:       installDir,
+				containerRuntime: selected.containerRuntime,
+				containerName:    selected.containerName,
 			}
-			if instAbs == absConfig {
-				installDir := ""
-				if inst.binaryPath != "" {
-					installDir = filepath.Dir(inst.binaryPath)
-				}
-				runningProcs = append(runningProcs, otelProcessInfo{
-					pid:              inst.pid,
-					binaryPath:       inst.binaryPath,
-					installDir:       installDir,
-					containerRuntime: inst.containerRuntime,
-					containerName:    inst.containerName,
-					// containerCfgPath not needed: config is already on the host
-				})
+			// Track container-internal config path for copy-back only when
+			// the config is not host-mounted (configPath is still empty here).
+			if configPath == "" && selected.containerRuntime != "" {
+				proc.containerCfgPath = selected.containerConfigPath
 			}
+			runningProcs = []otelProcessInfo{proc}
 		}
 	} else {
-		// No --config: show running collector list and let the user pick.
-		allProcs := findAllRunningOtelCollectorsFunc()
-		if len(allProcs) > 0 {
-			display.ColorMessage.Println("  Running OTel Collectors:")
-			fmt.Println()
-			selected, err := selectCollector(allProcs)
-			if err != nil {
-				return err // includes ErrInstallCancelled
-			}
-			if selected != nil {
-				if selected.configPath != "" {
-					configPath = selected.configPath
-				}
-				installDir := ""
-				if selected.binaryPath != "" {
-					installDir = filepath.Dir(selected.binaryPath)
-				}
-				proc := otelProcessInfo{
-					pid:              selected.pid,
-					binaryPath:       selected.binaryPath,
-					installDir:       installDir,
-					containerRuntime: selected.containerRuntime,
-					containerName:    selected.containerName,
-				}
-				// Track container-internal config path for copy-back only when
-				// the config is not host-mounted (configPath is still empty here).
-				if configPath == "" && selected.containerRuntime != "" {
-					proc.containerCfgPath = selected.containerConfigPath
-				}
-				runningProcs = []otelProcessInfo{proc}
-			}
-		} else {
-			display.ColorMuted.Println("  No running OTel Collectors found.")
-			fmt.Println()
-		}
+		display.ColorMuted.Println("  No running OTel Collectors found.")
+		fmt.Println()
+	}
 
-		if configPath == "" {
-			if len(allProcs) == 0 {
-				return fmt.Errorf("no running OTel Collectors found — use --config to specify the config file path")
-			}
-			// Container with config inside the image: extract to a temp file so we
-			// can patch it, then copy it back and restart the container.
-			if len(runningProcs) == 1 && runningProcs[0].containerRuntime != "" && runningProcs[0].containerCfgPath != "" {
-				tmpPath, err := extractContainerConfig(
-					runningProcs[0].containerRuntime,
-					runningProcs[0].containerName,
-					runningProcs[0].containerCfgPath,
-				)
-				if err != nil {
-					return fmt.Errorf("extracting config from container %s: %w", runningProcs[0].containerName, err)
-				}
-				defer os.Remove(tmpPath)
-				configPath = tmpPath
-				fmt.Printf("  Extracted config from container (%s → temp file)\n", runningProcs[0].containerCfgPath)
-			} else {
-				return fmt.Errorf("could not determine config path for the selected collector — use --config to specify it")
-			}
+	if configPath == "" {
+		if len(allProcs) == 0 {
+			return fmt.Errorf("no running OTel Collectors found — use --config to specify the config file path")
 		}
-		if _, err := os.Stat(configPath); err != nil {
-			return fmt.Errorf("config file not found: %s", configPath)
+		// Container with config inside the image: extract to a temp file so we
+		// can patch it, then copy it back and restart the container.
+		if len(runningProcs) == 1 && runningProcs[0].containerRuntime != "" && runningProcs[0].containerCfgPath != "" {
+			tmpPath, err := extractContainerConfig(
+				runningProcs[0].containerRuntime,
+				runningProcs[0].containerName,
+				runningProcs[0].containerCfgPath,
+			)
+			if err != nil {
+				return fmt.Errorf("extracting config from container %s: %w", runningProcs[0].containerName, err)
+			}
+			defer os.Remove(tmpPath)
+			configPath = tmpPath
+			fmt.Printf("  Extracted config from container (%s → temp file)\n", runningProcs[0].containerCfgPath)
+		} else {
+			return fmt.Errorf("could not determine config path for the selected collector — use --config to specify it")
 		}
 	}
+	if _, err := os.Stat(configPath); err != nil {
+		return fmt.Errorf("config file not found: %s", configPath)
+	}
+
+	return updateOtelConfig(configPath, runningProcs, envURL, token, platformTok, dryRun)
+}
+
+// UpdateOtelConfig updates an existing OTel Collector config file with the
+// Dynatrace exporter. Shows a coloured diff preview and asks for confirmation
+// before writing. After patching, the selected running collector is killed and
+// restarted with the updated config, and a verification log is sent.
+// If dryRun is true the preview is printed without prompting.
+// configPath must be non-empty; use UpdateOtelConfigInteractive when the path
+// is not known and should be resolved from running collectors.
+func UpdateOtelConfig(configPath, envURL, token, platformTok string, dryRun bool) error {
+	if configPath == "" {
+		return fmt.Errorf("config path must not be empty — use --config or UpdateOtelConfigInteractive")
+	}
+
+	if _, err := os.Stat(configPath); err != nil {
+		return fmt.Errorf("config file not found: %s", configPath)
+	}
+	absConfig, err := filepath.Abs(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve config path: %w", err)
+	}
+
+	var runningProcs []otelProcessInfo
+	for _, inst := range findAllRunningOtelCollectorsFunc() {
+		if inst.configPath == "" {
+			continue
+		}
+		// Skip non-running native processes (pid == 0 with no container runtime).
+		// Containers always have pid == 0 but are running — include them when their
+		// host-mounted config path matches.
+		if inst.containerRuntime == "" && inst.pid <= 0 {
+			continue
+		}
+		instAbs, err := filepath.Abs(inst.configPath)
+		if err != nil {
+			continue
+		}
+		if instAbs == absConfig {
+			installDir := ""
+			if inst.binaryPath != "" {
+				installDir = filepath.Dir(inst.binaryPath)
+			}
+			runningProcs = append(runningProcs, otelProcessInfo{
+				pid:              inst.pid,
+				binaryPath:       inst.binaryPath,
+				installDir:       installDir,
+				containerRuntime: inst.containerRuntime,
+				containerName:    inst.containerName,
+				// containerCfgPath not needed: config is already on the host
+			})
+		}
+	}
+
+	return updateOtelConfig(configPath, runningProcs, envURL, token, platformTok, dryRun)
+}
+
+// updateOtelConfig is the shared implementation that applies the Dynatrace
+// exporter patch given a resolved configPath and the set of running collectors
+// to restart afterward.
+func updateOtelConfig(configPath string, runningProcs []otelProcessInfo, envURL, token, platformTok string, dryRun bool) error {
+	apiURL := APIURL(envURL)
 
 	logger.Debug("running collectors for restart", "count", len(runningProcs))
 	for _, p := range runningProcs {

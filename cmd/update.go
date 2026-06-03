@@ -34,11 +34,17 @@ var updateOtelCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := installer.UpdateOtelConfig(updateOtelConfigPath, envURL, classicTok, platformTok, updateDryRun); err != nil {
-			if errors.Is(err, installer.ErrInstallCancelled) {
-				return nil
-			}
-			return err
+		var updateErr error
+		if updateOtelConfigPath != "" {
+			updateErr = installer.UpdateOtelConfig(updateOtelConfigPath, envURL, classicTok, platformTok, updateDryRun)
+		} else {
+			updateErr = installer.UpdateOtelConfigInteractive(envURL, classicTok, platformTok, updateDryRun)
+		}
+		if errors.Is(updateErr, installer.ErrInstallCancelled) {
+			return nil
+		}
+		if updateErr != nil {
+			return updateErr
 		}
 		return nil
 	},

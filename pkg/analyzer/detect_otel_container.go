@@ -31,7 +31,7 @@ func otelContainerFromRuntime(cli string) (bool, string) {
 	if !ok || strings.TrimSpace(out) == "" {
 		return false, ""
 	}
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue

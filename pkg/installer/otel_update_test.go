@@ -507,6 +507,84 @@ func TestUpdateOtelConfig_ContainerDryRun_NotInRestartPlan(t *testing.T) {
 	}
 }
 
+func TestUpdateOtelConfig_EmptyPathReturnsError(t *testing.T) {
+	err := UpdateOtelConfig("", "https://env.live.dynatrace.com", "mytoken", "", false)
+	if err == nil {
+		t.Fatal("expected error when configPath is empty")
+	}
+	if !strings.Contains(err.Error(), "config path must not be empty") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestUpdateOtelConfigInteractive_NoCollectors(t *testing.T) {
+	orig := findAllRunningOtelCollectorsFunc
+	t.Cleanup(func() { findAllRunningOtelCollectorsFunc = orig })
+	findAllRunningOtelCollectorsFunc = func() []collectorInstance { return nil }
+
+	err := UpdateOtelConfigInteractive("https://env.live.dynatrace.com", "mytoken", "", false)
+	if err == nil {
+		t.Fatal("expected error when no collectors are running")
+	}
+	if !strings.Contains(err.Error(), "no running OTel Collectors found") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+// TestUpdateOtelConfigInteractive_DryRun verifies that when a running collector
+// with a known host config path is selected interactively, the update runs in
+// dry-run mode without modifying the file.
+func TestUpdateOtelConfigInteractive_DryRun(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+	initial := `receivers:
+  otlp:
+    protocols:
+      grpc: {}
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [logging]
+`
+	if err := os.WriteFile(configPath, []byte(initial), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	orig := findAllRunningOtelCollectorsFunc
+	t.Cleanup(func() { findAllRunningOtelCollectorsFunc = orig })
+	findAllRunningOtelCollectorsFunc = func() []collectorInstance {
+		return []collectorInstance{
+			{pid: 12345, binaryPath: "/usr/bin/otelcol", configPath: configPath},
+		}
+	}
+
+	// Simulate the user entering "1" to select the first (and only) collector.
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldStdin := os.Stdin
+	os.Stdin = r
+	t.Cleanup(func() { os.Stdin = oldStdin })
+	if _, err := w.WriteString("1\n"); err != nil {
+		t.Fatal(err)
+	}
+	w.Close()
+
+	captureStdout(t, func() {
+		if err := UpdateOtelConfigInteractive("https://env.live.dynatrace.com", "mytoken", "", true); err != nil {
+			t.Errorf("UpdateOtelConfigInteractive dry-run error: %v", err)
+		}
+	})
+
+	// Dry-run must not modify the file.
+	data, _ := os.ReadFile(configPath)
+	if string(data) != initial {
+		t.Error("config file was modified during dry-run")
+	}
+}
+
 func TestFindExistingCollectorConfig_HomeWins(t *testing.T) {
 	homeDir := t.TempDir()
 	cwdDir := t.TempDir()
