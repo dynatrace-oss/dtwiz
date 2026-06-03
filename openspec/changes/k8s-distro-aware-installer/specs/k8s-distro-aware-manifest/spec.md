@@ -58,10 +58,10 @@ The system SHALL include the `kspm.mappedHostPaths` block and `kspmNodeConfigura
 - **WHEN** distro is `"EKS-Bottlerocket"`
 - **THEN** rendered manifest does NOT contain `mappedHostPaths`
 
-#### Scenario: KSPM omitted for RKE2
+#### Scenario: KSPM omitted for RKE
 
 - **GIVEN** `InstallKubernetes()` is called
-- **WHEN** distro is `"RKE2"`
+- **WHEN** distro is `"RKE"`
 - **THEN** rendered manifest does NOT contain `mappedHostPaths`
 
 #### Scenario: KSPM omitted for IKS
@@ -127,7 +127,7 @@ The system SHALL set the appropriate `kubeletPath` in the rendered DynaKube spec
 #### Scenario: kubeletPath absent for standard distros
 
 - **GIVEN** `InstallKubernetes()` is called
-- **WHEN** distro is GKE, GKE-Autopilot, EKS, AKS, OpenShift, RKE2, or generic kubernetes
+- **WHEN** distro is GKE, GKE-Autopilot, EKS, AKS, OpenShift, RKE, or generic kubernetes
 - **THEN** rendered manifest does NOT contain `kubeletPath`
 
 ### Requirement: ClusterRoleBinding included in all rendered manifests

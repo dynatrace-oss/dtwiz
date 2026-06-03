@@ -56,15 +56,15 @@ The system SHALL identify an IBM Kubernetes Service cluster when the API server 
 - **WHEN** the cluster server URL contains `.containers.cloud.ibm.com`
 - **THEN** `DetectK8sDistribution` returns `"IKS"`
 
-### Requirement: Detect RKE2 by server version
+### Requirement: Detect RKE by server version
 
-The system SHALL identify an RKE2 cluster when the server gitVersion contains `+rke2`. The returned distribution string SHALL be `"RKE2"`.
+The system SHALL identify an RKE cluster when the server gitVersion contains `+rke2` (Rancher Kubernetes Engine 2, not RKE1). The returned distribution string SHALL be `"RKE"`.
 
-#### Scenario: RKE2 gitVersion matched
+#### Scenario: RKE gitVersion matched
 
 - **GIVEN** the cluster is reachable and `kubectl version` succeeds
 - **WHEN** the server gitVersion string contains `+rke2`
-- **THEN** `DetectK8sDistribution` returns `"RKE2"`
+- **THEN** `DetectK8sDistribution` returns `"RKE"`
 
 ### Requirement: Detect TKGI by namespace probe
 

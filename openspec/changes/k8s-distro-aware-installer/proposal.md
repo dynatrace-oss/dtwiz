@@ -6,7 +6,7 @@
 
 ## What Changes
 
-- `DetectK8sDistribution()` extended with 5 missing distributions: GKE Autopilot, EKS Bottlerocket, IKS, RKE2, TKGI — including sub-variant probing via live kubectl calls (node osImage, namespace existence)
+- `DetectK8sDistribution()` extended with 5 missing distributions: GKE Autopilot, EKS Bottlerocket, IKS, RKE, TKGI — including sub-variant probing via live kubectl calls (node osImage, namespace existence)
 - Detection order enforced: parent distro confirmed first, sub-variant probed only when parent matches (GKE confirmed → Autopilot probe; EKS confirmed → Bottlerocket probe)
 - `InstallKubernetes()` accepts a `distro` parameter; `installKubernetesCmd` passes the detected distribution
 - `dynakubeTemplateData` gains four new fields: `EnableKSPM`, `PrivilegedAnnotation`, `ReadOnlyVolume`, `KubeletPath`
@@ -17,7 +17,7 @@
 
 ### New Capabilities
 
-- `k8s-distribution-detection`: Detecting GKE Autopilot, EKS Bottlerocket, IKS, RKE2, and TKGI from live cluster signals (kubectl probes for node osImage and namespace existence), with correct sub-variant ordering
+- `k8s-distribution-detection`: Detecting GKE Autopilot, EKS Bottlerocket, IKS, RKE, and TKGI from live cluster signals (kubectl probes for node osImage and namespace existence), with correct sub-variant ordering
 - `k8s-distro-aware-manifest`: Generating a DynaKube manifest conditioned on the detected distribution — KSPM block, privileged/readonly annotations, kubeletPath override
 
 ### Modified Capabilities

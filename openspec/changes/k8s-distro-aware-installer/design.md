@@ -2,7 +2,7 @@
 
 ## Context
 
-`InstallKubernetes()` in `pkg/installer/kubernetes.go` renders a single `dynakube.tmpl` and applies it unconditionally. The analyzer already detects GKE, EKS, AKS, and OpenShift via `DetectK8sDistribution()`, but the detected value is never passed to the installer. Five distributions (GKE Autopilot, EKS Bottlerocket, IKS, RKE2, TKGI) are not detected at all. The result: KSPM always enabled regardless of platform, no annotations applied, no kubelet path overrides — silent failures on IKS and TKGI, pod admission rejections on OpenShift, CSI write errors on Bottlerocket.
+`InstallKubernetes()` in `pkg/installer/kubernetes.go` renders a single `dynakube.tmpl` and applies it unconditionally. The analyzer already detects GKE, EKS, AKS, and OpenShift via `DetectK8sDistribution()`, but the detected value is never passed to the installer. Five distributions (GKE Autopilot, EKS Bottlerocket, IKS, RKE, TKGI) are not detected at all. The result: KSPM always enabled regardless of platform, no annotations applied, no kubelet path overrides — silent failures on IKS and TKGI, pod admission rejections on OpenShift, CSI write errors on Bottlerocket.
 
 ## Goals / Non-Goals
 
