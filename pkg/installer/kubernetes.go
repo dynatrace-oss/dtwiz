@@ -134,7 +134,8 @@ func helmOperatorArgs(helmMajor int) []string {
 	}
 	return []string{
 		"install", "dynatrace-operator",
-		"oci://public.ecr.aws/dynatrace/dynatrace-operator",
+		"oci://ghcr.io/dynatrace/dynatrace-operator",
+		"--version", "0.0.0-nightly-chart",
 		"--create-namespace",
 		"--namespace", "dynatrace",
 		rollbackFlag,
@@ -150,7 +151,8 @@ func helmOperatorUpgradeArgs(helmMajor int) []string {
 	}
 	return []string{
 		"upgrade", "dynatrace-operator",
-		"oci://public.ecr.aws/dynatrace/dynatrace-operator",
+		"oci://ghcr.io/dynatrace/dynatrace-operator",
+		"--version", "0.0.0-nightly-chart",
 		"--namespace", "dynatrace",
 		rollbackFlag,
 	}
