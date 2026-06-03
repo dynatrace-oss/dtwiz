@@ -46,7 +46,8 @@ func ResolveAgentConfig(opts InstallOptions) AgentConfig {
 		cfg.MonitoringMode = opts.MonitoringMode
 	}
 	logger.Debug("resolved agent config",
-		"monitoring-mode", cfg.MonitoringMode,
+		"monitoring_mode", cfg.MonitoringMode,
+		"app_log_content_access", cfg.AppLogContentAccess,
 		"override_set", cfg.MonitoringMode != "fullstack",
 	)
 	return cfg
@@ -65,6 +66,8 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 		"dry_run", opts.DryRun,
 		"no_verify_signature", opts.NoVerifySignature,
 		"monitoring_mode", cfg.MonitoringMode,
+		"app_log_content_access", cfg.AppLogContentAccess,
+		"server_url", cfg.ServerURL,
 	)
 
 	if opts.DryRun {

@@ -57,7 +57,7 @@ Build the OS-specific install command from `AgentConfig` and execute it (or prev
 
 - [x] 6.1 Implement `BuildInstallCommand(env Environment, cfg AgentConfig, opts InstallOptions, installerPath string) ([]string, error)`
 - [x] 6.2 Windows: emit `{installerPath, --quiet?, --set-monitoring-mode=<cfg.MonitoringMode>, --set-app-log-content-access=<cfg.AppLogContentAccess>, --set-host-group=<opts.HostGroup>?}` (Windows `--quiet` MUST be the first flag; Windows-specific implementation in Task 11)
-- [x] 6.3 Linux: emit `{/bin/sh, installerPath, --set-server=<apiURL>, --set-monitoring-mode=..., --set-app-log-content-access=..., --set-host-group=<opts.HostGroup>?}`; prepend `sudo` when `needsSudo()` is true
+- [x] 6.3 Linux: emit `{/bin/sh, installerPath, --set-server=<apiURL>, --set-monitoring-mode=..., --set-app-log-content-access=..., --set-host-group=<opts.HostGroup>?}`; prepend `sudo` when `NeedsSudo()` is true
 - [x] 6.4 Unit tests covering both OS branches, `--monitoring-mode` override, host-group present/absent, `--quiet` flag ordering on Windows
 - [x] 6.4a Emit `logger.Debug("built install command", "argv", argv)` once the argv slice is final — the credential is not in argv, so this is safe
 

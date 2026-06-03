@@ -45,6 +45,7 @@ func BuildInstallCommand(env Environment, cfg AgentConfig, opts InstallOptions, 
 			if err != nil {
 				return nil, fmt.Errorf("sudo not found: %w", err)
 			}
+			logger.Debug("using sudo", "path", sudoPath)
 			argv = append([]string{sudoPath}, argv...)
 		}
 	case "windows":
@@ -71,6 +72,10 @@ func BuildInstallCommand(env Environment, cfg AgentConfig, opts InstallOptions, 
 // true. The subprocess exit code is always returned alongside any error; a
 // non-zero exit is always an error.
 func ExecuteInstallCommand(argv []string, quiet bool) (int, error) {
+	if len(argv) == 0 {
+		return 1, fmt.Errorf("install command is empty")
+	}
+
 	start := time.Now()
 	logger.Debug("executing installer", "argv", argv)
 
@@ -79,6 +84,7 @@ func ExecuteInstallCommand(argv []string, quiet bool) (int, error) {
 	}
 
 	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Stdin = os.Stdin
 	var captured bytes.Buffer
 	if quiet {
 		cmd.Stdout = &captured
@@ -96,6 +102,7 @@ func ExecuteInstallCommand(argv []string, quiet bool) (int, error) {
 		if errors.As(runErr, &exitErr) {
 			code = exitErr.ExitCode()
 		} else {
+			logger.Debug("installer process failed to start", "error", runErr, "binary", argv[0])
 			return 1, fmt.Errorf("executing installer: %w", runErr)
 		}
 	}
