@@ -210,7 +210,7 @@ func buildOneAgentInstallerArgs(installerPath, apiURL string, quiet bool, hostGr
 		args = append(args, fmt.Sprintf("--set-host-group=%s", hostGroup))
 	}
 
-	if needsSudo() {
+	if NeedsSudo() {
 		return append([]string{"sudo"}, args...)
 	}
 	return args
