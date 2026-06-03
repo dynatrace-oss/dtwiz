@@ -89,10 +89,10 @@ func TestResolveAgentConfig_DebugLog(t *testing.T) {
 	if len(lines) != 2 {
 		t.Fatalf("expected 2 debug lines, got %d:\n%s", len(lines), buf.String())
 	}
-	if !strings.Contains(lines[0], "resolved agent config") || !strings.Contains(lines[0], "monitoring-mode=fullstack") || !strings.Contains(lines[0], "override_set=false") {
+	if !strings.Contains(lines[0], "resolved agent config") || !strings.Contains(lines[0], "monitoring_mode=fullstack") || !strings.Contains(lines[0], "override_set=false") {
 		t.Errorf("default path: unexpected log line: %s", lines[0])
 	}
-	if !strings.Contains(lines[1], "resolved agent config") || !strings.Contains(lines[1], "monitoring-mode=infra-only") || !strings.Contains(lines[1], "override_set=true") {
+	if !strings.Contains(lines[1], "resolved agent config") || !strings.Contains(lines[1], "monitoring_mode=infra-only") || !strings.Contains(lines[1], "override_set=true") {
 		t.Errorf("override path: unexpected log line: %s", lines[1])
 	}
 }
