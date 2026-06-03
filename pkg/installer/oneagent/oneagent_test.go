@@ -163,4 +163,3 @@ func TestDetectRuntimeEnvironment(t *testing.T) {
 		}
 	}
 }
-

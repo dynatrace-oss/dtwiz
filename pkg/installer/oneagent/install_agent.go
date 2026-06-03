@@ -18,6 +18,10 @@ import (
 // Overridable in tests.
 var needsSudoFn = installer.NeedsSudo
 
+// sudoPathFn resolves the path to the sudo binary.
+// Overridable in tests to avoid exec.LookPath on platforms without sudo.
+var sudoPathFn = func() (string, error) { return exec.LookPath("sudo") }
+
 // BuildInstallCommand constructs the OS-specific installer argv from the
 // resolved AgentConfig and InstallOptions.
 //
@@ -37,7 +41,7 @@ func BuildInstallCommand(env Environment, cfg AgentConfig, opts InstallOptions, 
 			argv = append(argv, fmt.Sprintf("--set-host-group=%s", opts.HostGroup))
 		}
 		if needsSudoFn() {
-			sudoPath, err := exec.LookPath("sudo")
+			sudoPath, err := sudoPathFn()
 			if err != nil {
 				return nil, fmt.Errorf("sudo not found: %w", err)
 			}

@@ -17,6 +17,16 @@ func withNeedsSudo(t *testing.T, val bool) {
 	t.Cleanup(func() { needsSudoFn = orig })
 }
 
+// withSudoPath overrides sudoPathFn for the duration of the test.
+// Use this alongside withNeedsSudo(t, true) to avoid exec.LookPath("sudo")
+// on platforms that don't have sudo (e.g. Windows CI).
+func withSudoPath(t *testing.T, path string) {
+	t.Helper()
+	orig := sudoPathFn
+	sudoPathFn = func() (string, error) { return path, nil }
+	t.Cleanup(func() { sudoPathFn = orig })
+}
+
 func testLinuxCfg(serverURL string) AgentConfig {
 	return AgentConfig{MonitoringMode: "fullstack", AppLogContentAccess: true, ServerURL: serverURL}
 }
@@ -36,6 +46,7 @@ func assertContains(t *testing.T, slice []string, elem string) {
 
 func TestBuildInstallCommand_Linux_NonRoot(t *testing.T) {
 	withNeedsSudo(t, true)
+	withSudoPath(t, "/usr/bin/sudo")
 	argv, err := BuildInstallCommand(Environment{OS: "linux", Arch: "x86"}, testLinuxCfg("https://env.live.dynatrace.com"), InstallOptions{}, "/tmp/agent.sh")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
