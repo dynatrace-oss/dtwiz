@@ -329,6 +329,8 @@ func extractFromZip(archivePath, targetName, destPath string) error {
 // sendOtelVerificationLog sends a single OTLP log record to the local collector
 // (HTTP on 4318) with the given body text and returns the unique install ID
 // embedded in the message so the caller can search for it.
+// Retries on connection reset/refused: the TCP port can accept connections before
+// the HTTP handler is fully initialized, causing a RST on the first request.
 func sendOtelVerificationLog(body string) error {
 	hostname, _ := os.Hostname()
 
@@ -368,17 +370,28 @@ func sendOtelVerificationLog(body string) error {
 		return fmt.Errorf("marshalling OTLP payload: %w", err)
 	}
 
-	resp, err := http.Post("http://127.0.0.1:4318/v1/logs", "application/json", bytes.NewReader(data))
-	if err != nil {
-		return fmt.Errorf("sending OTLP log: %w", err)
+	const maxAttempts = 5
+	for attempt := range maxAttempts {
+		if attempt > 0 {
+			time.Sleep(500 * time.Millisecond)
+		}
+		resp, err := http.Post("http://127.0.0.1:4318/v1/logs", "application/json", bytes.NewReader(data))
+		if err != nil {
+			errStr := err.Error()
+			if strings.Contains(errStr, "connection reset") || strings.Contains(errStr, "connection refused") {
+				logger.Debug("sendOtelVerificationLog: transient error, retrying", "attempt", attempt+1, "err", err)
+				continue
+			}
+			return fmt.Errorf("sending OTLP log: %w", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode/100 != 2 {
+			body, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("OTLP endpoint returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		}
+		return nil
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode/100 != 2 {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("OTLP endpoint returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-	return nil
+	return fmt.Errorf("sending OTLP log: collector not ready after %d attempts", maxAttempts)
 }
 
 // waitForLogInDynatrace queries the Dynatrace Grail DQL API directly until a
