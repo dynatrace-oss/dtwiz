@@ -82,8 +82,10 @@ spec:
   metadataEnrichment:
     enabled: true
   oneAgent:
-    applicationMonitoring: {}
+    applicationMonitoring:
+      codeModulesImage: public.ecr.aws/dynatrace/dynatrace-codemodules:1.337.60.20260603-063549
   activeGate:
+    image: public.ecr.aws/dynatrace/dynatrace-activegate:1.337.36.20260526-135434
     capabilities:
       - routing
       - debugging
