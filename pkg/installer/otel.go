@@ -94,7 +94,17 @@ func detectAllProjects(runtimes []runtimeInfo) []detectedProject {
 			logger.Debug("skipping runtime (disabled)", "runtime", rt.name)
 			continue
 		}
-		if _, err := exec.LookPath(rt.binName); err != nil {
+		// Python's binary may exist as a non-functional stub even when no real
+		// interpreter is installed, so run it to verify it's usable.
+		available := true
+		if rt.binName == "python3" || rt.binName == "python" {
+			_, err := detectPython()
+			available = err == nil
+		} else {
+			_, err := exec.LookPath(rt.binName)
+			available = err == nil
+		}
+		if !available {
 			fmt.Printf("  Skipping %s instrumentation — '%s' not found on PATH.\n", rt.name, rt.binName)
 			continue
 		}
