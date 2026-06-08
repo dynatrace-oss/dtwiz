@@ -254,6 +254,21 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		if runtime == "" {
 			return fmt.Errorf("could not detect runtime from project path: %s", projectPath)
 		}
+		// Verify the runtime binary is actually available before proceeding.
+		switch runtime {
+		case "Python":
+			if _, err := detectPython(); err != nil {
+				return fmt.Errorf("Python runtime not available: %w", err)
+			}
+		case "Java":
+			if _, err := exec.LookPath("java"); err != nil {
+				return fmt.Errorf("Java runtime not available: 'java' not found on PATH")
+			}
+		case "Node.js":
+			if _, err := exec.LookPath("node"); err != nil {
+				return fmt.Errorf("Node.js runtime not available: 'node' not found on PATH")
+			}
+		}
 		projects := []ScannedProject{{Path: projectPath}}
 		switch runtime {
 		case "Java":
