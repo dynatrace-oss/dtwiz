@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.21] - 2026-06-08
+
+### Added
+
+- `dtwiz uninstall otel`: interactive picker when multiple Dynatrace OTel Collector instances are found (running or installed); Docker container support; "Uninstall all" option for multiple instances
+- `dtwiz update otel`: interactive running-collector picker when `--config` is omitted; supports container-based collectors including config extract/patch/write-back for Docker-managed configs
+
+### Changed
+
+- Kubernetes DynaKube template: pin ActiveGate, EEC, CodeModules, and node agent images to specific build tags
+- Kubernetes DynaKube template: right-size memory and CPU requests/limits to better match observed usage
+
 ## [0.2.20] - 2026-06-03
 
 ### Fixed
@@ -289,7 +301,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.20...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.21...HEAD
+[0.2.21]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.20...v0.2.21
 [0.2.20]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.19...v0.2.20
 [0.2.19]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.18...v0.2.19
 [0.2.18]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.17...v0.2.18
