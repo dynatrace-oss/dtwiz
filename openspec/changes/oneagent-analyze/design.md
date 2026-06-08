@@ -181,7 +181,7 @@ type Endpoint struct {
 func ResolveEndpoints(c *client.ClassicClient) ([]Endpoint, error)
 ```
 
-Uses the classic client to call `GET /api/v1/deployment/installer/agent/connectioninfo/endpoints`. The response body is a newline-/semicolon-separated list of `host:port` entries (or just `host`, defaulting to 443). Errors are wrapped with the URL and HTTP status to make debugging straightforward.
+Uses the classic client to call `GET /api/v1/deployment/installer/agent/connectioninfo/endpoints`. The response body is a newline-/semicolon-separated list of entries; `\r\n` (Windows HTTP line endings) are also handled. Three entry formats are accepted: bare `host` (defaults to port 443), `host:port`, and full HTTPS URL `https://host:port/path` (scheme and path are stripped). Both DNS hostnames and IP literals are tolerated. Errors are wrapped with the URL and HTTP status to make debugging straightforward.
 
 Empty response → error; an empty endpoint set is treated as a server bug and surfaced loudly.
 
@@ -325,11 +325,14 @@ Test coverage for the redaction rules is enforced by unit tests in Task 4 (audit
 CheckAllEndpoints(endpoints []Endpoint, perEndpointTimeout time.Duration) ConnectivityReport
 ```
 
-- One goroutine per endpoint; `net.DialTimeout("tcp", host:port, perEndpointTimeout)`.
-- `ConnectivityReport` aggregates results, latencies, and a `FailedCount`. Failures are warnings.
-- `--connectivity-check-only` skips minting/download/install entirely and exits after printing the report.
+- One goroutine per endpoint; `net.DialTimeout("tcp", host:port, perEndpointTimeout)` with `net.JoinHostPort` for IPv6-safe addressing.
+- `ConnectivityReport` aggregates results, latencies, and a `FailedCount`. Failures are warnings, not errors.
+- `--connectivity-check-only`: prints `display.Header("Checking network connectivity...")` **before** probing starts (so the user sees the header at the start of the timeout window), then calls `CheckAllEndpoints`, then `printConnectivityResults` (per-endpoint ✓/✗ lines). Exits without installing.
+- Normal install path: wraps `CheckAllEndpoints` in `display.PrintPending("connectivity", "checking endpoints...")` / `display.ClearPending()` for TTY-friendly in-progress feedback. No persistent output if all pass.
+- On failure (normal install path): `printConnectivityWarning` leads with `"allow outbound TCP to the following addresses"` and lists only unreachable endpoints with friendly error phrases (via `friendlyDialError`), framed by `display.PrintSectionDivider()` calls. Proxy tip follows.
+- `friendlyDialError`: maps raw `net.DialTimeout` error strings to `"timed out"` / `"connection refused"` / `"no route to host"` / `"network unreachable"` / `"connection reset"` / `"unreachable"`. Raw Go error strings are never shown to the user.
 - `--skip-connectivity-check` skips this stage.
-- `--print-endpoints` prints the resolved endpoint list and exits before minting.
+- `--print-endpoints` prints the resolved endpoint list and exits before probing.
 
 ### 13. CLI flags
 

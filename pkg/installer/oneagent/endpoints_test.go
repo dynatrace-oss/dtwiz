@@ -412,6 +412,29 @@ func TestCheckAllEndpoints_DebugLogs(t *testing.T) {
 	}
 }
 
+// --- friendlyDialError ---
+
+func TestFriendlyDialError(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"dial tcp 1.2.3.4:443: i/o timeout", "timed out"},
+		{"context deadline exceeded (Client.Timeout exceeded while awaiting headers)", "timed out"},
+		{"dial tcp 127.0.0.1:443: connect: connection refused", "connection refused"},
+		{"dial tcp 1.2.3.4:443: connect: no route to host", "no route to host"},
+		{"dial tcp 1.2.3.4:443: network is unreachable", "network unreachable"},
+		{"read tcp: connection reset by peer", "connection reset"},
+		{"some other unknown error from the OS", "unreachable"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := friendlyDialError(c.input); got != c.want {
+			t.Errorf("friendlyDialError(%q) = %q, want %q", c.input, got, c.want)
+		}
+	}
+}
+
 // --- InstallOneAgentV2 integration tests for Task 3 paths ---
 
 func TestInstallOneAgentV2_PrintEndpoints(t *testing.T) {

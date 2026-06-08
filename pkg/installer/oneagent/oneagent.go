@@ -93,12 +93,19 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 
 	if opts.SkipConnectivityCheck {
 		logger.Debug("skipping connectivity probe", "reason", "--skip-connectivity-check")
-	} else {
+	} else if opts.ConnectivityCheckOnly {
+		// Print header before the probe so the user sees what's happening
+		// during the dial timeout window.
+		display.Header("Checking network connectivity...")
 		report := CheckAllEndpoints(endpoints, defaultProbeTimeout)
-		if opts.ConnectivityCheckOnly {
-			printConnectivityReport(report)
-			return nil
-		}
+		printConnectivityResults(report)
+		return nil
+	} else {
+		// Normal install path: transient pending line while probes run,
+		// then clear it — no lingering output unless something failed.
+		display.PrintPending("connectivity", "checking endpoints...")
+		report := CheckAllEndpoints(endpoints, defaultProbeTimeout)
+		display.ClearPending()
 		if report.FailedCount > 0 {
 			printConnectivityWarning(report)
 		}

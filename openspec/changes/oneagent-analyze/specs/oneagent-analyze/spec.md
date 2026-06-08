@@ -183,6 +183,30 @@ Pre-flight checks SHALL run in the order: (1) environment detection, (2) existin
 - **WHEN** `ResolveEndpoints(c)` is called
 - **THEN** the returned `Endpoint` has `Host: "54.88.45.104"`, `Port: 443`
 
+#### Scenario: Newline-separated response
+
+- **GIVEN** the tenant API returns `"endpoint-1.example.com:443\nendpoint-2.example.com:443"` (newline-separated)
+- **WHEN** `ResolveEndpoints(c)` is called
+- **THEN** it returns two endpoints parsed correctly
+
+#### Scenario: CRLF line endings
+
+- **GIVEN** the tenant API returns entries separated by `\r\n`
+- **WHEN** `ResolveEndpoints(c)` is called
+- **THEN** each host value contains no stray `\r` character
+
+#### Scenario: Full HTTPS URL entries
+
+- **GIVEN** the tenant API returns `"https://endpoint-1.example.com:9999/communication"` (full URL form)
+- **WHEN** `ResolveEndpoints(c)` is called
+- **THEN** the scheme (`https://`) and path (`/communication`) are stripped and the returned `Endpoint` has `Host: "endpoint-1.example.com"`, `Port: 9999`
+
+#### Scenario: Mixed separators
+
+- **GIVEN** the tenant API returns `"ep1.example.com:443;ep2.example.com\nep3.example.com:9999"` (semicolons and newlines mixed)
+- **WHEN** `ResolveEndpoints(c)` is called
+- **THEN** it returns 3 endpoints; `ep2.example.com` has `Port: 443`
+
 ### Requirement: Tenant ID extraction from --environment
 
 `InstallOneAgentV2` SHALL extract the tenant ID from the `--environment` URL using `pkg/installer/installer.ExtractTenantID`. Both Live (`<id>.live.dynatrace.com`), Apps (`<id>.apps.dynatrace.com`), and Managed (`/e/<id>`) URL shapes SHALL be supported. When extraction returns an empty string, the install SHALL fail with an actionable error rather than guessing.
@@ -287,36 +311,91 @@ Pre-flight checks SHALL run in the order: (1) environment detection, (2) existin
 - **WHEN** `CheckAllEndpoints` runs
 - **THEN** total wall-clock time is bounded by the slowest single probe, not the sum of all timeouts
 
-### Requirement: User-facing probe output format
+### Requirement: User-facing probe output format — --connectivity-check-only
 
-When the probe runs (either as part of the install or under `--connectivity-check-only`), it SHALL output a structured report to stdout at default verbosity (no `-v` required). The report starts with a header via `display.Header("Checking network connectivity...")`, followed by one status line per endpoint via `display.PrintStatusLine("<host>:<port>", "<detail>", colorFunc)`. Status glyph is `✓` (via `display.ColorOK`) for reachable, `✗` (via `display.ColorError`) for unreachable. Detail is either the observed latency (e.g. `23ms`) for reachable endpoints, or the failure cause (e.g. `timeout after 10s`, `connection refused`) for unreachable ones.
+Under `--connectivity-check-only`, `InstallOneAgentV2` SHALL print `display.Header("Checking network connectivity...")` BEFORE calling `CheckAllEndpoints`, so the user sees the section header immediately at the start of the dial timeout window rather than after it. After `CheckAllEndpoints` returns, one `display.PrintStatusLine` per endpoint is printed: `display.ColorOK` with `"✓ <latency>"` for reachable endpoints, `display.ColorError` with `"✗ <friendly-error>"` for unreachable ones. Failure cause is a short human-readable phrase produced by `friendlyDialError` (see below), not the raw Go error string.
 
-#### Scenario: All endpoints reachable
+#### Scenario: Header appears before probe
+
+- **GIVEN** `--connectivity-check-only` is passed
+- **AND** each endpoint probe takes ~1s to complete
+- **WHEN** `InstallOneAgentV2` reaches the connectivity stage
+- **THEN** stdout contains the `display.Header` output before any per-endpoint status lines appear
+
+#### Scenario: All endpoints reachable under --connectivity-check-only
 
 - **GIVEN** 2 endpoints both reachable in 23ms and 31ms
 - **WHEN** the probe completes
 - **THEN** stdout contains the header via `display.Header`
-- **AND** stdout contains status lines for each endpoint via `display.PrintStatusLine` with `display.ColorOK` showing latency
+- **AND** stdout contains status lines for each endpoint via `display.PrintStatusLine` with `display.ColorOK` showing latency (e.g. `"✓ 23ms"`)
 
-#### Scenario: Mixed reachable and unreachable
+#### Scenario: Mixed reachable and unreachable under --connectivity-check-only
 
-- **GIVEN** 4 endpoints: 2 reachable, 1 times out after 10s, 1 connection-refused
+- **GIVEN** 4 endpoints: 2 reachable, 1 times out, 1 connection-refused
 - **WHEN** the probe completes
-- **THEN** stdout contains 4 status lines via `display.PrintStatusLine` (one per endpoint)
-- **AND** unreachable endpoints use `display.ColorError` with failure details
+- **THEN** stdout contains 4 status lines via `display.PrintStatusLine`
+- **AND** unreachable endpoints use `display.ColorError` with a friendly error phrase (e.g. `"✗ timed out"`, `"✗ connection refused"`)
+
+### Requirement: In-progress indicator during normal install probe
+
+When the probe runs as part of the normal install path (not `--connectivity-check-only`), `InstallOneAgentV2` SHALL call `display.PrintPending("connectivity", "checking endpoints...")` before `CheckAllEndpoints` and `display.ClearPending()` immediately after it returns. This gives TTY users a transient status line during the dial timeout window. The pending output is suppressed in non-TTY environments (CI, pipes) by the existing `display.PrintPending` implementation.
+
+#### Scenario: Pending indicator on TTY
+
+- **GIVEN** the process stdout is a TTY
+- **AND** the normal install path runs
+- **WHEN** `CheckAllEndpoints` is executing
+- **THEN** stderr shows `connectivity:  checking endpoints...` transiently
+- **AND** the line is erased by `display.ClearPending()` before any subsequent output appears
 
 ### Requirement: Connectivity failures are warnings, not errors
 
-When the probe is run as part of the normal install (not `--connectivity-check-only`), unreachable endpoints SHALL produce a warning section via `display.Header` listing the failed endpoints plus a note about `HTTP_PROXY`/`HTTPS_PROXY`. The install SHALL proceed regardless.
+When the probe is run as part of the normal install (not `--connectivity-check-only`), unreachable endpoints SHALL produce a warning section. The install SHALL proceed regardless.
+
+The warning section format is:
+
+1. `display.Header("Warning: connectivity check failed")`
+2. `display.PrintStatusLine("action", "allow outbound TCP to the following addresses", display.ColorWarning)`
+3. `display.PrintSectionDivider()`
+4. One `display.PrintStatusLine("<host>:<port>", "✗ <friendly-error>", display.ColorError)` per unreachable endpoint
+5. `display.PrintSectionDivider()`
+6. `display.PrintStatusLine("tip", "if a proxy is required, set HTTP_PROXY / HTTPS_PROXY", display.ColorWarning)`
+
+The `<friendly-error>` term is produced by `friendlyDialError` (not the raw Go error string).
 
 #### Scenario: Partial failure proceeds with install
 
 - **GIVEN** `--skip-connectivity-check` is NOT set
 - **AND** 2 of 5 resolved endpoints are unreachable
 - **WHEN** `InstallOneAgentV2` reaches the connectivity-probe stage
-- **THEN** stdout outputs a warning header and status lines via `display.Header` and `display.PrintStatusLine` listing the 2 unreachable endpoints
-- **AND** outputs a note via `display.PrintStatusLine` about proxy configuration
+- **THEN** stdout outputs the warning header (`"Warning: connectivity check failed"`), the action line (`"allow outbound TCP..."`), the 2 unreachable endpoints with friendly errors, and the proxy tip
 - **AND** the install proceeds to `MintInstallerToken`
+
+### Requirement: Friendly error messages in connectivity output
+
+`InstallOneAgentV2` SHALL translate raw `net.DialTimeout` error strings to short human-readable phrases via a `friendlyDialError` helper before displaying them to the user. The mapping:
+
+| Raw error contains | Displayed as |
+|---|---|
+| `"i/o timeout"`, `"timed out"`, `"deadline exceeded"` | `"timed out"` |
+| `"connection refused"` | `"connection refused"` |
+| `"no route to host"` | `"no route to host"` |
+| `"network is unreachable"` | `"network unreachable"` |
+| `"connection reset"` | `"connection reset"` |
+| anything else (non-empty) | `"unreachable"` |
+| empty string | `""` |
+
+#### Scenario: Timeout error is friendly
+
+- **GIVEN** a probe that times out (Go error contains `"i/o timeout"`)
+- **WHEN** the result is displayed
+- **THEN** the user sees `"timed out"`, not `"dial tcp 1.2.3.4:443: i/o timeout"`
+
+#### Scenario: Connection refused is friendly
+
+- **GIVEN** a probe that gets a reset (Go error contains `"connection refused"`)
+- **WHEN** the result is displayed
+- **THEN** the user sees `"connection refused"`
 
 ### Requirement: Probe debug logging
 

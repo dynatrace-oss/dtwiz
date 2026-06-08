@@ -168,28 +168,56 @@ func CheckAllEndpoints(endpoints []Endpoint, timeout time.Duration) Connectivity
 	return report
 }
 
-// printConnectivityReport outputs a full probe table — used by --connectivity-check-only.
-func printConnectivityReport(report ConnectivityReport) {
-	display.Header("Checking network connectivity...")
+// printConnectivityResults outputs one status line per endpoint.
+// The caller is responsible for printing the section header before this is called
+// so the header appears before the dial timeout window, not after.
+func printConnectivityResults(report ConnectivityReport) {
 	for _, r := range report.Results {
 		label := fmt.Sprintf("%s:%d", r.Endpoint.Host, r.Endpoint.Port)
 		if r.Reachable {
 			display.PrintStatusLine(label, fmt.Sprintf("✓ %s", r.Latency.Round(time.Millisecond)), display.ColorOK)
 		} else {
-			display.PrintStatusLine(label, fmt.Sprintf("✗ %s", r.Error), display.ColorError)
+			display.PrintStatusLine(label, fmt.Sprintf("✗ %s", friendlyDialError(r.Error)), display.ColorError)
 		}
 	}
 }
 
-// printConnectivityWarning outputs a warning block with only the failed endpoints,
-// used in the normal install path when some endpoints are unreachable.
+// printConnectivityWarning outputs a warning block that leads with the list of
+// unreachable addresses — formatted so the user knows exactly which hosts/IPs to
+// allow through their firewall — followed by a proxy configuration tip.
 func printConnectivityWarning(report ConnectivityReport) {
-	display.Header("Warning: some endpoints could not be reached")
+	display.Header("Warning: connectivity check failed")
+	display.PrintStatusLine("action", "allow outbound TCP to the following addresses", display.ColorWarning)
+	display.PrintSectionDivider()
 	for _, r := range report.Results {
 		if !r.Reachable {
 			label := fmt.Sprintf("%s:%d", r.Endpoint.Host, r.Endpoint.Port)
-			display.PrintStatusLine(label, r.Error, display.ColorError)
+			display.PrintStatusLine(label, fmt.Sprintf("✗ %s", friendlyDialError(r.Error)), display.ColorError)
 		}
 	}
-	display.PrintStatusLine("tip", "set HTTP_PROXY / HTTPS_PROXY if a proxy is required", display.ColorWarning)
+	display.PrintSectionDivider()
+	display.PrintStatusLine("tip", "if a proxy is required, set HTTP_PROXY / HTTPS_PROXY", display.ColorWarning)
+}
+
+// friendlyDialError converts a raw net.DialTimeout error string into a short,
+// human-readable phrase suitable for user-facing output.
+func friendlyDialError(errStr string) string {
+	switch {
+	case strings.Contains(errStr, "i/o timeout"),
+		strings.Contains(errStr, "timed out"),
+		strings.Contains(errStr, "deadline exceeded"):
+		return "timed out"
+	case strings.Contains(errStr, "connection refused"):
+		return "connection refused"
+	case strings.Contains(errStr, "no route to host"):
+		return "no route to host"
+	case strings.Contains(errStr, "network is unreachable"):
+		return "network unreachable"
+	case strings.Contains(errStr, "connection reset"):
+		return "connection reset"
+	case errStr == "":
+		return ""
+	default:
+		return "unreachable"
+	}
 }
