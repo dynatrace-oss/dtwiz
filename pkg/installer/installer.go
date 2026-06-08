@@ -155,6 +155,11 @@ func ExtractTenantID(environmentURL string) string {
 		}
 		return s
 	}
+	// Check for Managed URL pattern: /e/<tenantId>
+	if parts := strings.SplitN(strings.Trim(u.Path, "/"), "/", 3); len(parts) >= 2 && parts[0] == "e" && parts[1] != "" {
+		return parts[1]
+	}
+
 	host := u.Hostname()
 	if idx := strings.Index(host, "."); idx > 0 {
 		return host[:idx]

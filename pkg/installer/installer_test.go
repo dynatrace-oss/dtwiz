@@ -87,6 +87,7 @@ func TestExtractTenantID(t *testing.T) {
 		{"https://fxz0998d.dev.dynatracelabs.com", "fxz0998d"},
 		{"https://fxz0998d.dev.apps.dynatracelabs.com", "fxz0998d"},
 		{"abc12345.live.dynatrace.com", "abc12345"},
+		{"https://my-managed.example.com/e/abc12345", "abc12345"},
 	}
 	for _, tt := range tests {
 		got := ExtractTenantID(tt.input)

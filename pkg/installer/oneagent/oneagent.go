@@ -79,6 +79,34 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 		return nil
 	}
 
+	endpoints, err := ResolveEndpoints(c.Classic)
+	if err != nil {
+		return err
+	}
+
+	if opts.PrintEndpoints {
+		for _, ep := range endpoints {
+			fmt.Printf("%s:%d\n", ep.Host, ep.Port)
+		}
+		return nil
+	}
+
+	if opts.SkipConnectivityCheck {
+		logger.Debug("skipping connectivity probe", "reason", "--skip-connectivity-check")
+	} else {
+		report := CheckAllEndpoints(endpoints, defaultProbeTimeout)
+		if opts.ConnectivityCheckOnly {
+			printConnectivityReport(report)
+			return nil
+		}
+		if report.FailedCount > 0 {
+			printConnectivityWarning(report)
+		}
+	}
+	if opts.ConnectivityCheckOnly {
+		return nil
+	}
+
 	if updating && !opts.Quiet {
 		ok, err := installer.ConfirmProceed("  OneAgent is already installed. Update?")
 		if err != nil || !ok {
