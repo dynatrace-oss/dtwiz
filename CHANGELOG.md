@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.21] - 2026-06-08
+
+### Changed
+
+- Kubernetes DynaKube template: pin ActiveGate, EEC, CodeModules, and node agent images to specific build tags
+- Kubernetes DynaKube template: right-size memory and CPU requests/limits to better match observed usage
+
 ## [0.2.20] - 2026-06-03
 
 ### Fixed
