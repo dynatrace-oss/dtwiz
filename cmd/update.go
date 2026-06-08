@@ -34,11 +34,17 @@ var updateOtelCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := installer.UpdateOtelConfig(updateOtelConfigPath, envURL, classicTok, platformTok, updateDryRun); err != nil {
-			if errors.Is(err, installer.ErrInstallCancelled) {
-				return nil
-			}
-			return err
+		var updateErr error
+		if updateOtelConfigPath != "" {
+			updateErr = installer.UpdateOtelConfig(updateOtelConfigPath, envURL, classicTok, platformTok, updateDryRun)
+		} else {
+			updateErr = installer.UpdateOtelConfigInteractive(envURL, classicTok, platformTok, updateDryRun)
+		}
+		if errors.Is(updateErr, installer.ErrInstallCancelled) {
+			return nil
+		}
+		if updateErr != nil {
+			return updateErr
 		}
 		return nil
 	},
@@ -47,6 +53,6 @@ var updateOtelCmd = &cobra.Command{
 func init() {
 	updateCmd.PersistentFlags().BoolVar(&updateDryRun, "dry-run", false, "show what would be done without executing")
 	updateCmd.PersistentFlags().BoolVarP(&updateAutoConfirm, "yes", "y", false, "skip confirmation prompts")
-	updateOtelCmd.Flags().StringVar(&updateOtelConfigPath, "config", "config.yaml", "path to the existing OTel Collector config file to patch")
+	updateOtelCmd.Flags().StringVar(&updateOtelConfigPath, "config", "", "path to the existing OTel Collector config file to patch (prompts with running collector list when omitted)")
 	updateCmd.AddCommand(updateOtelCmd)
 }

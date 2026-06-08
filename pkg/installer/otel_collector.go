@@ -3,7 +3,6 @@ package installer
 import (
 	"archive/tar"
 	"archive/zip"
-	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -32,8 +31,27 @@ var otelConfigTemplateText string
 
 // otelConfigData holds the values substituted into otel.tmpl.
 type otelConfigData struct {
-	Endpoint   string
-	AuthHeader string
+	Endpoint    string
+	AuthHeader  string
+	MetricsPort int
+	GRPCPort    int
+	HTTPPort    int
+}
+
+// findFreePort returns the lowest port >= startPort on which localhost is not
+// already listening.  Falls back to startPort if no free port is found within
+// 100 attempts (avoids an infinite loop on pathological systems).
+func findFreePort(startPort int) int {
+	for port := startPort; port < startPort+100; port++ {
+		addr := fmt.Sprintf("localhost:%d", port)
+		l, err := net.Listen("tcp", addr)
+		if err != nil {
+			continue
+		}
+		l.Close()
+		return port
+	}
+	return startPort
 }
 
 // otelCollectorBinaryName returns the expected binary name inside the release archive.
@@ -311,6 +329,8 @@ func extractFromZip(archivePath, targetName, destPath string) error {
 // sendOtelVerificationLog sends a single OTLP log record to the local collector
 // (HTTP on 4318) with the given body text and returns the unique install ID
 // embedded in the message so the caller can search for it.
+// Retries on connection reset/refused: the TCP port can accept connections before
+// the HTTP handler is fully initialized, causing a RST on the first request.
 func sendOtelVerificationLog(body string) error {
 	hostname, _ := os.Hostname()
 
@@ -350,17 +370,28 @@ func sendOtelVerificationLog(body string) error {
 		return fmt.Errorf("marshalling OTLP payload: %w", err)
 	}
 
-	resp, err := http.Post("http://127.0.0.1:4318/v1/logs", "application/json", bytes.NewReader(data))
-	if err != nil {
-		return fmt.Errorf("sending OTLP log: %w", err)
+	const maxAttempts = 5
+	for attempt := range maxAttempts {
+		if attempt > 0 {
+			time.Sleep(500 * time.Millisecond)
+		}
+		resp, err := http.Post("http://127.0.0.1:4318/v1/logs", "application/json", bytes.NewReader(data))
+		if err != nil {
+			errStr := err.Error()
+			if strings.Contains(errStr, "connection reset") || strings.Contains(errStr, "connection refused") {
+				logger.Debug("sendOtelVerificationLog: transient error, retrying", "attempt", attempt+1, "err", err)
+				continue
+			}
+			return fmt.Errorf("sending OTLP log: %w", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode/100 != 2 {
+			body, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("OTLP endpoint returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		}
+		return nil
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode/100 != 2 {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("OTLP endpoint returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-	return nil
+	return fmt.Errorf("sending OTLP log: collector not ready after %d attempts", maxAttempts)
 }
 
 // waitForLogInDynatrace queries the Dynatrace Grail DQL API directly until a
@@ -597,15 +628,29 @@ func termLink(label, url string) string {
 }
 
 // generateOtelConfig renders otel.tmpl and returns a collector configuration YAML string.
+// It probes for a free port starting at 8888 for the collector's Prometheus metrics
+// endpoint so that multiple collectors can run on the same host without conflicting.
 func generateOtelConfig(apiURL, token string) (string, error) {
 	tmpl, err := template.New("otel").Parse(otelConfigTemplateText)
 	if err != nil {
 		return "", fmt.Errorf("parsing otel template: %w", err)
 	}
+	grpcPort := findFreePort(4317)
+	httpPort := findFreePort(4318)
+	if httpPort == grpcPort {
+		httpPort = findFreePort(grpcPort + 1)
+	}
+	metricsPort := findFreePort(8888)
+	if metricsPort == grpcPort || metricsPort == httpPort {
+		metricsPort = findFreePort(httpPort + 1)
+	}
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, otelConfigData{
-		Endpoint:   strings.TrimRight(apiURL, "/"),
-		AuthHeader: AuthHeader(token),
+		Endpoint:    strings.TrimRight(apiURL, "/"),
+		AuthHeader:  AuthHeader(token),
+		MetricsPort: metricsPort,
+		GRPCPort:    grpcPort,
+		HTTPPort:    httpPort,
 	}); err != nil {
 		return "", fmt.Errorf("rendering otel template: %w", err)
 	}
@@ -653,32 +698,17 @@ func formatPIDs(procs []runningCollector) string {
 func startOtelCollector(binaryPath, configPath string) (<-chan error, error) {
 	cmd := exec.Command(binaryPath, "--config", configPath)
 	cmd.Stdout = os.Stdout
-
-	// Pipe stderr through a filter — the collector writes structured logs to
-	// stderr in tab-separated format: "<timestamp>\t<level>\t<component>\t<msg>".
-	// Suppress info-level lines; forward warn/error/fatal and anything unrecognised.
-	stderrPipe, err := cmd.StderrPipe()
-	if err != nil {
-		return nil, fmt.Errorf("creating stderr pipe: %w", err)
-	}
+	// Use os.Stderr directly (not a pipe) so the child inherits the fd and
+	// keeps writing after dtwiz exits. A pipe would cause SIGPIPE to the
+	// collector when dtwiz's read-end closes on exit.
+	cmd.Stderr = os.Stderr
 
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("starting OTel Collector: %w", err)
 	}
 
-	// Drain stderr in the background, only printing non-info lines.
-	go func() {
-		scanner := bufio.NewScanner(stderrPipe)
-		for scanner.Scan() {
-			line := scanner.Text()
-			if !strings.Contains(line, "\tinfo\t") {
-				fmt.Fprintln(os.Stderr, line)
-			}
-		}
-	}()
-
 	pid := cmd.Process.Pid
-	fmt.Printf("  Dynatrace OTel Collector started (PID %d).\n", pid)
+	fmt.Printf("  %s started (PID %d).\n", filepath.Base(binaryPath), pid)
 
 	// Monitor the process; send its exit status on the channel.
 	crashed := make(chan error, 1)
@@ -696,7 +726,7 @@ func startOtelCollector(binaryPath, configPath string) (<-chan error, error) {
 		close(crashed)
 		return crashed, nil
 	case <-time.After(3 * time.Second):
-		fmt.Printf("  Collector is running in the background (PID %d). Detaching...\n", pid)
+		fmt.Printf("  %s is running in the background (PID %d). Detaching...\n", filepath.Base(binaryPath), pid)
 		_ = cmd.Process.Release()
 	}
 

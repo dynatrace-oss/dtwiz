@@ -11,17 +11,8 @@ import (
 // detectOtelCollector looks for a running OpenTelemetry Collector process on Windows.
 // Returns (running, binaryPath, configPath).
 func detectOtelCollector() (bool, string, string) {
-	// Patterns to search for in the process list.
-	processNames := []string{
-		"otelcol.exe",
-		"otelcol-contrib.exe",
-		"dynatrace-otel-collector.exe",
-	}
-
 	// First try Get-Process via powershell for a quick name-based check.
-	for _, name := range processNames {
-		// Strip the .exe suffix for Get-Process -Name which doesn't want it.
-		baseName := strings.TrimSuffix(name, ".exe")
+	for _, baseName := range otelCollectorNames {
 		ok, pidOutput := runCmd("powershell", "-NoProfile", "-Command",
 			"Get-Process -Name '"+baseName+"' -ErrorAction SilentlyContinue | Select-Object -First 1 | ForEach-Object { $_.Id }")
 		if ok && strings.TrimSpace(pidOutput) != "" {
@@ -45,7 +36,7 @@ func detectOtelCollector() (bool, string, string) {
 	// Exclude shell processes (powershell, pwsh, cmd) and the current process
 	// to avoid matching dtwiz's own detection commands whose arguments contain
 	// the search patterns.
-	for _, pattern := range []string{"otel-collector", "otelcol"} {
+	for _, pattern := range otelCollectorNames {
 		ok, output := runCmd("powershell", "-NoProfile", "-Command",
 			"Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match '"+pattern+"' -and $_.Name -notmatch 'powershell|pwsh|cmd' -and $_.ProcessId -ne $PID } | Select-Object -First 1 -ExpandProperty CommandLine")
 		if ok && output != "" {
@@ -53,6 +44,10 @@ func detectOtelCollector() (bool, string, string) {
 			binPath, configPath := parseWindowsCommandLine(output)
 			return true, binPath, configPath
 		}
+	}
+	// Fall back to container runtime detection (docker/podman/nerdctl).
+	if found, image := detectOtelCollectorContainer(); found {
+		return true, image, ""
 	}
 	logger.Debug("detectOtelCollector: no collector found")
 	return false, "", ""
@@ -84,8 +79,8 @@ func parseWindowsCommandLine(cmdline string) (binaryPath, configPath string) {
 func extractOtelConfigPath(cmdline string) string {
 	fields := strings.Fields(cmdline)
 	for i, part := range fields {
-		if strings.HasPrefix(part, "--config=") {
-			return strings.TrimPrefix(part, "--config=")
+		if v, ok := strings.CutPrefix(part, "--config="); ok {
+			return v
 		}
 		if part == "--config" && i+1 < len(fields) {
 			return fields[i+1]

@@ -360,3 +360,40 @@ func TestUninstallOtelCollector_JavaDryRun_AgentDirExists(t *testing.T) {
 		t.Error("agent dir was removed during dry-run — it should not have been")
 	}
 }
+
+// TestCollectorToProcessInfo_ContainerFields verifies that collectorToProcessInfo
+// propagates the container runtime and name fields into otelProcessInfo so that
+// the update flow can restart the container correctly.
+func TestCollectorToProcessInfo_ContainerFields(t *testing.T) {
+	c := collectorInstance{
+		binaryPath:       "docker.io/otel/opentelemetry-collector:0.153.0",
+		containerRuntime: "podman",
+		containerName:    "competent_shirley",
+	}
+	p := collectorToProcessInfo(c)
+	if p.containerRuntime != "podman" {
+		t.Errorf("containerRuntime = %q, want %q", p.containerRuntime, "podman")
+	}
+	if p.containerName != "competent_shirley" {
+		t.Errorf("containerName = %q, want %q", p.containerName, "competent_shirley")
+	}
+}
+
+// TestCollectorToProcessInfo_NativeFields verifies that collectorToProcessInfo
+// still correctly converts a native-process collectorInstance (regression guard).
+func TestCollectorToProcessInfo_NativeFields(t *testing.T) {
+	c := collectorInstance{
+		pid:        42,
+		binaryPath: "/usr/local/bin/dynatrace-otel-collector",
+	}
+	p := collectorToProcessInfo(c)
+	if p.pid != 42 {
+		t.Errorf("pid = %d, want 42", p.pid)
+	}
+	if p.binaryPath != "/usr/local/bin/dynatrace-otel-collector" {
+		t.Errorf("binaryPath = %q, want %q", p.binaryPath, "/usr/local/bin/dynatrace-otel-collector")
+	}
+	if p.containerRuntime != "" {
+		t.Errorf("containerRuntime should be empty for native process, got %q", p.containerRuntime)
+	}
+}

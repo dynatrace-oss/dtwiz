@@ -8,7 +8,7 @@ import "strings"
 // Returns (running, binaryPath, configPath).
 func detectOtelCollector() (bool, string, string) {
 	// First try exact process name matches for standard distributions.
-	for _, bin := range []string{"otelcol", "otelcol-contrib"} {
+	for _, bin := range otelCollectorNames {
 		ok, pidStr := runCmd("pgrep", "-x", bin)
 		if ok {
 			binPath, configPath := otelInfoFromPID(strings.TrimSpace(pidStr))
@@ -17,7 +17,7 @@ func detectOtelCollector() (bool, string, string) {
 	}
 	// Fall back to full command-line search to catch custom builds
 	// like dynatrace-otel-collector, opentelemetry-collector, etc.
-	for _, pattern := range []string{"otel-collector", "otelcol"} {
+	for _, pattern := range otelCollectorNames {
 		ok, pidStr := runCmd("pgrep", "-f", pattern)
 		if ok {
 			// pgrep may return multiple PIDs; use the first one.
@@ -25,6 +25,10 @@ func detectOtelCollector() (bool, string, string) {
 			binPath, configPath := otelInfoFromPID(pid)
 			return true, binPath, configPath
 		}
+	}
+	// Fall back to container runtime detection (docker/podman/nerdctl).
+	if found, image := detectOtelCollectorContainer(); found {
+		return true, image, ""
 	}
 	return false, "", ""
 }
@@ -50,8 +54,8 @@ func otelInfoFromPID(pid string) (binaryPath, configPath string) {
 func extractOtelConfigPath(cmdline string) string {
 	fields := strings.Fields(cmdline)
 	for i, part := range fields {
-		if strings.HasPrefix(part, "--config=") {
-			return strings.TrimPrefix(part, "--config=")
+		if v, ok := strings.CutPrefix(part, "--config="); ok {
+			return v
 		}
 		if part == "--config" && i+1 < len(fields) {
 			return fields[i+1]

@@ -1,7 +1,6 @@
 package installer
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -68,28 +67,6 @@ func isAWSCLIInstalled() bool {
 }
 
 // promptLine prints a prompt, reads a single line from stdin and trims
-// whitespace.  When the user enters nothing and defaultVal is non-empty the
-// default is returned.
-func promptLine(prompt, defaultVal string) (string, error) {
-	if defaultVal != "" {
-		fmt.Printf("  %s [%s]: ", prompt, defaultVal)
-	} else {
-		fmt.Printf("  %s: ", prompt)
-	}
-	scanner := bufio.NewScanner(os.Stdin)
-	if scanner.Scan() {
-		val := strings.TrimSpace(scanner.Text())
-		if val == "" {
-			return defaultVal, nil
-		}
-		return val, nil
-	}
-	if err := scanner.Err(); err != nil {
-		return "", err
-	}
-	return defaultVal, nil
-}
-
 // classicAPIURL strips the ".apps." segment from a Dynatrace apps URL so that
 // requests target the classic /api/v2 endpoint.
 //
