@@ -348,11 +348,11 @@ When the probe runs as part of the normal install path (not `--connectivity-chec
 - **THEN** stderr shows `connectivity:  checking endpoints...` transiently
 - **AND** the line is erased by `display.ClearPending()` before any subsequent output appears
 
-### Requirement: Connectivity failures are warnings, not errors
+### Requirement: Connectivity failures are hard errors
 
-When the probe is run as part of the normal install (not `--connectivity-check-only`), unreachable endpoints SHALL produce a warning section. The install SHALL proceed regardless.
+When the probe is run as part of the normal install (not `--connectivity-check-only`), any unreachable endpoint SHALL terminate the install with a non-zero exit code. The install SHALL NOT proceed to downloading or executing the installer when connectivity fails.
 
-The warning section format is:
+The failure output format is:
 
 1. `display.Header("Warning: connectivity check failed")`
 2. `display.PrintStatusLine("action", "allow outbound TCP to the following addresses", display.ColorWarning)`
@@ -361,15 +361,18 @@ The warning section format is:
 5. `display.PrintSectionDivider()`
 6. `display.PrintStatusLine("tip", "if a proxy is required, set HTTP_PROXY / HTTPS_PROXY", display.ColorWarning)`
 
+After the failure output, `InstallOneAgentV2` SHALL return a non-nil error of the form `"connectivity check failed: N/M endpoints unreachable"`, causing the command to exit non-zero.
+
 The `<friendly-error>` term is produced by `friendlyDialError` (not the raw Go error string).
 
-#### Scenario: Partial failure proceeds with install
+#### Scenario: Partial failure aborts install
 
 - **GIVEN** `--skip-connectivity-check` is NOT set
 - **AND** 2 of 5 resolved endpoints are unreachable
 - **WHEN** `InstallOneAgentV2` reaches the connectivity-probe stage
 - **THEN** stdout outputs the warning header (`"Warning: connectivity check failed"`), the action line (`"allow outbound TCP..."`), the 2 unreachable endpoints with friendly errors, and the proxy tip
-- **AND** the install proceeds to `MintInstallerToken`
+- **AND** `InstallOneAgentV2` returns a non-nil error
+- **AND** `MintInstallerToken`, `DownloadInstaller`, `BuildInstallCommand`, `ExecuteInstallCommand` are NOT called
 
 ### Requirement: Friendly error messages in connectivity output
 
@@ -439,15 +442,3 @@ When `--connectivity-check-only` is set, `InstallOneAgentV2` SHALL run preflight
 - **AND** `MintInstallerToken`, `DownloadInstaller`, `BuildInstallCommand`, `ExecuteInstallCommand`, `WaitForHostRegistration` are NOT called
 - **AND** the command exits with code 0
 
-### Requirement: --print-endpoints prints resolved endpoints
-
-When `--print-endpoints` is set, `InstallOneAgentV2` SHALL run preflights, resolve endpoints, print each endpoint on its own line in `host:port` format, and exit with code 0 — before minting any token.
-
-#### Scenario: Print-endpoints run
-
-- **GIVEN** `--print-endpoints` is passed
-- **AND** the tenant returns two endpoints
-- **WHEN** `dtwiz install oneagent --print-endpoints` runs
-- **THEN** stdout contains exactly two lines, one per endpoint in `host:port` format
-- **AND** `MintInstallerToken` is NOT called
-- **AND** the command exits with code 0

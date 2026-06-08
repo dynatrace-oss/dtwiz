@@ -20,7 +20,6 @@ var (
 	flagNoVerifySignature     bool
 	flagSkipConnectivityCheck bool
 	flagConnectivityCheckOnly bool
-	flagPrintEndpoints        bool
 )
 
 var installCmd = &cobra.Command{
@@ -64,7 +63,6 @@ var installOneAgentCmd = &cobra.Command{
 			NoVerifySignature:     flagNoVerifySignature,
 			SkipConnectivityCheck: flagSkipConnectivityCheck,
 			ConnectivityCheckOnly: flagConnectivityCheckOnly,
-			PrintEndpoints:        flagPrintEndpoints,
 			Quiet:                 quiet,
 		}
 
@@ -389,7 +387,6 @@ func init() {
 	installOneAgentCmd.Flags().BoolVar(&flagNoVerifySignature, "no-verify-signature", false, "Skip installer signature verification (Linux only)")
 	installOneAgentCmd.Flags().BoolVar(&flagSkipConnectivityCheck, "skip-connectivity-check", false, "Skip endpoint connectivity probe before installation")
 	installOneAgentCmd.Flags().BoolVar(&flagConnectivityCheckOnly, "connectivity-check-only", false, "Run connectivity probe and exit without installing")
-	installOneAgentCmd.Flags().BoolVar(&flagPrintEndpoints, "print-endpoints", false, "Print resolved communication endpoints and exit")
 	installCmd.AddCommand(installOneAgentCmd)
 	installCmd.AddCommand(installKubernetesCmd)
 	installCmd.AddCommand(installDockerCmd)

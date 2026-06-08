@@ -19,7 +19,6 @@ type InstallOptions struct {
 	NoVerifySignature     bool
 	SkipConnectivityCheck bool
 	ConnectivityCheckOnly bool
-	PrintEndpoints        bool
 	Quiet                 bool
 }
 
@@ -84,13 +83,6 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 		return err
 	}
 
-	if opts.PrintEndpoints {
-		for _, ep := range endpoints {
-			fmt.Printf("%s:%d\n", ep.Host, ep.Port)
-		}
-		return nil
-	}
-
 	if opts.SkipConnectivityCheck {
 		logger.Debug("skipping connectivity probe", "reason", "--skip-connectivity-check")
 	} else if opts.ConnectivityCheckOnly {
@@ -108,9 +100,9 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 		display.ClearPending()
 		if report.FailedCount > 0 {
 			printConnectivityWarning(report)
-		} else {
-			display.PrintStatusLine("connectivity", "all endpoints reachable", display.ColorOK)
+			return fmt.Errorf("connectivity check failed: %d/%d endpoints unreachable", report.FailedCount, len(report.Results))
 		}
+		display.PrintStatusLine("connectivity", "all endpoints reachable", display.ColorOK)
 	}
 	if opts.ConnectivityCheckOnly {
 		return nil

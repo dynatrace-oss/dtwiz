@@ -121,7 +121,6 @@ type InstallOptions struct {
     NoVerifySignature      bool
     SkipConnectivityCheck  bool
     ConnectivityCheckOnly  bool
-    PrintEndpoints         bool
     HostGroup              string
     Quiet                  bool
 }
@@ -326,13 +325,12 @@ CheckAllEndpoints(endpoints []Endpoint, perEndpointTimeout time.Duration) Connec
 ```
 
 - One goroutine per endpoint; `net.DialTimeout("tcp", host:port, perEndpointTimeout)` with `net.JoinHostPort` for IPv6-safe addressing.
-- `ConnectivityReport` aggregates results, latencies, and a `FailedCount`. Failures are warnings, not errors.
+- `ConnectivityReport` aggregates results, latencies, and a `FailedCount`. Failures abort the install.
 - `--connectivity-check-only`: prints `display.Header("Checking network connectivity...")` **before** probing starts (so the user sees the header at the start of the timeout window), then calls `CheckAllEndpoints`, then `printConnectivityResults` (per-endpoint ✓/✗ lines). Exits without installing.
-- Normal install path: wraps `CheckAllEndpoints` in `display.PrintPending("connectivity", "checking endpoints...")` / `display.ClearPending()` for TTY-friendly in-progress feedback. No persistent output if all pass.
-- On failure (normal install path): `printConnectivityWarning` leads with `"allow outbound TCP to the following addresses"` and lists only unreachable endpoints with friendly error phrases (via `friendlyDialError`), framed by `display.PrintSectionDivider()` calls. Proxy tip follows.
+- Normal install path: wraps `CheckAllEndpoints` in `display.PrintPending("connectivity", "checking endpoints...")` / `display.ClearPending()` for TTY-friendly in-progress feedback. Prints `"all endpoints reachable"` on success.
+- On failure (normal install path): `printConnectivityWarning` leads with `"allow outbound TCP to the following addresses"` and lists only unreachable endpoints with friendly error phrases (via `friendlyDialError`), framed by `display.PrintSectionDivider()` calls. Proxy tip follows. Returns a non-nil error — install does not proceed.
 - `friendlyDialError`: maps raw `net.DialTimeout` error strings to `"timed out"` / `"connection refused"` / `"no route to host"` / `"network unreachable"` / `"connection reset"` / `"unreachable"`. Raw Go error strings are never shown to the user.
 - `--skip-connectivity-check` skips this stage.
-- `--print-endpoints` prints the resolved endpoint list and exits before probing.
 
 ### 13. CLI flags
 
@@ -345,7 +343,6 @@ All new flags live on `installOneAgentCmd` (not on `installCmd`, which already o
 | `--no-verify-signature` | bool | `false` | Skip Linux signature verification |
 | `--skip-connectivity-check` | bool | `false` | Skip Task 9 probe |
 | `--connectivity-check-only` | bool | `false` | Run only Task 9 probe, then exit |
-| `--print-endpoints` | bool | `false` | Print resolved endpoints, then exit |
 
 `--dry-run`, `--quiet`, `--host-group` are pre-existing and reused unchanged.
 

@@ -2,12 +2,10 @@ package oneagent
 
 import (
 	"bytes"
-	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -436,42 +434,6 @@ func TestFriendlyDialError(t *testing.T) {
 }
 
 // --- InstallOneAgentV2 integration tests for Task 3 paths ---
-
-func TestInstallOneAgentV2_PrintEndpoints(t *testing.T) {
-	if runtime.GOOS == "darwin" {
-		t.Skip("OneAgent not supported on macOS")
-	}
-
-	srv := newMockEndpointServer(t, "ep1.example.com:443;ep2.example.com:8080")
-	defer srv.Close()
-
-	// Capture stdout.
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	c := newMockClient(t, srv.URL)
-	err := InstallOneAgentV2(c, InstallOptions{
-		MonitoringMode: "fullstack",
-		PrintEndpoints: true,
-	})
-
-	w.Close()
-	os.Stdout = oldStdout
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	out := buf.String()
-	if !strings.Contains(out, "ep1.example.com:443") {
-		t.Errorf("output missing ep1: %q", out)
-	}
-	if !strings.Contains(out, "ep2.example.com:8080") {
-		t.Errorf("output missing ep2: %q", out)
-	}
-}
 
 func TestInstallOneAgentV2_ConnectivityCheckOnly_NoDownload(t *testing.T) {
 	if runtime.GOOS == "darwin" {
