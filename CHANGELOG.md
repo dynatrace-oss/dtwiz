@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.21] - 2026-06-08
 
+### Added
+
+- `dtwiz uninstall otel`: interactive picker when multiple Dynatrace OTel Collector instances are found (running or installed); Docker container support; "Uninstall all" option for multiple instances
+- `dtwiz update otel`: interactive running-collector picker when `--config` is omitted; supports container-based collectors including config extract/patch/write-back for Docker-managed configs
+
 ### Changed
 
 - Kubernetes DynaKube template: pin ActiveGate, EEC, CodeModules, and node agent images to specific build tags
