@@ -83,6 +83,8 @@ func detectGoRuntimeProjects() []detectedProject {
 	return detected
 }
 
+// detectAllProjects filters runtimes to those with a usable binary and scans
+// for projects in parallel across all enabled runtimes.
 func detectAllProjects(runtimes []runtimeInfo) []detectedProject {
 	type result struct {
 		projects []detectedProject
@@ -241,12 +243,12 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 	display.ColorMessage.Println("  Dynatrace OpenTelemetry Installation")
 	fmt.Println()
 
+	runtimes := detectAvailableRuntimes()
+
 	cp, err := prepareCollectorPlan(envURL, token)
 	if err != nil {
 		return err
 	}
-
-	runtimes := detectAvailableRuntimes()
 
 	var plan InstrumentationPlan
 	if projectPath != "" {
@@ -282,25 +284,23 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		plan = createRuntimePlan(proj, cp.apiURL, token, envURL, platformToken)
 	} else {
 		projects := detectAllProjects(runtimes)
-		if len(projects) > 0 {
-			for {
-				display.ColorMessage.Println("  Detected projects:")
-				display.PrintSectionDivider()
-				printProjectList(projects)
+		for {
+			display.ColorMessage.Println("  Detected projects:")
+			display.PrintSectionDivider()
+			printProjectList(projects)
 
-				selected, ok := selectProject(projects)
-				if !ok {
-					break
-				}
-				plan = createRuntimePlan(selected, cp.apiURL, token, envURL, platformToken)
-				if plan != nil {
-					break
-				}
-				// Project can't be auto-instrumented; ask if the user wants to try another.
-				again, err := confirmProceed("  Select another project?")
-				if err != nil || !again {
-					break
-				}
+			selected, ok := selectProject(projects)
+			if !ok {
+				break
+			}
+			plan = createRuntimePlan(selected, cp.apiURL, token, envURL, platformToken)
+			if plan != nil {
+				break
+			}
+			// Project can't be auto-instrumented; ask if the user wants to try another.
+			again, err := confirmProceed("  Select another project?")
+			if err != nil || !again {
+				break
 			}
 		}
 	}
