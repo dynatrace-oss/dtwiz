@@ -99,15 +99,24 @@ func detectAllProjects(runtimes []runtimeInfo) []detectedProject {
 		// Python's binary may exist as a non-functional stub even when no real
 		// interpreter is installed, so run it to verify it's usable.
 		var available bool
+		var stubOnly bool
 		if rt.binName == "python3" || rt.binName == "python" {
 			_, err := detectPython()
 			available = err == nil
+			if !available {
+				_, lookErr := exec.LookPath(rt.binName)
+				stubOnly = lookErr == nil // binary found but not usable
+			}
 		} else {
 			_, err := exec.LookPath(rt.binName)
 			available = err == nil
 		}
 		if !available {
-			fmt.Printf("  Skipping %s instrumentation — '%s' not found on PATH.\n", rt.name, rt.binName)
+			if stubOnly {
+				fmt.Printf("  Skipping %s instrumentation — '%s' found on PATH but not usable.\n", rt.name, rt.binName)
+			} else {
+				fmt.Printf("  Skipping %s instrumentation — '%s' not found on PATH.\n", rt.name, rt.binName)
+			}
 			continue
 		}
 		active = append(active, rt)
@@ -132,6 +141,9 @@ func detectAllProjects(runtimes []runtimeInfo) []detectedProject {
 }
 
 func printProjectList(projects []detectedProject) {
+	if len(projects) == 0 {
+		fmt.Println("  No projects detected.")
+	}
 	for i, p := range projects {
 		line := fmt.Sprintf("  [%d]  %s  %s  (%s)", i+1, p.Runtime, p.Path, strings.Join(p.Markers, ", "))
 		if len(p.RunningProcessIDs) > 0 {
