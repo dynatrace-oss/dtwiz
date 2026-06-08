@@ -4,7 +4,6 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
-	"net/url"
 	"os"
 	"os/exec"
 	"regexp"
@@ -19,13 +18,25 @@ import (
 //go:embed dynakube.tmpl
 var dynakubeTemplateText string
 
+// Pinned image references used in the DynaKube manifest.
+// Update these constants when rolling forward to a new Dynatrace release.
+const (
+	dynakubeActiveGateImage  = "public.ecr.aws/dynatrace/dynatrace-activegate:1.337.36.20260526-135434"
+	dynakubeEECRepository    = "public.ecr.aws/dynatrace/dynatrace-eec"
+	dynakubeEECTag           = "1.337.60.20260603-063549"
+	dynakubeCodeModulesImage = "public.ecr.aws/dynatrace/dynatrace-codemodules:1.337.60.20260603-063549"
+)
+
 // dynakubeTemplateData holds the values substituted into dynakube.tmpl.
 type dynakubeTemplateData struct {
-	ClusterName     string // sanitised Kubernetes resource name
-	APIURL          string // full Dynatrace API URL incl. /api suffix
-	APIToken        string // raw API token
-	DataIngestToken string // raw data-ingest token
-	EECRepository   string // OCI repository for the EEC image
+	ClusterName      string // sanitised Kubernetes resource name
+	APIURL           string // full Dynatrace API URL incl. /api suffix
+	APIToken         string // raw API token
+	DataIngestToken  string // raw data-ingest token
+	ActiveGateImage  string // full image reference for ActiveGate pods
+	EECRepository    string // OCI repository for the EEC image
+	EECTag           string // tag for the EEC image
+	CodeModulesImage string // full image reference for OneAgent code modules
 }
 
 // renderDynakubeTemplate fills dynakube.tmpl with the provided data and
@@ -40,18 +51,6 @@ func renderDynakubeTemplate(d dynakubeTemplateData) (string, error) {
 		return "", fmt.Errorf("rendering dynakube template: %w", err)
 	}
 	return buf.String(), nil
-}
-
-// eecRepositoryFromAPIURL derives the EEC OCI repository host path from the
-// Dynatrace API URL, e.g.
-//
-//	"https://abc123.live.dynatracelabs.com/api" → "abc123.live.dynatracelabs.com/linux/dynatrace-eec"
-func eecRepositoryFromAPIURL(apiURL string) string {
-	u, err := url.Parse(apiURL)
-	if err != nil || u.Host == "" {
-		return ""
-	}
-	return u.Host + "/linux/dynatrace-eec"
 }
 
 // sanitizeK8sName converts a string to a valid RFC 1123 DNS label suitable
@@ -305,11 +304,14 @@ func InstallKubernetes(envURL, token, name string, dryRun bool) error {
 
 	// --- Build manifest ---
 	tmplData := dynakubeTemplateData{
-		ClusterName:     name,
-		APIURL:          apiURL + "/api",
-		APIToken:        token,
-		DataIngestToken: token,
-		EECRepository:   eecRepositoryFromAPIURL(apiURL + "/api"),
+		ClusterName:      name,
+		APIURL:           apiURL + "/api",
+		APIToken:         token,
+		DataIngestToken:  token,
+		ActiveGateImage:  dynakubeActiveGateImage,
+		EECRepository:    dynakubeEECRepository,
+		EECTag:           dynakubeEECTag,
+		CodeModulesImage: dynakubeCodeModulesImage,
 	}
 	manifest, err := renderDynakubeTemplate(tmplData)
 	if err != nil {

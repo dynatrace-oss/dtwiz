@@ -21,7 +21,7 @@ spec:
   apiUrl: {{ .APIURL }}
   tokens: {{ .ClusterName }}
   activeGate:
-    image: public.ecr.aws/dynatrace/dynatrace-activegate:1.337.36.20260526-135434
+    image: {{ .ActiveGateImage }}
     capabilities:
       - kubernetes-monitoring
     resources:
@@ -35,8 +35,8 @@ spec:
   templates:
     extensionExecutionController:
       imageRef:
-        repository: public.ecr.aws/dynatrace/dynatrace-eec
-        tag: 1.337.60.20260603-063549
+        repository: {{ .EECRepository }}
+        tag: {{ .EECTag }}
     otelCollector:
       imageRef:
         repository: public.ecr.aws/dynatrace/dynatrace-otel-collector
@@ -83,9 +83,9 @@ spec:
     enabled: true
   oneAgent:
     applicationMonitoring:
-      codeModulesImage: public.ecr.aws/dynatrace/dynatrace-codemodules:1.337.60.20260603-063549
+      codeModulesImage: {{ .CodeModulesImage }}
   activeGate:
-    image: public.ecr.aws/dynatrace/dynatrace-activegate:1.337.36.20260526-135434
+    image: {{ .ActiveGateImage }}
     capabilities:
       - routing
       - debugging
