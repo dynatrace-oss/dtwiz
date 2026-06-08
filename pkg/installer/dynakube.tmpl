@@ -21,21 +21,22 @@ spec:
   apiUrl: {{ .APIURL }}
   tokens: {{ .ClusterName }}
   activeGate:
+    image: {{ .ActiveGateImage }}
     capabilities:
       - kubernetes-monitoring
     resources:
       requests:
-        cpu: 1000m
-        memory: 10Gi
+        cpu: 200m
+        memory: 6Gi
       limits:
-        cpu: 2000m
-        memory: 10Gi
+        cpu: 1000m
+        memory: 6Gi
     replicas: 1
   templates:
     extensionExecutionController:
       imageRef:
         repository: {{ .EECRepository }}
-        tag: latest
+        tag: {{ .EECTag }}
     otelCollector:
       imageRef:
         repository: public.ecr.aws/dynatrace/dynatrace-otel-collector
@@ -81,18 +82,20 @@ spec:
   metadataEnrichment:
     enabled: true
   oneAgent:
-    applicationMonitoring: {}
+    applicationMonitoring:
+      codeModulesImage: {{ .CodeModulesImage }}
   activeGate:
+    image: {{ .ActiveGateImage }}
     capabilities:
       - routing
       - debugging
     resources:
       requests:
-        cpu: 200m
-        memory: 4Gi
+        cpu: 250m
+        memory: 2Gi
       limits:
         cpu: 1000m
-        memory: 4Gi
+        memory: 2Gi
     replicas: 3
 ---
 apiVersion: rbac.authorization.k8s.io/v1
