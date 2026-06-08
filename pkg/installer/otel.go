@@ -96,7 +96,7 @@ func detectAllProjects(runtimes []runtimeInfo) []detectedProject {
 		}
 		// Python's binary may exist as a non-functional stub even when no real
 		// interpreter is installed, so run it to verify it's usable.
-		available := true
+		var available bool
 		if rt.binName == "python3" || rt.binName == "python" {
 			_, err := detectPython()
 			available = err == nil
