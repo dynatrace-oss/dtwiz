@@ -108,6 +108,8 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 		display.ClearPending()
 		if report.FailedCount > 0 {
 			printConnectivityWarning(report)
+		} else {
+			display.PrintStatusLine("connectivity", "all endpoints reachable", display.ColorOK)
 		}
 	}
 	if opts.ConnectivityCheckOnly {
