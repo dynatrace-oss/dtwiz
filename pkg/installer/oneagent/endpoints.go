@@ -93,8 +93,11 @@ func parseEndpoint(s string) (Endpoint, error) {
 
 	host, portStr, err := net.SplitHostPort(s)
 	if err != nil {
-		logger.Debug("endpoint token has no port, defaulting to 443", "host", s)
-		return Endpoint{Host: s, Port: 443}, nil
+		// s may be a bracketed IPv6 literal without a port (e.g. [2001:db8::1]).
+		// Strip the brackets so net.JoinHostPort doesn't double-bracket later.
+		host = strings.TrimPrefix(strings.TrimSuffix(s, "]"), "[")
+		logger.Debug("endpoint token has no port, defaulting to 443", "host", host)
+		return Endpoint{Host: host, Port: 443}, nil
 	}
 	port, err := strconv.Atoi(portStr)
 	if err != nil {

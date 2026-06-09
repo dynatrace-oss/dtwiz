@@ -78,21 +78,21 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 		return nil
 	}
 
-	endpoints, err := ResolveEndpoints(c.Classic)
-	if err != nil {
-		return err
-	}
-
 	if opts.SkipConnectivityCheck {
 		logger.Debug("skipping connectivity probe", "reason", "--skip-connectivity-check")
-	} else if opts.ConnectivityCheckOnly {
-		// Print header before the probe so the user sees what's happening
-		// during the dial timeout window.
-		display.Header("Checking network connectivity...")
-		report := CheckAllEndpoints(endpoints, defaultProbeTimeout)
-		printConnectivityResults(report)
-		return nil
 	} else {
+		endpoints, err := ResolveEndpoints(c.Classic)
+		if err != nil {
+			return err
+		}
+		if opts.ConnectivityCheckOnly {
+			// Print header before the probe so the user sees what's happening
+			// during the dial timeout window.
+			display.Header("Checking network connectivity...")
+			report := CheckAllEndpoints(endpoints, defaultProbeTimeout)
+			printConnectivityResults(report)
+			return nil
+		}
 		// Normal install path: transient pending line while probes run,
 		// then clear it — no lingering output unless something failed.
 		display.PrintPending("connectivity", "checking endpoints...")

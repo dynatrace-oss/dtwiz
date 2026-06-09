@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/client"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
@@ -137,6 +138,75 @@ func TestInstallOneAgentV2_UnsupportedPlatformReturnsError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "macOS") {
 		t.Errorf("error = %q, want macOS message", err)
+	}
+}
+
+func TestInstallOneAgentV2_ConnectivityFail_AbortsBeforeDownload(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("OneAgent not supported on macOS")
+	}
+
+	var downloadCalled bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == endpointsAPIPath {
+			w.WriteHeader(http.StatusOK)
+			// RFC 5737 TEST-NET: never routable, probe will time out.
+			_, _ = w.Write([]byte("192.0.2.1:12345"))
+			return
+		}
+		downloadCalled = true
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	old := defaultProbeTimeout
+	defaultProbeTimeout = 50 * time.Millisecond
+	defer func() { defaultProbeTimeout = old }()
+
+	c := newMockClient(t, srv.URL)
+	err := InstallOneAgentV2(c, InstallOptions{MonitoringMode: "fullstack"})
+	if err == nil {
+		t.Fatal("expected error when connectivity check fails, got nil")
+	}
+	if !strings.Contains(err.Error(), "connectivity check failed") {
+		t.Errorf("error = %q, want 'connectivity check failed'", err.Error())
+	}
+	if downloadCalled {
+		t.Error("download API was called but must not be when connectivity check fails")
+	}
+}
+
+func TestInstallOneAgentV2_ConnectivityPass_ContinuesToDownload(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("OneAgent not supported on macOS")
+	}
+
+	ln, addr := startTCPListener(t)
+	defer ln.Close()
+	go acceptLoop(ln)
+
+	var downloadCalled bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == endpointsAPIPath {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(addr))
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/v1/deployment/installer/agent/") {
+			downloadCalled = true
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	c := newMockClient(t, srv.URL)
+	err := InstallOneAgentV2(c, InstallOptions{MonitoringMode: "fullstack"})
+	// Connectivity passed, so the error must come from the download stage, not connectivity.
+	if err != nil && strings.Contains(err.Error(), "connectivity check failed") {
+		t.Errorf("connectivity should have passed but got: %v", err)
+	}
+	if !downloadCalled {
+		t.Error("download API was not called — install should have proceeded past the connectivity check")
 	}
 }
 

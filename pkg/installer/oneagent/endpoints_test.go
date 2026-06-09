@@ -161,6 +161,50 @@ func TestResolveEndpoints_FullHTTPSURL(t *testing.T) {
 	}
 }
 
+func TestResolveEndpoints_BracketedIPv6NoPort(t *testing.T) {
+	// Bracketed IPv6 without a port must default to 443 and must NOT store brackets
+	// in Host, or net.JoinHostPort will double-bracket ([[...]]:443) later.
+	srv := newMockTenantServer(t, endpointsAPIPath, http.StatusOK,
+		"https://[2001:db8::1]/communication")
+	defer srv.Close()
+
+	c := newTestClassicClient(t, srv.URL)
+	eps, err := ResolveEndpoints(c)
+	if err != nil {
+		t.Fatalf("ResolveEndpoints: %v", err)
+	}
+	if len(eps) != 1 {
+		t.Fatalf("expected 1 endpoint, got %d", len(eps))
+	}
+	if eps[0].Host != "2001:db8::1" {
+		t.Errorf("Host = %q, want %q (no brackets)", eps[0].Host, "2001:db8::1")
+	}
+	if eps[0].Port != 443 {
+		t.Errorf("Port = %d, want 443", eps[0].Port)
+	}
+}
+
+func TestResolveEndpoints_BracketedIPv6WithPort(t *testing.T) {
+	srv := newMockTenantServer(t, endpointsAPIPath, http.StatusOK,
+		"https://[2001:db8::1]:9999/communication")
+	defer srv.Close()
+
+	c := newTestClassicClient(t, srv.URL)
+	eps, err := ResolveEndpoints(c)
+	if err != nil {
+		t.Fatalf("ResolveEndpoints: %v", err)
+	}
+	if len(eps) != 1 {
+		t.Fatalf("expected 1 endpoint, got %d", len(eps))
+	}
+	if eps[0].Host != "2001:db8::1" {
+		t.Errorf("Host = %q, want %q", eps[0].Host, "2001:db8::1")
+	}
+	if eps[0].Port != 9999 {
+		t.Errorf("Port = %d, want 9999", eps[0].Port)
+	}
+}
+
 func TestResolveEndpoints_MixedSeparators(t *testing.T) {
 	// Real tenants may mix formats — be robust.
 	srv := newMockTenantServer(t, endpointsAPIPath, http.StatusOK,
@@ -466,6 +510,38 @@ func TestInstallOneAgentV2_ConnectivityCheckOnly_NoDownload(t *testing.T) {
 	}
 	if downloadCalled {
 		t.Error("download API was called but should not be under --connectivity-check-only")
+	}
+}
+
+func TestInstallOneAgentV2_SkipConnectivityCheck_EndpointsAPINotCalled(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("OneAgent not supported on macOS")
+	}
+
+	// Endpoints API is broken — install must succeed anyway because the user
+	// opted out of the entire connectivity stage with --skip-connectivity-check.
+	var endpointsCalled bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == endpointsAPIPath {
+			endpointsCalled = true
+			http.Error(w, "blocked", http.StatusForbidden)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	c := newMockClient(t, srv.URL)
+	err := InstallOneAgentV2(c, InstallOptions{
+		MonitoringMode:        "fullstack",
+		SkipConnectivityCheck: true,
+		ConnectivityCheckOnly: true,
+	})
+	if err != nil {
+		t.Fatalf("expected no error with --skip-connectivity-check, got: %v", err)
+	}
+	if endpointsCalled {
+		t.Error("endpoints API was called but must be skipped when --skip-connectivity-check is set")
 	}
 }
 
