@@ -2,6 +2,7 @@ package oneagent
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -107,9 +108,8 @@ func TestResolveAgentConfig_DebugLog(t *testing.T) {
 }
 
 func TestInstallOneAgentV2_DryRun_NoDownload(t *testing.T) {
-	if runtime.GOOS == "darwin" {
-		t.Skip("OneAgent not supported on macOS")
-	}
+	skipNonLinux(t)
+	withInstallDir(t, filepath.Join(t.TempDir(), "nonexistent"))
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Errorf("dry-run made a real HTTP request: %s %s", r.Method, r.URL.Path)
@@ -356,8 +356,28 @@ func TestInstallOneAgentV2_UpdatePrompt_Declined(t *testing.T) {
 	defer srv.Close()
 	c := newMockClient(t, srv.URL)
 
-	if err := InstallOneAgentV2(c, InstallOptions{MonitoringMode: "fullstack"}); err != nil {
-		t.Fatalf("expected nil on decline, got: %v", err)
+	err := InstallOneAgentV2(c, InstallOptions{MonitoringMode: "fullstack"})
+	if !errors.Is(err, installer.ErrInstallCancelled) {
+		t.Fatalf("expected ErrInstallCancelled on decline, got: %v", err)
+	}
+}
+
+// TestInstallOneAgentV2_UpdatePrompt_EOFCancels verifies that a closed stdin
+// (CI pipeline, < /dev/null) is treated as "no" and does not proceed to download.
+func TestInstallOneAgentV2_UpdatePrompt_EOFCancels(t *testing.T) {
+	skipNonLinux(t)
+	withInstallDir(t, t.TempDir())
+	withStdin(t, "") // EOF immediately
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("EOF should cancel: unexpected HTTP request %s %s", r.Method, r.URL.Path)
+	}))
+	defer srv.Close()
+	c := newMockClient(t, srv.URL)
+
+	err := InstallOneAgentV2(c, InstallOptions{MonitoringMode: "fullstack"})
+	if !errors.Is(err, installer.ErrInstallCancelled) {
+		t.Fatalf("expected ErrInstallCancelled on EOF cancel, got: %v", err)
 	}
 }
 

@@ -1,7 +1,6 @@
 package oneagent
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"runtime"
@@ -80,15 +79,11 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 		return nil
 	}
 
-	if updating && !opts.Quiet && !installer.AutoConfirm {
-		fmt.Print("  OneAgent is already installed. Update? [Y/n] ")
-		scanner := bufio.NewScanner(os.Stdin)
-		if scanner.Scan() {
-			answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
-			if !(answer == "" || answer == "y" || answer == "yes") {
-				display.PrintStatusLine("result", "update cancelled", display.ColorMuted)
-				return nil
-			}
+	if updating && !opts.Quiet {
+		ok, err := installer.ConfirmProceed("  OneAgent is already installed. Update?")
+		if err != nil || !ok {
+			display.PrintStatusLine("result", "update cancelled", display.ColorMuted)
+			return installer.ErrInstallCancelled
 		}
 	}
 

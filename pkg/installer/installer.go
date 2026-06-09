@@ -22,6 +22,10 @@ var ErrInstallCancelled = errors.New("installation cancelled by user")
 // Set by the --yes / -y flag on install, update, and uninstall command groups.
 var AutoConfirm bool
 
+// ConfirmProceed is the exported variant of confirmProceed for use by
+// sub-packages (e.g. pkg/installer/oneagent).
+func ConfirmProceed(prompt string) (bool, error) { return confirmProceed(prompt) }
+
 // confirmProceed prints the prompt and returns true if the user confirms.
 // When AutoConfirm is true it returns true immediately without prompting.
 func confirmProceed(prompt string) (bool, error) {
