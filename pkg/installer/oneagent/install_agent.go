@@ -1,12 +1,8 @@
 package oneagent
 
 import (
-	"bytes"
-	"errors"
 	"fmt"
-	"os"
 	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
@@ -75,48 +71,16 @@ func ExecuteInstallCommand(argv []string, quiet bool) (int, error) {
 	if len(argv) == 0 {
 		return 1, fmt.Errorf("install command is empty")
 	}
-
 	start := time.Now()
 	logger.Debug("executing installer", "argv", argv)
-
 	if !quiet {
 		display.PrintStatusLine("execute", "Executing installer...", display.ColorMessage)
 	}
-
-	cmd := exec.Command(argv[0], argv[1:]...)
-	cmd.Stdin = os.Stdin
-	var captured bytes.Buffer
-	if quiet {
-		cmd.Stdout = &captured
-		cmd.Stderr = &captured
-	} else {
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-	}
-
-	runErr := cmd.Run()
-
-	code := 0
-	if runErr != nil {
-		var exitErr *exec.ExitError
-		if errors.As(runErr, &exitErr) {
-			code = exitErr.ExitCode()
-		} else {
-			logger.Debug("installer process failed to start", "error", runErr, "binary", argv[0])
-			return 1, fmt.Errorf("executing installer: %w", runErr)
-		}
-	}
-
+	code, err := installer.RunCommandWithExitCode(argv, quiet)
 	logger.Verbose("installer exited", "exit_code", code, "duration", time.Since(start))
-
-	if code != 0 {
-		msg := fmt.Sprintf("installer exited with code %d", code)
-		if out := strings.TrimSpace(captured.String()); out != "" {
-			msg += ": " + out
-		}
-		return code, fmt.Errorf("%s", msg) //nolint:goerr113
+	if err != nil {
+		return code, fmt.Errorf("installer %w", err)
 	}
-
 	if !quiet {
 		display.PrintStatusLine("result", "Installer executed successfully", display.ColorOK)
 	}

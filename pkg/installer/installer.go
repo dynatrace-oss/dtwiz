@@ -3,6 +3,7 @@ package installer
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"net/url"
@@ -173,6 +174,39 @@ func RunCommand(name string, args ...string) error {
 		return fmt.Errorf("command %q failed: %w", name, err)
 	}
 	return nil
+}
+
+// RunCommandWithExitCode runs argv[0] with argv[1:] as arguments.
+// When quiet is false stdout and stderr are streamed to the terminal; when true
+// they are captured and appended to the error on non-zero exit.
+// The subprocess exit code is always returned; a non-zero exit is always an error.
+func RunCommandWithExitCode(argv []string, quiet bool) (int, error) {
+	if len(argv) == 0 {
+		return 1, fmt.Errorf("empty command")
+	}
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Stdin = os.Stdin
+	var captured bytes.Buffer
+	if quiet {
+		cmd.Stdout = &captured
+		cmd.Stderr = &captured
+	} else {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	}
+	runErr := cmd.Run()
+	if runErr == nil {
+		return 0, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(runErr, &exitErr) {
+		code := exitErr.ExitCode()
+		if out := strings.TrimSpace(captured.String()); out != "" {
+			return code, fmt.Errorf("exited with code %d: %s", code, out)
+		}
+		return code, fmt.Errorf("exited with code %d", code)
+	}
+	return 1, fmt.Errorf("command failed to start: %w", runErr)
 }
 
 // RunCommandQuiet runs a named executable suppressing stdout. Stderr is still
