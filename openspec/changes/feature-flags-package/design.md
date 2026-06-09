@@ -22,7 +22,7 @@ dtctl (sibling project) has no centralized feature flag system. Its `pkg/aidetec
 
 - Remote feature flag evaluation (LaunchDarkly, etc.) — this is local-only.
 - Runtime notices or `[Preview]` banners when a flag-gated feature activates (status output is sufficient).
-- Gating analyzer/recommender capabilities behind feature flags (evaluated and not needed — see task 6).
+- Gating all analyzer/recommender capabilities behind feature flags — only Docker (recommendation) and demo app installation are gated behind `Experimental`; Kubernetes, OneAgent, AWS, Azure, and GCP are GA and ungated.
 
 ## Decisions
 
@@ -35,6 +35,8 @@ type Flag int
 
 const (
     AllRuntimes Flag = iota
+    OneAgentPoC
+    Experimental
 )
 
 type CLIFeatureFlag struct {
@@ -47,14 +49,9 @@ type CLIFeatureFlag struct {
 }
 
 var registry = []CLIFeatureFlag{
-    {
-        AllRuntimes,
-        "all-runtimes",
-        "DTWIZ_ALL_RUNTIMES",
-        false,
-        "enable all runtimes for OTel auto-instrumentation",
-        false,
-    },
+    {AllRuntimes, "all-runtimes", "DTWIZ_ALL_RUNTIMES", false, "enable all runtimes for OTel auto-instrumentation", false},
+    {OneAgentPoC, "oneagent-poc", "DTWIZ_ONEAGENT_POC", false, "enable the new OneAgent PoC installer flow (development only)", false},
+    {Experimental, "experimental", "DTWIZ_EXPERIMENTAL", false, "enable experimental features (demo installation, Docker in recommendations)", false},
 }
 ```
 

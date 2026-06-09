@@ -53,5 +53,5 @@ End-to-end verification of all flows.
 
 Manually evaluate whether Docker, Kubernetes, OneAgent, AWS, Azure, and GCP analysis/recommendations should be gated behind feature flags (Platform, OTel, and Services are already GA and excluded from this evaluation).
 
-- [ ] 6.1 Review each analyzer in `pkg/analyzer/` and each recommendation method in `pkg/recommender/` — determine if any non-GA capability would benefit from a feature flag
-- [ ] 6.2 Document findings as a comment on the change or in the PR description
+- [x] 6.1 Review each analyzer in `pkg/analyzer/` and each recommendation method in `pkg/recommender/` — determine if any non-GA capability would benefit from a feature flag
+- [x] 6.2 Document findings: Docker recommendation and demo app installation are gated behind `Experimental` (`--experimental` / `DTWIZ_EXPERIMENTAL`). Kubernetes, OneAgent, AWS, Azure, and GCP are GA and remain ungated.

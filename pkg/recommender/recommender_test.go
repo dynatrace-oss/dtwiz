@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
+	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/recommender"
 )
 
@@ -75,6 +76,7 @@ func TestGenerateRecommendations_Kubernetes(t *testing.T) {
 }
 
 func TestGenerateRecommendations_DockerOnly(t *testing.T) {
+	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
 	system := &analyzer.SystemInfo{
 		Platform:         analyzer.PlatformLinux,
 		ContainerRuntime: analyzer.ContainerRuntimeDocker,
@@ -90,6 +92,22 @@ func TestGenerateRecommendations_DockerOnly(t *testing.T) {
 	}
 	if !found {
 		t.Error("expected docker recommendation")
+	}
+}
+
+func TestGenerateRecommendations_DockerHiddenWithoutExperimental(t *testing.T) {
+	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, false)
+	system := &analyzer.SystemInfo{
+		Platform:         analyzer.PlatformLinux,
+		ContainerRuntime: analyzer.ContainerRuntimeDocker,
+		Docker:           &analyzer.DockerInfo{Available: true},
+		Orchestrator:     analyzer.OrchestratorNone,
+	}
+	recs := recommender.GenerateRecommendations(system)
+	for _, r := range recs {
+		if r.Method == recommender.MethodDocker {
+			t.Error("docker recommendation should not appear without --experimental")
+		}
 	}
 }
 

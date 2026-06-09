@@ -76,6 +76,20 @@ func TestIsEnabled_OneAgentPoC_EnvTrue(t *testing.T) {
 	}
 }
 
+func TestIsEnabled_Experimental_DefaultFalse(t *testing.T) {
+	t.Setenv("DTWIZ_EXPERIMENTAL", "")
+	if IsEnabled(Experimental) {
+		t.Error("expected Experimental to be disabled by default")
+	}
+}
+
+func TestIsEnabled_Experimental_EnvTrue(t *testing.T) {
+	t.Setenv("DTWIZ_EXPERIMENTAL", "true")
+	if !IsEnabled(Experimental) {
+		t.Error("expected Experimental to be enabled with DTWIZ_EXPERIMENTAL=true")
+	}
+}
+
 func TestSetCLIOverrideForTest_OverridesAndRestores(t *testing.T) {
 	t.Setenv("DTWIZ_ALL_RUNTIMES", "")
 

@@ -9,6 +9,7 @@ import (
 	"github.com/fatih/color"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
+	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 )
 
 // IngestMethod identifies a Dynatrace ingestion approach.
@@ -111,8 +112,9 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 		})
 	}
 
-	// 5. Docker without Kubernetes → Docker OneAgent.
-	if system.ContainerRuntime == analyzer.ContainerRuntimeDocker &&
+	// 5. Docker without Kubernetes → Docker OneAgent (experimental).
+	if featureflags.IsEnabled(featureflags.Experimental) &&
+		system.ContainerRuntime == analyzer.ContainerRuntimeDocker &&
 		system.Orchestrator != analyzer.OrchestratorKubernetes {
 		recs = append(recs, Recommendation{
 			Method:        MethodDocker,
@@ -227,6 +229,8 @@ func FormatRecommendations(recs []Recommendation) string {
 		}
 	}
 	sb.WriteString("\n")
-	sb.WriteString(fmt.Sprintf("  %s  %s\n", recMuted.Sprint("[d]"), recMuted.Sprint("Install demo app (schnitzel)")))
+	if featureflags.IsEnabled(featureflags.Experimental) {
+		sb.WriteString(fmt.Sprintf("  %s  %s\n", recMuted.Sprint("[d]"), recMuted.Sprint("Install demo app (schnitzel)")))
+	}
 	return strings.TrimRight(sb.String(), "\n")
 }

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/spf13/cobra"
 
@@ -344,10 +345,14 @@ var installGCPCmd = &cobra.Command{
 }
 
 var installDemoCmd = &cobra.Command{
-	Use:   "demo",
-	Short: "Install the schnitzel demo app and set up Dynatrace OTel monitoring",
-	Args:  cobra.NoArgs,
+	Use:    "demo",
+	Short:  "Install the schnitzel demo app and set up Dynatrace OTel monitoring",
+	Args:   cobra.NoArgs,
+	Hidden: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if !featureflags.IsEnabled(featureflags.Experimental) {
+			return fmt.Errorf("demo installation is an experimental feature; enable it with --experimental or DTWIZ_EXPERIMENTAL=true")
+		}
 		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
 			return err
@@ -399,5 +404,8 @@ func init() {
 	installCmd.AddCommand(installAWSLambdaCmd)
 	installCmd.AddCommand(installAzureCmd)
 	installCmd.AddCommand(installGCPCmd)
+	if featureflags.IsEnabled(featureflags.Experimental) {
+		installDemoCmd.Hidden = false
+	}
 	installCmd.AddCommand(installDemoCmd)
 }
