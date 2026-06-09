@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.22] - 2026-06-09
+
 ### Fixed
 
 - `install otel-python`: check that Python is installed before scanning for projects; avoids a confusing error when Python is not on the system
@@ -305,7 +307,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.21...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.22...HEAD
+[0.2.22]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.21...v0.2.22
 [0.2.21]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.20...v0.2.21
 [0.2.20]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.19...v0.2.20
 [0.2.19]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.18...v0.2.19
