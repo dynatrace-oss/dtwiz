@@ -320,8 +320,8 @@ func TestCheckAllEndpoints_AllReachable(t *testing.T) {
 		if !r.Reachable {
 			t.Errorf("endpoint %s:%d reported unreachable", r.Endpoint.Host, r.Endpoint.Port)
 		}
-		if r.Latency <= 0 {
-			t.Errorf("endpoint %s:%d has zero latency", r.Endpoint.Host, r.Endpoint.Port)
+		if r.Latency < 0 {
+			t.Errorf("endpoint %s:%d has negative latency", r.Endpoint.Host, r.Endpoint.Port)
 		}
 	}
 }

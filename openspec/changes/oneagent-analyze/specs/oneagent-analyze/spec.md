@@ -441,4 +441,3 @@ When `--connectivity-check-only` is set, `InstallOneAgentV2` SHALL run preflight
 - **AND** the probe runs and the report is printed
 - **AND** `MintInstallerToken`, `DownloadInstaller`, `BuildInstallCommand`, `ExecuteInstallCommand`, `WaitForHostRegistration` are NOT called
 - **AND** the command exits with code 0
-
