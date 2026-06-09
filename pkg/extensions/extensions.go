@@ -36,7 +36,7 @@ func InstallExtension(c *client.PlatformClient, extensionName, version string, s
 	if silent && (sc == http.StatusBadRequest || sc == http.StatusConflict) {
 		return nil
 	}
-	if sc != http.StatusOK && sc != http.StatusCreated {
+	if sc != http.StatusOK && sc != http.StatusCreated && sc != http.StatusAccepted {
 		body := resp.String()
 		return fmt.Errorf("installing extension %s@%s (HTTP %d): %s", extensionName, version, sc, body[:min(len(body), 400)])
 	}

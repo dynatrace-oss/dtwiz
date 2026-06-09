@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -15,8 +17,10 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/extensions"
 )
 
-// awsTemplateURL is the pinned Dynatrace CloudFormation template.
-const awsTemplateURL = "https://dynatrace-data-acquisition.s3.amazonaws.com/aws/deployment/cfn/v1.0.11/da-aws-activation.yaml"
+// awsTemplateURL points to the latest published Dynatrace CloudFormation
+// template. Using the "latest" channel avoids 403s when a pinned version is
+// removed from S3 and matches dtctl's behaviour.
+const awsTemplateURL = "https://dynatrace-data-acquisition.s3.amazonaws.com/aws/deployment/cfn/latest/da-aws-activation.yaml"
 
 // awsStackConfig holds all values required to render aws.tmpl and drive the
 // CloudFormation deployment.
@@ -166,14 +170,14 @@ func findExistingMonitoringConfig(c *client.PlatformClient, accountID string) (s
 
 // createDTMonitoringConfig creates a new da-aws monitoring configuration and
 // returns the objectId (UUID) to use as pMonitoringConfigId in CloudFormation.
-func createDTMonitoringConfig(c *client.PlatformClient, accountID, region string) (string, error) {
+func createDTMonitoringConfig(c *client.PlatformClient, accountID, region, version string) (string, error) {
 	desc := fmt.Sprintf("dtwiz — account %s / %s", accountID, region)
 	payload := map[string]interface{}{
 		"scope": "integration-aws",
 		"value": map[string]interface{}{
 			"enabled":           false,
 			"description":       desc,
-			"version":           "1.0.11",
+			"version":           version,
 			"featureSets":       defaultFeatureSets,
 			"activationContext": "DATA_ACQUISITION",
 			"aws": map[string]interface{}{
@@ -415,8 +419,13 @@ func InstallAWS(c *client.PlatformClient, envURL, token string, dryRun bool, sta
 	if monitoringConfigID != "" {
 		fmt.Printf("  Monitoring config: found existing %s\n", monitoringConfigID)
 	} else {
-		fmt.Printf("  Creating Dynatrace monitoring configuration...\n")
-		monitoringConfigID, err = createDTMonitoringConfig(c, accountID, region)
+		extVersion, vErr := getLatestDAAWSVersion(c)
+		if vErr != nil {
+			fmt.Printf("  Warning: could not resolve installed extension version (%s); falling back to %s\n", vErr, daAWSExtensionVersion)
+			extVersion = daAWSExtensionVersion
+		}
+		fmt.Printf("  Creating Dynatrace monitoring configuration (extension %s)...\n", extVersion)
+		monitoringConfigID, err = createDTMonitoringConfig(c, accountID, region, extVersion)
 		if err != nil {
 			return fmt.Errorf("creating monitoring configuration: %w", err)
 		}
@@ -454,6 +463,14 @@ func InstallAWS(c *client.PlatformClient, envURL, token string, dryRun bool, sta
 			return
 		}
 		statusCh <- fmt.Sprintf("CloudFormation stack %q deployed successfully.", cfg.StackName)
+
+		statusCh <- "Enabling Dynatrace AWS monitoring configuration..."
+		if err := enableDAAWSMonitoringConfig(c, monitoringConfigID); err != nil {
+			deployErr = fmt.Errorf("enabling monitoring configuration: %w", err)
+			statusCh <- fmt.Sprintf("Enabling monitoring configuration failed: %s", err)
+			return
+		}
+		statusCh <- "Dynatrace AWS monitoring configuration enabled."
 	}()
 
 	// Run Lambda instrumentation on the main thread — it is quick but produces
@@ -465,9 +482,11 @@ func InstallAWS(c *client.PlatformClient, envURL, token string, dryRun bool, sta
 	}
 
 	// Start watch after Lambda output is done — CFN deploy is still running
-	// in the background and will send its result into statusCh.
+	// in the background and will send its result into statusCh. Scope the
+	// cloud-platform signal queries to this AWS account to filter out noise
+	// from other accounts in the same tenant.
 	if startTime != "" && token != "" {
-		WatchIngestWithStatus(envURL, token, startTime, statusCh)
+		WatchIngestAWS(envURL, token, startTime, statusCh, accountID)
 	}
 
 	wg.Wait()
@@ -477,6 +496,112 @@ func InstallAWS(c *client.PlatformClient, envURL, token string, dryRun bool, sta
 		return deployErr
 	}
 	return nil
+}
+
+// getLatestDAAWSVersion returns the highest semver version of the da-aws
+// extension currently installed in the tenant. Mirrors dtctl's
+// awsmonitoringconfig.Handler.GetLatestVersion.
+func getLatestDAAWSVersion(c *client.PlatformClient) (string, error) {
+	var result struct {
+		Items []struct {
+			Version string `json:"version"`
+		} `json:"items"`
+	}
+	resp, err := c.HTTP().R().SetResult(&result).Get("/platform/extensions/v2/extensions/" + daAWSExtension)
+	if err != nil {
+		return "", err
+	}
+	if resp.IsError() {
+		return "", fmt.Errorf("HTTP %d", resp.StatusCode())
+	}
+	versions := make([]string, 0, len(result.Items))
+	for _, it := range result.Items {
+		if it.Version != "" {
+			versions = append(versions, it.Version)
+		}
+	}
+	if len(versions) == 0 {
+		return "", fmt.Errorf("no installed versions found")
+	}
+	sort.Slice(versions, func(i, j int) bool { return compareSemver(versions[i], versions[j]) > 0 })
+	return versions[0], nil
+}
+
+// enableDAAWSMonitoringConfig flips the da-aws monitoring configuration and all
+// its credentials to enabled=true. Mirrors `dtctl enable aws monitoring`:
+// without this step the CloudFormation stack is deployed but Dynatrace will
+// not actually collect anything.
+func enableDAAWSMonitoringConfig(c *client.PlatformClient, id string) error {
+	path := fmt.Sprintf("/platform/extensions/v2/extensions/%s/monitoring-configurations/%s", daAWSExtension, id)
+
+	var existing struct {
+		Scope string                 `json:"scope"`
+		Value map[string]interface{} `json:"value"`
+	}
+	resp, err := c.HTTP().R().SetResult(&existing).Get(path)
+	if err != nil {
+		return fmt.Errorf("GET monitoring config: %w", err)
+	}
+	if resp.IsError() {
+		return fmt.Errorf("GET monitoring config (HTTP %d): %s", resp.StatusCode(), resp.String())
+	}
+	if existing.Value == nil {
+		return fmt.Errorf("GET monitoring config: empty value")
+	}
+
+	existing.Value["enabled"] = true
+	if aws, ok := existing.Value["aws"].(map[string]interface{}); ok {
+		if creds, ok := aws["credentials"].([]interface{}); ok {
+			for _, cred := range creds {
+				if m, ok := cred.(map[string]interface{}); ok {
+					m["enabled"] = true
+				}
+			}
+		}
+	}
+
+	payload := map[string]interface{}{
+		"scope": existing.Scope,
+		"value": existing.Value,
+	}
+	resp, err = c.HTTP().R().
+		SetHeader("Content-Type", "application/json").
+		SetBody(payload).
+		Put(path)
+	if err != nil {
+		return fmt.Errorf("PUT monitoring config: %w", err)
+	}
+	if resp.IsError() {
+		return fmt.Errorf("PUT monitoring config (HTTP %d): %s", resp.StatusCode(), resp.String())
+	}
+	return nil
+}
+
+// compareSemver compares two dotted numeric versions. Returns 1 if a>b,
+// -1 if a<b, 0 if equal. Non-numeric segments are treated as 0.
+func compareSemver(a, b string) int {
+	ap := strings.Split(a, ".")
+	bp := strings.Split(b, ".")
+	n := len(ap)
+	if len(bp) > n {
+		n = len(bp)
+	}
+	for i := 0; i < n; i++ {
+		var av, bv int
+		if i < len(ap) {
+			av, _ = strconv.Atoi(ap[i])
+		}
+		if i < len(bp) {
+			bv, _ = strconv.Atoi(bp[i])
+		}
+		if av != bv {
+			if av > bv {
+				return 1
+			}
+			return -1
+		}
+	}
+	return 0
 }
 
 // runCommandSilent runs a command like RunCommand but discards stdout,
