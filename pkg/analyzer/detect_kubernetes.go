@@ -126,21 +126,21 @@ func DetectK8sDistribution(context, cluster, serverURL, serverVersion string) st
 func ProbeK8sSubVariant(distro string) string {
 	switch distro {
 	case "GKE":
-		err, output := runCmdWithTimeout(5*time.Second, "kubectl", "get", "namespace", "kube-system",
+		output, err := runCmdWithTimeout(5*time.Second, "kubectl", "get", "namespace", "kube-system",
 			"-o", "jsonpath={.metadata.annotations}")
 		if err != nil {
 			display.PrintWarning("GKE Autopilot probe", err)
 		}
 		return ClassifyK8sSubVariant(distro, output, err)
 	case "EKS":
-		err, output := runCmdWithTimeout(5*time.Second, "kubectl", "get", "nodes",
+		output, err := runCmdWithTimeout(5*time.Second, "kubectl", "get", "nodes",
 			"-o", "jsonpath={.items[*].status.nodeInfo.osImage}")
 		if err != nil {
 			display.PrintWarning("EKS Bottlerocket probe", err)
 		}
 		return ClassifyK8sSubVariant(distro, output, err)
 	case "kubernetes":
-		err, output := runCmdWithTimeout(5*time.Second, "kubectl", "get", "namespace", "pks-system",
+		output, err := runCmdWithTimeout(5*time.Second, "kubectl", "get", "namespace", "pks-system",
 			"--ignore-not-found", "-o", "jsonpath={.status.phase}")
 		if err != nil {
 			display.PrintWarning("TKGI namespace probe", err)
@@ -175,8 +175,8 @@ func ClassifyK8sSubVariant(distro, output string, err error) string {
 	return distro
 }
 
-// runCmdWithTimeout runs the command with a hard deadline, returning (error, trimmed output).
-func runCmdWithTimeout(timeout time.Duration, command string, args ...string) (error, string) {
+// runCmdWithTimeout runs the command with a hard deadline, returning (trimmed output, error).
+func runCmdWithTimeout(timeout time.Duration, command string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	c := exec.CommandContext(ctx, command, args...)
@@ -184,5 +184,5 @@ func runCmdWithTimeout(timeout time.Duration, command string, args ...string) (e
 	c.Stdout = &buf
 	c.Stderr = &buf
 	err := c.Run()
-	return err, strings.TrimSpace(buf.String())
+	return strings.TrimSpace(buf.String()), err
 }

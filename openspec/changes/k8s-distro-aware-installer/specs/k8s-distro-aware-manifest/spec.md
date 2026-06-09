@@ -2,15 +2,21 @@
 
 ## ADDED Requirements
 
-### Requirement: InstallKubernetes accepts distribution parameter
+### Requirement: InstallKubernetes accepts clusterName and distribution parameters
 
-The system SHALL accept a `distro string` parameter in `InstallKubernetes()`. When empty, it SHALL default to `"kubernetes"` behavior.
+The system SHALL accept a `clusterName string` and a `distro string` parameter in `InstallKubernetes()`. When `clusterName` is empty it SHALL be derived from the current kubectl context. When `distro` is empty it SHALL default to `"kubernetes"` behavior.
 
-#### Scenario: Distro wired from command
+#### Scenario: clusterName and distro wired from detected KubernetesInfo
 
-- **GIVEN** the analyzer has detected a Kubernetes cluster with a non-empty `Distribution` in `KubernetesInfo`
-- **WHEN** `installKubernetesCmd` runs
-- **THEN** the detected `Distribution` value SHALL be passed to `InstallKubernetes()`
+- **GIVEN** the analyzer has detected a Kubernetes cluster with non-empty `Cluster` and `Distribution` in `KubernetesInfo`
+- **WHEN** `installKubernetesCmd` or `setup` runs
+- **THEN** both `Cluster` and `Distribution` SHALL be passed to `InstallKubernetes()`, avoiding a redundant kubectl call inside the installer
+
+#### Scenario: Empty clusterName falls back to kubectl context
+
+- **GIVEN** `InstallKubernetes()` is called with an empty `clusterName` string
+- **WHEN** the installer runs
+- **THEN** the cluster name SHALL be derived from `kubectl config view` and sanitized for use as a Kubernetes resource name
 
 #### Scenario: Empty distro falls back to default
 

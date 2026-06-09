@@ -4,10 +4,10 @@
 
 - [x] 1.1 Add IKS detection to `DetectK8sDistribution()` in `pkg/analyzer/detect_kubernetes.go` — match server URL containing `.containers.cloud.ibm.com`, return `"IKS"`
 - [x] 1.2 Add RKE detection to `DetectK8sDistribution()` — match gitVersion containing `+rke2` (RKE2, not RKE1), return `"RKE"`; check before generic `"kubernetes"` fallback
-- [x] 1.3 Add `ProbeK8sSubVariant(distro string) string` function in `pkg/analyzer/detect_kubernetes.go` — accepts parent distro, runs conditional kubectl probes, returns refined distro or parent unchanged
+- [x] 1.3 Add `ProbeK8sSubVariant(distro string) string` and `ClassifyK8sSubVariant(distro, output string, err error) string` in `pkg/analyzer/detect_kubernetes.go` — `ProbeK8sSubVariant` runs kubectl and delegates classification to the pure `ClassifyK8sSubVariant`; on error `ClassifyK8sSubVariant` returns parent distro unchanged
 - [x] 1.4 Implement GKE Autopilot probe inside `ProbeK8sSubVariant`: run `kubectl get namespace kube-system -o jsonpath={.metadata.annotations}` with 5s timeout; return `"GKE-Autopilot"` if output contains `autopilot.gke.io`, else return `"GKE"`
 - [x] 1.5 Implement EKS Bottlerocket probe inside `ProbeK8sSubVariant`: run `kubectl get nodes -o jsonpath={.items[*].status.nodeInfo.osImage}` with 5s timeout; return `"EKS-Bottlerocket"` if output contains "Bottlerocket" (case-insensitive), else return `"EKS"`
-- [x] 1.6 Implement TKGI fallback probe inside `ProbeK8sSubVariant`: when parent is `"kubernetes"`, run `kubectl get namespace pks-system --ignore-not-found` with 5s timeout; return `"TKGI"` if output is non-empty
+- [x] 1.6 Implement TKGI fallback probe inside `ProbeK8sSubVariant`: when parent is `"kubernetes"`, run `kubectl get namespace pks-system --ignore-not-found -o jsonpath={.status.phase}` with 5s timeout; return `"TKGI"` only if output is `"Active"`
 - [x] 1.7 Call `ProbeK8sSubVariant` from `detectKubernetes()` in `pkg/analyzer/detect_kubernetes.go` — after `DetectK8sDistribution()` returns, pass result through probe, store final value in `info.Distribution`
 
 ## 2. Detection Unit Tests
@@ -18,8 +18,8 @@
 
 ## 3. Wire Distro into Installer Signature
 
-- [x] 3.1 Add `distro string` parameter to `InstallKubernetes()` in `pkg/installer/kubernetes.go` — position after `name`, before `dryRun`
-- [x] 3.2 Update `installKubernetesCmd` in `cmd/install.go` to call `analyzer.DetectKubernetes()` (or read from a pre-run `AnalyzeSystem()` result), extract `Distribution`, pass it to `InstallKubernetes()`
+- [x] 3.1 Add `clusterName string` and `distro string` parameters to `InstallKubernetes()` in `pkg/installer/kubernetes.go` — `clusterName` replaces `name`, position before `distro` and `dryRun`; empty `clusterName` falls back to internal `fetchClusterName()`
+- [x] 3.2 Update `installKubernetesCmd` in `cmd/install.go` and `setup.go` to call `analyzer.DetectKubernetes()` (or read from pre-run `AnalyzeSystem()` result), extract both `Cluster` and `Distribution`, pass both to `InstallKubernetes()` to avoid redundant kubectl calls
 - [x] 3.3 Update dry-run output in `InstallKubernetes()` to print detected distro: `fmt.Printf("  Distribution: %s\n", distro)`
 - [x] 3.4 Run `make build` — confirm compiles; run `make test` — confirm no regressions
 

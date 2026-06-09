@@ -68,19 +68,35 @@ The system SHALL identify an RKE cluster when the server gitVersion contains `+r
 
 ### Requirement: Detect TKGI by namespace probe
 
-The system SHALL identify a TKGI cluster by checking whether the `pks-system` namespace exists after no other distro is matched. The returned distribution string SHALL be `"TKGI"`.
+The system SHALL identify a TKGI cluster by checking whether the `pks-system` namespace exists and is `Active` after no other distro is matched. The returned distribution string SHALL be `"TKGI"`.
 
-#### Scenario: TKGI namespace found
+#### Scenario: TKGI namespace active
 
 - **GIVEN** no other distro signal matches the cluster
-- **WHEN** `kubectl get namespace pks-system --ignore-not-found` returns a non-empty result
-- **THEN** `ProbeK8sSubVariant` (or a fallback probe) returns `"TKGI"`
+- **WHEN** `kubectl get namespace pks-system --ignore-not-found -o jsonpath={.status.phase}` returns `"Active"`
+- **THEN** `ClassifyK8sSubVariant` returns `"TKGI"`
 
 #### Scenario: Namespace absent
 
 - **GIVEN** no other distro signal matches the cluster
-- **WHEN** `pks-system` namespace does not exist
+- **WHEN** `pks-system` namespace does not exist (empty output from `--ignore-not-found`)
 - **THEN** detection falls through to `"kubernetes"` default
+
+#### Scenario: Namespace exists but inactive
+
+- **GIVEN** no other distro signal matches the cluster
+- **WHEN** `pks-system` namespace exists but `.status.phase` is not `"Active"` (e.g. `"Terminating"`)
+- **THEN** detection falls through to `"kubernetes"` default
+
+### Requirement: Sub-variant classification logic is pure and separately testable
+
+The system SHALL implement sub-variant classification as `ClassifyK8sSubVariant(distro, output string, err error) string` — a pure function that takes the parent distro, kubectl output, and probe error, and returns the refined distro. `ProbeK8sSubVariant` SHALL invoke the kubectl probe and delegate the classification decision to `ClassifyK8sSubVariant`.
+
+#### Scenario: Error propagates to parent distro
+
+- **GIVEN** any parent distro
+- **WHEN** `ClassifyK8sSubVariant` is called with a non-nil `err`
+- **THEN** it returns the parent distro unchanged, regardless of `output`
 
 ### Requirement: Sub-variant probes run only when parent distro matches
 

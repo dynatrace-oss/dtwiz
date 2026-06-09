@@ -6,9 +6,10 @@
 
 ## What Changes
 
-- `DetectK8sDistribution()` extended with 5 missing distributions: GKE Autopilot, EKS Bottlerocket, IKS, RKE, TKGI — including sub-variant probing via live kubectl calls (node osImage, namespace existence)
+- `DetectK8sDistribution()` extended with 5 missing distributions: GKE Autopilot, EKS Bottlerocket, IKS, RKE, TKGI — including sub-variant probing via live kubectl calls (node osImage, namespace active phase)
 - Detection order enforced: parent distro confirmed first, sub-variant probed only when parent matches (GKE confirmed → Autopilot probe; EKS confirmed → Bottlerocket probe)
-- `InstallKubernetes()` accepts a `distro` parameter; `installKubernetesCmd` passes the detected distribution
+- Sub-variant classification extracted into pure `ClassifyK8sSubVariant(distro, output string, err error) string` for unit-testability without subprocess invocation
+- `InstallKubernetes()` accepts `clusterName` and `distro` parameters; callers pass both from the already-detected `KubernetesInfo` to avoid redundant kubectl calls; empty `clusterName` falls back to internal derivation
 - `dynakubeTemplateData` gains four new fields: `EnableKSPM`, `PrivilegedAnnotation`, `ReadOnlyVolume`, `KubeletPath`
 - `dynakube.tmpl` gains conditional blocks driven by the new fields: KSPM section, per-DynaKube annotations, kubelet path override
 - Missing `ClusterRoleBinding` added to the template
@@ -26,8 +27,8 @@
 
 ## Impact
 
-- `pkg/analyzer/detect_kubernetes.go` — extended with new distros and kubectl probes
-- `pkg/installer/kubernetes.go` — new param, new mapping function
+- `pkg/analyzer/detect_kubernetes.go` — extended with new distros, kubectl probes, and `ClassifyK8sSubVariant`
+- `pkg/installer/kubernetes.go` — `clusterName` + `distro` params, new mapping function
 - `pkg/installer/dynakube.tmpl` — conditional blocks added
-- `cmd/install.go` — passes detected distro to installer
+- `cmd/install.go`, `cmd/setup.go` — pass detected `Cluster` and `Distribution` from `KubernetesInfo`
 - No external API changes, no new flags, no breaking changes to existing behavior on already-supported distros
