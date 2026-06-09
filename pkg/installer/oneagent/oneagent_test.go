@@ -61,12 +61,19 @@ func TestDefaultAgentConfig(t *testing.T) {
 	if cfg.MonitoringMode != "fullstack" {
 		t.Errorf("expected MonitoringMode fullstack, got %q", cfg.MonitoringMode)
 	}
+	if !cfg.AppLogContentAccess {
+		t.Error("expected AppLogContentAccess to be true by default")
+	}
 }
 
 func TestResolveAgentConfig_Default(t *testing.T) {
-	cfg := ResolveAgentConfig(InstallOptions{MonitoringMode: "fullstack"})
+	// Empty MonitoringMode → default-fallback branch (the if-override is not entered).
+	cfg := ResolveAgentConfig(InstallOptions{})
 	if cfg.MonitoringMode != "fullstack" {
 		t.Errorf("expected MonitoringMode fullstack, got %q", cfg.MonitoringMode)
+	}
+	if !cfg.AppLogContentAccess {
+		t.Error("expected AppLogContentAccess to be true")
 	}
 }
 
@@ -202,6 +209,85 @@ func withStdin(t *testing.T, input string) {
 		os.Stdin = orig
 		r.Close()
 	})
+}
+
+// --- printDryRun ---
+
+func TestPrintDryRun_InstallHeader(t *testing.T) {
+	withNeedsSudo(t, false)
+	flush := captureStdout(t)
+	printDryRun(
+		Environment{OS: "linux", Arch: "x86"},
+		AgentConfig{MonitoringMode: "fullstack", AppLogContentAccess: true, ServerURL: "https://abc.live.dynatrace.com"},
+		InstallOptions{NoVerifySignature: true},
+		false, // not updating
+	)
+	out := flush()
+	if !strings.Contains(out, "Would install") {
+		t.Errorf("expected 'Would install', got:\n%s", out)
+	}
+	if strings.Contains(out, "Would update") {
+		t.Errorf("unexpected 'Would update':\n%s", out)
+	}
+}
+
+func TestPrintDryRun_UpdateHeader(t *testing.T) {
+	withNeedsSudo(t, false)
+	flush := captureStdout(t)
+	printDryRun(
+		Environment{OS: "linux", Arch: "x86"},
+		AgentConfig{MonitoringMode: "infra-only", AppLogContentAccess: true, ServerURL: "https://abc.live.dynatrace.com"},
+		InstallOptions{NoVerifySignature: true},
+		true, // updating
+	)
+	out := flush()
+	if !strings.Contains(out, "Would update") {
+		t.Errorf("expected 'Would update', got:\n%s", out)
+	}
+	if !strings.Contains(out, "infra-only") {
+		t.Errorf("expected monitoring mode in output, got:\n%s", out)
+	}
+}
+
+func TestPrintDryRun_SignatureLines(t *testing.T) {
+	withNeedsSudo(t, false)
+	cfg := AgentConfig{MonitoringMode: "fullstack", AppLogContentAccess: true, ServerURL: "https://abc.live.dynatrace.com"}
+
+	// Linux without --no-verify-signature → should mention verification CA URL.
+	flush := captureStdout(t)
+	printDryRun(Environment{OS: "linux", Arch: "x86"}, cfg, InstallOptions{}, false)
+	if out := flush(); !strings.Contains(out, "would verify") {
+		t.Errorf("linux without flag: expected 'would verify', got:\n%s", out)
+	}
+
+	// Linux with --no-verify-signature → "skipped".
+	flush = captureStdout(t)
+	printDryRun(Environment{OS: "linux", Arch: "x86"}, cfg, InstallOptions{NoVerifySignature: true}, false)
+	if out := flush(); !strings.Contains(out, "skipped") {
+		t.Errorf("--no-verify-signature: expected 'skipped', got:\n%s", out)
+	}
+
+	// Non-Linux → "skipped".
+	flush = captureStdout(t)
+	printDryRun(Environment{OS: "windows", Arch: "x86"}, cfg, InstallOptions{}, false)
+	if out := flush(); !strings.Contains(out, "skipped") {
+		t.Errorf("windows: expected 'skipped', got:\n%s", out)
+	}
+}
+
+func TestPrintDryRun_HostGroup(t *testing.T) {
+	withNeedsSudo(t, false)
+	flush := captureStdout(t)
+	printDryRun(
+		Environment{OS: "linux", Arch: "x86"},
+		AgentConfig{MonitoringMode: "fullstack", AppLogContentAccess: true, ServerURL: "https://abc.live.dynatrace.com"},
+		InstallOptions{HostGroup: "prod-eu", NoVerifySignature: true},
+		false,
+	)
+	out := flush()
+	if !strings.Contains(out, "prod-eu") {
+		t.Errorf("expected host group in output, got:\n%s", out)
+	}
 }
 
 // skipNonLinux skips the test on platforms where InstallOneAgentV2 cannot

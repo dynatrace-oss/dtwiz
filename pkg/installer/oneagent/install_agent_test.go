@@ -2,6 +2,7 @@ package oneagent
 
 import (
 	"bytes"
+	"fmt"
 	"log/slog"
 	"path/filepath"
 	"runtime"
@@ -153,6 +154,21 @@ func TestBuildInstallCommand_MonitoringModeOverride(t *testing.T) {
 	assertContains(t, argv, "--set-app-log-content-access=false")
 }
 
+func TestBuildInstallCommand_SudoNotFound(t *testing.T) {
+	withNeedsSudo(t, true)
+	orig := sudoPathFn
+	sudoPathFn = func() (string, error) { return "", fmt.Errorf("sudo not found in PATH") }
+	t.Cleanup(func() { sudoPathFn = orig })
+
+	_, err := BuildInstallCommand(Environment{OS: "linux", Arch: "x86"}, testLinuxCfg("https://env.live.dynatrace.com"), InstallOptions{}, "/tmp/agent.sh")
+	if err == nil {
+		t.Fatal("expected error when sudo binary is not found")
+	}
+	if !strings.Contains(err.Error(), "sudo not found") {
+		t.Errorf("error = %q, want 'sudo not found' message", err)
+	}
+}
+
 func TestBuildInstallCommand_UnsupportedOS(t *testing.T) {
 	_, err := BuildInstallCommand(Environment{OS: "darwin", Arch: "x86"}, testLinuxCfg("https://env.live.dynatrace.com"), InstallOptions{}, "/tmp/agent.sh")
 	if err == nil {
@@ -242,5 +258,41 @@ func TestExecuteInstallCommand_DebugLog(t *testing.T) {
 
 	if !strings.Contains(buf.String(), "executing installer") {
 		t.Errorf("expected debug log 'executing installer', got: %s", buf.String())
+	}
+}
+
+func TestExecuteInstallCommand_EmptyArgv(t *testing.T) {
+	code, err := ExecuteInstallCommand([]string{}, true)
+	if err == nil {
+		t.Fatal("expected error for empty argv")
+	}
+	if code != 1 {
+		t.Errorf("expected code 1, got %d", code)
+	}
+}
+
+func TestExecuteInstallCommand_NonQuiet(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses Unix shell")
+	}
+	// Non-quiet streams output to os.Stdout; capture it so the test is silent.
+	flush := captureStdout(t)
+	code, err := ExecuteInstallCommand([]string{"sh", "-c", "exit 0"}, false)
+	flush()
+	if err != nil {
+		t.Errorf("expected nil error, got %v", err)
+	}
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d", code)
+	}
+}
+
+func TestExecuteInstallCommand_BinaryNotFound(t *testing.T) {
+	code, err := ExecuteInstallCommand([]string{"/nonexistent/binary/dtwiz-test-sentinel"}, true)
+	if err == nil {
+		t.Fatal("expected error when binary does not exist")
+	}
+	if code != 1 {
+		t.Errorf("expected code 1, got %d", code)
 	}
 }
