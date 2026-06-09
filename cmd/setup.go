@@ -150,7 +150,7 @@ var setupCmd = &cobra.Command{
 		case recommender.MethodKubernetes:
 			k8sClusterName := ""
 			k8sDistro := ""
-			if info.Kubernetes != nil {
+			if info.Kubernetes.Available {
 				k8sClusterName = info.Kubernetes.Cluster
 				k8sDistro = info.Kubernetes.Distribution
 			}

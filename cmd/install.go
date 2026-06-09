@@ -104,7 +104,7 @@ var installKubernetesCmd = &cobra.Command{
 		k8sInfo := analyzer.DetectKubernetes()
 		clusterName := ""
 		distro := ""
-		if k8sInfo != nil {
+		if k8sInfo.Available {
 			clusterName = k8sInfo.Cluster
 			distro = k8sInfo.Distribution
 		}

@@ -52,11 +52,6 @@ func DetectKubernetes() *KubernetesInfo {
 	return info
 }
 
-// detectKubernetes is the internal alias used by AnalyzeSystem.
-func detectKubernetes() *KubernetesInfo {
-	return DetectKubernetes()
-}
-
 // parseK8sServerVersion extracts gitVersion from `kubectl version -o json` output.
 func parseK8sServerVersion(out string) string {
 	var v struct {

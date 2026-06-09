@@ -344,7 +344,7 @@ func AnalyzeSystem() (*SystemInfo, error) {
 	})
 
 	run(func() error {
-		k := detectKubernetes()
+		k := DetectKubernetes()
 		mu.Lock()
 		info.Kubernetes = k
 		if k.Available {

@@ -354,6 +354,7 @@ func InstallKubernetes(envURL, token, clusterName, distro string, dryRun bool) e
 	display.ColorMessage.Println("  Dynatrace Kubernetes Integration")
 	fmt.Println()
 	fmt.Printf("  Cluster name:  %s\n", clusterName)
+	fmt.Printf("  Distribution:  %s\n", distro)
 	fmt.Printf("  API URL:       %s\n\n", apiURL)
 	fmt.Printf("  %s\n", sep)
 	display.ColorMessage.Println("  dynakube.yaml manifest to be applied:")
