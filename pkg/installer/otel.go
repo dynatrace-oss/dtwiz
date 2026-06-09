@@ -141,9 +141,6 @@ func detectAllProjects(runtimes []runtimeInfo) []detectedProject {
 }
 
 func printProjectList(projects []detectedProject) {
-	if len(projects) == 0 {
-		fmt.Println("  No projects detected.")
-	}
 	for i, p := range projects {
 		line := fmt.Sprintf("  [%d]  %s  %s  (%s)", i+1, p.Runtime, p.Path, strings.Join(p.Markers, ", "))
 		if len(p.RunningProcessIDs) > 0 {
@@ -281,23 +278,34 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		plan = createRuntimePlan(proj, cp.apiURL, token, envURL, platformToken)
 	} else {
 		projects := detectAllProjects(runtimes)
-		for {
-			display.ColorMessage.Println("  Detected projects:")
-			display.PrintSectionDivider()
-			printProjectList(projects)
+		if len(projects) == 0 {
+			fmt.Println("  No projects detected.")
+			cont, err := confirmProceed("  Continue installation?")
+			if err != nil {
+				return fmt.Errorf("reading confirmation: %w", err)
+			}
+			if !cont {
+				return ErrInstallCancelled
+			}
+		} else {
+			for {
+				display.ColorMessage.Println("  Detected projects:")
+				display.PrintSectionDivider()
+				printProjectList(projects)
 
-			selected, ok := selectProject(projects)
-			if !ok {
-				break
-			}
-			plan = createRuntimePlan(selected, cp.apiURL, token, envURL, platformToken)
-			if plan != nil {
-				break
-			}
-			// Project can't be auto-instrumented; ask if the user wants to try another.
-			again, err := confirmProceed("  Select another project?")
-			if err != nil || !again {
-				break
+				selected, ok := selectProject(projects)
+				if !ok {
+					break
+				}
+				plan = createRuntimePlan(selected, cp.apiURL, token, envURL, platformToken)
+				if plan != nil {
+					break
+				}
+				// Project can't be auto-instrumented; ask if the user wants to try another.
+				again, err := confirmProceed("  Select another project?")
+				if err != nil || !again {
+					break
+				}
 			}
 		}
 	}
