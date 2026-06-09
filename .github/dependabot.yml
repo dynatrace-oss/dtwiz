@@ -6,9 +6,17 @@ updates:
       interval: weekly
     labels:
       - deps
+    groups:
+      all-go-deps:
+        patterns:
+          - "*"
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
     labels:
       - deps
+    groups:
+      all-actions:
+        patterns:
+          - "*"
