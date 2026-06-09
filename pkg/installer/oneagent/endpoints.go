@@ -15,17 +15,14 @@ import (
 
 const endpointsAPIPath = "/api/v1/deployment/installer/agent/connectioninfo/endpoints"
 
-// defaultProbeTimeout is the per-endpoint TCP dial timeout. A variable so tests
-// can override it without waiting 5 seconds per unreachable probe.
+// A variable so tests can override it without waiting 5 seconds per unreachable probe.
 var defaultProbeTimeout = 5 * time.Second
 
-// Endpoint is a OneAgent communication endpoint resolved from the tenant API.
 type Endpoint struct {
 	Host string
 	Port int
 }
 
-// ConnectivityResult holds the TCP probe outcome for a single endpoint.
 type ConnectivityResult struct {
 	Endpoint  Endpoint
 	Reachable bool
@@ -33,18 +30,12 @@ type ConnectivityResult struct {
 	Error     string
 }
 
-// ConnectivityReport aggregates per-endpoint probe results.
 type ConnectivityReport struct {
 	Results     []ConnectivityResult
 	AllPassed   bool
 	FailedCount int
 }
 
-// ResolveEndpoints calls GET /api/v1/deployment/installer/agent/connectioninfo/endpoints
-// and returns the parsed list. The API response is a newline- or semicolon-separated
-// list of entries: "host:port", bare "host" (defaults to port 443), or full URL
-// "https://host:port/path" (scheme and path are stripped). All three forms
-// tolerate both DNS hostnames and IP literals (including IPv6 bracket notation).
 func ResolveEndpoints(c *client.ClassicClient) ([]Endpoint, error) {
 	reqURL := strings.TrimRight(c.BaseURL(), "/") + endpointsAPIPath
 	logger.Debug("resolving tenant endpoints", "url", reqURL)
@@ -90,28 +81,19 @@ func ResolveEndpoints(c *client.ClassicClient) ([]Endpoint, error) {
 	return endpoints, nil
 }
 
-// parseEndpoint parses a single endpoint token into an Endpoint.
-// Accepted forms (all tolerate DNS hostnames and IP literals):
-//   - "host:port"           → {host, port}
-//   - "host"                → {host, 443}
-//   - "https://host:port/x" → scheme + path stripped → {host, port}
+// Accepted forms: "host:port", "host" (→ port 443), "https://host:port/path" (scheme+path stripped).
 func parseEndpoint(s string) (Endpoint, error) {
-	// Strip optional scheme (https://host:port/path → host:port/path).
 	if idx := strings.Index(s, "://"); idx >= 0 {
 		s = s[idx+3:]
 	}
-	// Strip optional path component (host:port/path → host:port).
-	// net.SplitHostPort handles brackets for IPv6, so we must not split on
-	// the first '/' blindly when the host is an IPv6 literal — but IPv6
-	// addresses in URLs are always bracketed, so the first '/' after the
-	// closing ']' is safe to trim.
+	// IPv6 literals are always bracketed in URLs, so the first '/' after ']' is safe to trim.
 	if slash := strings.Index(s, "/"); slash >= 0 {
 		s = s[:slash]
 	}
 
 	host, portStr, err := net.SplitHostPort(s)
 	if err != nil {
-		// No port present — use default 443.
+		logger.Debug("endpoint token has no port, defaulting to 443", "host", s)
 		return Endpoint{Host: s, Port: 443}, nil
 	}
 	port, err := strconv.Atoi(portStr)
@@ -121,8 +103,6 @@ func parseEndpoint(s string) (Endpoint, error) {
 	return Endpoint{Host: host, Port: port}, nil
 }
 
-// CheckAllEndpoints probes each endpoint concurrently via net.DialTimeout and
-// returns a ConnectivityReport with per-endpoint reachability, latency, and errors.
 func CheckAllEndpoints(endpoints []Endpoint, timeout time.Duration) ConnectivityReport {
 	results := make([]ConnectivityResult, len(endpoints))
 	var wg sync.WaitGroup
@@ -168,9 +148,7 @@ func CheckAllEndpoints(endpoints []Endpoint, timeout time.Duration) Connectivity
 	return report
 }
 
-// printConnectivityResults outputs one status line per endpoint.
-// The caller is responsible for printing the section header before this is called
-// so the header appears before the dial timeout window, not after.
+// Caller must print the section header before calling this so it appears before the dial window.
 func printConnectivityResults(report ConnectivityReport) {
 	for _, r := range report.Results {
 		label := fmt.Sprintf("%s:%d", r.Endpoint.Host, r.Endpoint.Port)
@@ -182,9 +160,6 @@ func printConnectivityResults(report ConnectivityReport) {
 	}
 }
 
-// printConnectivityWarning outputs a warning block that leads with the list of
-// unreachable addresses — formatted so the user knows exactly which hosts/IPs to
-// allow through their firewall — followed by a proxy configuration tip.
 func printConnectivityWarning(report ConnectivityReport) {
 	display.Header("Warning: connectivity check failed")
 	display.PrintStatusLine("action", "allow outbound TCP to the following addresses", display.ColorWarning)
@@ -199,8 +174,6 @@ func printConnectivityWarning(report ConnectivityReport) {
 	display.PrintStatusLine("tip", "if a proxy is required, set HTTP_PROXY / HTTPS_PROXY", display.ColorWarning)
 }
 
-// friendlyDialError converts a raw net.DialTimeout error string into a short,
-// human-readable phrase suitable for user-facing output.
 func friendlyDialError(errStr string) string {
 	switch {
 	case strings.Contains(errStr, "i/o timeout"),
