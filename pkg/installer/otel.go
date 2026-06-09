@@ -83,6 +83,8 @@ func detectGoRuntimeProjects() []detectedProject {
 	return detected
 }
 
+// detectAllProjects filters runtimes to those with a usable binary and scans
+// for projects in parallel across all enabled runtimes.
 func detectAllProjects(runtimes []runtimeInfo) []detectedProject {
 	type result struct {
 		projects []detectedProject
@@ -94,8 +96,27 @@ func detectAllProjects(runtimes []runtimeInfo) []detectedProject {
 			logger.Debug("skipping runtime (disabled)", "runtime", rt.name)
 			continue
 		}
-		if _, err := exec.LookPath(rt.binName); err != nil {
-			fmt.Printf("  Skipping %s instrumentation — '%s' not found on PATH.\n", rt.name, rt.binName)
+		// Python's binary may exist as a non-functional stub even when no real
+		// interpreter is installed, so run it to verify it's usable.
+		var available bool
+		var stubOnly bool
+		if rt.binName == "python3" || rt.binName == "python" {
+			_, err := detectPython()
+			available = err == nil
+			if !available {
+				_, lookErr := exec.LookPath(rt.binName)
+				stubOnly = lookErr == nil // binary found but not usable
+			}
+		} else {
+			_, err := exec.LookPath(rt.binName)
+			available = err == nil
+		}
+		if !available {
+			if stubOnly {
+				fmt.Printf("  Skipping %s instrumentation — '%s' found on PATH but not usable.\n", rt.name, rt.binName)
+			} else {
+				fmt.Printf("  Skipping %s instrumentation — '%s' not found on PATH.\n", rt.name, rt.binName)
+			}
 			continue
 		}
 		active = append(active, rt)
@@ -231,12 +252,12 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 	display.ColorMessage.Println("  Dynatrace OpenTelemetry Installation")
 	fmt.Println()
 
+	runtimes := detectAvailableRuntimes()
+
 	cp, err := prepareCollectorPlan(envURL, token)
 	if err != nil {
 		return err
 	}
-
-	runtimes := detectAvailableRuntimes()
 
 	var plan InstrumentationPlan
 	if projectPath != "" {
@@ -257,7 +278,16 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		plan = createRuntimePlan(proj, cp.apiURL, token, envURL, platformToken)
 	} else {
 		projects := detectAllProjects(runtimes)
-		if len(projects) > 0 {
+		if len(projects) == 0 {
+			fmt.Println("  No projects detected.")
+			cont, err := confirmProceed("  Continue installation?")
+			if err != nil {
+				return fmt.Errorf("reading confirmation: %w", err)
+			}
+			if !cont {
+				return ErrInstallCancelled
+			}
+		} else {
 			for {
 				display.ColorMessage.Println("  Detected projects:")
 				display.PrintSectionDivider()

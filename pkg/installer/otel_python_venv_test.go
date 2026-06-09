@@ -11,7 +11,7 @@ import (
 func TestValidatePythonPrerequisites_PythonNotFound(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 
-	err := validatePythonPrerequisites()
+	_, err := validatePythonPrerequisites()
 	if err == nil || !strings.Contains(err.Error(), "Python 3") {
 		t.Fatalf("expected Python 3 error, got %v", err)
 	}
@@ -22,7 +22,7 @@ func TestValidatePythonPrerequisites_PipNotFound(t *testing.T) {
 	t.Setenv("PATH", pythonDir)
 	t.Setenv("DTWIZ_TEST_FAIL_PIP", "1")
 
-	err := validatePythonPrerequisites()
+	_, err := validatePythonPrerequisites()
 	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "pip") {
 		t.Fatalf("expected pip error, got %v", err)
 	}
@@ -33,7 +33,7 @@ func TestValidatePythonPrerequisites_VenvNotFound(t *testing.T) {
 	t.Setenv("PATH", pythonDir)
 	t.Setenv("DTWIZ_TEST_FAIL_VENV", "1")
 
-	err := validatePythonPrerequisites()
+	_, err := validatePythonPrerequisites()
 	if err == nil {
 		t.Fatal("expected venv error, got nil")
 	}
@@ -49,7 +49,7 @@ func TestValidatePythonPrerequisites_AllPresent(t *testing.T) {
 	pythonDir := requireFakePython3(t)
 	t.Setenv("PATH", pythonDir)
 
-	if err := validatePythonPrerequisites(); err != nil {
+	if _, err := validatePythonPrerequisites(); err != nil {
 		t.Fatalf("validatePythonPrerequisites() error = %v", err)
 	}
 }

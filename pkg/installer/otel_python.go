@@ -76,7 +76,12 @@ func DetectPythonPlanFromPath(projectPath, apiURL, token string) *PythonInstrume
 	if _, err := detectPython(); err != nil {
 		return nil
 	}
+	return detectPythonPlanWithConfirmedRuntime(projectPath, apiURL, token)
+}
 
+// detectPythonPlanWithConfirmedRuntime builds the plan assuming Python is already confirmed usable.
+// Call this when detectPython() or validatePythonPrerequisites() has already run in the same invocation.
+func detectPythonPlanWithConfirmedRuntime(projectPath, apiURL, token string) *PythonInstrumentationPlan {
 	if projectPath != "" {
 		projects := []ScannedProject{{Path: projectPath}}
 		processes := detectPythonProcesses()
@@ -286,7 +291,7 @@ func InstallOtelPython(envURL, token, platformToken, serviceName, projectPath st
 			return fmt.Errorf("project path not found: %s", projectPath)
 		}
 	}
-	if err := validatePythonPrerequisites(); err != nil {
+	if _, err := validatePythonPrerequisites(); err != nil {
 		return err
 	}
 
@@ -318,7 +323,7 @@ func InstallOtelPython(envURL, token, platformToken, serviceName, projectPath st
 	display.ColorMessage.Println("  Dynatrace Python Auto-Instrumentation")
 	fmt.Println("  " + sep)
 
-	plan := DetectPythonPlanFromPath(projectPath, apiURL, token)
+	plan := detectPythonPlanWithConfirmedRuntime(projectPath, apiURL, token)
 	if plan == nil {
 		printManualInstructions(envVars)
 		return nil
