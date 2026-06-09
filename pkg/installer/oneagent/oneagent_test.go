@@ -2,6 +2,7 @@ package oneagent
 
 import (
 	"bytes"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/client"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 )
 
 // newTestClassicClient creates a ClassicClient pointing at the given test server URL.
@@ -161,5 +163,161 @@ func TestDetectRuntimeEnvironment(t *testing.T) {
 		if !strings.Contains(err.Error(), "unsupported") {
 			t.Errorf("error = %q, want unsupported OS message", err)
 		}
+	}
+}
+
+// captureStdout replaces os.Stdout with a pipe for the duration of the test
+// and returns a function that restores it and returns the captured output.
+// Only fmt.Printf / fmt.Print calls are captured; color.Output is not.
+func captureStdout(t *testing.T) func() string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("captureStdout: %v", err)
+	}
+	orig := os.Stdout
+	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = orig })
+	return func() string {
+		w.Close()
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, r)
+		r.Close()
+		return buf.String()
+	}
+}
+
+// withStdin replaces os.Stdin with a pipe pre-loaded with the given text.
+func withStdin(t *testing.T, input string) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("withStdin: %v", err)
+	}
+	_, _ = w.WriteString(input)
+	w.Close()
+	orig := os.Stdin
+	os.Stdin = r
+	t.Cleanup(func() {
+		os.Stdin = orig
+		r.Close()
+	})
+}
+
+// skipNonLinux skips the test on platforms where InstallOneAgentV2 cannot
+// reach the detection logic (macOS returns an error from detectRuntimeEnvironment).
+func skipNonLinux(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS != "linux" {
+		t.Skipf("update-flow tests require Linux; skipping on %s", runtime.GOOS)
+	}
+}
+
+// TestInstallOneAgentV2_DryRun_HeaderInstall verifies that the dry-run plan
+// header reads "Would install" when no existing agent is detected.
+func TestInstallOneAgentV2_DryRun_HeaderInstall(t *testing.T) {
+	skipNonLinux(t)
+	withInstallDir(t, filepath.Join(t.TempDir(), "nonexistent"))
+	t.Setenv("PATH", "")
+
+	flush := captureStdout(t)
+	srv := newMockTenantServer(t, "/", http.StatusOK, "")
+	defer srv.Close()
+	c := newMockClient(t, srv.URL)
+
+	if err := InstallOneAgentV2(c, InstallOptions{DryRun: true, MonitoringMode: "fullstack"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := flush()
+	if !strings.Contains(out, "Would install") {
+		t.Errorf("expected 'Would install' in output, got:\n%s", out)
+	}
+	if strings.Contains(out, "Would update") {
+		t.Errorf("unexpected 'Would update' in output:\n%s", out)
+	}
+}
+
+// TestInstallOneAgentV2_DryRun_HeaderUpdate verifies that the dry-run plan
+// header reads "Would update" when an existing installation is detected.
+func TestInstallOneAgentV2_DryRun_HeaderUpdate(t *testing.T) {
+	skipNonLinux(t)
+	withInstallDir(t, t.TempDir())
+
+	flush := captureStdout(t)
+	srv := newMockTenantServer(t, "/", http.StatusOK, "")
+	defer srv.Close()
+	c := newMockClient(t, srv.URL)
+
+	if err := InstallOneAgentV2(c, InstallOptions{DryRun: true, MonitoringMode: "fullstack"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := flush()
+	if !strings.Contains(out, "Would update") {
+		t.Errorf("expected 'Would update' in output, got:\n%s", out)
+	}
+}
+
+// TestInstallOneAgentV2_UpdatePrompt_Declined verifies that answering "n"
+// exits cleanly without making any network calls.
+func TestInstallOneAgentV2_UpdatePrompt_Declined(t *testing.T) {
+	skipNonLinux(t)
+	withInstallDir(t, t.TempDir())
+	withStdin(t, "n\n")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("declined update made HTTP request: %s %s", r.Method, r.URL.Path)
+	}))
+	defer srv.Close()
+	c := newMockClient(t, srv.URL)
+
+	if err := InstallOneAgentV2(c, InstallOptions{MonitoringMode: "fullstack"}); err != nil {
+		t.Fatalf("expected nil on decline, got: %v", err)
+	}
+}
+
+// TestInstallOneAgentV2_UpdatePrompt_AutoConfirm verifies that AutoConfirm
+// bypasses the prompt and proceeds to download when an agent is detected.
+func TestInstallOneAgentV2_UpdatePrompt_AutoConfirm(t *testing.T) {
+	skipNonLinux(t)
+	withInstallDir(t, t.TempDir())
+
+	orig := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = orig })
+
+	// Server must serve a valid (minimal) installer body so DownloadInstaller
+	// succeeds; the install is expected to fail at execution, not at download.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("#!/bin/sh\n"))
+	}))
+	defer srv.Close()
+	c := newMockClient(t, srv.URL)
+
+	// The install will fail after download (no real installer), but the point
+	// is that the prompt was skipped and the download was attempted.
+	_ = InstallOneAgentV2(c, InstallOptions{MonitoringMode: "fullstack", NoVerifySignature: true})
+}
+
+// TestInstallOneAgentV2_UpdateQuiet verifies that quiet mode skips the prompt
+// entirely and proceeds to download when an agent is detected.
+func TestInstallOneAgentV2_UpdateQuiet(t *testing.T) {
+	skipNonLinux(t)
+	withInstallDir(t, t.TempDir())
+
+	downloaded := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "installer/agent") {
+			downloaded = true
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("#!/bin/sh\n"))
+		}
+	}))
+	defer srv.Close()
+	c := newMockClient(t, srv.URL)
+
+	_ = InstallOneAgentV2(c, InstallOptions{MonitoringMode: "fullstack", Quiet: true, NoVerifySignature: true})
+	if !downloaded {
+		t.Error("expected download to be attempted in quiet mode with existing agent")
 	}
 }

@@ -1,6 +1,7 @@
 package oneagent
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"runtime"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/dynatrace-oss/dtwiz/pkg/client"
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -70,9 +72,24 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 		"server_url", cfg.ServerURL,
 	)
 
+	updating := oneAgentInstalled()
+	logger.Debug("existing oneagent detected", "updating", updating)
+
 	if opts.DryRun {
-		printDryRun(env, cfg, opts)
+		printDryRun(env, cfg, opts, updating)
 		return nil
+	}
+
+	if updating && !opts.Quiet && !installer.AutoConfirm {
+		fmt.Print("  OneAgent is already installed. Update? [Y/n] ")
+		scanner := bufio.NewScanner(os.Stdin)
+		if scanner.Scan() {
+			answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+			if !(answer == "" || answer == "y" || answer == "yes") {
+				display.PrintStatusLine("result", "update cancelled", display.ColorMuted)
+				return nil
+			}
+		}
 	}
 
 	installerPath, err := DownloadInstaller(c.Classic, env)
@@ -94,8 +111,12 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 	return err
 }
 
-func printDryRun(env Environment, cfg AgentConfig, opts InstallOptions) {
-	fmt.Println("[dry-run] Would install Dynatrace OneAgent")
+func printDryRun(env Environment, cfg AgentConfig, opts InstallOptions, updating bool) {
+	verb := "install"
+	if updating {
+		verb = "update"
+	}
+	fmt.Printf("[dry-run] Would %s Dynatrace OneAgent\n", verb)
 	if url, err := InstallerDownloadURL(cfg.ServerURL, env); err == nil {
 		fmt.Printf("  Installer:  %s\n", url)
 	}

@@ -16,6 +16,18 @@ Before implementing, review the design and spec documents to understand the requ
 > - The earlier draft of this change planned a minted installer-scoped token (`DownloadInstaller(c, mintedToken, env)`). `oneagent-configure` later eliminated minting and standardised on the credential already embedded in `c.Classic`. This change has been updated to match: `DownloadInstaller(c *client.ClassicClient, env Environment)`.
 > - The `Environment` type referenced by Task 5/6 was planned in `oneagent-init` Task 1.5 and is defined in `pkg/installer/oneagent/oneagent.go` as `{OS, Arch, Supported, Reason}`.
 
+## 7. Existing agent detection and update offer
+
+Detect whether OneAgent is already installed before proceeding with the download. When detected, offer an update prompt (or proceed silently in quiet mode). Update the dry-run plan header accordingly.
+
+**Files:** `pkg/installer/oneagent/detect_unix.go` (new), `pkg/installer/oneagent/detect_windows.go` (new), `pkg/installer/oneagent/oneagent.go` (extend)
+
+- [x] 7.1 Create `pkg/installer/oneagent/detect_unix.go` (`//go:build !windows`): implement unexported `oneAgentInstalled() bool` — `os.Stat("/opt/dynatrace/oneagent")` is a dir, fallback `exec.LookPath("oneagentctl")`. Detects *installation*, not a running service; no `systemctl is-active`.
+- [x] 7.2 Create `pkg/installer/oneagent/detect_windows.go` (`//go:build windows`): implement `oneAgentInstalled() bool` — `os.Stat("%ProgramFiles%\dynatrace\oneagent")` is a dir, then `Get-Service "Dynatrace OneAgent"` present in **any** state (not only `Running`), fallback `exec.LookPath("oneagentctl")`
+- [x] 7.3 In `InstallOneAgentV2`: call `oneAgentInstalled()` before the dry-run check; thread `updating bool` into `printDryRun` to flip the header; add the quiet/confirm guard (inline prompt honouring `installer.AutoConfirm`) before `DownloadInstaller`
+
+---
+
 ## 5. Download Installer + Linux Signature Verification
 
 Use the credentials embedded in the ClassicClient to download the installer. On Linux, verify the signature against the published Dynatrace root CA.
