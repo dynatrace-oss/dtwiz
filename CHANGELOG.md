@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `install otel-python`: check that Python is installed before scanning for projects; avoids a confusing error when Python is not on the system
+
 ## [0.2.21] - 2026-06-08
 
 ### Added
