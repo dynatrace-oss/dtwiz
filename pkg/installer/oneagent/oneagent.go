@@ -78,6 +78,14 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 		return nil
 	}
 
+	if updating && !opts.Quiet {
+		ok, err := installer.ConfirmProceed("  OneAgent is already installed. Update?")
+		if err != nil || !ok {
+			display.PrintStatusLine("result", "update cancelled", display.ColorMuted)
+			return installer.ErrInstallCancelled
+		}
+	}
+
 	if opts.SkipConnectivityCheck {
 		logger.Debug("skipping connectivity probe", "reason", "--skip-connectivity-check")
 	} else {
@@ -106,14 +114,6 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 	}
 	if opts.ConnectivityCheckOnly {
 		return nil
-	}
-
-	if updating && !opts.Quiet {
-		ok, err := installer.ConfirmProceed("  OneAgent is already installed. Update?")
-		if err != nil || !ok {
-			display.PrintStatusLine("result", "update cancelled", display.ColorMuted)
-			return installer.ErrInstallCancelled
-		}
 	}
 
 	installerPath, err := DownloadInstaller(c.Classic, env)
