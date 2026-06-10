@@ -69,9 +69,9 @@ func TestPrintStatusLine_FormatsLabelAndMessage(t *testing.T) {
 
 func TestPrintStatusLine_ErrorMessage(t *testing.T) {
 	got := captureOutput(t, func() {
-		PrintStatusLine("Access Token", "✗ not set (use --access-token or DT_ACCESS_TOKEN)", ColorError)
+		PrintStatusLine("Access Token", "✗ not set (use --access-token)", ColorError)
 	})
-	want := "  Access Token:  ✗ not set (use --access-token or DT_ACCESS_TOKEN)\n"
+	want := "  Access Token:  ✗ not set (use --access-token)\n"
 	if got != want {
 		t.Errorf("PrintStatusLine() = %q, want %q", got, want)
 	}

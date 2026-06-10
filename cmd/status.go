@@ -62,7 +62,6 @@ var statusCmd = &cobra.Command{
 			printCredentialStatus("Access Token", envURL, CredentialToken{
 				value:         accessTok,
 				cliName:       "access-token",
-				envName:       "DT_ACCESS_TOKEN",
 				tokenVerifyFn: checkAccessToken,
 				getUrlFn:      installer.APIURL,
 			})
@@ -126,7 +125,11 @@ func printExtensionsStatus() {
 
 func printCredentialStatus(label, envURL string, token CredentialToken) {
 	if token.value == "" {
-		display.PrintStatusLine(label, fmt.Sprintf("✗ not set (use --%s or %s)", token.cliName, token.envName), display.ColorError)
+		hint := fmt.Sprintf("✗ not set (use --%s)", token.cliName)
+		if token.envName != "" {
+			hint = fmt.Sprintf("✗ not set (use --%s or %s)", token.cliName, token.envName)
+		}
+		display.PrintStatusLine(label, hint, display.ColorError)
 		return
 	}
 	if envURL != "" {

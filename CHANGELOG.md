@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Access-token auth is now opt-in and flag-only: it activates only when `--access-token` is passed explicitly and is no longer read from the `DT_ACCESS_TOKEN` env var. This prevents a leftover `DT_ACCESS_TOKEN` from silently switching Classic API calls off the platform token. When `--access-token` is absent, the platform token is used for Classic API calls.
+
 ## [0.2.22] - 2026-06-09
 
 ### Fixed

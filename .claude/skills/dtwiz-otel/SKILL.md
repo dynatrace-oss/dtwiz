@@ -34,7 +34,7 @@ pkg/installer/
 
 ```
 InstallOtelCollectorWithProject()
-├── Validate DT credentials (DT_ENVIRONMENT + DT_ACCESS_TOKEN or DT_PLATFORM_TOKEN)
+├── Validate DT credentials (DT_ENVIRONMENT + DT_PLATFORM_TOKEN; --access-token is opt-in)
 ├── prepareCollectorPlan() — download binary, generate config, find running collectors
 ├── detectAvailableRuntimes() — check for Python, Java, Node.js, Go on PATH
 ├── detectAllProjects() — parallel scan across enabled runtimes
@@ -70,8 +70,8 @@ Process detection is OS-specific (see AGENTS.md); each runtime has its own heuri
 ```go
 // Credentials — never written to disk
 DT_ENVIRONMENT    // e.g. https://abc123.live.dynatrace.com
-DT_ACCESS_TOKEN   // Classic API token (dt0c01.*)
-DT_PLATFORM_TOKEN // Platform API token (dt0s16.*)
+DT_PLATFORM_TOKEN // Platform API token (dt0s16.*) — required; used for API access
+// Access token (dt0c01.*) is opt-in and flag-only: pass --access-token explicitly
 
 // OTel env vars injected into instrumented processes
 OTEL_SERVICE_NAME

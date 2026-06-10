@@ -13,15 +13,14 @@ import (
 )
 
 // Client is the top-level HTTP client for Dynatrace API calls.
-// It exposes a ClassicClient (Classic API, DT_ACCESS_TOKEN) and a
-// PlatformClient (Platform/Apps API, DT_PLATFORM_TOKEN).
+// It exposes a ClassicClient (Classic API) and a PlatformClient (Platform/Apps API).
 type Client struct {
 	Classic  *ClassicClient
 	Platform *PlatformClient
 }
 
-// ClassicClient calls the Classic Dynatrace API (no .apps. in URL)
-// authenticated with DT_ACCESS_TOKEN.
+// ClassicClient calls the Classic Dynatrace API (no .apps. in URL),
+// authenticated with the token configured when constructing the client.
 type ClassicClient struct {
 	http    *resty.Client
 	baseURL string

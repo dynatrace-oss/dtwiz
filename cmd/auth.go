@@ -24,13 +24,10 @@ func environmentHint() string {
 }
 
 // accessToken returns the Dynatrace API access token from the --access-token
-// flag or the DT_ACCESS_TOKEN env var (flag takes precedence).
-// Returns an empty string when neither is set.
+// flag. Access-token auth is opt-in and activates only when the flag is
+// passed explicitly on the command line.
 func accessToken() string {
-	if accessTokenFlag != "" {
-		return accessTokenFlag
-	}
-	return os.Getenv("DT_ACCESS_TOKEN")
+	return accessTokenFlag
 }
 
 // platformToken returns a Dynatrace platform token (dt0s16.*) from the

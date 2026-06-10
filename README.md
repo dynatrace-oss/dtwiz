@@ -14,7 +14,6 @@ Run the following commands in your terminal/console to install and launch `dtwiz
 
 ```bash
 export DT_ENVIRONMENT="https://<your-tenant-domain>"
-export DT_ACCESS_TOKEN="dt0c01.XXXX..."
 export DT_PLATFORM_TOKEN="dt0s16.XXXX..."
 source <(curl -sSL https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.sh)
 dtwiz setup
@@ -26,7 +25,6 @@ dtwiz setup
 
 ```powershell
 $env:DT_ENVIRONMENT="https://<your-tenant-domain>"
-$env:DT_ACCESS_TOKEN="dt0c01.XXXX..."
 $env:DT_PLATFORM_TOKEN="dt0s16.XXXX..."
 irm https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.ps1 | iex
 dtwiz setup
@@ -39,8 +37,9 @@ Set the following environment variables before running `dtwiz`:
 | Variable | Description |
 |----------|-------------|
 | `DT_ENVIRONMENT` | Your Dynatrace environment URL (e.g. `https://<your-tenant-domain>`) |
-| `DT_ACCESS_TOKEN` | Classic API token (`dt0c01.*`) — used for OneAgent installer download, OTel ingest, etc. |
-| `DT_PLATFORM_TOKEN` | Platform token (`dt0s16.*`) — used for AWS integration and DQL log verification |
+| `DT_PLATFORM_TOKEN` | Platform token (`dt0s16.*`) — primary credential; used for Platform/DQL and (by default) Classic API calls |
+
+For legacy environments where the platform token lacks Classic API access, opt into a Classic API token (`dt0c01.*`) by passing `--access-token` explicitly. It is intentionally **not** read from `DT_ACCESS_TOKEN` — so a leftover env var can never silently change which token authenticates Classic API calls.
 
 ## Installation
 
@@ -137,7 +136,6 @@ dtwiz install demo --yes    # skip confirmation
 ```bash
 # 1. Set credentials
 export DT_ENVIRONMENT="https://<your-tenant-domain>"
-export DT_ACCESS_TOKEN="dt0c01.XXXX..."
 export DT_PLATFORM_TOKEN="dt0s16.XXXX..."
 
 # 2. Analyze the current system
@@ -191,4 +189,4 @@ dtwiz/
     └── installer/    # Shared utilities + per-method stubs
 ```
 
-Credentials are read from `DT_ENVIRONMENT`, `DT_ACCESS_TOKEN`, and `DT_PLATFORM_TOKEN` environment variables — `dtwiz` never stores tokens itself.
+Credentials are read from the `DT_ENVIRONMENT` and `DT_PLATFORM_TOKEN` environment variables (or the `--environment` / `--platform-token` flags); a legacy Classic API access token is supplied only via the explicit `--access-token` flag. `dtwiz` never stores tokens itself.
