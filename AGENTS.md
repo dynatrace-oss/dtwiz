@@ -67,7 +67,7 @@ Two URL families — getting this wrong causes 404s or auth errors:
 
 `AuthHeader()`: `dt0c01.*` → `Api-Token <token>`, everything else → `Bearer <token>`.
 
-Credentials resolved from: `--environment`/`--access-token`/`--platform-token` flags → `DT_ENVIRONMENT`/`DT_ACCESS_TOKEN`/`DT_PLATFORM_TOKEN` env vars.
+Credentials resolved from: `--environment` flag → `DT_ENVIRONMENT` env var; `--platform-token` flag → `DT_PLATFORM_TOKEN` env var. The Classic API **access token is opt-in and flag-only**: `--access-token` activates access-token auth and is intentionally **not** read from `DT_ACCESS_TOKEN`, so a leftover env var can never silently switch Classic API calls onto it. When `--access-token` is absent, the platform token is used for Classic API calls too.
 
 ## Key design rules
 

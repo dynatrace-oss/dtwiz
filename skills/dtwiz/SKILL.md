@@ -15,11 +15,12 @@ Go CLI that detects your environment and deploys the best Dynatrace monitoring m
 
 ```bash
 export DT_ENVIRONMENT=https://<your-tenant-domain>
-export DT_ACCESS_TOKEN=dt0c01.****
-export DT_PLATFORM_TOKEN=dt0s16.****    # optional, needed for AWS installer
+export DT_PLATFORM_TOKEN=dt0s16.****
 ```
 
-Or pass per-command: `--environment`, `--access-token`, `--platform-token`.
+Or pass per-command: `--environment`, `--platform-token`.
+
+For environments where the access token is required, pass `--access-token dt0c01.****` explicitly.
 
 ## Recommended Initialization
 

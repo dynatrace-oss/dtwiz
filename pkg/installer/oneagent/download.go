@@ -101,7 +101,7 @@ func DownloadInstaller(c *client.ClassicClient, env Environment) (string, error)
 		if resp.StatusCode() == http.StatusForbidden || resp.StatusCode() == http.StatusUnauthorized {
 			return "", fmt.Errorf(
 				"installer download failed (%d) — if using a platform token, ensure it has the InstallerDownload scope; "+
-					"or pass a dt0c01.* access token with --access-token or DT_ACCESS_TOKEN.\n"+
+					"or pass a dt0c01.* access token with --access-token.\n"+
 					"Run with --debug for the API error detail",
 				resp.StatusCode(),
 			)
