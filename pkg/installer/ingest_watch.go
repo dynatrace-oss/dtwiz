@@ -25,7 +25,11 @@ type watchSection struct {
 	Name    string
 	Count   int
 	Details string // formatted detail line (e.g. service names, type breakdown)
-	Link    string // deep link path appended to AppsURL
+	// Secondary is an extra dim line rendered under the section, regardless
+	// of Count. Used to surface side-signals (e.g. platform-log metrics that
+	// arrive before Smartscape topology builds up).
+	Secondary string
+	Link      string // deep link path appended to AppsURL
 }
 
 type typeCount struct {
@@ -49,18 +53,25 @@ type watchState struct {
 // fromClause is injected directly into DQL queries — accepts RFC3339 timestamps
 // or DQL relative expressions (e.g. "now()-1h").
 func WatchIngest(envURL, pToken, fromClause string) {
-	watchIngest(envURL, pToken, fromClause, nil)
+	watchIngest(envURL, pToken, fromClause, nil, "")
 }
 
 // WatchIngestWithStatus is like WatchIngest but displays a background-task
 // status line (e.g. a CloudFormation deployment) in the watch header.
 // The caller sends status messages to statusCh; the most recent message is
-// shown on every render. Closing or sending on a nil channel is safe.
+// shown on every render. Passing a nil channel disables status updates.
 func WatchIngestWithStatus(envURL, pToken, fromClause string, statusCh <-chan string) {
-	watchIngest(envURL, pToken, fromClause, statusCh)
+	watchIngest(envURL, pToken, fromClause, statusCh, "")
 }
 
-func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string) {
+// WatchIngestAWS is like WatchIngestWithStatus but additionally scopes the
+// cloud-platform signal queries (metrics + da-* logs) to a specific AWS
+// account ID so noise from other accounts in the same tenant is filtered out.
+func WatchIngestAWS(envURL, pToken, fromClause string, statusCh <-chan string, awsAccountID string) {
+	watchIngest(envURL, pToken, fromClause, statusCh, awsAccountID)
+}
+
+func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsAccountID string) {
 	if pToken == "" {
 		fmt.Println("  Platform token required for watch. Set --platform-token or DT_PLATFORM_TOKEN.")
 		return
@@ -131,7 +142,7 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string) {
 			}
 		}
 
-		state := pollAll(queryURL, pToken, fromClause)
+		state := pollAll(queryURL, pToken, fromClause, awsAccountID)
 
 		var buf strings.Builder
 
@@ -195,6 +206,9 @@ func renderSection(buf *strings.Builder, name string, sec watchSection, appsURL 
 		highlight.Fprintf(buf, " %s\n", name)
 		dim.Fprintf(buf, "   waiting...\n")
 	}
+	if sec.Secondary != "" {
+		dim.Fprintf(buf, "   %s\n", sec.Secondary)
+	}
 	buf.WriteString("\n")
 }
 
@@ -229,7 +243,14 @@ func dqlFromLiteral(fromClause string) string {
 	return `"` + fromClause + `"`
 }
 
-func pollAll(queryURL, token string, fromClause string) watchState {
+// dqlEscapeString escapes a value for safe interpolation into a DQL
+// double-quoted string literal. Backslashes and double quotes are the only
+// metacharacters inside `"..."` literals.
+var dqlStringEscaper = strings.NewReplacer(`\`, `\\`, `"`, `\"`)
+
+func dqlEscapeString(s string) string { return dqlStringEscaper.Replace(s) }
+
+func pollAll(queryURL, token string, fromClause string, awsAccountID string) watchState {
 	var state watchState
 
 	type result struct {
@@ -238,6 +259,7 @@ func pollAll(queryURL, token string, fromClause string) watchState {
 	}
 
 	from := dqlFromLiteral(fromClause)
+
 	queries := map[string]string{
 		"services":      fmt.Sprintf(`smartscapeNodes SERVICE, from:%s | fields name | limit 100`, from),
 		"nodes":         fmt.Sprintf(`smartscapeNodes "*", from:%s | summarize count=count(), by:{type} | limit 200`, from),
@@ -245,6 +267,18 @@ func pollAll(queryURL, token string, fromClause string) watchState {
 		"logs":          fmt.Sprintf(`fetch logs, from:%s | summarize count=count(), by:{loglevel}`, from),
 		"requests":      fmt.Sprintf(`fetch spans, from:%s | filter request.is_root_span == true | summarize failed=countIf(request.is_failed == true), success=countIf(request.is_failed != true)`, from),
 		"exceptions":    fmt.Sprintf(`fetch spans, from:%s | expand events = span.events | filter events[type] == "exception" | summarize count=count()`, from),
+	}
+
+	// Cloud-platform signals (metric registrations + da-* integration logs) are
+	// only useful when scoped to a specific AWS account, and they would otherwise
+	// add two extra DQL queries to every poll for non-AWS installs. Gate them on
+	// an explicit account ID so generic `dtwiz watch` is unaffected.
+	if awsAccountID != "" {
+		cloudAccountFilter := fmt.Sprintf(`| filter aws.account.id == "%s" `, dqlEscapeString(awsAccountID))
+		// Metrics is metadata-only (count of registered AWS metric series) so it
+		// intentionally uses the default timeframe; logs are data so they honour `from`.
+		queries["cloud_metrics"] = fmt.Sprintf(`metrics | filter startsWith(metric.key, "cloud.aws.") %s| summarize count=count(), by:{aws.resource.type} | limit 50`, cloudAccountFilter)
+		queries["cloud_logs"] = fmt.Sprintf(`fetch logs, from:%s | filter startsWith(dt.openpipeline.source, "da-") %s| summarize count=count(), by:{aws.resource.type} | limit 50`, from, cloudAccountFilter)
 	}
 
 	ch := make(chan result, len(queries))
@@ -264,6 +298,8 @@ func pollAll(queryURL, token string, fromClause string) watchState {
 	state.Services = parseServices(results["services"])
 	// Cloud + Kubernetes from nodes
 	state.Cloud, state.Kubernetes = parseNodes(results["nodes"])
+	// Cloud platform signals (metrics + logs from da-* integrations)
+	state.Cloud.Secondary = parseCloudPlatformSignals(results["cloud_metrics"], results["cloud_logs"])
 	// Relationships
 	state.Relationships = parseRelationships(results["relationships"])
 	// Logs
@@ -456,6 +492,83 @@ func parseExceptions(resp *dqlResponse) watchSection {
 	}
 	sec.Count = toInt(resp.Result.Records[0]["count"])
 	return sec
+}
+
+// parseCloudPlatformSignals summarises AWS data-acquisition signals (metric
+// registrations and integration logs grouped by `aws.resource.type`) into a
+// single dim line that lists the actual resource types detected, e.g.:
+//
+//	cloud signals (5 types): Lambda::Function · ApiGatewayV2::Api · EC2::Instance · RDS::DBInstance · EKS::Cluster
+//
+// Records with null/empty `aws.resource.type` are ignored — they are noise
+// (uncategorised metrics).
+func parseCloudPlatformSignals(metrics, logs *dqlResponse) string {
+	combined := make(map[string]int)
+	collectResourceTypes(metrics, combined)
+	collectResourceTypes(logs, combined)
+
+	if len(combined) == 0 {
+		return ""
+	}
+
+	types := make([]typeCount, 0, len(combined))
+	for name, c := range combined {
+		types = append(types, typeCount{name, c})
+	}
+	// Tie-break on typeName so the rendered order stays stable between polls
+	// (map iteration order would otherwise make equal-count entries swap).
+	sort.Slice(types, func(i, j int) bool {
+		if types[i].count != types[j].count {
+			return types[i].count > types[j].count
+		}
+		return types[i].typeName < types[j].typeName
+	})
+
+	limit := 5
+	if len(types) < limit {
+		limit = len(types)
+	}
+	names := make([]string, 0, limit)
+	for _, tc := range types[:limit] {
+		names = append(names, shortResourceType(tc.typeName))
+	}
+
+	suffix := ""
+	if len(types) > limit {
+		suffix = fmt.Sprintf(" +%d more", len(types)-limit)
+	}
+	return fmt.Sprintf("cloud signals (%d type%s): %s%s", len(types), plural(len(types)), strings.Join(names, " · "), suffix)
+}
+
+// collectResourceTypes accumulates non-null `aws.resource.type` counts into dst.
+func collectResourceTypes(resp *dqlResponse, dst map[string]int) {
+	if resp == nil {
+		return
+	}
+	for _, rec := range resp.Result.Records {
+		rt, _ := rec["aws.resource.type"].(string)
+		if rt == "" {
+			continue
+		}
+		c := toInt(rec["count"])
+		if c == 0 {
+			continue
+		}
+		dst[rt] += c
+	}
+}
+
+// shortResourceType strips the redundant "AWS::" prefix so labels stay compact:
+// "AWS::Lambda::Function" -> "Lambda::Function".
+func shortResourceType(rt string) string {
+	return strings.TrimPrefix(rt, "AWS::")
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // formatTypeBreakdown formats the top 5 entity types by count with humanized names.

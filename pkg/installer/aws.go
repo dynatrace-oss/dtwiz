@@ -15,8 +15,10 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/extensions"
 )
 
-// awsTemplateURL is the pinned Dynatrace CloudFormation template.
-const awsTemplateURL = "https://dynatrace-data-acquisition.s3.amazonaws.com/aws/deployment/cfn/v1.0.11/da-aws-activation.yaml"
+// awsTemplateURL points to the latest published Dynatrace CloudFormation
+// template. Using the "latest" channel avoids 403s when a pinned version is
+// removed from S3 and matches dtctl's behaviour.
+const awsTemplateURL = "https://dynatrace-data-acquisition.s3.amazonaws.com/aws/deployment/cfn/latest/da-aws-activation.yaml"
 
 // awsStackConfig holds all values required to render aws.tmpl and drive the
 // CloudFormation deployment.
@@ -166,14 +168,14 @@ func findExistingMonitoringConfig(c *client.PlatformClient, accountID string) (s
 
 // createDTMonitoringConfig creates a new da-aws monitoring configuration and
 // returns the objectId (UUID) to use as pMonitoringConfigId in CloudFormation.
-func createDTMonitoringConfig(c *client.PlatformClient, accountID, region string) (string, error) {
+func createDTMonitoringConfig(c *client.PlatformClient, accountID, region, version string) (string, error) {
 	desc := fmt.Sprintf("dtwiz — account %s / %s", accountID, region)
 	payload := map[string]interface{}{
 		"scope": "integration-aws",
 		"value": map[string]interface{}{
 			"enabled":           false,
 			"description":       desc,
-			"version":           "1.0.11",
+			"version":           version,
 			"featureSets":       defaultFeatureSets,
 			"activationContext": "DATA_ACQUISITION",
 			"aws": map[string]interface{}{
@@ -415,8 +417,13 @@ func InstallAWS(c *client.PlatformClient, envURL, token string, dryRun bool, sta
 	if monitoringConfigID != "" {
 		fmt.Printf("  Monitoring config: found existing %s\n", monitoringConfigID)
 	} else {
-		fmt.Printf("  Creating Dynatrace monitoring configuration...\n")
-		monitoringConfigID, err = createDTMonitoringConfig(c, accountID, region)
+		extVersion, vErr := extensions.GetLatestInstalledVersion(c, daAWSExtension)
+		if vErr != nil {
+			fmt.Printf("  Warning: could not resolve installed extension version (%s); falling back to %s\n", vErr, daAWSExtensionVersion)
+			extVersion = daAWSExtensionVersion
+		}
+		fmt.Printf("  Creating Dynatrace monitoring configuration (extension %s)...\n", extVersion)
+		monitoringConfigID, err = createDTMonitoringConfig(c, accountID, region, extVersion)
 		if err != nil {
 			return fmt.Errorf("creating monitoring configuration: %w", err)
 		}
@@ -454,6 +461,14 @@ func InstallAWS(c *client.PlatformClient, envURL, token string, dryRun bool, sta
 			return
 		}
 		statusCh <- fmt.Sprintf("CloudFormation stack %q deployed successfully.", cfg.StackName)
+
+		statusCh <- "Enabling Dynatrace AWS monitoring configuration..."
+		if err := enableAWSMonitoringConfig(c, monitoringConfigID); err != nil {
+			deployErr = fmt.Errorf("enabling monitoring configuration: %w", err)
+			statusCh <- fmt.Sprintf("Enabling monitoring configuration failed: %s", err)
+			return
+		}
+		statusCh <- "Dynatrace AWS monitoring configuration enabled."
 	}()
 
 	// Run Lambda instrumentation on the main thread — it is quick but produces
@@ -465,9 +480,11 @@ func InstallAWS(c *client.PlatformClient, envURL, token string, dryRun bool, sta
 	}
 
 	// Start watch after Lambda output is done — CFN deploy is still running
-	// in the background and will send its result into statusCh.
+	// in the background and will send its result into statusCh. Scope the
+	// cloud-platform signal queries to this AWS account to filter out noise
+	// from other accounts in the same tenant.
 	if startTime != "" && token != "" {
-		WatchIngestWithStatus(envURL, token, startTime, statusCh)
+		WatchIngestAWS(envURL, token, startTime, statusCh, accountID)
 	}
 
 	wg.Wait()
@@ -477,4 +494,29 @@ func InstallAWS(c *client.PlatformClient, envURL, token string, dryRun bool, sta
 		return deployErr
 	}
 	return nil
+}
+
+// enableAWSMonitoringConfig flips the da-aws monitoring configuration and all
+// its credentials to enabled=true. Mirrors `dtctl enable aws monitoring`:
+// without this step the CloudFormation stack is deployed but Dynatrace will
+// not actually collect anything.
+//
+// The AWS-specific mutation of the value payload lives here; the underlying
+// GET/PUT against the Extensions v2 API is provided by pkg/extensions.
+func enableAWSMonitoringConfig(c *client.PlatformClient, id string) error {
+	cfg, err := extensions.GetMonitoringConfig(c, daAWSExtension, id)
+	if err != nil {
+		return err
+	}
+	cfg.Value["enabled"] = true
+	if aws, ok := cfg.Value["aws"].(map[string]interface{}); ok {
+		if creds, ok := aws["credentials"].([]interface{}); ok {
+			for _, cred := range creds {
+				if m, ok := cred.(map[string]interface{}); ok {
+					m["enabled"] = true
+				}
+			}
+		}
+	}
+	return extensions.UpdateMonitoringConfig(c, daAWSExtension, id, cfg)
 }
