@@ -78,7 +78,7 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 		return nil
 	}
 
-	if updating && !opts.Quiet {
+	if updating && !opts.Quiet && !opts.ConnectivityCheckOnly {
 		ok, err := installer.ConfirmProceed("  OneAgent is already installed. Update?")
 		if err != nil || !ok {
 			display.PrintStatusLine("result", "update cancelled", display.ColorMuted)
