@@ -475,6 +475,42 @@ func TestInstallOneAgentV2_UpdatePrompt_AutoConfirm(t *testing.T) {
 	_ = InstallOneAgentV2(c, InstallOptions{MonitoringMode: "fullstack", NoVerifySignature: true})
 }
 
+// TestInstallOneAgentV2_ConnectivityCheckOnly_SkipsUpdatePrompt verifies that
+// --connectivity-check-only never shows the "already installed" prompt, even
+// when an existing OneAgent is detected.
+func TestInstallOneAgentV2_ConnectivityCheckOnly_SkipsUpdatePrompt(t *testing.T) {
+	skipNonLinux(t)
+	withInstallDir(t, t.TempDir()) // simulate existing installation
+
+	// No withStdin — any attempt to read stdin would hang or EOF-cancel.
+
+	ln, addr := startTCPListener(t)
+	defer ln.Close()
+	go acceptLoop(ln)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == endpointsAPIPath {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(addr))
+			return
+		}
+		if strings.Contains(r.URL.Path, "installer/agent") {
+			t.Errorf("connectivity-check-only must not download the installer")
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	c := newMockClient(t, srv.URL)
+
+	err := InstallOneAgentV2(c, InstallOptions{ConnectivityCheckOnly: true})
+	if errors.Is(err, installer.ErrInstallCancelled) {
+		t.Fatal("update prompt must not be shown when --connectivity-check-only is set")
+	}
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 // TestInstallOneAgentV2_UpdateQuiet verifies that quiet mode skips the prompt
 // entirely and proceeds to download when an agent is detected.
 func TestInstallOneAgentV2_UpdateQuiet(t *testing.T) {
