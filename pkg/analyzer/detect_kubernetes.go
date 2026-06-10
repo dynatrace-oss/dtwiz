@@ -18,6 +18,7 @@ func DetectKubernetes() *KubernetesInfo {
 
 	ok, _ := runCmd("kubectl", "cluster-info", "--request-timeout=5s")
 	if !ok {
+		info.Distribution = "None was detected"
 		return info
 	}
 	info.Available = true
@@ -67,8 +68,8 @@ func parseK8sServerVersion(out string) string {
 
 // DetectK8sDistribution heuristically identifies the Kubernetes distribution.
 // It is exported for testing.
-func DetectK8sDistribution(context, cluster, serverURL, serverVersion string) string {
-	ctxLower := strings.ToLower(context)
+func DetectK8sDistribution(kubeCtx, cluster, serverURL, serverVersion string) string {
+	ctxLower := strings.ToLower(kubeCtx)
 	clusterLower := strings.ToLower(cluster)
 	serverURLLower := strings.ToLower(serverURL)
 	verLower := strings.ToLower(serverVersion)
@@ -104,38 +105,48 @@ func DetectK8sDistribution(context, cluster, serverURL, serverVersion string) st
 	if strings.Contains(verLower, "+rke2") {
 		return "RKE"
 	}
-	// minikube
-	if ctxLower == "minikube" || strings.Contains(ctxLower, "minikube") {
-		return "minikube"
-	}
-	// kind
-	if strings.HasPrefix(ctxLower, "kind-") {
-		return "kind"
-	}
 
 	return "kubernetes"
 }
 
+type cmdRunner func(timeout time.Duration, cmd string, args ...string) (string, error)
+
 // ProbeK8sSubVariant runs conditional kubectl probes to refine the parent distribution.
 // On error or timeout the parent distro is returned unchanged.
 func ProbeK8sSubVariant(distro string) string {
+	return probeK8sSubVariant(distro, runCmdWithTimeout)
+}
+
+func probeK8sSubVariant(distro string, run cmdRunner) string {
 	switch distro {
 	case "GKE":
-		output, err := runCmdWithTimeout(5*time.Second, "kubectl", "get", "namespace", "kube-system",
+		output, err := run(5*time.Second, "kubectl", "get", "namespace", "kube-system",
 			"-o", "jsonpath={.metadata.annotations}")
 		if err != nil {
 			display.PrintWarning("GKE Autopilot probe", err)
 		}
 		return ClassifyK8sSubVariant(distro, output, err)
 	case "EKS":
-		output, err := runCmdWithTimeout(5*time.Second, "kubectl", "get", "nodes",
+		output, err := run(5*time.Second, "kubectl", "get", "nodes",
 			"-o", "jsonpath={.items[*].status.nodeInfo.osImage}")
 		if err != nil {
 			display.PrintWarning("EKS Bottlerocket probe", err)
 		}
 		return ClassifyK8sSubVariant(distro, output, err)
 	case "kubernetes":
-		output, err := runCmdWithTimeout(5*time.Second, "kubectl", "get", "namespace", "pks-system",
+		minikubeOut, minikubeErr := run(5*time.Second, "kubectl", "get", "nodes",
+			"-l", "minikube.k8s.io/name", "--no-headers", "-o", "name")
+		if minikubeErr == nil && strings.TrimSpace(minikubeOut) != "" {
+			return "minikube"
+		}
+
+		kindOut, kindErr := run(5*time.Second, "kubectl", "get", "nodes",
+			"-o", "jsonpath={.items[0].spec.providerID}")
+		if kindErr == nil && strings.HasPrefix(strings.TrimSpace(kindOut), "kind://") {
+			return "kind"
+		}
+
+		output, err := run(5*time.Second, "kubectl", "get", "namespace", "pks-system",
 			"--ignore-not-found", "-o", "jsonpath={.status.phase}")
 		if err != nil {
 			display.PrintWarning("TKGI namespace probe", err)
@@ -177,7 +188,6 @@ func runCmdWithTimeout(timeout time.Duration, command string, args ...string) (s
 	c := exec.CommandContext(ctx, command, args...)
 	var buf bytes.Buffer
 	c.Stdout = &buf
-	c.Stderr = &buf
 	err := c.Run()
 	return strings.TrimSpace(buf.String()), err
 }

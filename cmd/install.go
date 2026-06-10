@@ -103,10 +103,9 @@ var installKubernetesCmd = &cobra.Command{
 		}
 		k8sInfo := analyzer.DetectKubernetes()
 		clusterName := ""
-		distro := ""
+		distro := k8sInfo.Distribution
 		if k8sInfo.Available {
 			clusterName = k8sInfo.Cluster
-			distro = k8sInfo.Distribution
 		}
 		if err := installer.InstallKubernetes(envURL, classicTok, clusterName, distro, installDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
