@@ -243,6 +243,13 @@ func dqlFromLiteral(fromClause string) string {
 	return `"` + fromClause + `"`
 }
 
+// dqlEscapeString escapes a value for safe interpolation into a DQL
+// double-quoted string literal. Backslashes and double quotes are the only
+// metacharacters inside `"..."` literals.
+var dqlStringEscaper = strings.NewReplacer(`\`, `\\`, `"`, `\"`)
+
+func dqlEscapeString(s string) string { return dqlStringEscaper.Replace(s) }
+
 func pollAll(queryURL, token string, fromClause string, awsAccountID string) watchState {
 	var state watchState
 
@@ -267,7 +274,7 @@ func pollAll(queryURL, token string, fromClause string, awsAccountID string) wat
 	// add two extra DQL queries to every poll for non-AWS installs. Gate them on
 	// an explicit account ID so generic `dtwiz watch` is unaffected.
 	if awsAccountID != "" {
-		cloudAccountFilter := fmt.Sprintf(`| filter aws.account.id == "%s" `, awsAccountID)
+		cloudAccountFilter := fmt.Sprintf(`| filter aws.account.id == "%s" `, dqlEscapeString(awsAccountID))
 		// Metrics is metadata-only (count of registered AWS metric series) so it
 		// intentionally uses the default timeframe; logs are data so they honour `from`.
 		queries["cloud_metrics"] = fmt.Sprintf(`metrics | filter startsWith(metric.key, "cloud.aws.") %s| summarize count=count(), by:{aws.resource.type} | limit 50`, cloudAccountFilter)

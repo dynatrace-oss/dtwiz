@@ -1,6 +1,7 @@
 package installer
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -204,5 +205,37 @@ func TestPlural(t *testing.T) {
 	}
 	if plural(0) != "s" || plural(2) != "s" || plural(99) != "s" {
 		t.Errorf("plural(n!=1) should be \"s\"")
+	}
+}
+
+func TestDqlEscapeString(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"plain account id", "123456789012", "123456789012"},
+		{"empty", "", ""},
+		{"double quote", `12"34`, `12\"34`},
+		{"backslash", `a\b`, `a\\b`},
+		{"backslash before quote", `a\"b`, `a\\\"b`},
+		{"closing quote injection attempt", `" or "1"=="1`, `\" or \"1\"==\"1`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := dqlEscapeString(tc.in); got != tc.want {
+				t.Errorf("dqlEscapeString(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestPollAllCloudFilter_EscapesAccountID(t *testing.T) {
+	// Sanity check: the formatted filter wraps the escaped value in
+	// double quotes — so a quote in the input must not terminate the literal.
+	got := fmt.Sprintf(`| filter aws.account.id == "%s" `, dqlEscapeString(`"; drop everything`))
+	want := `| filter aws.account.id == "\"; drop everything" `
+	if got != want {
+		t.Errorf("filter clause = %q, want %q", got, want)
 	}
 }
