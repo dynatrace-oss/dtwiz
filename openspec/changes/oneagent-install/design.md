@@ -72,7 +72,30 @@ Linux argv:
 
 `ExecuteInstallCommand` returns `(exitCode int, err error)`. Non-zero exit is wrapped as an error including the captured installer output. Streaming (`quiet == false`) lets the user see installer progress in real time. On success, stdout outputs via `display.PrintStatusLine("result", "Installer executed successfully", display.ColorOK)`. `--dry-run` prints the command via `fmt.Printf("Command: %s\n", ...)` and returns `(0, nil)` without spawning a process.
 
-### 5. Logging
+### 6. Existing agent detection — update offer
+
+Before downloading the installer, `InstallOneAgentV2` checks whether OneAgent is already **installed** on this host via `installer.OneAgentInstalled()`. The check is best-effort: false negatives proceed to a normal install.
+
+It deliberately detects *installation*, not a *running* service — a stopped-but-installed agent must still take the update path. Detection therefore leads with a filesystem check (instant, no subprocess, init-system-agnostic, and cleared on a clean uninstall) and falls back to a service/`PATH` probe only for custom install locations:
+
+- **Unix:** `os.Stat("/opt/dynatrace/oneagent")` → fallback `exec.LookPath("oneagentctl")`
+- **Windows:** `os.Stat("%ProgramFiles%\dynatrace\oneagent")` → `Get-Service "Dynatrace OneAgent"` (present in any state, not only `Running`) → fallback `exec.LookPath("oneagentctl")`
+
+A `systemd is-active` / `Get-Service ... -eq Running` check is deliberately **not** used: it answers "running now", which misclassifies a stopped-but-installed agent as absent and is systemd-only on Linux.
+
+Detection lives in `pkg/installer/oneagent/` as unexported `oneAgentInstalled()`, split across build-tagged files (`detect_unix.go`, `detect_windows.go`). It is called directly within the same package — no cross-package export needed.
+
+When an existing installation is detected:
+
+- **Normal mode:** prompt `OneAgent is already installed. Update it? [Y/n]` (honouring `installer.AutoConfirm`). Declining exits cleanly with no error, printing `update cancelled`.
+- **Quiet mode (`--quiet`):** skip the prompt, proceed silently (unattended automation intent).
+- **Dry-run:** change the plan header from `"Would install"` to `"Would update"`.
+
+The underlying installer invocation is identical whether installing fresh or updating — OneAgent's own installer handles upgrades, token rotation, and config reconciliation (including a new `--set-server` URL) natively.
+
+**Why not diff the current config:** Diffing the live agent config requires shelling out to `oneagentctl --get-server` and comparing — adding complexity for little gain since the installer is idempotent and fast. The simpler model is: detected → offer update → proceed.
+
+### 7. Logging
 
 | Stage | Level | Message | Keys |
 |---|---|---|---|

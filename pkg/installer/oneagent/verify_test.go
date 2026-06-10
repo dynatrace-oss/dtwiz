@@ -177,6 +177,21 @@ func TestFetchDynatraceRootCA_HTTPError(t *testing.T) {
 	}
 }
 
+func TestFetchDynatraceRootCA_NetworkError(t *testing.T) {
+	// Close the server before the request so resty gets a connection-refused error.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	url := srv.URL
+	srv.Close()
+
+	_, err := fetchDynatraceRootCA(url)
+	if err == nil {
+		t.Fatal("expected error on network failure")
+	}
+	if !strings.Contains(err.Error(), "Dynatrace root CA") {
+		t.Errorf("error = %q, want CA error message", err)
+	}
+}
+
 func TestRunOpensslVerify_Success(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses /bin/sh fake openssl")
@@ -200,6 +215,29 @@ func TestRunOpensslVerify_Success(t *testing.T) {
 	}
 	if code != 0 {
 		t.Errorf("exit code = %d, want 0; stderr = %q", code, stderr)
+	}
+}
+
+func TestRunOpensslVerify_BinaryMissing(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses Unix paths")
+	}
+	installer := filepath.Join(t.TempDir(), "installer.sh")
+	if err := os.WriteFile(installer, []byte("payload"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cert := filepath.Join(t.TempDir(), "ca.pem")
+	if err := os.WriteFile(cert, []byte("PEM"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// A non-existent binary causes cmd.Run() to return a non-ExitError (PathError).
+	code, _, err := runOpensslVerify("/nonexistent/openssl-dtwiz-test-sentinel", installer, cert)
+	if err == nil {
+		t.Fatal("expected error when binary is missing")
+	}
+	if code != 0 {
+		t.Errorf("expected code 0 on process-start failure, got %d", code)
 	}
 }
 

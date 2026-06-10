@@ -2,6 +2,7 @@ package oneagent
 
 import (
 	"bytes"
+	"compress/gzip"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -9,8 +10,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-
-	"github.com/dynatrace-oss/dtwiz/pkg/display"
 )
 
 func TestInstallerOSSegment(t *testing.T) {
@@ -54,21 +53,18 @@ func TestInstallerExtension(t *testing.T) {
 	}
 }
 
-func TestHumanBytes(t *testing.T) {
-	cases := []struct {
-		in   int64
-		want string
-	}{
-		{0, "0B"},
-		{512, "512B"},
-		{1024, "1KB"},
-		{2 * 1024 * 1024, "2MB"},
-		{3 * 1024 * 1024 * 1024, "3GB"},
+func TestDownloadInstaller_NetworkError(t *testing.T) {
+	// Close the server before the request so the client gets a connection-refused error.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	c := newTestClassicClient(t, srv.URL)
+	srv.Close()
+
+	_, err := DownloadInstaller(c, Environment{OS: "linux", Arch: "x86"})
+	if err == nil {
+		t.Fatal("expected error on network failure")
 	}
-	for _, c := range cases {
-		if got := display.HumanBytes(c.in); got != c.want {
-			t.Errorf("humanBytes(%d) = %q, want %q", c.in, got, c.want)
-		}
+	if !strings.Contains(err.Error(), "downloading OneAgent installer") {
+		t.Errorf("error = %q, want 'downloading OneAgent installer'", err)
 	}
 }
 
@@ -210,5 +206,87 @@ func TestDownloadInstaller_DebugLogLineRedactsToken(t *testing.T) {
 	}
 	if strings.Contains(logs, "dt0s16.test") {
 		t.Errorf("logs contain raw token:\n%s", logs)
+	}
+}
+
+func TestInstallerDownloadURL(t *testing.T) {
+	cases := []struct {
+		baseURL string
+		env     Environment
+		want    string
+		wantErr bool
+	}{
+		{
+			"https://abc123.live.dynatrace.com",
+			Environment{OS: "linux", Arch: "x86"},
+			"https://abc123.live.dynatrace.com/api/v1/deployment/installer/agent/unix/default/latest?arch=x86",
+			false,
+		},
+		{
+			// trailing slash on base URL should be stripped
+			"https://abc123.live.dynatrace.com/",
+			Environment{OS: "linux", Arch: "arm"},
+			"https://abc123.live.dynatrace.com/api/v1/deployment/installer/agent/unix/default/latest?arch=arm",
+			false,
+		},
+		{
+			"https://abc123.live.dynatrace.com",
+			Environment{OS: "windows", Arch: "x86"},
+			"https://abc123.live.dynatrace.com/api/v1/deployment/installer/agent/windows/default/latest?arch=x86",
+			false,
+		},
+		{
+			"https://abc123.live.dynatrace.com",
+			Environment{OS: "freebsd", Arch: "x86"},
+			"",
+			true,
+		},
+	}
+	for _, c := range cases {
+		got, err := InstallerDownloadURL(c.baseURL, c.env)
+		if (err != nil) != c.wantErr {
+			t.Errorf("InstallerDownloadURL(%q, %+v) error = %v, wantErr %v", c.baseURL, c.env, err, c.wantErr)
+		}
+		if got != c.want {
+			t.Errorf("InstallerDownloadURL(%q, %+v) = %q, want %q", c.baseURL, c.env, got, c.want)
+		}
+	}
+}
+
+func TestDownloadInstaller_Forbidden(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	_, err := DownloadInstaller(newTestClassicClient(t, srv.URL), Environment{OS: "linux", Arch: "x86"})
+	if err == nil {
+		t.Fatal("expected error for 403")
+	}
+	if !strings.Contains(err.Error(), "403") {
+		t.Errorf("error %q does not mention 403", err)
+	}
+}
+
+func TestDownloadInstaller_NonOK_GzipBody(t *testing.T) {
+	// Build a gzip-encoded error body so readErrorBody's decompression path runs.
+	var compressed bytes.Buffer
+	gz := gzip.NewWriter(&compressed)
+	_, _ = gz.Write([]byte("token scope missing"))
+	_ = gz.Close()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Encoding", "gzip")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write(compressed.Bytes())
+	}))
+	defer srv.Close()
+
+	_, err := DownloadInstaller(newTestClassicClient(t, srv.URL), Environment{OS: "linux", Arch: "x86"})
+	if err == nil {
+		t.Fatal("expected error for 500")
+	}
+	if !strings.Contains(err.Error(), "token scope missing") {
+		t.Errorf("error %q does not contain decoded gzip body", err)
 	}
 }

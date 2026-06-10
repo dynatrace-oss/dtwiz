@@ -41,7 +41,7 @@ func uninstallOneAgentLinux(dryRun bool) error {
 	fmt.Println()
 	fmt.Printf("  Uninstall script:  %s\n", linuxUninstallScript)
 
-	if needsSudo() {
+	if NeedsSudo() {
 		fmt.Println("  Privileges:        sudo required (current user is not root)")
 	}
 	fmt.Println()
@@ -63,7 +63,7 @@ func uninstallOneAgentLinux(dryRun bool) error {
 
 	// Run the uninstall script, prepending sudo if needed.
 	args := []string{linuxUninstallScript}
-	if needsSudo() {
+	if NeedsSudo() {
 		args = append([]string{"sudo"}, args...)
 	}
 

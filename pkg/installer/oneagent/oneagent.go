@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strings"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/client"
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -22,7 +24,9 @@ type InstallOptions struct {
 }
 
 type AgentConfig struct {
-	MonitoringMode string
+	MonitoringMode      string
+	AppLogContentAccess bool
+	ServerURL           string
 }
 
 // Environment identifies the target OS and CPU architecture used to select the
@@ -34,7 +38,7 @@ type Environment struct {
 }
 
 func DefaultAgentConfig() AgentConfig {
-	return AgentConfig{MonitoringMode: "fullstack"}
+	return AgentConfig{MonitoringMode: "fullstack", AppLogContentAccess: true}
 }
 
 func ResolveAgentConfig(opts InstallOptions) AgentConfig {
@@ -43,7 +47,8 @@ func ResolveAgentConfig(opts InstallOptions) AgentConfig {
 		cfg.MonitoringMode = opts.MonitoringMode
 	}
 	logger.Debug("resolved agent config",
-		"monitoring-mode", cfg.MonitoringMode,
+		"monitoring_mode", cfg.MonitoringMode,
+		"app_log_content_access", cfg.AppLogContentAccess,
 		"override_set", cfg.MonitoringMode != "fullstack",
 	)
 	return cfg
@@ -57,16 +62,29 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 	logger.Debug("detected environment", "os", env.OS, "arch", env.Arch)
 
 	cfg := ResolveAgentConfig(opts)
-	display.PrintStatusLine("oneagent", fmt.Sprintf("PoC flow (monitoring-mode=%s)", cfg.MonitoringMode), display.ColorWarning)
+	cfg.ServerURL = c.Classic.BaseURL()
 	logger.Debug("install options",
 		"dry_run", opts.DryRun,
 		"no_verify_signature", opts.NoVerifySignature,
 		"monitoring_mode", cfg.MonitoringMode,
+		"app_log_content_access", cfg.AppLogContentAccess,
+		"server_url", cfg.ServerURL,
 	)
 
+	updating := oneAgentInstalled()
+	logger.Debug("existing oneagent detected", "updating", updating)
+
 	if opts.DryRun {
-		printDryRun(c.Classic.BaseURL(), env, cfg, opts)
+		printDryRun(env, cfg, opts, updating)
 		return nil
+	}
+
+	if updating && !opts.Quiet {
+		ok, err := installer.ConfirmProceed("  OneAgent is already installed. Update?")
+		if err != nil || !ok {
+			display.PrintStatusLine("result", "update cancelled", display.ColorMuted)
+			return installer.ErrInstallCancelled
+		}
 	}
 
 	installerPath, err := DownloadInstaller(c.Classic, env)
@@ -79,14 +97,22 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 		return err
 	}
 
-	display.PrintStatusLine("oneagent", "install execution not yet implemented", display.ColorWarning)
-	logger.Debug("install execution not yet implemented", "installer_path", installerPath)
-	return nil
+	argv, err := BuildInstallCommand(env, cfg, opts, installerPath)
+	if err != nil {
+		return err
+	}
+
+	_, err = ExecuteInstallCommand(argv, opts.Quiet)
+	return err
 }
 
-func printDryRun(baseURL string, env Environment, cfg AgentConfig, opts InstallOptions) {
-	fmt.Println("[dry-run] Would install Dynatrace OneAgent")
-	if url, err := InstallerDownloadURL(baseURL, env); err == nil {
+func printDryRun(env Environment, cfg AgentConfig, opts InstallOptions, updating bool) {
+	verb := "install"
+	if updating {
+		verb = "update"
+	}
+	fmt.Printf("[dry-run] Would %s Dynatrace OneAgent\n", verb)
+	if url, err := InstallerDownloadURL(cfg.ServerURL, env); err == nil {
 		fmt.Printf("  Installer:  %s\n", url)
 	}
 	if opts.NoVerifySignature || env.OS != "linux" {
@@ -97,6 +123,9 @@ func printDryRun(baseURL string, env Environment, cfg AgentConfig, opts InstallO
 	fmt.Printf("  Mode:       %s\n", cfg.MonitoringMode)
 	if opts.HostGroup != "" {
 		fmt.Printf("  Host group: %s\n", opts.HostGroup)
+	}
+	if argv, err := BuildInstallCommand(env, cfg, opts, "<installer>"); err == nil {
+		fmt.Printf("  Command:    %s\n", strings.Join(argv, " "))
 	}
 	display.PrintStatusLine("dry-run", "no changes made", display.ColorMuted)
 }

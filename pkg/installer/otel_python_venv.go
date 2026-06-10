@@ -36,23 +36,23 @@ func detectPython() (string, error) {
 	return "", fmt.Errorf("Python 3 interpreter not found: install Python 3 and ensure either `python3` or `python` is in PATH") //nolint:staticcheck // ST1005: keep brand capitalization
 }
 
-func validatePythonPrerequisites() error {
+func validatePythonPrerequisites() (string, error) {
 	pythonBin, err := detectPython()
 	if err != nil {
-		return err
+		return "", err
 	}
 	logger.Debug("validating python prerequisites", "python", pythonBin)
 	if out, err := exec.Command(pythonBin, "-m", "pip", "--version").CombinedOutput(); err != nil {
 		logger.Debug("python pip check failed", "python", pythonBin, "output", strings.TrimSpace(string(out)), "error", err)
-		return fmt.Errorf("pip is not available for the detected Python 3 interpreter (%s): %w\n    %s", pythonBin, err, strings.TrimSpace(string(out)))
+		return "", fmt.Errorf("pip is not available for the detected Python 3 interpreter (%s): %w\n    %s", pythonBin, err, strings.TrimSpace(string(out)))
 	}
 	logger.Debug("python pip check succeeded", "python", pythonBin)
 	if out, err := exec.Command(pythonBin, "-m", "venv", "--help").CombinedOutput(); err != nil {
 		logger.Debug("python venv check failed", "python", pythonBin, "output", strings.TrimSpace(string(out)), "error", err)
-		return fmt.Errorf("venv module is not available for the detected Python 3 interpreter (%s) — on Debian/Ubuntu run: apt install python3-venv: %w\n    %s", pythonBin, err, strings.TrimSpace(string(out)))
+		return "", fmt.Errorf("venv module is not available for the detected Python 3 interpreter (%s) — on Debian/Ubuntu run: apt install python3-venv: %w\n    %s", pythonBin, err, strings.TrimSpace(string(out)))
 	}
 	logger.Debug("python venv check succeeded", "python", pythonBin)
-	return nil
+	return pythonBin, nil
 }
 
 func resolveVenvBinary(projectPath, name string) string {

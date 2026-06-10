@@ -2,6 +2,75 @@
 
 ## ADDED Requirements
 
+### Requirement: Detect existing OneAgent and offer update
+
+Before downloading the installer, `InstallOneAgentV2` SHALL check whether OneAgent is already installed on this host via `installer.OneAgentInstalled() bool`. The check is platform-specific and best-effort — false negatives proceed to a normal install. It SHALL detect *installation*, not a *running* service, so that a stopped-but-installed agent still takes the update path.
+
+Detection SHALL lead with a filesystem check and fall back to a service/`PATH` probe only for custom install locations:
+
+- **Unix:** `os.Stat("/opt/dynatrace/oneagent")` is a directory → installed; else `exec.LookPath("oneagentctl")` succeeds → installed.
+- **Windows:** `os.Stat("%ProgramFiles%\dynatrace\oneagent")` is a directory → installed; else `Get-Service "Dynatrace OneAgent"` returns a service in **any** state → installed; else `exec.LookPath("oneagentctl")` succeeds → installed.
+
+A "service is running" check (`systemctl is-active`, `Get-Service ... -eq Running`) SHALL NOT be used as the installed signal.
+
+When `OneAgentInstalled()` returns `true`:
+
+- Under `--dry-run`: the plan header SHALL read `[dry-run] Would update Dynatrace OneAgent` instead of `Would install`.
+- In **quiet mode**: proceed without prompting (unattended automation).
+- Otherwise: prompt `OneAgent is already installed. Update it? [Y/n]` (honouring `installer.AutoConfirm`). On decline: print `display.PrintStatusLine("result", "update cancelled", display.ColorMuted)` and return `nil`.
+
+The underlying installer invocation (download → verify → execute) is identical for both install and update paths.
+
+#### Scenario: No existing installation — proceeds as install
+
+- **GIVEN** `OneAgentInstalled()` returns `false`
+- **WHEN** `InstallOneAgentV2` is called
+- **THEN** no detection message is printed
+- **AND** the install proceeds as normal
+
+#### Scenario: Existing installation detected — user confirms update
+
+- **GIVEN** `OneAgentInstalled()` returns `true`
+- **AND** `opts.Quiet == false`
+- **AND** the user answers `Y` (or presses Enter)
+- **WHEN** `InstallOneAgentV2` runs
+- **THEN** stdout contains the "already installed — updating" status line
+- **AND** the full install flow (download → verify → execute) runs
+
+#### Scenario: Existing installation detected — user declines
+
+- **GIVEN** `OneAgentInstalled()` returns `true`
+- **AND** `opts.Quiet == false`
+- **AND** the user answers `n`
+- **WHEN** `InstallOneAgentV2` runs
+- **THEN** stdout contains the "update cancelled" status line
+- **AND** `DownloadInstaller` is NOT called
+- **AND** `InstallOneAgentV2` returns `nil`
+
+#### Scenario: Existing installation detected — quiet mode proceeds silently
+
+- **GIVEN** `OneAgentInstalled()` returns `true`
+- **AND** `opts.Quiet == true`
+- **WHEN** `InstallOneAgentV2` runs
+- **THEN** no detection or update prompt is printed
+- **AND** the full install flow runs
+
+#### Scenario: Dry-run with existing installation shows "Would update"
+
+- **GIVEN** `OneAgentInstalled()` returns `true`
+- **AND** `opts.DryRun == true`
+- **WHEN** `InstallOneAgentV2` prints the plan
+- **THEN** stdout contains `[dry-run] Would update Dynatrace OneAgent`
+
+#### Scenario: Dry-run without existing installation shows "Would install"
+
+- **GIVEN** `OneAgentInstalled()` returns `false`
+- **AND** `opts.DryRun == true`
+- **WHEN** `InstallOneAgentV2` prints the plan
+- **THEN** stdout contains `[dry-run] Would install Dynatrace OneAgent`
+
+---
+
 ### Requirement: Installer download reuses the ClassicClient credential
 
 `InstallOneAgentV2` SHALL download the OneAgent installer using the resty client embedded in `c.Classic`. The credential is set upstream by `validateCredentials` / `setupClientFromCreds` and SHALL NOT be extracted to a variable in installer code. The download SHALL stream to a temporary file with `0o700` permissions on Unix (preventing other local users from reading the binary).

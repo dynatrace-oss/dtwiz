@@ -45,6 +45,7 @@ func TestConfirmProceedAutoConfirm(t *testing.T) {
 func TestInstallOtelCollectorWithProject_DryRun(t *testing.T) {
 	dir := t.TempDir()
 	setTestWorkingDir(t, dir)
+	setTestStdin(t, "y\n")
 
 	output := captureStdout(t, func() {
 		err := InstallOtelCollectorWithProject(

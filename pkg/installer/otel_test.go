@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -313,6 +314,28 @@ func TestDetectAllProjects_SkipsDisabled(t *testing.T) {
 	projects := detectAllProjects(runtimes)
 	if len(projects) != 0 {
 		t.Errorf("expected 0 projects when all runtimes are disabled, got %d: %v", len(projects), projects)
+	}
+}
+
+// TestDetectAllProjects_SkipsPythonStub verifies that a python3 binary on PATH
+// that does not output "Python 3.x" (e.g. a Windows Store stub that exits
+// silently) is treated as unavailable and excluded from the active runtimes.
+func TestDetectAllProjects_SkipsPythonStub(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-based stubs only work on Unix")
+	}
+	dir := t.TempDir()
+	// A stub that exists on PATH but produces no output — simulates the Windows
+	// Store App Execution Alias behaviour in a non-interactive subprocess.
+	createStubFile(t, filepath.Join(dir, "python3"), "#!/bin/sh\nexit 0\n", 0o755)
+	t.Setenv("PATH", dir)
+
+	runtimes := []runtimeInfo{
+		{name: "Python", binName: "python3", enabled: true, detect: detectPythonRuntimeProjects},
+	}
+	projects := detectAllProjects(runtimes)
+	if len(projects) != 0 {
+		t.Errorf("expected Python to be skipped when stub produces no version output, got %d project(s)", len(projects))
 	}
 }
 

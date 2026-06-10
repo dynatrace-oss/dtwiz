@@ -7,7 +7,7 @@ The existing OneAgent installer flow downloads the installer binary without any 
 - `DownloadInstaller(c *client.ClassicClient, env Environment) (string, error)`: streams the installer to a temp file using `c.HTTP().R()` — the resty client already carries the correct `Authorization` header. Temp file permissions are tightened to `0o700` on Unix.
 - `VerifyInstallerSignature(env Environment, installerPath string, skip bool) error`: on Linux, verifies the installer's CMS signature against `https://ca.dynatrace.com/dt-root.cert.pem` via `openssl cms -verify`. Non-Linux and `--no-verify-signature` skip silently. Missing `openssl` is a hard error, not a silent skip.
 - `BuildInstallCommand(env Environment, cfg AgentConfig, opts InstallOptions, installerPath string) ([]string, error)`: constructs the OS-specific argv from `AgentConfig` (`--set-monitoring-mode`, `--set-app-log-content-access`) and options.
-- `ExecuteInstallCommand(argv []string, dryRun, quiet bool) (int, error)`: runs the installer subprocess, streaming output. `--dry-run` prints the command without executing.
+- `ExecuteInstallCommand(argv []string, quiet bool) (int, error)`: runs the installer subprocess, streaming output. Dry-run is handled upstream in `InstallOneAgentV2` before this function is called.
 
 ## Capabilities
 

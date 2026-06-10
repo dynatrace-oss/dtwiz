@@ -457,7 +457,7 @@ func InstallAWS(c *client.PlatformClient, envURL, token string, dryRun bool, sta
 	go func() {
 		defer wg.Done()
 		statusCh <- fmt.Sprintf("CloudFormation stack %q deploying... (this may take a few minutes)", cfg.StackName)
-		if err := runCommandSilent("aws", realArgs...); err != nil {
+		if err := RunCommandQuiet("aws", realArgs...); err != nil {
 			deployErr = fmt.Errorf("CloudFormation deployment failed: %w", err)
 			statusCh <- fmt.Sprintf("CloudFormation deployment failed: %s", err)
 			return
@@ -602,21 +602,4 @@ func compareSemver(a, b string) int {
 		}
 	}
 	return 0
-}
-
-// runCommandSilent runs a command like RunCommand but discards stdout,
-// preventing interleaving with the watch display. Stderr is captured and
-// included in the error message on failure.
-func runCommandSilent(name string, args ...string) error {
-	var stderr strings.Builder
-	cmd := exec.Command(name, args...)
-	cmd.Stdout = io.Discard
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		if msg := strings.TrimSpace(stderr.String()); msg != "" {
-			return fmt.Errorf("%w\n%s", err, msg)
-		}
-		return err
-	}
-	return nil
 }

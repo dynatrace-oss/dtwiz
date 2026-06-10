@@ -85,6 +85,7 @@ func DownloadInstaller(c *client.ClassicClient, env Environment) (string, error)
 
 	resp, err := c.HTTP().R().SetDoNotParseResponse(true).Get(path)
 	if err != nil {
+		logger.Debug("installer download network error", "url", downloadURL, "error", err)
 		return "", fmt.Errorf("downloading OneAgent installer: %w", err)
 	}
 	defer resp.RawBody().Close()
@@ -127,6 +128,7 @@ func DownloadInstaller(c *client.ClassicClient, env Environment) (string, error)
 
 	if runtime.GOOS != "windows" {
 		if err := os.Chmod(tmpFile.Name(), 0o700); err != nil {
+			logger.Debug("chmod installer failed", "path", tmpFile.Name(), "error", err)
 			_ = os.Remove(tmpFile.Name())
 			return "", fmt.Errorf("setting installer permissions: %w", err)
 		}
