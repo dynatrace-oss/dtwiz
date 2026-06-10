@@ -66,5 +66,5 @@ func PrintError(label string, err error) {
 }
 
 func PrintWarning(label string, err error) {
-	_, _ = fmt.Fprintf(color.Output, "  %s: %s\n", ColorDefault.Sprint(label), ColorWarning.Sprintf("⚠ %s", err))
+	_, _ = fmt.Fprintf(color.Error, "  %s: %s\n", ColorDefault.Sprint(label), ColorWarning.Sprintf("⚠ %s", err))
 }

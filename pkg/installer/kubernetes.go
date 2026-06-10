@@ -285,23 +285,31 @@ func fetchClusterName(fallback string) string {
 	return name
 }
 
+// resolveClusterName returns a sanitized Kubernetes resource name for the DynaKube CR.
+// Priority: explicit name → kubectl context → tenant ID derived from envURL → "dynakube".
+func resolveClusterName(name, envURL string) string {
+	if name != "" {
+		return sanitizeK8sName(name)
+	}
+	if resolved := fetchClusterName(sanitizeK8sName(ExtractTenantID(envURL))); resolved != "" {
+		return resolved
+	}
+	return "dynakube"
+}
+
 // InstallKubernetes deploys the Dynatrace Operator on a Kubernetes cluster.
 //
 // Parameters:
+// Parameters:
 //   - envURL:      Dynatrace environment URL
 //   - token:       platform token used for both apiToken and dataIngestToken in the DynaKube Secret
-//   - clusterName: DynaKube CR name (auto-derived from envURL if empty)
+//   - clusterName: DynaKube CR name; when empty, it is derived from the current kubectl context (falling back to a value derived from envURL)
 //   - distro:      detected Kubernetes distribution (e.g. "GKE", "EKS"); empty falls back to defaults
 //   - dryRun:      when true, only print what would be done
 func InstallKubernetes(envURL, token, clusterName, distro string, dryRun bool) error {
 	apiURL := APIURL(envURL)
 
-	if clusterName == "" {
-		clusterName = fetchClusterName(sanitizeK8sName(ExtractTenantID(envURL)))
-		if clusterName == "" {
-			clusterName = "dynakube"
-		}
-	}
+	clusterName = resolveClusterName(clusterName, envURL)
 
 	// --- Build manifest ---
 	tmplData := dynakubeTemplateData{
