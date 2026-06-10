@@ -16,7 +16,7 @@ The base path for all endpoints is `/platform/extensions/v2/extensions/{extensio
 - **WHEN** `InstallExtension(c, extensionName, version, silent)` is called
 - **THEN** it POSTs `{"extensionName": extensionName, "version": version}` to
   `/platform/extensions/v2/extensions/{extensionName}`
-- **AND** returns nil on HTTP 200 or 201
+- **AND** returns nil on HTTP 200, 201, or 202
 
 #### Scenario: InstallExtension with silent=true ignores 400 and 409
 
@@ -70,3 +70,36 @@ The base path for all endpoints is `/platform/extensions/v2/extensions/{extensio
 - **GIVEN** the API returns a status other than 200 or 204
 - **WHEN** `DeleteMonitoringConfig` processes the response
 - **THEN** it returns an error containing the HTTP status code and response body
+
+#### Scenario: ListInstalledVersions returns installed versions of an extension
+
+- **GIVEN** a `*client.PlatformClient` and an extension name
+- **WHEN** `ListInstalledVersions(c, extensionName)` is called
+- **THEN** it GETs `/platform/extensions/v2/extensions/{extensionName}`
+- **AND** returns the `items` array (each with a `version` field) on HTTP 200
+- **AND** returns an error containing the HTTP status code on any non-200 response
+
+#### Scenario: GetLatestInstalledVersion returns the highest dotted-numeric version
+
+- **GIVEN** the tenant has multiple installed versions of an extension (e.g. `1.0.11`, `1.0.10`, `1.2.0`)
+- **WHEN** `GetLatestInstalledVersion(c, extensionName)` is called
+- **THEN** it returns the highest version compared segment-wise as integers
+- **AND** non-numeric segments are treated as 0 for comparison
+- **AND** returns an error when no installed versions are found
+
+#### Scenario: GetMonitoringConfig fetches a single configuration by objectId
+
+- **GIVEN** a `*client.PlatformClient`, an extension name, and an objectId
+- **WHEN** `GetMonitoringConfig(c, extensionName, objectID)` is called
+- **THEN** it GETs `/platform/extensions/v2/extensions/{extensionName}/monitoring-configurations/{objectID}`
+- **AND** returns a `*MonitoringConfig` containing `scope` and a non-nil `value` map on HTTP 200
+- **AND** returns an error containing the HTTP status code and up to 400 bytes of body on any non-200 response
+
+#### Scenario: UpdateMonitoringConfig replaces an existing configuration via PUT
+
+- **GIVEN** a `*client.PlatformClient`, an extension name, an objectId, and a `*MonitoringConfig`
+- **WHEN** `UpdateMonitoringConfig(c, extensionName, objectID, cfg)` is called
+- **THEN** it PUTs `{"scope": cfg.Scope, "value": cfg.Value}` to
+  `/platform/extensions/v2/extensions/{extensionName}/monitoring-configurations/{objectID}`
+- **AND** returns nil on HTTP 200, 201, or 204
+- **AND** returns an error containing the HTTP status code and up to 400 bytes of body on any other status

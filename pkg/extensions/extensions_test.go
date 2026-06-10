@@ -88,6 +88,17 @@ func TestInstallExtension_ErrorOnServerFailure(t *testing.T) {
 	}
 }
 
+func TestInstallExtension_AcceptsHTTP202(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+
+	if err := InstallExtension(newTestPlatformClient(t, srv.URL), "com.example.ext", "1.0.0", false); err != nil {
+		t.Errorf("expected nil error for HTTP 202, got: %v", err)
+	}
+}
+
 // ListMonitoringConfigs
 
 func TestListMonitoringConfigs_ReturnsSinglePage(t *testing.T) {
@@ -228,5 +239,227 @@ func TestDeleteMonitoringConfig_ErrorOnNonOK(t *testing.T) {
 	}
 	if want := "404"; !strings.Contains(err.Error(), want) {
 		t.Errorf("error %q does not contain %q", err.Error(), want)
+	}
+}
+
+// ListInstalledVersions / GetLatestInstalledVersion
+
+func TestListInstalledVersions_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		want := fmt.Sprintf(extensionPath, "com.example.ext")
+		if r.URL.Path != want {
+			t.Errorf("path = %q, want %q", r.URL.Path, want)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[{"version":"1.0.11"},{"version":"1.2.0"}]}`))
+	}))
+	defer srv.Close()
+
+	items, err := ListInstalledVersions(newTestPlatformClient(t, srv.URL), "com.example.ext")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := len(items), 2; got != want {
+		t.Fatalf("len(items) = %d, want %d", got, want)
+	}
+	if items[0].Version != "1.0.11" || items[1].Version != "1.2.0" {
+		t.Errorf("versions = %+v", items)
+	}
+}
+
+func TestListInstalledVersions_ErrorOnNonOK(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	_, err := ListInstalledVersions(newTestPlatformClient(t, srv.URL), "com.example.ext")
+	if err == nil {
+		t.Fatal("expected error for 404, got nil")
+	}
+	if want := "404"; !strings.Contains(err.Error(), want) {
+		t.Errorf("error %q does not contain %q", err.Error(), want)
+	}
+}
+
+func TestGetLatestInstalledVersion_PicksHighestNumeric(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Deliberately unordered; "1.2.0" should win over "1.0.11" because the
+		// second segment dominates and "1.0.11" parses segment-wise (1,0,11).
+		_, _ = w.Write([]byte(`{"items":[{"version":"1.0.10"},{"version":"1.2.0"},{"version":"1.0.11"}]}`))
+	}))
+	defer srv.Close()
+
+	v, err := GetLatestInstalledVersion(newTestPlatformClient(t, srv.URL), "com.example.ext")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if want := "1.2.0"; v != want {
+		t.Errorf("version = %q, want %q", v, want)
+	}
+}
+
+func TestGetLatestInstalledVersion_NumericSortBeatsLexicographic(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Lexicographically "1.0.9" > "1.0.11"; numerically 11 > 9.
+		_, _ = w.Write([]byte(`{"items":[{"version":"1.0.9"},{"version":"1.0.11"}]}`))
+	}))
+	defer srv.Close()
+
+	v, err := GetLatestInstalledVersion(newTestPlatformClient(t, srv.URL), "com.example.ext")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if want := "1.0.11"; v != want {
+		t.Errorf("version = %q, want %q", v, want)
+	}
+}
+
+func TestGetLatestInstalledVersion_ErrorWhenNoVersions(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[]}`))
+	}))
+	defer srv.Close()
+
+	_, err := GetLatestInstalledVersion(newTestPlatformClient(t, srv.URL), "com.example.ext")
+	if err == nil {
+		t.Fatal("expected error for empty version list, got nil")
+	}
+}
+
+// GetMonitoringConfig / UpdateMonitoringConfig
+
+func TestGetMonitoringConfig_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		want := fmt.Sprintf(monitoringConfigPath, "com.example.ext", "obj-123")
+		if r.URL.Path != want {
+			t.Errorf("path = %q, want %q", r.URL.Path, want)
+		}
+		if r.Method != http.MethodGet {
+			t.Errorf("method = %q, want GET", r.Method)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"scope":"integration-aws","value":{"enabled":false,"aws":{"credentials":[{"enabled":false}]}}}`))
+	}))
+	defer srv.Close()
+
+	cfg, err := GetMonitoringConfig(newTestPlatformClient(t, srv.URL), "com.example.ext", "obj-123")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Scope != "integration-aws" {
+		t.Errorf("scope = %q", cfg.Scope)
+	}
+	if cfg.Value == nil {
+		t.Fatal("value is nil")
+	}
+	if v, ok := cfg.Value["enabled"].(bool); !ok || v {
+		t.Errorf("enabled = %v (ok=%v)", v, ok)
+	}
+}
+
+func TestGetMonitoringConfig_ErrorOnNonOK(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":"not found"}`))
+	}))
+	defer srv.Close()
+
+	_, err := GetMonitoringConfig(newTestPlatformClient(t, srv.URL), "com.example.ext", "obj-123")
+	if err == nil {
+		t.Fatal("expected error for 404, got nil")
+	}
+	if want := "404"; !strings.Contains(err.Error(), want) {
+		t.Errorf("error %q does not contain %q", err.Error(), want)
+	}
+}
+
+func TestGetMonitoringConfig_ErrorOnEmptyValue(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"scope":"integration-aws"}`))
+	}))
+	defer srv.Close()
+
+	_, err := GetMonitoringConfig(newTestPlatformClient(t, srv.URL), "com.example.ext", "obj-123")
+	if err == nil {
+		t.Fatal("expected error for empty value, got nil")
+	}
+}
+
+func TestUpdateMonitoringConfig_SendsScopeAndValue(t *testing.T) {
+	var received map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		want := fmt.Sprintf(monitoringConfigPath, "com.example.ext", "obj-123")
+		if r.URL.Path != want {
+			t.Errorf("path = %q, want %q", r.URL.Path, want)
+		}
+		if r.Method != http.MethodPut {
+			t.Errorf("method = %q, want PUT", r.Method)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Errorf("decoding body: %v", err)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	cfg := &MonitoringConfig{
+		Scope: "integration-aws",
+		Value: map[string]interface{}{"enabled": true, "tag": "x"},
+	}
+	if err := UpdateMonitoringConfig(newTestPlatformClient(t, srv.URL), "com.example.ext", "obj-123", cfg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if received["scope"] != "integration-aws" {
+		t.Errorf("scope sent = %v", received["scope"])
+	}
+	v, ok := received["value"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("value is %T, want map", received["value"])
+	}
+	if enabled, _ := v["enabled"].(bool); !enabled {
+		t.Errorf("value.enabled = %v, want true", v["enabled"])
+	}
+}
+
+func TestUpdateMonitoringConfig_ErrorOnNonOK(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	cfg := &MonitoringConfig{Scope: "x", Value: map[string]interface{}{}}
+	err := UpdateMonitoringConfig(newTestPlatformClient(t, srv.URL), "com.example.ext", "obj-123", cfg)
+	if err == nil {
+		t.Fatal("expected error for 403, got nil")
+	}
+	if want := "403"; !strings.Contains(err.Error(), want) {
+		t.Errorf("error %q does not contain %q", err.Error(), want)
+	}
+}
+
+// compareDottedVersions
+
+func TestCompareDottedVersions(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want int
+	}{
+		{"1.0.0", "1.0.0", 0},
+		{"1.0.11", "1.0.9", 1},
+		{"1.0.9", "1.0.11", -1},
+		{"1.2.0", "1.0.11", 1},
+		{"1.0", "1.0.0", 0},
+		{"2", "1.99.99", 1},
+		{"1.0.abc", "1.0.0", 0}, // non-numeric segment treated as 0
+	}
+	for _, tc := range cases {
+		if got := compareDottedVersions(tc.a, tc.b); got != tc.want {
+			t.Errorf("compareDottedVersions(%q, %q) = %d, want %d", tc.a, tc.b, got, tc.want)
+		}
 	}
 }

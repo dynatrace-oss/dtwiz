@@ -59,7 +59,7 @@ func WatchIngest(envURL, pToken, fromClause string) {
 // WatchIngestWithStatus is like WatchIngest but displays a background-task
 // status line (e.g. a CloudFormation deployment) in the watch header.
 // The caller sends status messages to statusCh; the most recent message is
-// shown on every render. Closing or sending on a nil channel is safe.
+// shown on every render. Passing a nil channel disables status updates.
 func WatchIngestWithStatus(envURL, pToken, fromClause string, statusCh <-chan string) {
 	watchIngest(envURL, pToken, fromClause, statusCh, "")
 }
@@ -253,11 +253,6 @@ func pollAll(queryURL, token string, fromClause string, awsAccountID string) wat
 
 	from := dqlFromLiteral(fromClause)
 
-	// Optional AWS account scope for cloud-platform signal queries.
-	cloudAccountFilter := ""
-	if awsAccountID != "" {
-		cloudAccountFilter = fmt.Sprintf(`| filter aws.account.id == "%s" `, awsAccountID)
-	}
 	queries := map[string]string{
 		"services":      fmt.Sprintf(`smartscapeNodes SERVICE, from:%s | fields name | limit 100`, from),
 		"nodes":         fmt.Sprintf(`smartscapeNodes "*", from:%s | summarize count=count(), by:{type} | limit 200`, from),
@@ -265,11 +260,18 @@ func pollAll(queryURL, token string, fromClause string, awsAccountID string) wat
 		"logs":          fmt.Sprintf(`fetch logs, from:%s | summarize count=count(), by:{loglevel}`, from),
 		"requests":      fmt.Sprintf(`fetch spans, from:%s | filter request.is_root_span == true | summarize failed=countIf(request.is_failed == true), success=countIf(request.is_failed != true)`, from),
 		"exceptions":    fmt.Sprintf(`fetch spans, from:%s | expand events = span.events | filter events[type] == "exception" | summarize count=count()`, from),
-		// Cloud platform signals — arrive before Smartscape topology builds up.
+	}
+
+	// Cloud-platform signals (metric registrations + da-* integration logs) are
+	// only useful when scoped to a specific AWS account, and they would otherwise
+	// add two extra DQL queries to every poll for non-AWS installs. Gate them on
+	// an explicit account ID so generic `dtwiz watch` is unaffected.
+	if awsAccountID != "" {
+		cloudAccountFilter := fmt.Sprintf(`| filter aws.account.id == "%s" `, awsAccountID)
 		// Metrics is metadata-only (count of registered AWS metric series) so it
 		// intentionally uses the default timeframe; logs are data so they honour `from`.
-		"cloud_metrics": fmt.Sprintf(`metrics | filter startsWith(metric.key, "cloud.aws.") %s| summarize count=count(), by:{aws.resource.type} | limit 50`, cloudAccountFilter),
-		"cloud_logs":    fmt.Sprintf(`fetch logs, from:%s | filter startsWith(dt.openpipeline.source, "da-") %s| summarize count=count(), by:{aws.resource.type} | limit 50`, from, cloudAccountFilter),
+		queries["cloud_metrics"] = fmt.Sprintf(`metrics | filter startsWith(metric.key, "cloud.aws.") %s| summarize count=count(), by:{aws.resource.type} | limit 50`, cloudAccountFilter)
+		queries["cloud_logs"] = fmt.Sprintf(`fetch logs, from:%s | filter startsWith(dt.openpipeline.source, "da-") %s| summarize count=count(), by:{aws.resource.type} | limit 50`, from, cloudAccountFilter)
 	}
 
 	ch := make(chan result, len(queries))
@@ -506,7 +508,14 @@ func parseCloudPlatformSignals(metrics, logs *dqlResponse) string {
 	for name, c := range combined {
 		types = append(types, typeCount{name, c})
 	}
-	sort.Slice(types, func(i, j int) bool { return types[i].count > types[j].count })
+	// Tie-break on typeName so the rendered order stays stable between polls
+	// (map iteration order would otherwise make equal-count entries swap).
+	sort.Slice(types, func(i, j int) bool {
+		if types[i].count != types[j].count {
+			return types[i].count > types[j].count
+		}
+		return types[i].typeName < types[j].typeName
+	})
 
 	limit := 5
 	if len(types) < limit {
