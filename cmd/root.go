@@ -105,7 +105,7 @@ func init() {
 	rootCmd.PersistentFlags().CountVarP(&verbosityFlag, "verbose", "v", "verbose output")
 	rootCmd.PersistentFlags().StringVar(&environmentFlag, "environment", "", "Dynatrace environment URL (also read from DT_ENVIRONMENT)")
 	rootCmd.PersistentFlags().StringVar(&platformTokenFlag, "platform-token", "", "Dynatrace platform token (also read from DT_PLATFORM_TOKEN)")
-	rootCmd.PersistentFlags().StringVar(&accessTokenFlag, "access-token", "", "Dynatrace API access token for legacy environments (opt-in; must be passed explicitly — not read from env)")
+	rootCmd.PersistentFlags().StringVar(&accessTokenFlag, "access-token", "", "Dynatrace API access token for legacy environments (opt-in; must be passed explicitly — not read from the environment variables)")
 
 	featureflags.RegisterFlags(rootCmd.PersistentFlags())
 
