@@ -1,3 +1,5 @@
+# Tasks: Access Token Flag-Only
+
 ## 1. Code (already implemented)
 
 - [x] 1.1 `cmd/auth.go`: `accessToken()` returns only `accessTokenFlag`; drop the `os.Getenv("DT_ACCESS_TOKEN")` fallback

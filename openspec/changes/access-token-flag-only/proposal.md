@@ -1,3 +1,5 @@
+# Proposal: Access Token Flag-Only
+
 ## Why
 
 The Classic API access token (`dt0c01.*`) is resolved from either the `--access-token` flag **or** the `DT_ACCESS_TOKEN` env var. A leftover `DT_ACCESS_TOKEN` exported in a user's shell therefore silently switches API calls off the platform token and onto an access token the user never intended to use for this invocation — with no way to tell an intentional token from a stale one. As Dynatrace deprecates access tokens, the safe default is platform-token auth, and access-token use should require an explicit, per-invocation signal.

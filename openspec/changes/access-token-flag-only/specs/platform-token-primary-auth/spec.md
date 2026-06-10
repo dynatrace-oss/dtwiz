@@ -1,3 +1,5 @@
+# Delta Spec: Platform Token Primary Auth
+
 ## MODIFIED Requirements
 
 ### Requirement: Access token is optional; used as Classic API fallback

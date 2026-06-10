@@ -20,8 +20,7 @@ type Client struct {
 }
 
 // ClassicClient calls the Classic Dynatrace API (no .apps. in URL),
-// authenticated with the platform token by default or an explicit access token
-// when --access-token is provided.
+// authenticated with the token configured when constructing the client.
 type ClassicClient struct {
 	http    *resty.Client
 	baseURL string

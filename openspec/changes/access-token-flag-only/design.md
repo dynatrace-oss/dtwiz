@@ -1,3 +1,5 @@
+# Design: Access Token Flag-Only
+
 ## Context
 
 Credentials are resolved in `cmd/auth.go`. `accessToken()` currently returns the `--access-token` flag value, falling back to `os.Getenv("DT_ACCESS_TOKEN")`. `validateCredentials()` validates the platform token via DQL (hard requirement) and, when an explicit access token is set (`accessTok != "" && accessTok != platformTok`), returns it as the Classic API token without probing; otherwise it uses the platform token for API calls. `dtwiz status` renders the Access Token row only when `accessToken() != ""`.
@@ -7,11 +9,13 @@ The problem is the env-var fallback: a stale `DT_ACCESS_TOKEN` in the shell is i
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Access-token auth activates only via an explicit, per-invocation signal (`--access-token`).
 - A leftover `DT_ACCESS_TOKEN` env var can never activate access-token auth.
 - Behavior when no access token is supplied is unchanged: platform token used for Classic API calls.
 
 **Non-Goals:**
+
 - No access-token content validation in the setup/install path. The token stays trusted-on-use there, exactly as today.
 - No change to platform-token DQL validation, URL families, or `AuthHeader()` scheme selection.
 - No new flag is introduced.
