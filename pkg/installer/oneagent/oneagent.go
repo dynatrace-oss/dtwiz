@@ -99,6 +99,9 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 			display.Header("Checking network connectivity...")
 			report := CheckAllEndpoints(endpoints, defaultProbeTimeout)
 			printConnectivityResults(report)
+			if report.FailedCount > 0 {
+				return fmt.Errorf("connectivity check failed: %d/%d endpoints unreachable", report.FailedCount, len(report.Results))
+			}
 			return nil
 		}
 		// Normal install path: transient pending line while probes run,

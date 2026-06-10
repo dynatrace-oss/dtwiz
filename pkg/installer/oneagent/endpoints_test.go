@@ -412,10 +412,7 @@ func TestCheckAllEndpoints_AllBlocked(t *testing.T) {
 }
 
 func TestCheckAllEndpoints_RunsConcurrently(t *testing.T) {
-	old := defaultProbeTimeout
 	timeout := 100 * time.Millisecond
-	defaultProbeTimeout = timeout
-	defer func() { defaultProbeTimeout = old }()
 
 	// 5 unreachable endpoints; if sequential they'd take ≥ 5 * timeout.
 	// If concurrent, total time should be roughly one timeout.
@@ -510,6 +507,32 @@ func TestInstallOneAgentV2_ConnectivityCheckOnly_NoDownload(t *testing.T) {
 	}
 	if downloadCalled {
 		t.Error("download API was called but should not be under --connectivity-check-only")
+	}
+}
+
+func TestInstallOneAgentV2_ConnectivityCheckOnly_FailsWhenEndpointsUnreachable(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("OneAgent not supported on macOS")
+	}
+
+	// Return an unreachable address so all TCP probes fail.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == endpointsAPIPath {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("192.0.2.1:12345"))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	c := newMockClient(t, srv.URL)
+	err := InstallOneAgentV2(c, InstallOptions{
+		MonitoringMode:        "fullstack",
+		ConnectivityCheckOnly: true,
+	})
+	if err == nil {
+		t.Fatal("expected error when endpoints are unreachable, got nil")
 	}
 }
 

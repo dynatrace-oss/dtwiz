@@ -156,7 +156,12 @@ func printConnectivityResults(report ConnectivityReport) {
 	for _, r := range report.Results {
 		label := fmt.Sprintf("%s:%d", r.Endpoint.Host, r.Endpoint.Port)
 		if r.Reachable {
-			display.PrintStatusLine(label, fmt.Sprintf("✓ %s", r.Latency.Round(time.Millisecond)), display.ColorOK)
+			lat := r.Latency.Round(time.Millisecond)
+			latStr := lat.String()
+			if lat == 0 {
+				latStr = "<1ms"
+			}
+			display.PrintStatusLine(label, fmt.Sprintf("✓ %s", latStr), display.ColorOK)
 		} else {
 			display.PrintStatusLine(label, fmt.Sprintf("✗ %s", friendlyDialError(r.Error)), display.ColorError)
 		}
