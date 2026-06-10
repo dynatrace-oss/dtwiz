@@ -8,7 +8,7 @@ The new flow is gated behind `ONEAGENT_POC` during development. Once Task 8 land
 
 ## What Changes
 
-- Pre-flight validation (OS/arch detection, existing-OneAgent check, privilege check) runs before any network work.
+- Pre-flight validation runs before any network work: OS/arch classification via `classifyEnvironment` (pure, never errors), platform validation via `validateEnvironment` (fails fast with actionable messages on macOS, AIX, or unknown platforms), then system-readiness checks via `runPreflightChecks` (existing-OneAgent detection with update-confirmation prompt, sudo availability on Linux when non-root).
 - Agent configuration (`MonitoringMode`) resolved early from defaults and `--monitoring-mode` flag.
 - Tenant endpoints resolved dynamically from `GET /api/v1/deployment/installer/agent/connectioninfo/endpoints` — no hardcoded IPs.
 - Short-lived `InstallerDownload`-scoped token minted via `POST /api/v2/tokens` (1h expiry); the user's long-lived `--access-token` is never passed to the installer binary.
@@ -16,14 +16,14 @@ The new flow is gated behind `ONEAGENT_POC` during development. Once Task 8 land
 - OS-specific install command built from the resolved `AgentConfig` (`--set-monitoring-mode=...`) and executed with sudo/UAC; `--dry-run` prints the command without executing.
 - Post-install verification polls Grail via the Platform API (`POST <apps-url>/platform/storage/query/v1/query:execute`) with a DQL `smartscapeNodes HOST` query filtered on the local hostname, for up to 2 minutes; timeout is a warning, not a failure. This matches the existing `WatchIngest` post-install flow (`pkg/installer/ingest_watch.go`) rather than introducing a parallel classic-API call path.
 - Optional parallel TCP connectivity probe of all resolved endpoints; failures abort the install.
-- New flags on `dtwiz install oneagent`: `--force`, `--monitoring-mode`, `--no-verify-signature`, `--skip-connectivity-check`, `--connectivity-check-only`. `--dry-run` already exists on the parent `install` command.
+- New flags on `dtwiz install oneagent`: `--force`, `--monitoring-mode`, `--no-verify-signature`, `--skip-connectivity-check`, `--connectivity-check-only`, `--print-endpoints`. `--dry-run` already exists on the parent `install` command.
 - `ONEAGENT_POC` feature flag added to `pkg/featureflags/featureflags.go` during development; removed at end of Task 8 when the new flow replaces the old.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `oneagent-preflight`: OS/arch detection, AIX rejection, existing-OneAgent detection (`--force` override), privilege check, agent configuration resolution.
+- `oneagent-preflight`: OS/arch classification (`classifyEnvironment`) and platform validation (`validateEnvironment`) with per-platform rejection messages; existing-OneAgent detection with update-confirmation prompt; sudo availability check on Linux when non-root; agent configuration resolution.
 - `oneagent-tenant-endpoints`: Tenant ID extraction from `--environment`; dynamic endpoint resolution via the Dynatrace tenant API.
 - `oneagent-installer-token`: Mandatory minting of a short-lived `InstallerDownload`-scoped token; no fallback to the user-supplied token.
 - `oneagent-installer-download`: Download via the minted token; Linux signature verification with `openssl cms -verify`.

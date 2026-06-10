@@ -93,9 +93,10 @@ The new `InstallOneAgentV2` orchestrates the following stages, each implemented 
 ```text
 InstallOneAgentV2(c *client.Client, opts InstallOptions) error
   │
-  ├─ DetectEnvironment()                          // Task 2A
-  ├─ RunPreflightChecks(env, opts)                // Task 2B
+  ├─ detectRuntimeEnvironment()                   // Task 2A
+  ├─ validateEnvironment(env)                     // Task 2A
   ├─ ResolveAgentConfig(opts)                     // Task 2.5
+  ├─ runPreflightChecks(env, opts)                // Task 2B
   ├─ ResolveEndpoints(c.Classic, tenantID)        // Task 3
   ├─ (optional) CheckAllEndpoints(...)            // Task 9
   ├─ MintInstallerToken(c.Classic)                // Task 4 — MANDATORY
@@ -116,7 +117,6 @@ The entry function takes `*client.Client` (not `*client.ClassicClient`) because 
 ```go
 type InstallOptions struct {
     DryRun                 bool
-    Force                  bool
     MonitoringMode         string
     NoVerifySignature      bool
     SkipConnectivityCheck  bool
@@ -128,28 +128,30 @@ type InstallOptions struct {
 
 This replaces the positional `(dryRun, quiet, hostGroup)` signature in Task 8.
 
-### 4. Pre-flight: detect environment, then check, then configure
+### 4. Pre-flight: classify, validate, configure, then check system readiness
 
-Pre-flights run in a single function that returns either a fully-populated context (env + agent config) or a typed error. Order:
+Pre-flights run as four discrete steps before any network work. Any failure short-circuits with a clear error.
 
-1. `DetectEnvironment()` populates:
+1. `detectRuntimeEnvironment()` calls the pure `classifyEnvironment(runtime.GOOS, runtime.GOARCH)` and returns an `Environment` with canonical values. It never returns an error — classification always produces a result:
 
    ```go
    type Environment struct {
-       OS        string // "windows", "linux", "aix", "other"
-       Arch      string // "x86", "arm", "other"
-       Supported bool
-       Reason    string // populated when Supported is false
+       OS   string // "linux", "windows", "darwin", "other"
+       Arch string // "x86", "arm", "other"
    }
    ```
 
-   Mapping: `runtime.GOOS` → `OS`; `runtime.GOARCH` (`amd64`/`386` → `"x86"`, `arm64`/`arm` → `"arm"`). `aix` and `darwin` resolve to `Supported: false` with a `Reason`. macOS's existing error message is preserved verbatim.
+   OS mapping: `linux`→`"linux"`, `windows`→`"windows"`, `darwin`→`"darwin"`, anything else (including `aix`, `freebsd`, etc.)→`"other"`. Arch mapping: `amd64`/`386`→`"x86"`, `arm64`/`arm`→`"arm"`, anything else→`"other"`. 32-bit variants (`386`, `arm`) map to the same token as their 64-bit counterparts because the installer API uses `arch=x86` and `arch=arm`.
 
-2. `RunPreflightChecks(env, opts)`:
-   - **Existing-OneAgent check:** call into `pkg/analyzer/detect_oneagent_*.go`. If detected and `opts.Force == false`, return `"OneAgent already installed at {path}. Use --force to reinstall."`. If `opts.Force == true`, log via `logger.Debug` and proceed.
-   - **Privilege check:** Unix calls `sudo -k && sudo -l` (reuse `needsSudo` semantics); Windows checks the process token for the BUILTIN\Administrators SID. On failure: `"This command requires administrator/root privileges. Please run with sudo or as an administrator."`.
+2. `validateEnvironment(env)` encodes the supported platform set and returns targeted, actionable errors. Supported combinations (`linux`/`windows` × `x86`/`arm`) return nil. OS is checked before arch so the most actionable message surfaces first:
 
-3. `ResolveAgentConfig(opts)`:
+   | Condition | Error |
+   |---|---|
+   | `env.OS == "darwin"` | `"OneAgent direct install is not supported on macOS; use Docker or Linux"` (existing message, preserved) |
+   | `env.OS == "other"` | `"OneAgent direct install is not supported on <runtime.GOOS>; use Linux or Windows"` |
+   | `env.Arch == "other"` | `"OneAgent direct install is not supported on <runtime.GOARCH> architecture; use an x86 or ARM host"` |
+
+3. `ResolveAgentConfig(opts)` resolves the agent's runtime configuration before the system-readiness checks:
 
    ```go
    type AgentConfig struct {
@@ -158,6 +160,18 @@ Pre-flights run in a single function that returns either a fully-populated conte
    ```
 
    `--monitoring-mode <value>` overrides the default. No allow-list — the value is passed through to `--set-monitoring-mode=<value>`.
+
+4. `runPreflightChecks(env, opts)` validates system readiness and returns a `preflightResult`:
+
+   ```go
+   type preflightResult struct {
+       IsUpdate bool
+   }
+   ```
+
+   Checks run in order:
+   - **Existing-OneAgent check:** calls `oneAgentInstalled()` (reuses `pkg/analyzer/detect_oneagent_*.go`). Sets `IsUpdate = true` regardless of dry-run mode so the dry-run plan header can show "Would update" vs "Would install". When `IsUpdate && !opts.DryRun && !opts.Quiet`, prompts for confirmation via `installer.ConfirmProceed`; on decline returns `installer.ErrInstallCancelled`.
+   - **Sudo availability:** when `env.OS == "linux"` and the process is non-root (`needsSudoFn()` returns true), resolves the `sudo` binary via `sudoPathFn()`. Fails fast with `"sudo not found: install sudo or run dtwiz as root"` if missing. Not checked on Windows or when running as root.
 
 ### 5. Tenant ID extraction
 
@@ -289,10 +303,10 @@ Logging is layered:
 
 | Stage | Level | Message | Keys |
 |---|---|---|---|
-| Env detection | Debug | `"detected environment"` | `os`, `arch`, `supported`, `reason` |
-| Existing-agent check | Debug | `"existing oneagent detected"` | `path`, `force_override` |
-| Privilege check | Debug | `"privilege check"` | `privileged`, `os` |
-| Agent config | Debug | `"resolved agent config"` | `monitoring-mode`, `app_log_content_access` |
+| Env detection | Debug | `"detected environment"` | `os`, `arch` |
+| Preflight: existing install | Debug | `"preflight: oneagent detection"` | `is_update` |
+| Preflight: sudo available | Debug | `"preflight: sudo available"` | — |
+| Agent config | Debug | `"resolved agent config"` | `monitoring-mode`, `override_set` |
 | Tenant ID | Debug | `"extracted tenant id"` | `tenant_id` (NOT the full URL if it contains credentials) |
 | Endpoint API call | Debug | `"resolving tenant endpoints"` | `url` |
 | Endpoint resolution | Verbose | `"resolved tenant endpoints"` | `count` |
@@ -338,7 +352,6 @@ All new flags live on `installOneAgentCmd` (not on `installCmd`, which already o
 
 | Flag | Type | Default | Purpose |
 |---|---|---|---|
-| `--force` | bool | `false` | Override existing-OneAgent preflight |
 | `--monitoring-mode` | string | `"fullstack"` | Passed through as `--set-monitoring-mode` |
 | `--no-verify-signature` | bool | `false` | Skip Linux signature verification |
 | `--skip-connectivity-check` | bool | `false` | Skip Task 9 probe |
