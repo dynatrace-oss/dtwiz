@@ -75,7 +75,6 @@ type InstallOptions struct {
     NoVerifySignature     bool
     SkipConnectivityCheck bool
     ConnectivityCheckOnly bool
-    PrintEndpoints        bool
     Quiet                 bool
 }
 ```
@@ -90,7 +89,6 @@ All new flags are added to the `installOneAgentCmd` Cobra command definition (no
 | `--no-verify-signature` | bool | `false` |
 | `--skip-connectivity-check` | bool | `false` |
 | `--connectivity-check-only` | bool | `false` |
-| `--print-endpoints` | bool | `false` |
 
  Pre-existing flags (`--dry-run`, `--quiet`, `--host-group`) remain unchanged on their current parent command(s). `--host-group` continues to apply to the existing v1 installer flow; the v2 scaffolding in this change does not model it in `InstallOptions` yet.
 
@@ -105,7 +103,6 @@ opts := oneagent.InstallOptions{
     NoVerifySignature:     flagNoVerifySignature,
     SkipConnectivityCheck: flagSkipConnectivityCheck,
     ConnectivityCheckOnly: flagConnectivityCheckOnly,
-    PrintEndpoints:        flagPrintEndpoints,
     Quiet:                 quiet,
 }
 ```

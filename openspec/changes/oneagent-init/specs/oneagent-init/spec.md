@@ -95,14 +95,13 @@ New flags SHALL be defined on `installOneAgentCmd` (not on the parent `installCm
 | `--no-verify-signature` | bool | `false` | Skip Linux signature verification | 5 |
 | `--skip-connectivity-check` | bool | `false` | Skip connectivity probe | 9 |
 | `--connectivity-check-only` | bool | `false` | Run only probe, then exit | 9 |
-| `--print-endpoints` | bool | `false` | Print resolved endpoints, then exit | 9 |
 
 Pre-existing flags (`--dry-run`, `--quiet`) remain unchanged.
 
 #### Scenario: Flags are available on install-oneagent subcommand
 
 - **GIVEN** `--help` text is displayed for `dtwiz install oneagent`
-- **THEN** the flag list includes `--monitoring-mode`, `--no-verify-signature`, `--skip-connectivity-check`, `--connectivity-check-only`, `--print-endpoints`
+- **THEN** the flag list includes `--monitoring-mode`, `--no-verify-signature`, `--skip-connectivity-check`, `--connectivity-check-only`
 
 ### Requirement: InstallOptions struct carries all CLI-derived inputs
 
@@ -115,7 +114,6 @@ type InstallOptions struct {
     NoVerifySignature     bool
     SkipConnectivityCheck bool
     ConnectivityCheckOnly bool
-    PrintEndpoints        bool
     Quiet                 bool
 }
 ```

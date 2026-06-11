@@ -88,33 +88,40 @@ Resolve agent communication endpoints dynamically from the tenant API. Drop the 
 
 ### Part A — Endpoint resolution
 
-- [ ] 3.1 Define `Endpoint` struct (`Host string`, `Port int`)
-- [ ] 3.2 Implement `ResolveEndpoints(c *client.ClassicClient) ([]Endpoint, error)` calling `GET /api/v1/deployment/installer/agent/connectioninfo/endpoints` via the resty client
-- [ ] 3.3 Parse the response into `[]Endpoint`; default port `443` when omitted; tolerate both hostnames and IP literals
-- [ ] 3.4 Return wrapped errors that include the URL and HTTP status when the API returns 4xx/5xx
-- [ ] 3.5 Return an error when the response is empty (treat as a server bug)
-- [ ] 3.6 Unit tests with `httptest.Server`: happy path (multiple endpoints), empty response, 401 with body, 5xx
-- [ ] 3.7 Confirm `installer.ExtractTenantID()` correctly handles `live.dynatrace.com`, `apps.dynatrace.com`, and `/e/<tenantId>` Managed URLs; add cases if missing
-- [ ] 3.8 Emit `logger.Debug("extracted tenant id", "tenant_id", id)` after extraction; do NOT log the full `--environment` URL at Debug if it may contain embedded credentials
-- [ ] 3.9 Emit `logger.Debug("resolving tenant endpoints", "url", reqURL)` before the API call
-- [ ] 3.10 Emit one `logger.Debug("tenant endpoint", "host", e.Host, "port", e.Port)` per parsed endpoint
-- [ ] 3.11 Emit `logger.Verbose("resolved tenant endpoints", "count", len(endpoints))` as the operator-visible milestone
-- [ ] 3.12 Unit test (with captured stderr): `--debug` shows per-endpoint lines; `-v` only shows the summary line; default shows nothing
+- [x] 3.1 Define `Endpoint` struct (`Host string`, `Port int`)
+- [x] 3.2 Implement `ResolveEndpoints(c *client.ClassicClient) ([]Endpoint, error)` calling `GET /api/v1/deployment/installer/agent/connectioninfo/endpoints` via the resty client
+- [x] 3.3 Parse the response into `[]Endpoint`; default port `443` when omitted; tolerate both hostnames and IP literals
+- [x] 3.3a Parse the response body using `strings.FieldsFunc` splitting on `;`, `\n`, and `\r` so that semicolon-separated, newline-separated, and CRLF-terminated responses are all handled identically
+- [x] 3.3b Strip HTTPS scheme (`https://`) and path component (`/communication` etc.) from entries before parsing, so that full URL-format responses (`https://host:port/path`) are handled in addition to bare `host:port`
+- [x] 3.3c Unit tests for: newline-separated response, CRLF-separated response (verify no stray `\r` in host), full HTTPS URL entries, and mixed separator formats
+- [x] 3.4 Return wrapped errors that include the URL and HTTP status when the API returns 4xx/5xx
+- [x] 3.5 Return an error when the response is empty (treat as a server bug)
+- [x] 3.6 Unit tests with `httptest.Server`: happy path (multiple endpoints), empty response, 401 with body, 5xx
+- [x] 3.7 Confirm `installer.ExtractTenantID()` correctly handles `live.dynatrace.com`, `apps.dynatrace.com`, and `/e/<tenantId>` Managed URLs; add cases if missing
+- [x] 3.7a Fix: `ExtractTenantID` was not handling Managed URLs (`https://host/e/<id>`); added path-based extraction: when `url.Parse` succeeds and the path matches `/e/<id>`, return `<id>` from the path (not the first DNS label of the host). Added test case to `pkg/installer/installer_test.go`.
+- [x] 3.8 Emit `logger.Debug("extracted tenant id", "tenant_id", id)` after extraction; do NOT log the full `--environment` URL at Debug if it may contain embedded credentials
+- [x] 3.9 Emit `logger.Debug("resolving tenant endpoints", "url", reqURL)` before the API call
+- [x] 3.10 Emit one `logger.Debug("tenant endpoint", "host", e.Host, "port", e.Port)` per parsed endpoint
+- [x] 3.11 Emit `logger.Verbose("resolved tenant endpoints", "count", len(endpoints))` as the operator-visible milestone
+- [x] 3.12 Unit test (with captured stderr): `--debug` shows per-endpoint lines; `-v` only shows the summary line; default shows nothing
 
 ### Part B — Connectivity probe
 
-- [ ] 3.13 Define `ConnectivityResult` struct (`Endpoint`, `Reachable bool`, `Latency time.Duration`, `Error string`) and `ConnectivityReport` struct (`Results []ConnectivityResult`, `AllPassed bool`, `FailedCount int`) for use by the diagnostic exit modes below
-- [ ] 3.14 Implement `CheckAllEndpoints(endpoints []Endpoint, timeout time.Duration) ConnectivityReport` using `net.DialTimeout("tcp", "host:port", timeout)` per endpoint; run probes concurrently and collect results with timing and error details
-- [ ] 3.15 Use a default probe timeout of `5s` per endpoint; do not make it configurable at this stage
-- [ ] 3.16 Wire `opts.ConnectivityCheckOnly` (from `InstallOptions`): if `true`, call `CheckAllEndpoints`, print a table-format report (`host:port  reachable  latency  error`), then return `nil` without proceeding to token minting, download, or install
-- [ ] 3.17 Wire `opts.PrintEndpoints` (from `InstallOptions`): if `true`, print resolved endpoints one per line in `host:port` format after `ResolveEndpoints`, then return `nil` without probing or installing
-- [ ] 3.18 When `len(report.Results with Reachable==false) > 0` in the normal install path, print a WARNING block and continue (non-blocking)
-- [ ] 3.19 When all endpoints are reachable in the normal install path, print nothing (do not add a "all endpoints reachable" success line at default verbosity)
-- [ ] 3.20 Wire `opts.SkipConnectivityCheck` (from `InstallOptions`): when `true`, skip `CheckAllEndpoints` entirely; emit `logger.Debug("skipping connectivity probe", "reason", "--skip-connectivity-check")`
-- [ ] 3.21 Emit one `logger.Debug("endpoint probe result", "host", r.Endpoint.Host, "port", r.Endpoint.Port, "reachable", r.Reachable, "latency_ms", r.Latency.Milliseconds(), "error", r.Error)` per result when probing
-- [ ] 3.22 Emit `logger.Verbose("connectivity probe complete", "total", len(report.Results), "failed", report.FailedCount)` after all probes finish (only when the probe ran in the normal path)
-- [ ] 3.23 Unit tests:
-  - Normal path: all reachable (no output, no remediation), some blocked (warning printed), all blocked, `SkipConnectivityCheck == true` (no probe, no output)
+- [x] 3.13 Define `ConnectivityResult` struct (`Endpoint`, `Reachable bool`, `Latency time.Duration`, `Error string`) and `ConnectivityReport` struct (`Results []ConnectivityResult`, `AllPassed bool`, `FailedCount int`) for use by the diagnostic exit modes below
+- [x] 3.14 Implement `CheckAllEndpoints(endpoints []Endpoint, timeout time.Duration) ConnectivityReport` using `net.DialTimeout("tcp", "host:port", timeout)` per endpoint; run probes concurrently and collect results with timing and error details
+- [x] 3.15 Use a default probe timeout of `5s` per endpoint; do not make it configurable at this stage
+- [x] 3.16 Wire `opts.ConnectivityCheckOnly` (from `InstallOptions`): if `true`, call `CheckAllEndpoints`, print one `display.PrintStatusLine` per endpoint (`host:port` as label, `✓ <latency>` in green or `✗ <friendly-error>` in red), then return `nil` without proceeding to token minting, download, or install
+- [x] 3.16a Print `display.Header("Checking network connectivity...")` BEFORE calling `CheckAllEndpoints` when `ConnectivityCheckOnly` is true, so the header appears at the start of the dial window rather than after it
+- [x] 3.18 When `len(report.Results with Reachable==false) > 0` in the normal install path, print a WARNING block and return a non-nil error to abort the install
+- [x] 3.18a In the normal install path, call `display.PrintPending("connectivity", "checking endpoints...")` before `CheckAllEndpoints` and `display.ClearPending()` after it returns, giving TTY users a transient in-progress indicator
+- [x] 3.18b Implement `friendlyDialError(errStr string) string` that maps raw `net.DialTimeout` error strings to short human-readable phrases: `"i/o timeout"` / `"deadline exceeded"` / `"timed out"` → `"timed out"`, `"connection refused"` → `"connection refused"`, `"no route to host"` → `"no route to host"`, `"network is unreachable"` → `"network unreachable"`, `"connection reset"` → `"connection reset"`, anything else → `"unreachable"`
+- [x] 3.18c Update `printConnectivityWarning` format: header says `"Warning: connectivity check failed"`; lead with `display.PrintStatusLine("action", "allow outbound TCP to the following addresses", display.ColorWarning)`; frame the address list between two `display.PrintSectionDivider()` calls; use `friendlyDialError` for error messages; update proxy tip to `"if a proxy is required, set HTTP_PROXY / HTTPS_PROXY"`
+- [x] 3.18d Unit test for `friendlyDialError`: all mapping cases including the unknown-error fallback and empty-string case
+- [x] 3.19 When all endpoints are reachable in the normal install path, print `display.PrintStatusLine("connectivity", "all endpoints reachable", display.ColorOK)`
+- [x] 3.20 Wire `opts.SkipConnectivityCheck` (from `InstallOptions`): when `true`, skip `CheckAllEndpoints` entirely; emit `logger.Debug("skipping connectivity probe", "reason", "--skip-connectivity-check")`
+- [x] 3.21 Emit one `logger.Debug("endpoint probe result", "host", r.Endpoint.Host, "port", r.Endpoint.Port, "reachable", r.Reachable, "latency_ms", r.Latency.Milliseconds(), "error", r.Error)` per result when probing
+- [x] 3.22 Emit `logger.Verbose("connectivity probe complete", "total", len(report.Results), "failed", report.FailedCount)` after all probes finish (only when the probe ran in the normal path)
+- [x] 3.23 Unit tests:
+  - Normal path: all reachable (success line printed), some blocked (warning printed + error returned), all blocked, `SkipConnectivityCheck == true` (no probe, no output)
   - `--connectivity-check-only`: mixed reachable/blocked endpoints print the expected table, no token mint
-  - `--print-endpoints`: prints correct `host:port` lines, exits before probing
   - Use an in-process TCP listener (`net.Listen`) to control reachability without real network access

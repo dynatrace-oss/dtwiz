@@ -27,7 +27,7 @@ Set up the foundational structure for the OneAgent PoC implementation: feature f
 ### Package: pkg/installer/oneagent/
 
 - [x] 1.5 Create `pkg/installer/oneagent/oneagent.go` with type definitions: `Environment`, `AgentConfig`, `InstallOptions`
-- [x] 1.6 Define `InstallOptions` struct carrying `DryRun`, `MonitoringMode`, `NoVerifySignature`, `SkipConnectivityCheck`, `ConnectivityCheckOnly`, `PrintEndpoints`, `Quiet`
+- [x] 1.6 Define `InstallOptions` struct carrying `DryRun`, `MonitoringMode`, `NoVerifySignature`, `SkipConnectivityCheck`, `ConnectivityCheckOnly`, `Quiet`
 - [x] 1.7 Implement `InstallOneAgentV2(c *client.Client, opts InstallOptions) error` — full implementation, not a stub
 - [x] 1.8 Implement `DefaultAgentConfig()`, `ResolveAgentConfig()`, `detectRuntimeEnvironment()` in `oneagent.go`; `DownloadInstaller()` in `download.go`; `VerifyInstallerSignature()` in `verify.go`
 - [x] 1.9 Ensure code compiles with `go build ./...`
@@ -40,7 +40,7 @@ Set up the foundational structure for the OneAgent PoC implementation: feature f
 
 ### CLI Flags
 
-- [x] 1.13 Add flag definitions on `installOneAgentCmd`: `--monitoring-mode`, `--no-verify-signature`, `--skip-connectivity-check`, `--connectivity-check-only`, `--print-endpoints`
+- [x] 1.13 Add flag definitions on `installOneAgentCmd`: `--monitoring-mode`, `--no-verify-signature`, `--skip-connectivity-check`, `--connectivity-check-only`
 - [x] 1.14 Each flag is properly documented in the cobra command definition
 - [x] 1.15 Unit test: flags parse correctly from the command line
 

@@ -145,15 +145,25 @@ func AppsURL(environmentURL string) string {
 // Dynatrace environment URL.
 // e.g. "https://abc12345.live.dynatrace.com" → "abc12345"
 func ExtractTenantID(environmentURL string) string {
-	u, err := url.Parse(environmentURL)
+	s := environmentURL
+	if !strings.Contains(s, "://") {
+		s = "https://" + s
+	}
+	u, err := url.Parse(s)
 	if err != nil || u.Host == "" {
-		// Fallback: take everything before the first dot.
-		s := strings.TrimPrefix(environmentURL, "https://")
-		s = strings.TrimPrefix(s, "http://")
-		if idx := strings.Index(s, "."); idx > 0 {
-			return s[:idx]
+		// Strip any scheme before searching for the first DNS label.
+		raw := environmentURL
+		if i := strings.Index(raw, "://"); i >= 0 {
+			raw = raw[i+3:]
 		}
-		return s
+		if idx := strings.Index(raw, "."); idx > 0 {
+			return raw[:idx]
+		}
+		return raw
+	}
+	// Managed URL: /e/<tenantId>
+	if parts := strings.SplitN(strings.Trim(u.Path, "/"), "/", 3); len(parts) >= 2 && parts[0] == "e" && parts[1] != "" {
+		return parts[1]
 	}
 	host := u.Hostname()
 	if idx := strings.Index(host, "."); idx > 0 {

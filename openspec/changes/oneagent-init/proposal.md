@@ -10,7 +10,7 @@ This change lays that foundation without touching the core installer logic.
 - **New package:** `pkg/installer/oneagent/` with entry point `InstallOneAgentV2()` and implementations split across three files: `oneagent.go` (types, entry point, config resolution), `download.go` (installer download), `verify.go` (CMS signature verification).
 - **Type definitions:** `Environment`, `AgentConfig`, `InstallOptions` — all exported in `pkg/installer/oneagent`.
 - **Tests:** `pkg/installer/oneagent/oneagent_test.go` with HTTP mock helpers and full test coverage.
-- **CLI flags:** `--force`, `--monitoring-mode`, `--no-verify-signature`, `--skip-connectivity-check`, `--connectivity-check-only`, `--print-endpoints` — all wired on `installOneAgentCmd`.
+- **CLI flags:** `--force`, `--monitoring-mode`, `--no-verify-signature`, `--skip-connectivity-check`, `--connectivity-check-only` — all wired on `installOneAgentCmd`.
 - **Feature-flag branching:** In `cmd/install.go`, conditional dispatch based on `ONEAGENT_POC` enables the new flow when the flag is set.
 
 ## Capabilities

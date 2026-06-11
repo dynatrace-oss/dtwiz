@@ -19,7 +19,6 @@ type InstallOptions struct {
 	NoVerifySignature     bool
 	SkipConnectivityCheck bool
 	ConnectivityCheckOnly bool
-	PrintEndpoints        bool
 	Quiet                 bool
 }
 
@@ -79,12 +78,45 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 		return nil
 	}
 
-	if updating && !opts.Quiet {
+	if updating && !opts.Quiet && !opts.ConnectivityCheckOnly {
 		ok, err := installer.ConfirmProceed("  OneAgent is already installed. Update?")
 		if err != nil || !ok {
 			display.PrintStatusLine("result", "update cancelled", display.ColorMuted)
 			return installer.ErrInstallCancelled
 		}
+	}
+
+	if opts.SkipConnectivityCheck {
+		logger.Debug("skipping connectivity probe", "reason", "--skip-connectivity-check")
+	} else {
+		endpoints, err := ResolveEndpoints(c.Classic)
+		if err != nil {
+			return err
+		}
+		if opts.ConnectivityCheckOnly {
+			// Print header before the probe so the user sees what's happening
+			// during the dial timeout window.
+			display.Header("Checking network connectivity...")
+			report := CheckAllEndpoints(endpoints, defaultProbeTimeout)
+			printConnectivityResults(report)
+			if report.FailedCount > 0 {
+				return fmt.Errorf("connectivity check failed: %d/%d endpoints unreachable", report.FailedCount, len(report.Results))
+			}
+			return nil
+		}
+		// Normal install path: transient pending line while probes run,
+		// then clear it — no lingering output unless something failed.
+		display.PrintPending("connectivity", "checking endpoints...")
+		report := CheckAllEndpoints(endpoints, defaultProbeTimeout)
+		display.ClearPending()
+		if report.FailedCount > 0 {
+			printConnectivityWarning(report)
+			return fmt.Errorf("connectivity check failed: %d/%d endpoints unreachable", report.FailedCount, len(report.Results))
+		}
+		display.PrintStatusLine("connectivity", "all endpoints reachable", display.ColorOK)
+	}
+	if opts.ConnectivityCheckOnly {
+		return nil
 	}
 
 	installerPath, err := DownloadInstaller(c.Classic, env)

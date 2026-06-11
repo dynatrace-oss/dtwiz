@@ -15,8 +15,8 @@ The new flow is gated behind `ONEAGENT_POC` during development. Once Task 8 land
 - Linux installer signature verified against `https://ca.dynatrace.com/dt-root.cert.pem` using `openssl cms -verify`; skippable via `--no-verify-signature`.
 - OS-specific install command built from the resolved `AgentConfig` (`--set-monitoring-mode=...`) and executed with sudo/UAC; `--dry-run` prints the command without executing.
 - Post-install verification polls Grail via the Platform API (`POST <apps-url>/platform/storage/query/v1/query:execute`) with a DQL `smartscapeNodes HOST` query filtered on the local hostname, for up to 2 minutes; timeout is a warning, not a failure. This matches the existing `WatchIngest` post-install flow (`pkg/installer/ingest_watch.go`) rather than introducing a parallel classic-API call path.
-- Optional parallel TCP connectivity probe of all resolved endpoints; failures are warnings, not blockers.
-- New flags on `dtwiz install oneagent`: `--force`, `--monitoring-mode`, `--no-verify-signature`, `--skip-connectivity-check`, `--connectivity-check-only`, `--print-endpoints`. `--dry-run` already exists on the parent `install` command.
+- Optional parallel TCP connectivity probe of all resolved endpoints; failures abort the install.
+- New flags on `dtwiz install oneagent`: `--force`, `--monitoring-mode`, `--no-verify-signature`, `--skip-connectivity-check`, `--connectivity-check-only`. `--dry-run` already exists on the parent `install` command.
 - `ONEAGENT_POC` feature flag added to `pkg/featureflags/featureflags.go` during development; removed at end of Task 8 when the new flow replaces the old.
 
 ## Capabilities
