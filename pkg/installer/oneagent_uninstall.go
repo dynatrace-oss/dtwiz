@@ -16,7 +16,6 @@ const (
 	// Stub directory left behind by the uninstall script; we clean it up.
 	linuxInstallDir = "/opt/dynatrace/oneagent"
 
-	// Preserved by the uninstall script for potential reinstall.
 	linuxStateDir = "/var/lib/dynatrace/oneagent"
 )
 
@@ -70,7 +69,6 @@ func uninstallOneAgentLinux(dryRun bool) error {
 	}
 	fmt.Println()
 
-	// Run the uninstall script, prepending sudo if needed.
 	args := []string{linuxUninstallScript}
 	if needsSudo {
 		args = append([]string{"sudo"}, args...)
@@ -90,9 +88,8 @@ func uninstallOneAgentLinux(dryRun bool) error {
 		fmt.Printf("  Warning: could not remove %s: %v\n", linuxInstallDir, err)
 	}
 
-	// Inform the user about the preserved state directory (intentionally kept
-	// by the uninstall script for potential reinstall).
-	if _, statErr := os.Stat(linuxStateDir); statErr == nil {
+	// A permission error on stat doesn't mean the directory is absent.
+	if _, statErr := os.Stat(linuxStateDir); !os.IsNotExist(statErr) {
 		logger.Debug("state directory preserved by uninstall script", "path", linuxStateDir)
 		fmt.Printf("  Note: configuration preserved at %s\n", linuxStateDir)
 	}
@@ -102,6 +99,18 @@ func uninstallOneAgentLinux(dryRun bool) error {
 }
 
 func removeResidualDir(path string, needsSudo bool) error {
+	if needsSudo {
+		// Skip stat — a permission error on stat does not mean sudo rm -rf will
+		// fail, and rm -rf is a no-op when the path is absent (-f suppresses the
+		// "no such file" error).
+		logger.Debug("removing residual install directory", "path", path, "needs_sudo", true)
+		if err := RunCommand("sudo", "rm", "-rf", path); err != nil {
+			return fmt.Errorf("sudo rm -rf %s: %w", path, err)
+		}
+		logger.Verbose("removed residual install directory", "path", path)
+		return nil
+	}
+
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
 		logger.Debug("residual directory already absent", "path", path)
@@ -115,18 +124,10 @@ func removeResidualDir(path string, needsSudo bool) error {
 		return nil
 	}
 
-	logger.Debug("removing residual install directory", "path", path, "needs_sudo", needsSudo)
-
-	if needsSudo {
-		if err := RunCommand("sudo", "rm", "-rf", path); err != nil {
-			return fmt.Errorf("sudo rm -rf %s: %w", path, err)
-		}
-	} else {
-		if err := os.RemoveAll(path); err != nil {
-			return fmt.Errorf("rm -rf %s: %w", path, err)
-		}
+	logger.Debug("removing residual install directory", "path", path, "needs_sudo", false)
+	if err := os.RemoveAll(path); err != nil {
+		return fmt.Errorf("rm -rf %s: %w", path, err)
 	}
-
 	logger.Verbose("removed residual install directory", "path", path)
 	return nil
 }
