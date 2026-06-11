@@ -7,9 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.23] - 2026-06-11
+
+### Added
+
+- Kubernetes distribution detection extended: detects RKE2, GKE Autopilot, EKS Bottlerocket, and `kind` sub-variants via kubectl probes
+
 ### Changed
 
 - Access-token auth is now opt-in and flag-only: it activates only when `--access-token` is passed explicitly and is no longer read from the `DT_ACCESS_TOKEN` env var. This prevents a leftover `DT_ACCESS_TOKEN` from silently switching Classic API calls off the platform token. When `--access-token` is absent, the platform token is used for Classic API calls.
+
+### Fixed
+
+- `install aws`: accept HTTP 202 from the extension install endpoint (normal response when the extension is already installed)
+- `install aws`: resolve latest installed `da-aws` extension version dynamically for monitoring config creation; avoids 404 caused by a hardcoded version mismatch
+- `install aws`: use the latest CloudFormation template URL; fixes 403 returned by the previously pinned (retired) version
+- `install aws`: enable monitoring config and credentials after CloudFormation deploy (aligns with `dtctl enable aws monitoring` behaviour)
+- `watch`: add cloud-platform signal line (AWS metrics + `da-*` logs by `aws.resource.type`) scoped to the installed account; surfaces activity before Smartscape topology builds up
+- `watch`: escape AWS account ID before interpolating into DQL to prevent injection via malformed account IDs
 
 ## [0.2.22] - 2026-06-09
 
@@ -311,7 +326,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.22...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.23...HEAD
+[0.2.23]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.22...v0.2.23
 [0.2.22]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.21...v0.2.22
 [0.2.21]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.20...v0.2.21
 [0.2.20]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.19...v0.2.20
