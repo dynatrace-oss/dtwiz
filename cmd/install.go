@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
@@ -100,7 +101,13 @@ var installKubernetesCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := installer.InstallKubernetes(envURL, classicTok, "", installDryRun); err != nil {
+		k8sInfo := analyzer.DetectKubernetes()
+		clusterName := ""
+		distro := k8sInfo.Distribution
+		if k8sInfo.Available {
+			clusterName = k8sInfo.Cluster
+		}
+		if err := installer.InstallKubernetes(envURL, classicTok, clusterName, distro, installDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
 				return nil
 			}

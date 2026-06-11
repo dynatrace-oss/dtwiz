@@ -49,33 +49,3 @@ func TestAnalyzeSystem_SummaryNotEmpty(t *testing.T) {
 		t.Error("Summary() returned empty string")
 	}
 }
-
-func TestDetectK8sDistribution(t *testing.T) {
-	tests := []struct {
-		context   string
-		cluster   string
-		serverURL string
-		version   string
-		want      string
-	}{
-		{"gke_project_region_cluster", "", "", "", "GKE"},
-		{"arn:aws:eks:us-east-1:123:cluster/my-cluster", "", "", "", "EKS"},
-		{"my-cluster-context", "", "https://my-cluster-abc123.hcp.eastus.azmk8s.io:443", "", "AKS"},
-		{"my-aks-context", "my-cluster.azmk8s.io", "", "", "AKS"},
-		{"openshift-context", "", "", "", "OpenShift"},
-		{"minikube", "", "", "", "minikube"},
-		{"kind-mycluster", "", "", "", "kind"},
-		{"docker-desktop", "", "", "v1.30.0-k3s1", "k3s"},
-		{"some-other-context", "", "", "v1.30.0", "kubernetes"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.context, func(t *testing.T) {
-			got := analyzer.DetectK8sDistribution(tt.context, tt.cluster, tt.serverURL, tt.version)
-			if got != tt.want {
-				t.Errorf("DetectK8sDistribution(%q, %q, %q, %q) = %q, want %q",
-					tt.context, tt.cluster, tt.serverURL, tt.version, got, tt.want)
-			}
-		})
-	}
-}

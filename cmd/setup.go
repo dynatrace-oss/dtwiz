@@ -148,7 +148,13 @@ var setupCmd = &cobra.Command{
 				installErr = installer.InstallOneAgent(c.Classic, setupDryRun, false, "")
 			}
 		case recommender.MethodKubernetes:
-			installErr = installer.InstallKubernetes(envURL, classicTok, "" /* name */, setupDryRun)
+			k8sClusterName := ""
+			k8sDistro := ""
+			if info.Kubernetes.Available {
+				k8sClusterName = info.Kubernetes.Cluster
+				k8sDistro = info.Kubernetes.Distribution
+			}
+			installErr = installer.InstallKubernetes(envURL, classicTok, k8sClusterName, k8sDistro, setupDryRun)
 		case recommender.MethodDocker:
 			installErr = installer.InstallDocker(envURL, classicTok, setupDryRun)
 		case recommender.MethodOtelCollector:

@@ -22,11 +22,11 @@
 
 ## Decisions
 
-### 1. Pass `distro string` into `InstallKubernetes()` rather than re-detecting inside it
+### 1. Pass `clusterName` and `distro` into `InstallKubernetes()` rather than re-detecting inside it
 
-The analyzer already runs before `installKubernetesCmd` executes. Re-detecting inside the installer would duplicate kubectl calls and add latency. The command layer fetches `SystemInfo`, reads `info.Kubernetes.Distribution`, and passes it down. If analyzer hasn't run (dry-run or future non-interactive path), the empty string falls through to the `"kubernetes"` default case in `distroTemplateData()`.
+The analyzer already runs before `installKubernetesCmd` executes and populates `KubernetesInfo.Cluster` and `KubernetesInfo.Distribution`. Passing both from the caller avoids redundant `kubectl config view` and probe calls. When called standalone (e.g. `dtwiz install kubernetes` without a prior analyze), `clusterName` is empty and `InstallKubernetes()` falls back to its internal `fetchClusterName()`. `distro` empty falls through to the `"kubernetes"` default case in `distroTemplateData()`.
 
-Alternative considered: detect inside `InstallKubernetes()`. Rejected — violates single-responsibility, adds ~3 kubectl calls to install path already covered by analyze.
+Alternative considered: detect inside `InstallKubernetes()`. Rejected — violates single-responsibility, adds kubectl calls to the install path already covered by analyze.
 
 ### 2. New fields on `dynakubeTemplateData` over per-distro template files
 
@@ -36,22 +36,27 @@ Alternative considered: per-distro YAML files embedded as separate `//go:embed` 
 
 ### 3. Sub-variant detection requires live kubectl probes beyond the existing 4-string signature
 
-`DetectK8sDistribution(context, cluster, serverURL, serverVersion string)` is a pure function — fast, testable, no I/O. GKE Autopilot and EKS Bottlerocket cannot be distinguished from their parents using only these four strings. Two new probes are needed:
+`DetectK8sDistribution(context, cluster, serverURL, serverVersion string)` is a pure function — fast, testable, no I/O. GKE Autopilot and EKS Bottlerocket cannot be distinguished from their parents using only these four strings. Three probes are needed:
 
 - Autopilot: `kubectl get namespace kube-system -o jsonpath={.metadata.annotations}` — check for `autopilot.gke.io`
 - Bottlerocket: `kubectl get nodes -o jsonpath={.items[*].status.nodeInfo.osImage}` — check for "Bottlerocket"
+- TKGI: `kubectl get namespace pks-system --ignore-not-found -o jsonpath={.status.phase}` — check for `"Active"` (not merely non-empty, to avoid false positives from migrated clusters with a `Terminating` namespace)
 
-These probes run only after the parent distro is confirmed (GKE or EKS), keeping the happy path fast. The pure `DetectK8sDistribution()` function remains unchanged for unit-testability; a new `ProbeK8sSubVariant(distro string) string` function wraps the kubectl calls.
+These probes run only after the parent distro is confirmed, keeping the happy path fast. The pure `DetectK8sDistribution()` function remains unchanged for unit-testability; `ProbeK8sSubVariant(distro string) string` runs the kubectl calls and delegates classification to `ClassifyK8sSubVariant(distro, output string, err error) string`.
 
 ### 4. Detection order: resolve sub-variants after parent match
 
 `ProbeK8sSubVariant` is called after `DetectK8sDistribution` returns the parent distro. This keeps the existing pure function contract intact and avoids adding kubectl calls to every detection path.
 
+### 5. Classification logic extracted into a pure function for testability
+
+`ClassifyK8sSubVariant` contains all the decision rules (string checks on kubectl output) with no I/O. This allows the full test matrix to be expressed as a plain table test without PATH injection or fake subprocesses, matching the pattern used for `TestDetectK8sDistribution`.
+
 ## Risks / Trade-offs
 
 `ProbeK8sSubVariant` kubectl calls add latency on GKE and EKS paths (~1–2s per probe with 5s timeout) → mitigated by running probes only when parent matches, with short timeouts and graceful fallback to parent distro on error.
 
-TKGI detection via `pks-system` namespace may produce false positives on clusters that previously ran TKGI but were migrated → acceptable edge case; user can override with `--platform` flag (future).
+TKGI detection via `pks-system` namespace phase check reduces false positives from migrated clusters (a `Terminating` namespace no longer triggers `"TKGI"`), but a stale `Active` namespace on a non-TKGI cluster remains a theoretical edge case → acceptable; user can override with `--platform` flag (future).
 
 `dynakube.tmpl` conditional blocks increase template complexity → mitigated by table-driven manifest assertion tests per distro.
 

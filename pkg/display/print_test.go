@@ -107,6 +107,43 @@ func TestPrintError_FormatsLabelAndError(t *testing.T) {
 	}
 }
 
+func captureErrorOutput(t *testing.T, fn func()) string {
+	t.Helper()
+
+	var buf bytes.Buffer
+
+	origError := color.Error
+	color.Error = &buf
+	t.Cleanup(func() { color.Error = origError })
+
+	origNoColor := color.NoColor
+	color.NoColor = true
+	t.Cleanup(func() { color.NoColor = origNoColor })
+
+	fn()
+
+	return buf.String()
+}
+
+func TestPrintWarning_FormatsLabelAndError(t *testing.T) {
+	got := captureErrorOutput(t, func() {
+		PrintWarning("EKS Bottlerocket probe", errors.New("exit status 1"))
+	})
+	want := "  EKS Bottlerocket probe: ⚠ exit status 1\n"
+	if got != want {
+		t.Errorf("PrintWarning() = %q, want %q", got, want)
+	}
+}
+
+func TestPrintWarning_DiffersFromPrintError(t *testing.T) {
+	err := errors.New("kubectl timeout")
+	warning := captureErrorOutput(t, func() { PrintWarning("probe", err) })
+	errOut := captureOutput(t, func() { PrintError("probe", err) })
+	if warning == errOut {
+		t.Error("PrintWarning() and PrintError() should produce different output (⚠ vs ✗)")
+	}
+}
+
 func TestPrintFlagLine_DiffersFromPrintStatusLine(t *testing.T) {
 	label, message := "DTWIZ_ALL_RUNTIMES", "✓ enabled (cli)"
 	flagLine := captureOutput(t, func() { PrintFlagLine(label, message, ColorOK) })

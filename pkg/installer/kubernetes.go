@@ -285,26 +285,35 @@ func fetchClusterName(fallback string) string {
 	return name
 }
 
+// resolveClusterName returns a sanitized Kubernetes resource name for the DynaKube CR.
+// Priority: explicit name → kubectl context → tenant ID derived from envURL → "dynakube".
+func resolveClusterName(name, envURL string) string {
+	if name != "" {
+		return sanitizeK8sName(name)
+	}
+	if resolved := fetchClusterName(sanitizeK8sName(ExtractTenantID(envURL))); resolved != "" {
+		return resolved
+	}
+	return "dynakube"
+}
+
 // InstallKubernetes deploys the Dynatrace Operator on a Kubernetes cluster.
 //
 // Parameters:
-//   - envURL:  Dynatrace environment URL
-//   - token:   platform token used for both apiToken and dataIngestToken in the DynaKube Secret
-//   - name:    DynaKube CR name (auto-derived from envURL if empty)
-//   - dryRun:  when true, only print what would be done
-func InstallKubernetes(envURL, token, name string, dryRun bool) error {
+// Parameters:
+//   - envURL:      Dynatrace environment URL
+//   - token:       platform token used for both apiToken and dataIngestToken in the DynaKube Secret
+//   - clusterName: DynaKube CR name; when empty, it is derived from the current kubectl context (falling back to a value derived from envURL)
+//   - distro:      detected Kubernetes distribution (e.g. "GKE", "EKS"); empty falls back to defaults
+//   - dryRun:      when true, only print what would be done
+func InstallKubernetes(envURL, token, clusterName, distro string, dryRun bool) error {
 	apiURL := APIURL(envURL)
 
-	if name == "" {
-		name = fetchClusterName(sanitizeK8sName(ExtractTenantID(envURL)))
-		if name == "" {
-			name = "dynakube"
-		}
-	}
+	clusterName = resolveClusterName(clusterName, envURL)
 
 	// --- Build manifest ---
 	tmplData := dynakubeTemplateData{
-		ClusterName:      name,
+		ClusterName:      clusterName,
 		APIURL:           apiURL + "/api",
 		APIToken:         token,
 		DataIngestToken:  token,
@@ -335,12 +344,13 @@ func InstallKubernetes(envURL, token, name string, dryRun bool) error {
 
 	if dryRun {
 		fmt.Println("[dry-run] Would deploy Dynatrace Operator on Kubernetes")
-		fmt.Printf("  API URL:    %s\n", apiURL)
-		fmt.Printf("  DynaKube:   %s\n", name)
+		fmt.Printf("  API URL:      %s\n", apiURL)
+		fmt.Printf("  DynaKube:     %s\n", clusterName)
+		fmt.Printf("  Distribution: %s\n", distro)
 		fmt.Println("  Steps:")
 		fmt.Println("    1. Ensure Helm is installed")
 		fmt.Printf("    2. %s\n", helmCmd)
-		fmt.Printf("    3. kubectl apply Secret + DynaKube CRs (cluster: %s)\n", name)
+		fmt.Printf("    3. kubectl apply Secret + DynaKube CRs (cluster: %s)\n", clusterName)
 		fmt.Println("    4. Wait for pods to become ready")
 		return nil
 	}
@@ -351,7 +361,8 @@ func InstallKubernetes(envURL, token, name string, dryRun bool) error {
 	fmt.Println()
 	display.ColorMessage.Println("  Dynatrace Kubernetes Integration")
 	fmt.Println()
-	fmt.Printf("  Cluster name:  %s\n", name)
+	fmt.Printf("  Cluster name:  %s\n", clusterName)
+	fmt.Printf("  Distribution:  %s\n", distro)
 	fmt.Printf("  API URL:       %s\n\n", apiURL)
 	fmt.Printf("  %s\n", sep)
 	display.ColorMessage.Println("  dynakube.yaml manifest to be applied:")

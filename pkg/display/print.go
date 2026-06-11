@@ -64,3 +64,7 @@ func ClearPending() {
 func PrintError(label string, err error) {
 	_, _ = fmt.Fprintf(color.Output, "  %s: %s\n", ColorDefault.Sprint(label), ColorError.Sprintf("✗ %s", err))
 }
+
+func PrintWarning(label string, err error) {
+	_, _ = fmt.Fprintf(color.Error, "  %s: %s\n", ColorDefault.Sprint(label), ColorWarning.Sprintf("⚠ %s", err))
+}
