@@ -14,6 +14,7 @@ type Flag int
 const (
 	AllRuntimes Flag = iota
 	OneAgentPoC
+	Experimental
 )
 
 // CLIFeatureFlag defines a single feature flag with its metadata.
@@ -41,6 +42,14 @@ var registry = []CLIFeatureFlag{
 		"DTWIZ_ONEAGENT_POC",
 		false,
 		"enable the new OneAgent PoC installer flow (development only)",
+		false,
+	},
+	{
+		Experimental,
+		"experimental",
+		"DTWIZ_EXPERIMENTAL",
+		false,
+		"enable experimental features (demo installation, Docker in recommendations)",
 		false,
 	},
 }

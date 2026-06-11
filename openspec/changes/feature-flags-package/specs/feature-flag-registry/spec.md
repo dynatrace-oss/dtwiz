@@ -77,6 +77,34 @@ The package SHALL expose `RegisterFlags(flags *pflag.FlagSet)` that registers a 
 - **WHEN** `ApplyCLIOverrides` runs and then `IsEnabled(AllRuntimes)` is called
 - **THEN** it returns `true` (cobra's default `false` does NOT override the env var)
 
+### Requirement: `Experimental` flag gates command visibility in help output
+
+Subcommands that are experimental SHALL be registered with `Hidden: true` by default and unhidden only when `featureflags.IsEnabled(featureflags.Experimental)` returns `true`. Because `PersistentPreRun` is not called when `--help` is requested, commands that conditionally show hidden subcommands SHALL override their `HelpFunc` to call `ApplyCLIOverrides` before delegating to the default help renderer. Execution of an experimental command without the flag enabled SHALL return an error directing the user to `--experimental` or `DTWIZ_EXPERIMENTAL=true`.
+
+#### Scenario: Experimental command hidden from help by default
+
+- **GIVEN** neither `--experimental` nor `DTWIZ_EXPERIMENTAL` is set
+- **WHEN** a user runs `dtwiz install --help`
+- **THEN** the `docker` subcommand does NOT appear in the available commands list
+
+#### Scenario: Experimental command visible with env var
+
+- **GIVEN** `DTWIZ_EXPERIMENTAL=true` is set in the environment
+- **WHEN** a user runs `dtwiz install --help`
+- **THEN** the `docker` subcommand appears in the available commands list
+
+#### Scenario: Experimental command visible with CLI flag
+
+- **GIVEN** `--experimental` is passed on the command line
+- **WHEN** a user runs `dtwiz install --experimental --help`
+- **THEN** the `docker` subcommand appears in the available commands list
+
+#### Scenario: Experimental command blocked at execution without flag
+
+- **GIVEN** neither `--experimental` nor `DTWIZ_EXPERIMENTAL` is set
+- **WHEN** a user runs `dtwiz install docker`
+- **THEN** the command exits with an error: `docker installation is an experimental feature; enable it with --experimental or DTWIZ_EXPERIMENTAL=true`
+
 ### Requirement: Test helper `SetCLIOverrideForTest`
 
 The package SHALL expose `SetCLIOverrideForTest(t testCleaner, flag Flag, val bool)` in `test_utils.go` that injects a CLI-scoped override, equivalent to the user having passed the flag explicitly on the command line. The override SHALL be automatically removed via `t.Cleanup`.

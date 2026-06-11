@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/spf13/cobra"
 
@@ -119,10 +120,14 @@ var installKubernetesCmd = &cobra.Command{
 }
 
 var installDockerCmd = &cobra.Command{
-	Use:   "docker",
-	Short: "Install Dynatrace OneAgent for Docker",
-	Args:  cobra.NoArgs,
+	Use:    "docker",
+	Short:  "Install Dynatrace OneAgent for Docker",
+	Args:   cobra.NoArgs,
+	Hidden: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if !featureflags.IsEnabled(featureflags.Experimental) {
+			return fmt.Errorf("docker installation is an experimental feature; enable it with --experimental or DTWIZ_EXPERIMENTAL=true")
+		}
 		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
 			return err
@@ -344,10 +349,14 @@ var installGCPCmd = &cobra.Command{
 }
 
 var installDemoCmd = &cobra.Command{
-	Use:   "demo",
-	Short: "Install the schnitzel demo app and set up Dynatrace OTel monitoring",
-	Args:  cobra.NoArgs,
+	Use:    "demo",
+	Short:  "Install the schnitzel demo app and set up Dynatrace OTel monitoring",
+	Args:   cobra.NoArgs,
+	Hidden: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if !featureflags.IsEnabled(featureflags.Experimental) {
+			return fmt.Errorf("demo installation is an experimental feature; enable it with --experimental or DTWIZ_EXPERIMENTAL=true")
+		}
 		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
 			return err
@@ -400,4 +409,13 @@ func init() {
 	installCmd.AddCommand(installAzureCmd)
 	installCmd.AddCommand(installGCPCmd)
 	installCmd.AddCommand(installDemoCmd)
+
+	// PersistentPreRun doesn't run for --help, so resolve the experimental flag here
+	// to conditionally show the docker subcommand in help output.
+	defaultInstallHelp := installCmd.HelpFunc()
+	installCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		featureflags.ApplyCLIOverrides(cmd.Flags())
+		installDockerCmd.Hidden = !featureflags.IsEnabled(featureflags.Experimental)
+		defaultInstallHelp(cmd, args)
+	})
 }

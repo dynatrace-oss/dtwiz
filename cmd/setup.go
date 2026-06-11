@@ -54,6 +54,9 @@ var setupCmd = &cobra.Command{
 		var actionable []recommender.Recommendation
 		for _, r := range recs {
 			if !r.Done && r.Method != recommender.MethodNotSupported && !r.ComingSoon {
+				if r.Method == recommender.MethodDocker && !featureflags.IsEnabled(featureflags.Experimental) {
+					continue
+				}
 				actionable = append(actionable, r)
 			}
 		}
@@ -72,7 +75,9 @@ var setupCmd = &cobra.Command{
 			}
 		}
 		fmt.Println()
-		fmt.Printf("  %s  %s\n", display.ColorDefault.Sprint("[d]"), display.ColorDefault.Sprint("Install demo app (schnitzel)"))
+		if featureflags.IsEnabled(featureflags.Experimental) {
+			fmt.Printf("  %s  %s\n", display.ColorDefault.Sprint("[d]"), display.ColorDefault.Sprint("Install demo app (schnitzel)"))
+		}
 		fmt.Printf("  %s  %s\n", display.ColorDefault.Sprint("[0]"), display.ColorDefault.Sprint("Cancel"))
 		fmt.Println()
 		display.ColorMessage.Print("  Enter number: ")
@@ -89,7 +94,7 @@ var setupCmd = &cobra.Command{
 			return nil
 		}
 
-		if input == "d" {
+		if input == "d" && featureflags.IsEnabled(featureflags.Experimental) {
 			fmt.Println()
 			display.Header("Installing: Demo app (schnitzel)")
 
