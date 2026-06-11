@@ -35,8 +35,11 @@ func UninstallOneAgent(dryRun bool) error {
 
 func uninstallOneAgentLinux(dryRun bool) error {
 	logger.Debug("checking for OneAgent uninstall script", "path", linuxUninstallScript)
-	if _, err := os.Stat(linuxUninstallScript); os.IsNotExist(err) {
-		return fmt.Errorf("OneAgent uninstall script not found at %s — is OneAgent installed?", linuxUninstallScript)
+	if _, err := os.Stat(linuxUninstallScript); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("OneAgent uninstall script not found at %s — is OneAgent installed?", linuxUninstallScript)
+		}
+		return fmt.Errorf("cannot access OneAgent uninstall script at %s: %w", linuxUninstallScript, err)
 	}
 
 	header := color.New(color.FgMagenta, color.Bold)
@@ -55,7 +58,15 @@ func uninstallOneAgentLinux(dryRun bool) error {
 	fmt.Println()
 
 	if dryRun {
-		fmt.Println("[dry-run] Would run the OneAgent uninstall script. No changes made.")
+		fmt.Println("[dry-run] Would run:")
+		if needsSudo {
+			fmt.Printf("  sudo %s\n", linuxUninstallScript)
+			fmt.Printf("  sudo rm -rf %s\n", linuxInstallDir)
+		} else {
+			fmt.Printf("  %s\n", linuxUninstallScript)
+			fmt.Printf("  rm -rf %s\n", linuxInstallDir)
+		}
+		fmt.Println("No changes made.")
 		return nil
 	}
 
@@ -83,44 +94,43 @@ func uninstallOneAgentLinux(dryRun bool) error {
 
 	// The Dynatrace uninstall script removes agent/ contents but leaves the
 	// parent install directory as an empty stub. Clean it up.
+	cleanupOK := true
 	if err := removeResidualDir(linuxInstallDir, needsSudo); err != nil {
+		cleanupOK = false
 		logger.Warn("could not remove residual install directory", "path", linuxInstallDir, "error", err)
 		fmt.Printf("  Warning: could not remove %s: %v\n", linuxInstallDir, err)
 	}
 
-	// A permission error on stat doesn't mean the directory is absent.
-	if _, statErr := os.Stat(linuxStateDir); !os.IsNotExist(statErr) {
+	if _, statErr := os.Stat(linuxStateDir); statErr == nil {
 		logger.Debug("state directory preserved by uninstall script", "path", linuxStateDir)
 		fmt.Printf("  Note: configuration preserved at %s\n", linuxStateDir)
 	}
 
-	color.New(color.FgGreen, color.Bold).Println("\n  OneAgent uninstalled successfully.")
+	if cleanupOK {
+		color.New(color.FgGreen, color.Bold).Println("\n  OneAgent uninstalled successfully.")
+	} else {
+		color.New(color.FgYellow, color.Bold).Println("\n  OneAgent uninstalled (residual directory could not be removed; see warning above).")
+	}
 	return nil
 }
 
 func removeResidualDir(path string, needsSudo bool) error {
+	if info, err := os.Stat(path); err == nil {
+		if !info.IsDir() {
+			logger.Debug("residual path is not a directory, skipping", "path", path)
+			return nil
+		}
+	} else if os.IsNotExist(err) {
+		logger.Debug("residual directory already absent", "path", path)
+		return nil
+	}
+
 	if needsSudo {
-		// Skip stat — a permission error on stat does not mean sudo rm -rf will
-		// fail, and rm -rf is a no-op when the path is absent (-f suppresses the
-		// "no such file" error).
 		logger.Debug("removing residual install directory", "path", path, "needs_sudo", true)
 		if err := RunCommand("sudo", "rm", "-rf", path); err != nil {
 			return fmt.Errorf("sudo rm -rf %s: %w", path, err)
 		}
 		logger.Verbose("removed residual install directory", "path", path)
-		return nil
-	}
-
-	info, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		logger.Debug("residual directory already absent", "path", path)
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("stat %s: %w", path, err)
-	}
-	if !info.IsDir() {
-		logger.Debug("residual path is not a directory, skipping", "path", path)
 		return nil
 	}
 
