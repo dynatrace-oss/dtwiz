@@ -5,7 +5,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
 )
 
 var uninstallDryRun bool
@@ -34,6 +36,13 @@ var uninstallOneAgentCmd = &cobra.Command{
 	Short: "Uninstall Dynatrace OneAgent from this host",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if featureflags.IsEnabled(featureflags.OneAgentPoC) {
+			err := oneagent.UninstallOneAgentV2(oneagent.UninstallOptions{DryRun: uninstallDryRun})
+			if errors.Is(err, installer.ErrInstallCancelled) {
+				return nil
+			}
+			return err
+		}
 		return installer.UninstallOneAgent(uninstallDryRun)
 	},
 }
