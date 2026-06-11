@@ -16,6 +16,7 @@ const (
 	// Stub directory left behind by the uninstall script; we clean it up.
 	linuxInstallDir = "/opt/dynatrace/oneagent"
 
+	// Preserved by the uninstall script for potential reinstall.
 	linuxStateDir = "/var/lib/dynatrace/oneagent"
 )
 
@@ -115,29 +116,31 @@ func uninstallOneAgentLinux(dryRun bool) error {
 }
 
 func removeResidualDir(path string, needsSudo bool) error {
-	if info, err := os.Stat(path); err == nil {
-		if !info.IsDir() {
-			logger.Debug("residual path is not a directory, skipping", "path", path)
-			return nil
-		}
-	} else if os.IsNotExist(err) {
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
 		logger.Debug("residual directory already absent", "path", path)
 		return nil
 	}
-
-	if needsSudo {
-		logger.Debug("removing residual install directory", "path", path, "needs_sudo", true)
-		if err := RunCommand("sudo", "rm", "-rf", path); err != nil {
-			return fmt.Errorf("sudo rm -rf %s: %w", path, err)
-		}
-		logger.Verbose("removed residual install directory", "path", path)
+	if err != nil {
+		return fmt.Errorf("stat %s: %w", path, err)
+	}
+	if !info.IsDir() {
+		logger.Debug("residual path is not a directory, skipping", "path", path)
 		return nil
 	}
 
-	logger.Debug("removing residual install directory", "path", path, "needs_sudo", false)
-	if err := os.RemoveAll(path); err != nil {
-		return fmt.Errorf("rm -rf %s: %w", path, err)
+	logger.Debug("removing residual install directory", "path", path, "needs_sudo", needsSudo)
+
+	if needsSudo {
+		if err := RunCommand("sudo", "rm", "-rf", path); err != nil {
+			return fmt.Errorf("sudo rm -rf %s: %w", path, err)
+		}
+	} else {
+		if err := os.RemoveAll(path); err != nil {
+			return fmt.Errorf("rm -rf %s: %w", path, err)
+		}
 	}
+
 	logger.Verbose("removed residual install directory", "path", path)
 	return nil
 }
