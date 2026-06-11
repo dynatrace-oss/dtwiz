@@ -19,6 +19,7 @@
 ### Requirement: Plan is always shown before acting
 
 `UninstallOneAgentV2` SHALL call `printPlan()` after the installed check and before the dry-run check or confirmation prompt. The plan output is platform-specific:
+
 - Linux: the uninstall script path and whether `sudo` is required
 - Windows: the WMI method description
 
