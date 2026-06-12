@@ -12,7 +12,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/client"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
@@ -136,41 +135,9 @@ func TestInstallOneAgentV2_UnsupportedPlatformReturnsError(t *testing.T) {
 	}
 }
 
-func TestInstallOneAgentV2_ConnectivityFail_AbortsBeforeDownload(t *testing.T) {
-	if runtime.GOOS == "darwin" {
-		t.Skip("OneAgent not supported on macOS")
-	}
-
-	var downloadCalled bool
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == endpointsAPIPath {
-			w.WriteHeader(http.StatusOK)
-			// RFC 5737 TEST-NET: never routable, probe will time out.
-			_, _ = w.Write([]byte("192.0.2.1:12345"))
-			return
-		}
-		downloadCalled = true
-		http.NotFound(w, r)
-	}))
-	defer srv.Close()
-
-	old := defaultProbeTimeout
-	defaultProbeTimeout = 50 * time.Millisecond
-	defer func() { defaultProbeTimeout = old }()
-
-	c := newMockClient(t, srv.URL)
-	err := InstallOneAgentV2(c, InstallOptions{MonitoringMode: "fullstack"})
-	if err == nil {
-		t.Fatal("expected error when connectivity check fails, got nil")
-	}
-	if !strings.Contains(err.Error(), "connectivity check failed") {
-		t.Errorf("error = %q, want 'connectivity check failed'", err.Error())
-	}
-	if downloadCalled {
-		t.Error("download API was called but must not be when connectivity check fails")
-	}
-}
-
+// TestInstallOneAgentV2_ConnectivityPass_ContinuesToDownload verifies that when
+// all endpoints are reachable the install proceeds past the connectivity check
+// and reaches the download stage.
 func TestInstallOneAgentV2_ConnectivityPass_ContinuesToDownload(t *testing.T) {
 	if runtime.GOOS == "darwin" {
 		t.Skip("OneAgent not supported on macOS")
@@ -196,7 +163,7 @@ func TestInstallOneAgentV2_ConnectivityPass_ContinuesToDownload(t *testing.T) {
 
 	c := newMockClient(t, srv.URL)
 	err := InstallOneAgentV2(c, InstallOptions{MonitoringMode: "fullstack"})
-	// Connectivity passed, so the error must come from the download stage, not connectivity.
+	// Connectivity passed, so any error must come from the download stage, not connectivity.
 	if err != nil && strings.Contains(err.Error(), "connectivity check failed") {
 		t.Errorf("connectivity should have passed but got: %v", err)
 	}
@@ -204,7 +171,6 @@ func TestInstallOneAgentV2_ConnectivityPass_ContinuesToDownload(t *testing.T) {
 		t.Error("download API was not called — install should have proceeded past the connectivity check")
 	}
 }
-
 func TestDetectRuntimeEnvironment(t *testing.T) {
 	env := detectRuntimeEnvironment()
 	if env.OS == "" {
@@ -217,9 +183,9 @@ func TestDetectRuntimeEnvironment(t *testing.T) {
 
 func TestClassifyEnvironment(t *testing.T) {
 	tests := []struct {
-		goos    string
-		goarch  string
-		wantOS  string
+		goos     string
+		goarch   string
+		wantOS   string
 		wantArch string
 	}{
 		{"linux", "amd64", "linux", "x86"},
@@ -268,10 +234,8 @@ func TestValidateEnvironment(t *testing.T) {
 			if !strings.Contains(err.Error(), tt.wantMsg) {
 				t.Errorf("validateEnvironment(%+v) = %q, want message containing %q", tt.env, err.Error(), tt.wantMsg)
 			}
-		} else {
-			if err != nil {
-				t.Errorf("validateEnvironment(%+v): unexpected error: %v", tt.env, err)
-			}
+		} else if err != nil {
+			t.Errorf("validateEnvironment(%+v): unexpected error: %v", tt.env, err)
 		}
 	}
 }

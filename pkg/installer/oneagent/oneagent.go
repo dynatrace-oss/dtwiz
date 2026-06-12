@@ -63,7 +63,7 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 	if err := validateEnvironment(env); err != nil {
 		return err
 	}
-	display.PrintStatusLine("platform", fmt.Sprintf("✓ %s / %s", env.OS, env.Arch), display.ColorOK)
+	display.PrintStatusLine("OS", fmt.Sprintf("✓ %s / %s", env.OS, env.Arch), display.ColorOK)
 
 	cfg := ResolveAgentConfig(opts)
 	cfg.ServerURL = c.Classic.BaseURL()

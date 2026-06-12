@@ -3,6 +3,7 @@ package oneagent
 import (
 	"fmt"
 	"net"
+	"strconv"
 	"sync"
 	"time"
 
@@ -36,7 +37,7 @@ func CheckAllEndpoints(endpoints []Endpoint, timeout time.Duration) Connectivity
 		wg.Add(1)
 		go func(idx int, e Endpoint) {
 			defer wg.Done()
-			addr := fmt.Sprintf("%s:%d", e.Host, e.Port)
+			addr := net.JoinHostPort(e.Host, strconv.Itoa(e.Port))
 			start := time.Now()
 			conn, err := net.DialTimeout("tcp", addr, timeout)
 			latency := time.Since(start)

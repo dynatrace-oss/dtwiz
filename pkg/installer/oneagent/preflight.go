@@ -24,7 +24,7 @@ func runPreflightChecks(env Environment, opts InstallOptions) (preflightResult, 
 	result.IsUpdate = oneAgentInstalledFn()
 	logger.Debug("preflight: oneagent detection", "is_update", result.IsUpdate)
 
-	if result.IsUpdate && !opts.DryRun && !opts.Quiet {
+	if result.IsUpdate && !opts.DryRun && !opts.Quiet && !opts.ConnectivityCheckOnly {
 		ok, err := installer.ConfirmProceed("  OneAgent is already installed. Update?")
 		if err != nil || !ok {
 			return preflightResult{}, installer.ErrInstallCancelled

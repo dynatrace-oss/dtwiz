@@ -17,6 +17,17 @@ func startTCPListener(t *testing.T) (*net.TCPListener, string) {
 	return l.(*net.TCPListener), l.Addr().String()
 }
 
+// acceptLoop drains accept calls so the listener doesn't block probes.
+func acceptLoop(ln net.Listener) {
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		conn.Close()
+	}
+}
+
 func parseTestEndpoint(t *testing.T, addr string) Endpoint {
 	t.Helper()
 	host, portStr, err := net.SplitHostPort(addr)

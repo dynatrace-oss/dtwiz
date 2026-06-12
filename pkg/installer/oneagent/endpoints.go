@@ -11,6 +11,8 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
+const endpointsAPIPath = "/api/v1/deployment/installer/agent/connectioninfo/endpoints"
+
 // Endpoint represents a single OneAgent communication endpoint.
 type Endpoint struct {
 	Host string
@@ -25,11 +27,10 @@ func (e Endpoint) String() string {
 // communication endpoints. It returns an error if the API is unreachable,
 // returns a non-2xx status, or returns an empty endpoint list.
 func ResolveEndpoints(c *client.ClassicClient) ([]Endpoint, error) {
-	const path = "/api/v1/deployment/installer/agent/connectioninfo/endpoints"
-	reqURL := strings.TrimRight(c.BaseURL(), "/") + path
+	reqURL := strings.TrimRight(c.BaseURL(), "/") + endpointsAPIPath
 	logger.Debug("resolving tenant endpoints", "url", reqURL)
 
-	resp, err := c.HTTP().R().Get(path)
+	resp, err := c.HTTP().R().Get(endpointsAPIPath)
 	if err != nil {
 		return nil, fmt.Errorf("endpoint resolution network error: %w", err)
 	}
