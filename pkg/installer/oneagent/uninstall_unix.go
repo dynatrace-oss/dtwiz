@@ -32,8 +32,11 @@ func printPlan() {
 func runUninstall() error {
 	script := uninstallScriptPath()
 	logger.Debug("checking uninstall script", "path", script)
-	if _, err := os.Stat(script); os.IsNotExist(err) {
-		return fmt.Errorf("OneAgent uninstall script not found at %s", script)
+	if _, err := os.Stat(script); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("OneAgent uninstall script not found at %s", script)
+		}
+		return fmt.Errorf("stat OneAgent uninstall script at %s: %w", script, err)
 	}
 
 	needsSudo := needsSudoFn()
@@ -72,19 +75,6 @@ func runUninstall() error {
 // cleanupInstallDir removes the stub directory left behind by the uninstall
 // script. Missing paths and non-directories are silently skipped.
 func cleanupInstallDir(path string, needsSudo bool) error {
-	if needsSudo {
-		sudoPath, err := sudoPathFn()
-		if err != nil {
-			return fmt.Errorf("sudo not found: %w", err)
-		}
-		logger.Debug("removing residual install directory", "path", path, "needs_sudo", true)
-		if err := installer.RunCommand(sudoPath, "rm", "-rf", path); err != nil {
-			return fmt.Errorf("sudo rm -rf %s: %w", path, err)
-		}
-		logger.Verbose("removed residual install directory", "path", path)
-		return nil
-	}
-
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
 		logger.Debug("residual directory already absent", "path", path)
@@ -95,6 +85,19 @@ func cleanupInstallDir(path string, needsSudo bool) error {
 	}
 	if !info.IsDir() {
 		logger.Debug("residual path is not a directory, skipping", "path", path)
+		return nil
+	}
+
+	if needsSudo {
+		sudoPath, err := sudoPathFn()
+		if err != nil {
+			return fmt.Errorf("sudo not found: %w", err)
+		}
+		logger.Debug("removing residual install directory", "path", path, "needs_sudo", true)
+		if err := installer.RunCommand(sudoPath, "rm", "-rf", path); err != nil {
+			return fmt.Errorf("sudo rm -rf %s: %w", path, err)
+		}
+		logger.Verbose("removed residual install directory", "path", path)
 		return nil
 	}
 
