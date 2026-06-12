@@ -123,16 +123,17 @@ Resolve agent communication endpoints dynamically from the tenant API. Drop the 
 - [x] 3.15 Use a default probe timeout of `5s` per endpoint; do not make it configurable at this stage
 - [x] 3.16 Wire `opts.ConnectivityCheckOnly` (from `InstallOptions`): if `true`, call `CheckAllEndpoints`, print one `display.PrintStatusLine` per endpoint (`host:port` as label, `✓ <latency>` in green or `✗ <friendly-error>` in red), then return `nil` without proceeding to token minting, download, or install
 - [x] 3.16a Print `display.Header("Checking network connectivity...")` BEFORE calling `CheckAllEndpoints` when `ConnectivityCheckOnly` is true, so the header appears at the start of the dial window rather than after it
-- [x] 3.18 When `len(report.Results with Reachable==false) > 0` in the normal install path, print a WARNING block and return a non-nil error to abort the install
+- [x] 3.17 Wire `opts.PrintEndpoints` (from `InstallOptions`): if `true`, print resolved endpoints one per line in `host:port` format after `ResolveEndpoints`, then return `nil` without probing or installing
+- [x] 3.18 When `len(report.Results with Reachable==false) > 0` in the normal install path, print a WARNING block and continue (non-blocking)
 - [x] 3.18a In the normal install path, call `display.PrintPending("connectivity", "checking endpoints...")` before `CheckAllEndpoints` and `display.ClearPending()` after it returns, giving TTY users a transient in-progress indicator
 - [x] 3.18b Implement `friendlyDialError(errStr string) string` that maps raw `net.DialTimeout` error strings to short human-readable phrases: `"i/o timeout"` / `"deadline exceeded"` / `"timed out"` → `"timed out"`, `"connection refused"` → `"connection refused"`, `"no route to host"` → `"no route to host"`, `"network is unreachable"` → `"network unreachable"`, `"connection reset"` → `"connection reset"`, anything else → `"unreachable"`
 - [x] 3.18c Update `printConnectivityWarning` format: header says `"Warning: connectivity check failed"`; lead with `display.PrintStatusLine("action", "allow outbound TCP to the following addresses", display.ColorWarning)`; frame the address list between two `display.PrintSectionDivider()` calls; use `friendlyDialError` for error messages; update proxy tip to `"if a proxy is required, set HTTP_PROXY / HTTPS_PROXY"`
 - [x] 3.18d Unit test for `friendlyDialError`: all mapping cases including the unknown-error fallback and empty-string case
-- [x] 3.19 When all endpoints are reachable in the normal install path, print `display.PrintStatusLine("connectivity", "all endpoints reachable", display.ColorOK)`
+- [x] 3.19 When all endpoints are reachable in the normal install path, print nothing (do not add a "all endpoints reachable" success line at default verbosity)
 - [x] 3.20 Wire `opts.SkipConnectivityCheck` (from `InstallOptions`): when `true`, skip `CheckAllEndpoints` entirely; emit `logger.Debug("skipping connectivity probe", "reason", "--skip-connectivity-check")`
 - [x] 3.21 Emit one `logger.Debug("endpoint probe result", "host", r.Endpoint.Host, "port", r.Endpoint.Port, "reachable", r.Reachable, "latency_ms", r.Latency.Milliseconds(), "error", r.Error)` per result when probing
 - [x] 3.22 Emit `logger.Verbose("connectivity probe complete", "total", len(report.Results), "failed", report.FailedCount)` after all probes finish (only when the probe ran in the normal path)
 - [x] 3.23 Unit tests:
-  - Normal path: all reachable (success line printed), some blocked (warning printed + error returned), all blocked, `SkipConnectivityCheck == true` (no probe, no output)
+  - Normal path: all reachable (no output), some blocked (warning printed, install continues), all blocked, `SkipConnectivityCheck == true` (no probe, no output)
   - `--connectivity-check-only`: mixed reachable/blocked endpoints print the expected table, no token mint
   - Use an in-process TCP listener (`net.Listen`) to control reachability without real network access

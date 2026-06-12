@@ -2,203 +2,115 @@ package oneagent
 
 import (
 	"fmt"
-	"net"
+	"net/http"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/client"
-	"github.com/dynatrace-oss/dtwiz/pkg/display"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
-const endpointsAPIPath = "/api/v1/deployment/installer/agent/connectioninfo/endpoints"
-
-// A variable so tests can override it without waiting 5 seconds per unreachable probe.
-var defaultProbeTimeout = 5 * time.Second
-
+// Endpoint represents a single OneAgent communication endpoint.
 type Endpoint struct {
 	Host string
 	Port int
 }
 
-type ConnectivityResult struct {
-	Endpoint  Endpoint
-	Reachable bool
-	Latency   time.Duration
-	Error     string
+func (e Endpoint) String() string {
+	return fmt.Sprintf("%s:%d", e.Host, e.Port)
 }
 
-type ConnectivityReport struct {
-	Results     []ConnectivityResult
-	AllPassed   bool
-	FailedCount int
-}
-
+// ResolveEndpoints calls the Dynatrace tenant API to discover OneAgent
+// communication endpoints. It returns an error if the API is unreachable,
+// returns a non-2xx status, or returns an empty endpoint list.
 func ResolveEndpoints(c *client.ClassicClient) ([]Endpoint, error) {
-	reqURL := strings.TrimRight(c.BaseURL(), "/") + endpointsAPIPath
+	const path = "/api/v1/deployment/installer/agent/connectioninfo/endpoints"
+	reqURL := strings.TrimRight(c.BaseURL(), "/") + path
 	logger.Debug("resolving tenant endpoints", "url", reqURL)
 
-	resp, err := c.HTTP().R().Get(endpointsAPIPath)
+	resp, err := c.HTTP().R().Get(path)
 	if err != nil {
-		return nil, fmt.Errorf("GET %s: %w", reqURL, err)
+		return nil, fmt.Errorf("endpoint resolution network error: %w", err)
 	}
 
-	if resp.StatusCode() >= 400 {
-		body := strings.TrimSpace(resp.String())
-		return nil, fmt.Errorf("GET %s returned HTTP %d: %s", reqURL, resp.StatusCode(), body)
+	if resp.StatusCode() != http.StatusOK {
+		return nil, fmt.Errorf("endpoint resolution failed (status %d, url %s): %s",
+			resp.StatusCode(), reqURL, strings.TrimSpace(resp.String()))
 	}
 
 	body := strings.TrimSpace(resp.String())
 	if body == "" {
-		return nil, fmt.Errorf("tenant returned no endpoints")
+		return nil, fmt.Errorf("tenant returned no endpoints (empty response from %s)", reqURL)
 	}
 
 	var endpoints []Endpoint
-	// Split on semicolons and newlines; \r\n line endings are handled by the
-	// '\r' case so we never get stray carriage-returns in host tokens.
-	for _, token := range strings.FieldsFunc(body, func(r rune) bool {
-		return r == ';' || r == '\n' || r == '\r'
-	}) {
-		token = strings.TrimSpace(token)
-		if token == "" {
+	for _, part := range strings.Split(body, ";") {
+		part = strings.TrimSpace(part)
+		if part == "" {
 			continue
 		}
-		ep, parseErr := parseEndpoint(token)
-		if parseErr != nil {
-			return nil, fmt.Errorf("parsing endpoint %q: %w", token, parseErr)
+		ep, err := parseEndpoint(part)
+		if err != nil {
+			return nil, fmt.Errorf("malformed endpoint %q: %w", part, err)
 		}
-		logger.Debug("tenant endpoint", "host", ep.Host, "port", ep.Port)
 		endpoints = append(endpoints, ep)
 	}
 
 	if len(endpoints) == 0 {
-		return nil, fmt.Errorf("tenant returned no endpoints")
+		return nil, fmt.Errorf("tenant returned no endpoints (empty response from %s)", reqURL)
 	}
 
+	for _, e := range endpoints {
+		logger.Debug("tenant endpoint", "host", e.Host, "port", e.Port)
+	}
 	logger.Verbose("resolved tenant endpoints", "count", len(endpoints))
+
 	return endpoints, nil
 }
 
-// Accepted forms: "host:port", "host" (→ port 443), "https://host:port/path" (scheme+path stripped).
 func parseEndpoint(s string) (Endpoint, error) {
+	// Strip any leading scheme (https:// etc.) that might appear in some responses.
 	if idx := strings.Index(s, "://"); idx >= 0 {
 		s = s[idx+3:]
 	}
-	// IPv6 literals are always bracketed in URLs, so the first '/' after ']' is safe to trim.
-	if slash := strings.Index(s, "/"); slash >= 0 {
-		s = s[:slash]
+	// Strip any trailing path.
+	if idx := strings.Index(s, "/"); idx >= 0 {
+		s = s[:idx]
 	}
 
-	host, portStr, err := net.SplitHostPort(s)
-	if err != nil {
-		// s may be a bracketed IPv6 literal without a port (e.g. [2001:db8::1]).
-		// Strip the brackets so net.JoinHostPort doesn't double-bracket later.
-		host = strings.TrimPrefix(strings.TrimSuffix(s, "]"), "[")
-		logger.Debug("endpoint token has no port, defaulting to 443", "host", host)
+	// host:port or bare host
+	lastColon := strings.LastIndex(s, ":")
+	if lastColon < 0 {
+		return Endpoint{Host: s, Port: 443}, nil
+	}
+	// Distinguish IPv6 addresses (which also contain colons) by checking for brackets.
+	if strings.HasPrefix(s, "[") {
+		// IPv6 with port: [::1]:443
+		host := s[1:strings.Index(s, "]")]
+		portStr := s[strings.Index(s, "]")+2:]
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			return Endpoint{}, fmt.Errorf("invalid port %q", portStr)
+		}
+		return Endpoint{Host: host, Port: port}, nil
+	}
+
+	host := s[:lastColon]
+	portStr := s[lastColon+1:]
+	if portStr == "" {
 		return Endpoint{Host: host, Port: 443}, nil
 	}
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
-		return Endpoint{}, fmt.Errorf("invalid port %q: %w", portStr, err)
+		return Endpoint{}, fmt.Errorf("invalid port %q", portStr)
 	}
 	return Endpoint{Host: host, Port: port}, nil
 }
 
-func CheckAllEndpoints(endpoints []Endpoint, timeout time.Duration) ConnectivityReport {
-	results := make([]ConnectivityResult, len(endpoints))
-	var wg sync.WaitGroup
-	for i, ep := range endpoints {
-		wg.Add(1)
-		go func(i int, ep Endpoint) {
-			defer wg.Done()
-			addr := net.JoinHostPort(ep.Host, strconv.Itoa(ep.Port))
-			start := time.Now()
-			conn, dialErr := net.DialTimeout("tcp", addr, timeout)
-			latency := time.Since(start)
-			r := ConnectivityResult{Endpoint: ep, Latency: latency}
-			if dialErr != nil {
-				r.Error = dialErr.Error()
-			} else {
-				conn.Close()
-				r.Reachable = true
-			}
-			logger.Debug("endpoint probe result",
-				"host", ep.Host,
-				"port", ep.Port,
-				"reachable", r.Reachable,
-				"latency_ms", latency.Milliseconds(),
-				"error", r.Error,
-			)
-			results[i] = r
-		}(i, ep)
-	}
-	wg.Wait()
-
-	failed := 0
-	for _, r := range results {
-		if !r.Reachable {
-			failed++
-		}
-	}
-	report := ConnectivityReport{
-		Results:     results,
-		AllPassed:   failed == 0,
-		FailedCount: failed,
-	}
-	logger.Verbose("connectivity probe complete", "total", len(results), "failed", failed)
-	return report
-}
-
-// Caller must print the section header before calling this so it appears before the dial window.
-func printConnectivityResults(report ConnectivityReport) {
-	for _, r := range report.Results {
-		label := fmt.Sprintf("%s:%d", r.Endpoint.Host, r.Endpoint.Port)
-		if r.Reachable {
-			lat := r.Latency.Round(time.Millisecond)
-			latStr := lat.String()
-			if lat == 0 {
-				latStr = "<1ms"
-			}
-			display.PrintStatusLine(label, fmt.Sprintf("✓ %s", latStr), display.ColorOK)
-		} else {
-			display.PrintStatusLine(label, fmt.Sprintf("✗ %s", friendlyDialError(r.Error)), display.ColorError)
-		}
-	}
-}
-
-func printConnectivityWarning(report ConnectivityReport) {
-	display.Header("Warning: connectivity check failed")
-	display.PrintStatusLine("action", "allow outbound TCP to the following addresses", display.ColorWarning)
-	display.PrintSectionDivider()
-	for _, r := range report.Results {
-		if !r.Reachable {
-			label := fmt.Sprintf("%s:%d", r.Endpoint.Host, r.Endpoint.Port)
-			display.PrintStatusLine(label, fmt.Sprintf("✗ %s", friendlyDialError(r.Error)), display.ColorError)
-		}
-	}
-	display.PrintSectionDivider()
-	display.PrintStatusLine("tip", "if a proxy is required, set HTTP_PROXY / HTTPS_PROXY", display.ColorWarning)
-}
-
-func friendlyDialError(errStr string) string {
-	switch {
-	case strings.Contains(errStr, "i/o timeout"),
-		strings.Contains(errStr, "timed out"),
-		strings.Contains(errStr, "deadline exceeded"):
-		return "timed out"
-	case strings.Contains(errStr, "connection refused"):
-		return "connection refused"
-	case strings.Contains(errStr, "no route to host"):
-		return "no route to host"
-	case strings.Contains(errStr, "network is unreachable"):
-		return "network unreachable"
-	case strings.Contains(errStr, "connection reset"):
-		return "connection reset"
-	case errStr == "":
-		return ""
-	default:
-		return "unreachable"
-	}
+// logTenantID emits a debug line for the extracted tenant ID. Only the first
+// DNS label is logged — never the full URL which may contain credentials.
+func logTenantID(environmentURL string) {
+	id := installer.ExtractTenantID(environmentURL)
+	logger.Debug("extracted tenant id", "tenant_id", id)
 }
