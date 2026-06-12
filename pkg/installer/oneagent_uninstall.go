@@ -101,8 +101,7 @@ func uninstallOneAgentLinux(dryRun bool) error {
 		fmt.Printf("  Warning: could not remove %s: %v\n", linuxInstallDir, err)
 	}
 
-	// A permission error on stat doesn't mean the directory is absent.
-	if _, statErr := os.Stat(linuxStateDir); !os.IsNotExist(statErr) {
+	if _, statErr := os.Stat(linuxStateDir); statErr == nil {
 		logger.Debug("state directory preserved by uninstall script", "path", linuxStateDir)
 		fmt.Printf("  Note: configuration preserved at %s\n", linuxStateDir)
 	}
@@ -116,28 +115,22 @@ func uninstallOneAgentLinux(dryRun bool) error {
 }
 
 func removeResidualDir(path string, needsSudo bool) error {
+	if info, err := os.Stat(path); err == nil {
+		if !info.IsDir() {
+			logger.Debug("residual path is not a directory, skipping", "path", path)
+			return nil
+		}
+	} else if os.IsNotExist(err) {
+		logger.Debug("residual directory already absent", "path", path)
+		return nil
+	}
+
 	if needsSudo {
-		// Skip stat — a permission error on stat does not mean sudo rm -rf will
-		// fail, and rm -rf is a no-op when the path is absent (-f suppresses the
-		// "no such file" error).
 		logger.Debug("removing residual install directory", "path", path, "needs_sudo", true)
 		if err := RunCommand("sudo", "rm", "-rf", path); err != nil {
 			return fmt.Errorf("sudo rm -rf %s: %w", path, err)
 		}
 		logger.Verbose("removed residual install directory", "path", path)
-		return nil
-	}
-
-	info, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		logger.Debug("residual directory already absent", "path", path)
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("stat %s: %w", path, err)
-	}
-	if !info.IsDir() {
-		logger.Debug("residual path is not a directory, skipping", "path", path)
 		return nil
 	}
 
