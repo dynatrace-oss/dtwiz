@@ -26,7 +26,7 @@
 ## 4. Distro-to-Template Mapping
 
 - [ ] 4.1 Add fields to `dynakubeTemplateData` struct in `pkg/installer/kubernetes.go`: `EnableKSPM bool`, `PrivilegedAnnotation bool`, `ReadOnlyVolume bool`, `KubeletPath string`
-- [ ] 4.2 Implement `distroTemplateData(base dynakubeTemplateData, distro string) dynakubeTemplateData` in `pkg/installer/kubernetes.go` — set fields per distro: KSPM true for EKS/AKS/kubernetes/empty; `PrivilegedAnnotation` true for OpenShift; `ReadOnlyVolume` true for EKS-Bottlerocket; `KubeletPath` `/var/data/kubelet` for IKS, `/var/vcap/data/kubelet` for TKGI; RKE maps to no KSPM, no annotations, no kubeletPath
+- [ ] 4.2 Implement `distroTemplateData(base dynakubeTemplateData, distro string) dynakubeTemplateData` in `pkg/installer/kubernetes.go` — set fields per distro: KSPM true for EKS/AKS/kubernetes/minikube/kind/k3s/empty (minikube, kind, and k3s use the same config as the generic "other" YAML — standard Linux paths, no platform-managed posture scanning); `PrivilegedAnnotation` true for OpenShift; `ReadOnlyVolume` true for EKS-Bottlerocket; `KubeletPath` `/var/data/kubelet` for IKS, `/var/vcap/data/kubelet` for TKGI; RKE/GKE/GKE-Autopilot/EKS-Bottlerocket/IKS/TKGI/OpenShift map to no KSPM unless noted above
 - [ ] 4.3 Call `distroTemplateData()` in `InstallKubernetes()` before passing data to `renderDynakubeTemplate()`
 
 ## 5. Update DynaKube Template
@@ -39,6 +39,6 @@
 
 ## 6. Manifest Assertion Tests
 
-- [ ] 6.1 Create `pkg/installer/kubernetes_test.go` with `TestRenderDynakubeTemplate_Distros` table test — one row per distro string: `GKE`, `GKE-Autopilot`, `EKS`, `EKS-Bottlerocket`, `AKS`, `IKS`, `OpenShift`, `RKE`, `TKGI`, `kubernetes`
+- [ ] 6.1 Create `pkg/installer/kubernetes_test.go` with `TestRenderDynakubeTemplate_Distros` table test — one row per distro string: `GKE`, `GKE-Autopilot`, `EKS`, `EKS-Bottlerocket`, `AKS`, `IKS`, `OpenShift`, `RKE`, `TKGI`, `kubernetes`, `minikube`, `kind`, `k3s`
 - [ ] 6.2 For each row assert specific substrings present or absent in rendered YAML: `mappedHostPaths` present/absent per KSPM expectation, correct annotation key present/absent, `kubeletPath` value present/absent with correct path, `ClusterRoleBinding` always present
 - [ ] 6.3 Run `make test` and `make lint` — all pass

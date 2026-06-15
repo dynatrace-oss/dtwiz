@@ -29,14 +29,37 @@ const (
 
 // dynakubeTemplateData holds the values substituted into dynakube.tmpl.
 type dynakubeTemplateData struct {
-	ClusterName      string // sanitised Kubernetes resource name
-	APIURL           string // full Dynatrace API URL incl. /api suffix
-	APIToken         string // raw API token
-	DataIngestToken  string // raw data-ingest token
-	ActiveGateImage  string // full image reference for ActiveGate pods
-	EECRepository    string // OCI repository for the EEC image
-	EECTag           string // tag for the EEC image
-	CodeModulesImage string // full image reference for OneAgent code modules
+	ClusterName          string // sanitised Kubernetes resource name
+	APIURL               string // full Dynatrace API URL incl. /api suffix
+	APIToken             string // raw API token
+	DataIngestToken      string // raw data-ingest token
+	ActiveGateImage      string // full image reference for ActiveGate pods
+	EECRepository        string // OCI repository for the EEC image
+	EECTag               string // tag for the EEC image
+	CodeModulesImage     string // full image reference for OneAgent code modules
+	EnableKSPM           bool   // inject kspm.mappedHostPaths + kspmNodeConfigurationCollector block
+	PrivilegedAnnotation bool   // add feature.dynatrace.com/oneagent-privileged: "true" (OpenShift)
+	ReadOnlyVolume       bool   // add feature.dynatrace.com/injection-readonly-volume: "true" (Bottlerocket)
+	KubeletPath          string // non-standard kubelet path (IKS: /var/data/kubelet, TKGI: /var/vcap/data/kubelet)
+}
+
+// distroTemplateData applies per-distribution overrides to the base template
+// data. Distributions not listed here use no KSPM, no annotations, and no
+// kubeletPath override (GKE, GKE-Autopilot, RKE).
+func distroTemplateData(base dynakubeTemplateData, distro string) dynakubeTemplateData {
+	switch distro {
+	case "EKS", "AKS", "kubernetes", "minikube", "kind", "k3s", "":
+		base.EnableKSPM = true
+	case "OpenShift":
+		base.PrivilegedAnnotation = true
+	case "EKS-Bottlerocket":
+		base.ReadOnlyVolume = true
+	case "IKS":
+		base.KubeletPath = "/var/data/kubelet"
+	case "TKGI":
+		base.KubeletPath = "/var/vcap/data/kubelet"
+	}
+	return base
 }
 
 // renderDynakubeTemplate fills dynakube.tmpl with the provided data and
@@ -312,7 +335,7 @@ func InstallKubernetes(envURL, token, clusterName, distro string, dryRun bool) e
 	clusterName = resolveClusterName(clusterName, envURL)
 
 	// --- Build manifest ---
-	tmplData := dynakubeTemplateData{
+	tmplData := distroTemplateData(dynakubeTemplateData{
 		ClusterName:      clusterName,
 		APIURL:           apiURL + "/api",
 		APIToken:         token,
@@ -321,7 +344,7 @@ func InstallKubernetes(envURL, token, clusterName, distro string, dryRun bool) e
 		EECRepository:    dynakubeEECRepository,
 		EECTag:           dynakubeEECTag,
 		CodeModulesImage: dynakubeCodeModulesImage,
-	}
+	}, distro)
 	manifest, err := renderDynakubeTemplate(tmplData)
 	if err != nil {
 		return fmt.Errorf("rendering DynaKube manifest: %w", err)
