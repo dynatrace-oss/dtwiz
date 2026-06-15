@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.24] - 2026-06-15
+
+### Added
+
+- `featureflags` package: new `Experimental` feature flag, enabled via `--experimental` flag or `DTWIZ_EXPERIMENTAL=true` env var
+
+### Changed
+
+- `install docker` and `install demo` are now hidden behind the `Experimental` feature flag; they remain fully functional but are only visible and accessible when the flag is enabled
+
+### Fixed
+
+- `uninstall oneagent`: remove the residual `/opt/dynatrace/oneagent` stub directory that the vendor uninstall script leaves behind on Linux; a warning is printed (and uninstall still succeeds) if the cleanup fails
+
 ## [0.2.23] - 2026-06-11
 
 ### Added
@@ -326,7 +340,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.23...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.24...HEAD
+[0.2.24]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.23...v0.2.24
 [0.2.23]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.22...v0.2.23
 [0.2.22]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.21...v0.2.22
 [0.2.21]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.20...v0.2.21
