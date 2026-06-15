@@ -136,6 +136,28 @@ The system SHALL set the appropriate `kubeletPath` in the rendered DynaKube spec
 - **WHEN** distro is GKE, GKE-Autopilot, EKS, AKS, OpenShift, RKE, or generic kubernetes
 - **THEN** rendered manifest does NOT contain `kubeletPath`
 
+### Requirement: Templates block belongs only in DynaKube #2 (agents), not DynaKube #1 (monitoring)
+
+Per the Dynatrace Kubernetes onboarding guidelines for each supported distribution, DynaKube #1 (monitoring) SHALL contain only `activeGate` with the `kubernetes-monitoring` capability and the optional KSPM block. Extension and image templates (EEC, OTel collector, log module) belong exclusively in DynaKube #2 (agents), alongside `telemetryIngest`, `logMonitoring: {}`, and `extensions`. DynaKube #1 SHALL NOT carry these fields. When KSPM is enabled, only `kspmNodeConfigurationCollector` appears under `templates` in DynaKube #1.
+
+#### Scenario: DynaKube #1 templates limited to kspmNodeConfigurationCollector
+
+- **GIVEN** `InstallKubernetes()` is called with a KSPM-enabled distro
+- **WHEN** the manifest is rendered
+- **THEN** DynaKube #1 `templates` contains only `kspmNodeConfigurationCollector`; no EEC, OTel, or logModule entries
+
+#### Scenario: DynaKube #1 has no templates block when KSPM disabled
+
+- **GIVEN** `InstallKubernetes()` is called with a non-KSPM distro
+- **WHEN** the manifest is rendered
+- **THEN** DynaKube #1 has no `templates` block at all
+
+#### Scenario: DynaKube #2 carries all extension templates
+
+- **GIVEN** `InstallKubernetes()` is called for any distro
+- **WHEN** the manifest is rendered
+- **THEN** DynaKube #2 `templates` contains EEC, OTel collector, and log module image refs; `telemetryIngest`, `logMonitoring: {}`, and `extensions.prometheus: {}` are also present in DynaKube #2
+
 ### Requirement: ClusterRoleBinding included in all rendered manifests
 
 The system SHALL include a `ClusterRoleBinding` for `dynatrace-kubernetes-monitoring-sensitive` in every rendered manifest, binding to the `dynatrace-activegate` service account.

@@ -17,6 +17,15 @@ metadata:
   namespace: dynatrace
   labels:
     dynatrace.com/created-by: "dynatrace.kubernetes"
+{{- if or .PrivilegedAnnotation .ReadOnlyVolume }}
+  annotations:
+{{- if .PrivilegedAnnotation }}
+    feature.dynatrace.com/oneagent-privileged: "true"
+{{- end }}
+{{- if .ReadOnlyVolume }}
+    feature.dynatrace.com/injection-readonly-volume: "true"
+{{- end }}
+{{- end }}
 spec:
   apiUrl: {{ .APIURL }}
   tokens: {{ .ClusterName }}
@@ -32,23 +41,10 @@ spec:
         cpu: 1000m
         memory: 6Gi
     replicas: 1
-  templates:
-    extensionExecutionController:
-      imageRef:
-        repository: {{ .EECRepository }}
-        tag: {{ .EECTag }}
-    otelCollector:
-      imageRef:
-        repository: public.ecr.aws/dynatrace/dynatrace-otel-collector
-        tag: latest
-    logMonitoring:
-      imageRef:
-        repository: public.ecr.aws/dynatrace/dynatrace-logmodule
-        tag: 1.331.49.20260227-104933
-    kspmNodeConfigurationCollector:
-      imageRef:
-        repository: public.ecr.aws/dynatrace/dynatrace-k8s-node-config-collector
-        tag: 1.5.4
+{{- if .KubeletPath }}
+  kubeletPath: {{ .KubeletPath }}
+{{- end }}
+{{- if .EnableKSPM }}
   kspm:
     mappedHostPaths:
       - /boot
@@ -58,16 +54,12 @@ spec:
       - /sys/kernel/security/apparmor
       - /usr/lib/systemd/system
       - /var/lib
-  telemetryIngest:
-    protocols:
-      - jaeger
-      - otlp
-      - statsd
-      - zipkin
-    serviceName: telemetry-ingest
-  logMonitoring: {}
-  extensions:
-    prometheus: {}
+  templates:
+    kspmNodeConfigurationCollector:
+      imageRef:
+        repository: public.ecr.aws/dynatrace/dynatrace-k8s-node-config-collector
+        tag: 1.5.4
+{{- end }}
 ---
 apiVersion: dynatrace.com/v1beta6
 kind: DynaKube
@@ -76,11 +68,18 @@ metadata:
   namespace: dynatrace
   labels:
     dynatrace.com/created-by: "dynatrace.kubernetes"
+{{- if or .PrivilegedAnnotation .ReadOnlyVolume }}
+  annotations:
+{{- if .PrivilegedAnnotation }}
+    feature.dynatrace.com/oneagent-privileged: "true"
+{{- end }}
+{{- if .ReadOnlyVolume }}
+    feature.dynatrace.com/injection-readonly-volume: "true"
+{{- end }}
+{{- end }}
 spec:
   apiUrl: {{ .APIURL }}
   tokens: {{ .ClusterName }}
-  metadataEnrichment:
-    enabled: true
   oneAgent:
     applicationMonitoring:
       codeModulesImage: {{ .CodeModulesImage }}
@@ -97,6 +96,32 @@ spec:
         cpu: 1000m
         memory: 2Gi
     replicas: 3
+{{- if .KubeletPath }}
+  kubeletPath: {{ .KubeletPath }}
+{{- end }}
+  templates:
+    extensionExecutionController:
+      imageRef:
+        repository: {{ .EECRepository }}
+        tag: {{ .EECTag }}
+    otelCollector:
+      imageRef:
+        repository: public.ecr.aws/dynatrace/dynatrace-otel-collector
+        tag: latest
+    logMonitoring:
+      imageRef:
+        repository: public.ecr.aws/dynatrace/dynatrace-logmodule
+        tag: 1.331.49.20260227-104933
+  logMonitoring: {}
+  telemetryIngest:
+    protocols:
+      - jaeger
+      - otlp
+      - statsd
+      - zipkin
+    serviceName: telemetry-ingest
+  extensions:
+    prometheus: {}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -115,3 +140,18 @@ rules:
       - list
       - watch
       - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    dynatrace.com/created-by: "dynatrace.kubernetes"
+  name: dynatrace-kubernetes-monitoring-sensitive
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dynatrace-kubernetes-monitoring-sensitive
+subjects:
+  - kind: ServiceAccount
+    name: dynatrace-activegate
+    namespace: dynatrace
