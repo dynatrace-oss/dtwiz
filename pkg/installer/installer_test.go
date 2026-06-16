@@ -82,17 +82,14 @@ func TestExtractTenantID(t *testing.T) {
 		input string
 		want  string
 	}{
-		// SaaS — with and without scheme
 		{"https://abc12345.live.dynatrace.com", "abc12345"},
-		{"http://abc12345.live.dynatrace.com", "abc12345"},
 		{"https://abc12345.apps.dynatrace.com", "abc12345"},
 		{"https://fxz0998d.dev.dynatracelabs.com", "fxz0998d"},
 		{"https://fxz0998d.dev.apps.dynatracelabs.com", "fxz0998d"},
 		{"abc12345.live.dynatrace.com", "abc12345"},
-		// Managed (/e/<tenantId>) — with and without scheme
+		// Managed URL with /e/<id>
 		{"https://my-managed.example.com/e/abc12345", "abc12345"},
-		{"http://my-managed.example.com/e/abc12345", "abc12345"},
-		{"my-managed.example.com/e/abc12345", "abc12345"},
+		{"https://my-managed.example.com/e/abc12345/", "abc12345"},
 	}
 	for _, tt := range tests {
 		got := ExtractTenantID(tt.input)

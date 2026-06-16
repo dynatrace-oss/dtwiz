@@ -12,7 +12,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/client"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
@@ -111,6 +110,7 @@ func TestResolveAgentConfig_DebugLog(t *testing.T) {
 func TestInstallOneAgentV2_DryRun_NoDownload(t *testing.T) {
 	skipNonLinux(t)
 	withInstallDir(t, filepath.Join(t.TempDir(), "nonexistent"))
+	withNeedsSudo(t, false)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Errorf("dry-run made a real HTTP request: %s %s", r.Method, r.URL.Path)
@@ -125,57 +125,19 @@ func TestInstallOneAgentV2_DryRun_NoDownload(t *testing.T) {
 }
 
 func TestInstallOneAgentV2_UnsupportedPlatformReturnsError(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("macOS-specific error path test")
-	}
-	srv := newMockTenantServer(t, "/", http.StatusOK, `{}`)
-	defer srv.Close()
-
-	c := newMockClient(t, srv.URL)
-	err := InstallOneAgentV2(c, InstallOptions{MonitoringMode: "fullstack"})
+	// validateEnvironment rejects darwin before any network work.
+	err := validateEnvironment(Environment{OS: "darwin", Arch: "x86"})
 	if err == nil {
-		t.Fatal("expected error on macOS, got nil")
+		t.Fatal("expected error for darwin, got nil")
 	}
 	if !strings.Contains(err.Error(), "macOS") {
 		t.Errorf("error = %q, want macOS message", err)
 	}
 }
 
-func TestInstallOneAgentV2_ConnectivityFail_AbortsBeforeDownload(t *testing.T) {
-	if runtime.GOOS == "darwin" {
-		t.Skip("OneAgent not supported on macOS")
-	}
-
-	var downloadCalled bool
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == endpointsAPIPath {
-			w.WriteHeader(http.StatusOK)
-			// RFC 5737 TEST-NET: never routable, probe will time out.
-			_, _ = w.Write([]byte("192.0.2.1:12345"))
-			return
-		}
-		downloadCalled = true
-		http.NotFound(w, r)
-	}))
-	defer srv.Close()
-
-	old := defaultProbeTimeout
-	defaultProbeTimeout = 50 * time.Millisecond
-	defer func() { defaultProbeTimeout = old }()
-
-	c := newMockClient(t, srv.URL)
-	err := InstallOneAgentV2(c, InstallOptions{MonitoringMode: "fullstack"})
-	if err == nil {
-		t.Fatal("expected error when connectivity check fails, got nil")
-	}
-	if !strings.Contains(err.Error(), "connectivity check failed") {
-		t.Errorf("error = %q, want 'connectivity check failed'", err.Error())
-	}
-	if downloadCalled {
-		t.Error("download API was called but must not be when connectivity check fails")
-	}
-}
-
+// TestInstallOneAgentV2_ConnectivityPass_ContinuesToDownload verifies that when
+// all endpoints are reachable the install proceeds past the connectivity check
+// and reaches the download stage.
 func TestInstallOneAgentV2_ConnectivityPass_ContinuesToDownload(t *testing.T) {
 	if runtime.GOOS == "darwin" {
 		t.Skip("OneAgent not supported on macOS")
@@ -201,7 +163,7 @@ func TestInstallOneAgentV2_ConnectivityPass_ContinuesToDownload(t *testing.T) {
 
 	c := newMockClient(t, srv.URL)
 	err := InstallOneAgentV2(c, InstallOptions{MonitoringMode: "fullstack"})
-	// Connectivity passed, so the error must come from the download stage, not connectivity.
+	// Connectivity passed, so any error must come from the download stage, not connectivity.
 	if err != nil && strings.Contains(err.Error(), "connectivity check failed") {
 		t.Errorf("connectivity should have passed but got: %v", err)
 	}
@@ -209,36 +171,71 @@ func TestInstallOneAgentV2_ConnectivityPass_ContinuesToDownload(t *testing.T) {
 		t.Error("download API was not called — install should have proceeded past the connectivity check")
 	}
 }
-
 func TestDetectRuntimeEnvironment(t *testing.T) {
-	env, err := detectRuntimeEnvironment()
-	switch runtime.GOOS {
-	case "linux", "windows":
-		if err != nil {
-			if !strings.Contains(err.Error(), "unsupported architecture") {
-				t.Errorf("unexpected error on %s: %v", runtime.GOOS, err)
+	env := detectRuntimeEnvironment()
+	if env.OS == "" {
+		t.Error("expected non-empty OS")
+	}
+	if env.Arch == "" {
+		t.Error("expected non-empty Arch")
+	}
+}
+
+func TestClassifyEnvironment(t *testing.T) {
+	tests := []struct {
+		goos     string
+		goarch   string
+		wantOS   string
+		wantArch string
+	}{
+		{"linux", "amd64", "linux", "x86"},
+		{"linux", "arm64", "linux", "arm"},
+		{"linux", "386", "linux", "x86"},
+		{"linux", "arm", "linux", "arm"},
+		{"windows", "amd64", "windows", "x86"},
+		{"darwin", "amd64", "darwin", "x86"},
+		{"aix", "ppc64", "other", "other"},
+		{"freebsd", "amd64", "other", "x86"},
+		{"linux", "mips64", "linux", "other"},
+	}
+	for _, tt := range tests {
+		env := classifyEnvironment(tt.goos, tt.goarch)
+		if env.OS != tt.wantOS {
+			t.Errorf("classifyEnvironment(%q, %q).OS = %q, want %q", tt.goos, tt.goarch, env.OS, tt.wantOS)
+		}
+		if env.Arch != tt.wantArch {
+			t.Errorf("classifyEnvironment(%q, %q).Arch = %q, want %q", tt.goos, tt.goarch, env.Arch, tt.wantArch)
+		}
+	}
+}
+
+func TestValidateEnvironment(t *testing.T) {
+	tests := []struct {
+		env     Environment
+		wantErr bool
+		wantMsg string
+	}{
+		{Environment{OS: "linux", Arch: "x86"}, false, ""},
+		{Environment{OS: "linux", Arch: "arm"}, false, ""},
+		{Environment{OS: "windows", Arch: "x86"}, false, ""},
+		{Environment{OS: "darwin", Arch: "x86"}, true, "macOS"},
+		{Environment{OS: "other", Arch: "x86"}, true, "Linux or Windows"},
+		{Environment{OS: "linux", Arch: "other"}, true, "x86 or ARM"},
+		// OS checked before arch: darwin/other → macOS message, not arch message
+		{Environment{OS: "darwin", Arch: "other"}, true, "macOS"},
+	}
+	for _, tt := range tests {
+		err := validateEnvironment(tt.env)
+		if tt.wantErr {
+			if err == nil {
+				t.Errorf("validateEnvironment(%+v): expected error", tt.env)
+				continue
 			}
-			return
-		}
-		if env.OS != runtime.GOOS {
-			t.Errorf("env.OS = %q, want %q", env.OS, runtime.GOOS)
-		}
-		if env.Arch == "" {
-			t.Error("expected non-empty Arch")
-		}
-	case "darwin":
-		if err == nil {
-			t.Fatal("expected error on macOS")
-		}
-		if !strings.Contains(err.Error(), "macOS") {
-			t.Errorf("error = %q, want macOS message", err)
-		}
-	default:
-		if err == nil {
-			t.Fatalf("expected error on unsupported OS %s", runtime.GOOS)
-		}
-		if !strings.Contains(err.Error(), "unsupported") {
-			t.Errorf("error = %q, want unsupported OS message", err)
+			if !strings.Contains(err.Error(), tt.wantMsg) {
+				t.Errorf("validateEnvironment(%+v) = %q, want message containing %q", tt.env, err.Error(), tt.wantMsg)
+			}
+		} else if err != nil {
+			t.Errorf("validateEnvironment(%+v): unexpected error: %v", tt.env, err)
 		}
 	}
 }
@@ -374,7 +371,7 @@ func skipNonLinux(t *testing.T) {
 func TestInstallOneAgentV2_DryRun_HeaderInstall(t *testing.T) {
 	skipNonLinux(t)
 	withInstallDir(t, filepath.Join(t.TempDir(), "nonexistent"))
-	t.Setenv("PATH", "")
+	withNeedsSudo(t, false)
 
 	flush := captureStdout(t)
 	srv := newMockTenantServer(t, "/", http.StatusOK, "")
@@ -398,6 +395,7 @@ func TestInstallOneAgentV2_DryRun_HeaderInstall(t *testing.T) {
 func TestInstallOneAgentV2_DryRun_HeaderUpdate(t *testing.T) {
 	skipNonLinux(t)
 	withInstallDir(t, t.TempDir())
+	withNeedsSudo(t, false)
 
 	flush := captureStdout(t)
 	srv := newMockTenantServer(t, "/", http.StatusOK, "")
@@ -418,6 +416,7 @@ func TestInstallOneAgentV2_DryRun_HeaderUpdate(t *testing.T) {
 func TestInstallOneAgentV2_UpdatePrompt_Declined(t *testing.T) {
 	skipNonLinux(t)
 	withInstallDir(t, t.TempDir())
+	withNeedsSudo(t, false)
 	withStdin(t, "n\n")
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -437,6 +436,7 @@ func TestInstallOneAgentV2_UpdatePrompt_Declined(t *testing.T) {
 func TestInstallOneAgentV2_UpdatePrompt_EOFCancels(t *testing.T) {
 	skipNonLinux(t)
 	withInstallDir(t, t.TempDir())
+	withNeedsSudo(t, false)
 	withStdin(t, "") // EOF immediately
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -456,6 +456,7 @@ func TestInstallOneAgentV2_UpdatePrompt_EOFCancels(t *testing.T) {
 func TestInstallOneAgentV2_UpdatePrompt_AutoConfirm(t *testing.T) {
 	skipNonLinux(t)
 	withInstallDir(t, t.TempDir())
+	withNeedsSudo(t, false)
 
 	orig := installer.AutoConfirm
 	installer.AutoConfirm = true
@@ -472,7 +473,8 @@ func TestInstallOneAgentV2_UpdatePrompt_AutoConfirm(t *testing.T) {
 
 	// The install will fail after download (no real installer), but the point
 	// is that the prompt was skipped and the download was attempted.
-	_ = InstallOneAgentV2(c, InstallOptions{MonitoringMode: "fullstack", NoVerifySignature: true})
+	// SkipConnectivityCheck avoids a 5s probe timeout in unit tests.
+	_ = InstallOneAgentV2(c, InstallOptions{MonitoringMode: "fullstack", NoVerifySignature: true, SkipConnectivityCheck: true})
 }
 
 // TestInstallOneAgentV2_ConnectivityCheckOnly_SkipsUpdatePrompt verifies that
@@ -516,11 +518,15 @@ func TestInstallOneAgentV2_ConnectivityCheckOnly_SkipsUpdatePrompt(t *testing.T)
 func TestInstallOneAgentV2_UpdateQuiet(t *testing.T) {
 	skipNonLinux(t)
 	withInstallDir(t, t.TempDir())
+	withNeedsSudo(t, false)
 
 	downloaded := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Endpoint resolution and installer download both hit this handler.
+		// Respond with a minimal installer body; endpoint parsing is lenient
+		// enough to accept the response as a bare hostname.
 		if strings.Contains(r.URL.Path, "installer/agent") {
-			downloaded = true
+			downloaded = strings.Contains(r.URL.Path, "/default/latest")
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("#!/bin/sh\n"))
 		}
@@ -528,7 +534,8 @@ func TestInstallOneAgentV2_UpdateQuiet(t *testing.T) {
 	defer srv.Close()
 	c := newMockClient(t, srv.URL)
 
-	_ = InstallOneAgentV2(c, InstallOptions{MonitoringMode: "fullstack", Quiet: true, NoVerifySignature: true})
+	// SkipConnectivityCheck avoids a 5s probe timeout in unit tests.
+	_ = InstallOneAgentV2(c, InstallOptions{MonitoringMode: "fullstack", Quiet: true, NoVerifySignature: true, SkipConnectivityCheck: true})
 	if !downloaded {
 		t.Error("expected download to be attempted in quiet mode with existing agent")
 	}

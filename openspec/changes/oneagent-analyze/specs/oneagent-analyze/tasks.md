@@ -19,30 +19,41 @@ Before implementing, review the design and spec documents to understand the requ
 
 ## 2. OS/Arch Detection and Pre-flight Checks
 
-Detect OS/arch and run the existing-OneAgent and privilege pre-flights before any network work. Fail fast with clear, actionable errors. Agent configuration (default + `--monitoring-mode` override) is a separate concern owned by Task 2.5.
+Implement OS/arch classification, platform validation, and system-readiness pre-flight before any network work. All checks run automatically as part of `InstallOneAgentV2` — no new CLI flags.
 
-**Files:** `pkg/installer/oneagent.go` (extend), `pkg/installer/oneagent/` (extend — created in Task 1), `pkg/analyzer/detect_oneagent_unix.go` / `_windows.go` (reuse)
+**Files:** `pkg/installer/oneagent/oneagent.go` (extend), `pkg/installer/oneagent/preflight.go` (new)
 
-Task 1 has already created the `pkg/installer/oneagent/` package with the `InstallOptions` struct and the full `InstallOneAgentV2` entry function. This task fills in the OS-detection + preflight stages.
+### Part A — OS/Arch classification and validation
 
-### Part A — OS/Arch detection
-
-- [ ] 2.1 Define `Environment` struct (`OS`, `Arch`, `Supported`, `Reason`) in `pkg/installer/oneagent/oneagent.go` (if not already present from Task 1)
-- [ ] 2.2 Implement `DetectEnvironment() Environment` mapping `runtime.GOOS`/`runtime.GOARCH` → `OS` ("windows"/"linux"/"aix"/"other") and `Arch` ("x86" for `amd64`/`386`, "arm" for `arm64`/`arm`, "other" otherwise)
-- [ ] 2.3 Mark AIX as `Supported: false` with `Reason: "AIX is not supported"`; preserve the existing macOS rejection message
-- [ ] 2.4 Unit tests covering Linux/amd64, Linux/arm64, Windows/amd64, AIX rejection, and unknown OS
-- [ ] 2.4a After `DetectEnvironment`, emit `logger.Debug("detected environment", "os", env.OS, "arch", env.Arch, "supported", env.Supported, "reason", env.Reason)`
+- [x] 2.1 Add `classifyEnvironment(goos, goarch string) Environment` — pure function, no error return. Switch on `goarch` (`amd64`/`386`→`"x86"`, `arm64`/`arm`→`"arm"`, default→`"other"`), then switch on `goos` (`"linux"`, `"windows"`, `"darwin"`, default→`"other"`). AIX and all other unrecognised OS values map to `"other"`.
+- [x] 2.2 Replace `detectRuntimeEnvironment() (Environment, error)` with `detectRuntimeEnvironment() Environment` that calls `classifyEnvironment(runtime.GOOS, runtime.GOARCH)` and returns the result directly.
+- [x] 2.3 Update the `Environment` type to carry only `OS` and `Arch` fields. OS canonical values: `"linux"`, `"windows"`, `"darwin"`, `"other"`. Arch canonical values: `"x86"`, `"arm"`, `"other"`. Remove `Supported` and `Reason` — support decisions live in `validateEnvironment`.
+- [x] 2.4 Add `validateEnvironment(env Environment) error`: darwin → macOS rejection (preserves existing message), other OS → generic message naming `runtime.GOOS`, supported OS + other arch → message naming `runtime.GOARCH`. OS is checked before arch. Supported combinations (`linux`/`windows` × `x86`/`arm`) return nil.
+- [x] 2.4a In `InstallOneAgentV2`: replace `env, err := detectRuntimeEnvironment()` with `env := detectRuntimeEnvironment()` and add `if err := validateEnvironment(env); err != nil { return err }` immediately after, before `ResolveAgentConfig` and `runPreflightChecks`.
+- [x] 2.4b Emit `logger.Debug("detected environment", "os", env.OS, "arch", env.Arch)` after `detectRuntimeEnvironment` returns.
+- [x] 2.5 Unit tests — `TestClassifyEnvironment` table test covering: linux/amd64, linux/arm64, linux/386, linux/arm, windows/amd64, darwin/amd64, aix/ppc64 (→ other/other), freebsd/amd64 (→ other/x86), linux/mips64 (→ linux/other).
+- [x] 2.6 Unit tests — `TestValidateEnvironment` covering: linux/x86 (nil), linux/arm (nil), windows/x86 (nil), darwin/x86 → macOS message, other/x86 → names `runtime.GOOS`, linux/other → names `runtime.GOARCH`, darwin/other → macOS message (OS checked before arch).
+- [x] 2.7 Update `TestDetectRuntimeEnvironment`: remove darwin error assertion; verify it returns a non-empty `Environment` for any platform.
 
 ### Part B — Pre-flight checks
 
-- [ ] 2.5 Implement `CheckExistingOneAgent(force bool) error` that calls `pkg/analyzer/detect_oneagent_*.go` and returns `"OneAgent already installed at {path}. Use --force to reinstall."` when found and `force` is false
-- [ ] 2.6 When `force` is true and an agent is detected, log via `logger.Debug` and return nil
-- [ ] 2.7a Implement `CheckPrivilege() error` in `preflight_unix.go` (build tag `//go:build !windows`) that checks `os.Getuid() == 0` and returns `"This command requires root privileges. Please run with sudo."` when the process is not root
-- [ ] 2.7b Implement `CheckPrivilege() error` in `preflight_windows.go` (build tag `//go:build windows`) using process-token SID membership to detect admin elevation and returns `"This command requires administrator privileges. Please run as an administrator."` when not elevated
-- [ ] 2.8 Add a `sudo_windows.go` admin check (process-token SID membership) if not already present; reuse `needsSudo()` semantics on Unix
-- [ ] 2.9 Unit tests: existing-agent path (with/without `--force`), no existing agent, missing privilege
-- [ ] 2.9a Emit `logger.Debug("existing oneagent detected", "path", path, "force_override", force)` when an agent is detected (both with and without `--force`)
-- [ ] 2.9b Emit `logger.Debug("privilege check", "privileged", ok, "os", runtime.GOOS)` after the privilege probe
+- [x] 2.8 Define `preflightResult struct { IsUpdate bool }` in `pkg/installer/oneagent/preflight.go`.
+- [x] 2.9 Implement `runPreflightChecks(env Environment, opts InstallOptions) (preflightResult, error)`:
+  - Call `oneAgentInstalled()`, store result in `result.IsUpdate`, emit `logger.Debug("preflight: oneagent detection", "is_update", result.IsUpdate)`.
+  - When `result.IsUpdate && !opts.DryRun && !opts.Quiet`: call `installer.ConfirmProceed`; on decline/error return `installer.ErrInstallCancelled`.
+  - When `env.OS == "linux" && needsSudoFn()`: call `sudoPathFn()`; on error return `fmt.Errorf("sudo not found: install sudo or run dtwiz as root")`; on success emit `logger.Debug("preflight: sudo available")`.
+  - Return `result, nil`.
+- [x] 2.10 Replace inline `updating := oneAgentInstalled()` + confirmation block in `InstallOneAgentV2` with `preflight, err := runPreflightChecks(env, opts); if err != nil { return err }`. Pass `preflight.IsUpdate` to `printDryRun`.
+- [x] 2.11 Unit tests in `pkg/installer/oneagent/preflight_test.go`:
+  - `TestRunPreflightChecks_NoInstall_NoSudo` — returns `{IsUpdate: false}`, nil error.
+  - `TestRunPreflightChecks_NoInstall_SudoAvailable` — non-root, sudo found, returns nil error.
+  - `TestRunPreflightChecks_NoInstall_SudoMissing` — non-root, sudo missing, returns error containing `"sudo not found"`.
+  - `TestRunPreflightChecks_ExistingInstall_Confirmed` — user confirms, returns `{IsUpdate: true}`, nil error.
+  - `TestRunPreflightChecks_ExistingInstall_Declined` — user declines, returns `ErrInstallCancelled`.
+  - `TestRunPreflightChecks_ExistingInstall_DryRun` — no prompt, returns `{IsUpdate: true}`, nil error.
+  - `TestRunPreflightChecks_ExistingInstall_Quiet` — no prompt, returns nil error.
+  - `TestRunPreflightChecks_Windows_SkipsSudo` — `sudoPathFn` not called, returns nil error.
+- [x] 2.12 Update existing `InstallOneAgentV2` integration tests (`TestInstallOneAgentV2_DryRun_*`, `TestInstallOneAgentV2_Update*`) to inject `withNeedsSudo(t, false)` where the sudo pre-flight would otherwise interfere.
 
 ---
 
@@ -112,16 +123,17 @@ Resolve agent communication endpoints dynamically from the tenant API. Drop the 
 - [x] 3.15 Use a default probe timeout of `5s` per endpoint; do not make it configurable at this stage
 - [x] 3.16 Wire `opts.ConnectivityCheckOnly` (from `InstallOptions`): if `true`, call `CheckAllEndpoints`, print one `display.PrintStatusLine` per endpoint (`host:port` as label, `✓ <latency>` in green or `✗ <friendly-error>` in red), then return `nil` without proceeding to token minting, download, or install
 - [x] 3.16a Print `display.Header("Checking network connectivity...")` BEFORE calling `CheckAllEndpoints` when `ConnectivityCheckOnly` is true, so the header appears at the start of the dial window rather than after it
-- [x] 3.18 When `len(report.Results with Reachable==false) > 0` in the normal install path, print a WARNING block and return a non-nil error to abort the install
+- [x] 3.17 Wire `opts.PrintEndpoints` (from `InstallOptions`): if `true`, print resolved endpoints one per line in `host:port` format after `ResolveEndpoints`, then return `nil` without probing or installing
+- [x] 3.18 When `len(report.Results with Reachable==false) > 0` in the normal install path, print a WARNING block and continue (non-blocking)
 - [x] 3.18a In the normal install path, call `display.PrintPending("connectivity", "checking endpoints...")` before `CheckAllEndpoints` and `display.ClearPending()` after it returns, giving TTY users a transient in-progress indicator
 - [x] 3.18b Implement `friendlyDialError(errStr string) string` that maps raw `net.DialTimeout` error strings to short human-readable phrases: `"i/o timeout"` / `"deadline exceeded"` / `"timed out"` → `"timed out"`, `"connection refused"` → `"connection refused"`, `"no route to host"` → `"no route to host"`, `"network is unreachable"` → `"network unreachable"`, `"connection reset"` → `"connection reset"`, anything else → `"unreachable"`
 - [x] 3.18c Update `printConnectivityWarning` format: header says `"Warning: connectivity check failed"`; lead with `display.PrintStatusLine("action", "allow outbound TCP to the following addresses", display.ColorWarning)`; frame the address list between two `display.PrintSectionDivider()` calls; use `friendlyDialError` for error messages; update proxy tip to `"if a proxy is required, set HTTP_PROXY / HTTPS_PROXY"`
 - [x] 3.18d Unit test for `friendlyDialError`: all mapping cases including the unknown-error fallback and empty-string case
-- [x] 3.19 When all endpoints are reachable in the normal install path, print `display.PrintStatusLine("connectivity", "all endpoints reachable", display.ColorOK)`
+- [x] 3.19 When all endpoints are reachable in the normal install path, print nothing (do not add a "all endpoints reachable" success line at default verbosity)
 - [x] 3.20 Wire `opts.SkipConnectivityCheck` (from `InstallOptions`): when `true`, skip `CheckAllEndpoints` entirely; emit `logger.Debug("skipping connectivity probe", "reason", "--skip-connectivity-check")`
 - [x] 3.21 Emit one `logger.Debug("endpoint probe result", "host", r.Endpoint.Host, "port", r.Endpoint.Port, "reachable", r.Reachable, "latency_ms", r.Latency.Milliseconds(), "error", r.Error)` per result when probing
 - [x] 3.22 Emit `logger.Verbose("connectivity probe complete", "total", len(report.Results), "failed", report.FailedCount)` after all probes finish (only when the probe ran in the normal path)
 - [x] 3.23 Unit tests:
-  - Normal path: all reachable (success line printed), some blocked (warning printed + error returned), all blocked, `SkipConnectivityCheck == true` (no probe, no output)
+  - Normal path: all reachable (no output), some blocked (warning printed, install continues), all blocked, `SkipConnectivityCheck == true` (no probe, no output)
   - `--connectivity-check-only`: mixed reachable/blocked endpoints print the expected table, no token mint
   - Use an in-process TCP listener (`net.Listen`) to control reachability without real network access

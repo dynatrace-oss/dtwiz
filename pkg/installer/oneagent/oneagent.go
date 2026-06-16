@@ -5,10 +5,10 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/client"
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
-	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -19,6 +19,7 @@ type InstallOptions struct {
 	NoVerifySignature     bool
 	SkipConnectivityCheck bool
 	ConnectivityCheckOnly bool
+	PrintEndpoints        bool
 	Quiet                 bool
 }
 
@@ -53,12 +54,16 @@ func ResolveAgentConfig(opts InstallOptions) AgentConfig {
 	return cfg
 }
 
+const connectivityProbeTimeout = 5 * time.Second
+
 func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
-	env, err := detectRuntimeEnvironment()
-	if err != nil {
+	env := detectRuntimeEnvironment()
+	logger.Debug("detected environment", "os", env.OS, "arch", env.Arch)
+
+	if err := validateEnvironment(env); err != nil {
 		return err
 	}
-	logger.Debug("detected environment", "os", env.OS, "arch", env.Arch)
+	display.PrintStatusLine("OS", fmt.Sprintf("✓ %s / %s", env.OS, env.Arch), display.ColorOK)
 
 	cfg := ResolveAgentConfig(opts)
 	cfg.ServerURL = c.Classic.BaseURL()
@@ -70,53 +75,43 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 		"server_url", cfg.ServerURL,
 	)
 
-	updating := oneAgentInstalled()
-	logger.Debug("existing oneagent detected", "updating", updating)
+	preflight, err := runPreflightChecks(env, opts)
+	if err != nil {
+		return err
+	}
 
 	if opts.DryRun {
-		printDryRun(env, cfg, opts, updating)
+		printDryRun(env, cfg, opts, preflight.IsUpdate)
 		return nil
 	}
 
-	if updating && !opts.Quiet && !opts.ConnectivityCheckOnly {
-		ok, err := installer.ConfirmProceed("  OneAgent is already installed. Update?")
-		if err != nil || !ok {
-			display.PrintStatusLine("result", "update cancelled", display.ColorMuted)
-			return installer.ErrInstallCancelled
-		}
+	logTenantID(c.Classic.BaseURL())
+
+	endpoints, err := ResolveEndpoints(c.Classic)
+	if err != nil {
+		return err
 	}
 
-	if opts.SkipConnectivityCheck {
-		logger.Debug("skipping connectivity probe", "reason", "--skip-connectivity-check")
-	} else {
-		endpoints, err := ResolveEndpoints(c.Classic)
-		if err != nil {
-			return err
+	if opts.PrintEndpoints {
+		for _, e := range endpoints {
+			fmt.Println(e.String())
 		}
-		if opts.ConnectivityCheckOnly {
-			// Print header before the probe so the user sees what's happening
-			// during the dial timeout window.
-			display.Header("Checking network connectivity...")
-			report := CheckAllEndpoints(endpoints, defaultProbeTimeout)
-			printConnectivityResults(report)
-			if report.FailedCount > 0 {
-				return fmt.Errorf("connectivity check failed: %d/%d endpoints unreachable", report.FailedCount, len(report.Results))
-			}
-			return nil
-		}
-		// Normal install path: transient pending line while probes run,
-		// then clear it — no lingering output unless something failed.
-		display.PrintPending("connectivity", "checking endpoints...")
-		report := CheckAllEndpoints(endpoints, defaultProbeTimeout)
-		display.ClearPending()
-		if report.FailedCount > 0 {
-			printConnectivityWarning(report)
-			return fmt.Errorf("connectivity check failed: %d/%d endpoints unreachable", report.FailedCount, len(report.Results))
-		}
-		display.PrintStatusLine("connectivity", "all endpoints reachable", display.ColorOK)
+		return nil
 	}
+
 	if opts.ConnectivityCheckOnly {
+		report := CheckAllEndpoints(endpoints, connectivityProbeTimeout)
+		printConnectivityReport(report)
 		return nil
+	}
+
+	if !opts.SkipConnectivityCheck {
+		report := CheckAllEndpoints(endpoints, connectivityProbeTimeout)
+		if !report.AllPassed {
+			printConnectivityWarning(report)
+		}
+	} else {
+		logger.Debug("skipping connectivity probe", "reason", "--skip-connectivity-check")
 	}
 
 	installerPath, err := DownloadInstaller(c.Classic, env)
@@ -162,28 +157,48 @@ func printDryRun(env Environment, cfg AgentConfig, opts InstallOptions, updating
 	display.PrintStatusLine("dry-run", "no changes made", display.ColorMuted)
 }
 
-// detectRuntimeEnvironment returns an Environment based on the current host
-// OS and architecture. Used as a stand-in until DetectEnvironment (Task 2) is
-// implemented.
-func detectRuntimeEnvironment() (Environment, error) {
+// classifyEnvironment maps goos/goarch strings to canonical OS and arch tokens.
+// It never returns an error — unrecognized values map to "other", and
+// validateEnvironment encodes the support decision.
+func classifyEnvironment(goos, goarch string) Environment {
 	var arch string
-	switch runtime.GOARCH {
-	case "amd64":
+	switch goarch {
+	case "amd64", "386":
 		arch = "x86"
-	case "arm64":
+	case "arm64", "arm":
 		arch = "arm"
 	default:
-		return Environment{}, fmt.Errorf("unsupported architecture for OneAgent: %s", runtime.GOARCH)
+		arch = "other"
 	}
 
-	switch runtime.GOOS {
+	var os string
+	switch goos {
 	case "linux":
-		return Environment{OS: "linux", Arch: arch}, nil
+		os = "linux"
 	case "windows":
-		return Environment{OS: "windows", Arch: arch}, nil
+		os = "windows"
 	case "darwin":
-		return Environment{}, fmt.Errorf("OneAgent direct install is not supported on macOS; use Docker or Linux")
+		os = "darwin"
 	default:
-		return Environment{}, fmt.Errorf("unsupported OS for OneAgent: %s", runtime.GOOS)
+		os = "other"
 	}
+
+	return Environment{OS: os, Arch: arch}
+}
+
+func detectRuntimeEnvironment() Environment {
+	return classifyEnvironment(runtime.GOOS, runtime.GOARCH)
+}
+
+func validateEnvironment(env Environment) error {
+	switch env.OS {
+	case "darwin":
+		return fmt.Errorf("OneAgent direct install is not supported on macOS; use Docker or Linux")
+	case "other":
+		return fmt.Errorf("OneAgent direct install is not supported on %s; use Linux or Windows", runtime.GOOS)
+	}
+	if env.Arch == "other" {
+		return fmt.Errorf("OneAgent direct install is not supported on %s architecture; use an x86 or ARM host", runtime.GOARCH)
+	}
+	return nil
 }

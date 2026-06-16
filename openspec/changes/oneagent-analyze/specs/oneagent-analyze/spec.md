@@ -2,89 +2,264 @@
 
 ## ADDED Requirements
 
-### Requirement: Environment detection before any network work
+### Requirement: classifyEnvironment maps any GOOS/GOARCH to canonical Environment values
 
-`InstallOneAgentV2` SHALL detect OS and architecture before issuing any HTTP request. Detection SHALL produce an `Environment` struct with fields `OS` (`"windows"`, `"linux"`, `"aix"`, or `"other"`), `Arch` (`"x86"`, `"arm"`, or `"other"`), `Supported`, and `Reason`. Architecture mapping: `amd64`/`386` → `"x86"`, `arm64`/`arm` → `"arm"`.
+`classifyEnvironment(goos, goarch string) Environment` SHALL map the raw `runtime.GOOS` and `runtime.GOARCH` strings to the canonical OS and arch token sets. It SHALL never return an error. `"linux"` and `"windows"` are the supported OS values; `"darwin"` is classified explicitly so `validateEnvironment` can return a targeted macOS message. All other OS values (including `"aix"`, `"freebsd"`, etc.) map to `"other"`.
 
-#### Scenario: Linux amd64 host
+OS mapping:
 
-- **GIVEN** the process runs on Linux with `runtime.GOARCH == "amd64"`
-- **WHEN** `DetectEnvironment()` is called
-- **THEN** it returns `{OS: "linux", Arch: "x86", Supported: true}`
+| Input (`goos`) | `env.OS`    |
+| -------------- | ----------- |
+| `"linux"`      | `"linux"`   |
+| `"windows"`    | `"windows"` |
+| `"darwin"`     | `"darwin"`  |
+| anything else  | `"other"`   |
 
-#### Scenario: Linux arm64 host
+Arch mapping:
 
-- **GIVEN** the process runs on Linux with `runtime.GOARCH == "arm64"`
-- **WHEN** `DetectEnvironment()` is called
-- **THEN** it returns `{OS: "linux", Arch: "arm", Supported: true}`
+| Input (`goarch`)   | `env.Arch` |
+| ------------------ | ---------- |
+| `"amd64"`, `"386"` | `"x86"`    |
+| `"arm64"`, `"arm"` | `"arm"`    |
+| anything else      | `"other"`  |
 
-#### Scenario: Windows amd64 host
+#### Scenario: Linux amd64 — canonical linux/x86
 
-- **GIVEN** the process runs on Windows with `runtime.GOARCH == "amd64"`
-- **WHEN** `DetectEnvironment()` is called
-- **THEN** it returns `{OS: "windows", Arch: "x86", Supported: true}`
+- **GIVEN** `goos == "linux"`, `goarch == "amd64"`
+- **WHEN** `classifyEnvironment` is called
+- **THEN** it returns `Environment{OS: "linux", Arch: "x86"}`
 
-#### Scenario: AIX explicitly unsupported
+#### Scenario: Linux arm64 — canonical linux/arm
 
-- **GIVEN** the process runs on `aix`
-- **WHEN** `DetectEnvironment()` is called
-- **THEN** it returns `{OS: "aix", Supported: false, Reason: "AIX is not supported"}`
+- **GIVEN** `goos == "linux"`, `goarch == "arm64"`
+- **WHEN** `classifyEnvironment` is called
+- **THEN** it returns `Environment{OS: "linux", Arch: "arm"}`
 
-#### Scenario: macOS direct install unsupported
+#### Scenario: Linux 386 — maps to x86
 
-- **GIVEN** the process runs on `darwin`
-- **WHEN** `DetectEnvironment()` is called
-- **THEN** it returns `{OS: "other", Supported: false, Reason: "OneAgent direct install is not supported on macOS; use Docker or Linux"}`
+- **GIVEN** `goos == "linux"`, `goarch == "386"`
+- **WHEN** `classifyEnvironment` is called
+- **THEN** it returns `Environment{OS: "linux", Arch: "x86"}`
 
-### Requirement: Existing-OneAgent pre-flight check
+#### Scenario: Linux arm (32-bit) — maps to arm
 
-`InstallOneAgentV2` SHALL detect an existing OneAgent installation by reusing `pkg/analyzer/detect_oneagent_*.go`. When found AND `--force` is not set, the install SHALL exit with the message `"OneAgent already installed at {path}. Use --force to reinstall."`. When `--force` is set, the install SHALL proceed and log a debug entry recording the override.
+- **GIVEN** `goos == "linux"`, `goarch == "arm"`
+- **WHEN** `classifyEnvironment` is called
+- **THEN** it returns `Environment{OS: "linux", Arch: "arm"}`
 
-#### Scenario: Existing agent blocks install
+#### Scenario: Windows amd64 — canonical windows/x86
 
-- **GIVEN** OneAgent is installed at `/opt/dynatrace/oneagent`
-- **AND** `--force` is not passed
-- **WHEN** `dtwiz install oneagent` runs
-- **THEN** the command exits with `"OneAgent already installed at /opt/dynatrace/oneagent. Use --force to reinstall."`
+- **GIVEN** `goos == "windows"`, `goarch == "amd64"`
+- **WHEN** `classifyEnvironment` is called
+- **THEN** it returns `Environment{OS: "windows", Arch: "x86"}`
+
+#### Scenario: macOS — classified as darwin
+
+- **GIVEN** `goos == "darwin"`, `goarch == "amd64"`
+- **WHEN** `classifyEnvironment` is called
+- **THEN** it returns `Environment{OS: "darwin", Arch: "x86"}` (no error)
+
+#### Scenario: Unknown OS (aix, freebsd, etc.) — classified as other
+
+- **GIVEN** `goos == "aix"`, `goarch == "ppc64"`
+- **WHEN** `classifyEnvironment` is called
+- **THEN** it returns `Environment{OS: "other", Arch: "other"}` (no error)
+
+#### Scenario: Unknown arch — classified as other
+
+- **GIVEN** `goos == "linux"`, `goarch == "mips64"`
+- **WHEN** `classifyEnvironment` is called
+- **THEN** it returns `Environment{OS: "linux", Arch: "other"}` (no error)
+
+### Requirement: detectRuntimeEnvironment returns Environment without error
+
+`detectRuntimeEnvironment() Environment` SHALL call `classifyEnvironment(runtime.GOOS, runtime.GOARCH)` and return the result. It SHALL NOT return an error — the error-returning signature is replaced by a plain return.
+
+#### Scenario: Called on the host platform
+
+- **GIVEN** the process is running on any OS/arch
+- **WHEN** `detectRuntimeEnvironment()` is called
+- **THEN** it returns an `Environment` with non-empty `OS` and `Arch` fields, with no error
+
+### Requirement: validateEnvironment fails fast on unsupported platforms
+
+`validateEnvironment(env Environment) error` SHALL return a non-nil, actionable error for each unsupported platform. Supported platforms (`"linux"` and `"windows"` with arch `"x86"` or `"arm"`) SHALL return nil. OS is checked before arch.
+
+#### Scenario: Linux/x86 is supported
+
+- **GIVEN** `env == {OS: "linux", Arch: "x86"}`
+- **WHEN** `validateEnvironment` is called
+- **THEN** it returns nil
+
+#### Scenario: Linux/arm is supported
+
+- **GIVEN** `env == {OS: "linux", Arch: "arm"}`
+- **WHEN** `validateEnvironment` is called
+- **THEN** it returns nil
+
+#### Scenario: Windows/x86 is supported
+
+- **GIVEN** `env == {OS: "windows", Arch: "x86"}`
+- **WHEN** `validateEnvironment` is called
+- **THEN** it returns nil
+
+#### Scenario: macOS rejection preserves existing message
+
+- **GIVEN** `env.OS == "darwin"`
+- **WHEN** `validateEnvironment` is called
+- **THEN** it returns an error containing `"macOS"` and `"Docker or Linux"`
+
+#### Scenario: Unknown OS rejection names the platform
+
+- **GIVEN** `env.OS == "other"`
+- **WHEN** `validateEnvironment` is called
+- **THEN** it returns an error containing `runtime.GOOS` and `"Linux or Windows"`
+
+#### Scenario: Unknown arch rejection names the architecture
+
+- **GIVEN** `env.OS == "linux"`, `env.Arch == "other"`
+- **WHEN** `validateEnvironment` is called
+- **THEN** it returns an error containing `runtime.GOARCH` and `"x86 or ARM"`
+
+#### Scenario: OS check precedes arch check
+
+- **GIVEN** `env == {OS: "darwin", Arch: "other"}`
+- **WHEN** `validateEnvironment` is called
+- **THEN** the error message mentions `"macOS"` (not the arch)
+
+### Requirement: InstallOneAgentV2 calls validateEnvironment before any network operation
+
+In `InstallOneAgentV2`, `validateEnvironment(env)` SHALL be called immediately after `detectRuntimeEnvironment()` and before `ResolveAgentConfig`, `runPreflightChecks`, and `DownloadInstaller`. An unsupported platform returns the validation error before any HTTP request is made.
+
+#### Scenario: macOS returns error before download
+
+- **GIVEN** running on macOS
+- **WHEN** `InstallOneAgentV2` is called
+- **THEN** it returns an error containing `"macOS"`
+- **AND** `DownloadInstaller` is NOT called
 - **AND** no HTTP requests are made
 
-#### Scenario: --force overrides existing-agent check
+### Requirement: runPreflightChecks validates system readiness before download
 
-- **GIVEN** OneAgent is installed at `/opt/dynatrace/oneagent`
-- **AND** `--force` is passed
-- **WHEN** `dtwiz install oneagent --force` runs
-- **THEN** the preflight emits a `logger.Debug` entry noting the override
-- **AND** the install proceeds to subsequent stages
+`runPreflightChecks(env Environment, opts InstallOptions) (preflightResult, error)` SHALL execute all system-readiness checks in order before any network operation. It SHALL be called in `InstallOneAgentV2` after `validateEnvironment` and `ResolveAgentConfig`, and before `DownloadInstaller`.
 
-#### Scenario: No existing agent
+`preflightResult` carries:
 
-- **GIVEN** no OneAgent installation is detected
-- **WHEN** the preflight runs
-- **THEN** it returns nil and the install proceeds
+```go
+type preflightResult struct {
+    IsUpdate bool
+}
+```
 
-### Requirement: Privilege check before any network work
+Checks run in this order:
 
-`InstallOneAgentV2` SHALL verify that the process has the necessary privileges to install OneAgent before issuing any HTTP request. On Unix, the check SHALL verify root access, and on failure the install SHALL exit with `"This command requires root privileges. Please run with sudo."`. On Windows, the check SHALL verify the process token belongs to the BUILTIN\Administrators group, and on failure the install SHALL exit with `"This command requires administrator privileges. Please run as an administrator."`.
+1. Detect existing OneAgent installation via `oneAgentInstalled()`.
+2. When an existing installation is found and `!opts.DryRun && !opts.Quiet`: prompt for update confirmation.
+3. When `env.OS == "linux"` and the process is non-root: verify the `sudo` binary is available on PATH.
 
-#### Scenario: Non-privileged Unix process
+#### Scenario: Clean system, no existing install, running as root on Linux
 
-- **GIVEN** the process runs as a non-root user
-- **AND** sudo is not configured for this user
-- **WHEN** `dtwiz install oneagent` runs
-- **THEN** the command exits with `"This command requires root privileges. Please run with sudo."`
-- **AND** no HTTP requests are made
+- **GIVEN** `oneAgentInstalled()` returns `false`
+- **AND** `needsSudoFn()` returns `false`
+- **WHEN** `runPreflightChecks` runs
+- **THEN** it returns `preflightResult{IsUpdate: false}` with nil error
 
-#### Scenario: Non-privileged Windows process
+#### Scenario: Clean system, non-root, sudo available
 
-- **GIVEN** the process runs without administrator rights
-- **WHEN** `dtwiz install oneagent` runs
-- **THEN** - **THEN** the command exits with `"This command requires administrator privileges. Please run as an administrator."`
+- **GIVEN** `oneAgentInstalled()` returns `false`
+- **AND** `needsSudoFn()` returns `true`
+- **AND** `sudoPathFn()` returns a valid path
+- **WHEN** `runPreflightChecks` runs
+- **THEN** it returns `preflightResult{IsUpdate: false}` with nil error
 
-#### Scenario: Root Unix process
+### Requirement: Pre-flight detects existing OneAgent installation
 
-- **GIVEN** the process runs as root
-- **WHEN** the preflight runs
-- **THEN** it returns nil and the install proceeds
+`runPreflightChecks` SHALL call `oneAgentInstalled()` and set `preflightResult.IsUpdate = true` when it returns true. `IsUpdate` SHALL be set regardless of `opts.DryRun` so the dry-run plan header can show `"Would update"` vs `"Would install"`.
+
+#### Scenario: Existing installation detected — IsUpdate is true
+
+- **GIVEN** `oneAgentInstalled()` returns `true`
+- **WHEN** `runPreflightChecks` runs
+- **THEN** the returned `preflightResult.IsUpdate` is `true`
+
+#### Scenario: No installation detected — IsUpdate is false
+
+- **GIVEN** `oneAgentInstalled()` returns `false`
+- **WHEN** `runPreflightChecks` runs
+- **THEN** the returned `preflightResult.IsUpdate` is `false`
+
+### Requirement: Update confirmation prompt runs before download
+
+When an existing installation is detected and the install is not a dry-run and not quiet, `runPreflightChecks` SHALL prompt the user for confirmation via `installer.ConfirmProceed`. On decline or EOF, it SHALL return `installer.ErrInstallCancelled` without making any network calls.
+
+#### Scenario: Existing install, user confirms — proceeds
+
+- **GIVEN** `oneAgentInstalled()` returns `true`
+- **AND** `opts.DryRun == false`, `opts.Quiet == false`
+- **AND** the user answers `Y`
+- **WHEN** `runPreflightChecks` runs
+- **THEN** it returns `preflightResult{IsUpdate: true}` with nil error
+
+#### Scenario: Existing install, user declines — cancelled
+
+- **GIVEN** `oneAgentInstalled()` returns `true`
+- **AND** `opts.DryRun == false`, `opts.Quiet == false`
+- **AND** the user answers `n`
+- **WHEN** `runPreflightChecks` runs
+- **THEN** it returns `installer.ErrInstallCancelled`
+- **AND** no network calls are made
+
+#### Scenario: Existing install, dry-run — no prompt, IsUpdate true
+
+- **GIVEN** `oneAgentInstalled()` returns `true`
+- **AND** `opts.DryRun == true`
+- **WHEN** `runPreflightChecks` runs
+- **THEN** no confirmation prompt is shown
+- **AND** the returned `preflightResult.IsUpdate` is `true`
+
+#### Scenario: Existing install, quiet mode — no prompt, proceeds
+
+- **GIVEN** `oneAgentInstalled()` returns `true`
+- **AND** `opts.Quiet == true`
+- **WHEN** `runPreflightChecks` runs
+- **THEN** no confirmation prompt is shown
+- **AND** it returns nil error
+
+### Requirement: Sudo availability check on Linux when non-root
+
+When `env.OS == "linux"` and `needsSudoFn()` returns `true`, `runPreflightChecks` SHALL resolve the `sudo` binary via `sudoPathFn()`. If the binary is not found, it SHALL return an actionable error before any download.
+
+#### Scenario: Non-root on Linux, sudo available — proceeds
+
+- **GIVEN** `env.OS == "linux"`
+- **AND** `needsSudoFn()` returns `true`
+- **AND** `sudoPathFn()` returns a path successfully
+- **WHEN** `runPreflightChecks` runs
+- **THEN** it returns nil error
+
+#### Scenario: Non-root on Linux, sudo missing — fast fail
+
+- **GIVEN** `env.OS == "linux"`
+- **AND** `needsSudoFn()` returns `true`
+- **AND** `sudoPathFn()` returns an error
+- **WHEN** `runPreflightChecks` runs
+- **THEN** it returns an error containing `"sudo not found"` and `"root"`
+- **AND** no network calls are made
+
+#### Scenario: Root on Linux — sudo check skipped
+
+- **GIVEN** `env.OS == "linux"`
+- **AND** `needsSudoFn()` returns `false`
+- **WHEN** `runPreflightChecks` runs
+- **THEN** `sudoPathFn()` is NOT called
+- **AND** it returns nil error
+
+#### Scenario: Non-Linux platform — sudo check skipped
+
+- **GIVEN** `env.OS == "windows"`
+- **WHEN** `runPreflightChecks` runs
+- **THEN** `sudoPathFn()` is NOT called
+- **AND** it returns nil error
 
 ### Requirement: Agent configuration resolved before network work
 
@@ -112,37 +287,30 @@
 
 Each pre-flight stage SHALL emit a `logger.Debug` line at completion using the project's structured key-value convention. Logs are gated by `--debug` and are suppressed without it. No user-supplied or minted credential value SHALL appear in any pre-flight log line.
 
-#### Scenario: Environment detection logs structured fields
+#### Scenario: Environment classification logs structured fields
 
 - **GIVEN** `--debug` is enabled
-- **WHEN** `DetectEnvironment()` returns
-- **THEN** stderr contains a Debug line with message `"detected environment"` and structured keys `os`, `arch`, `supported`, `reason`
+- **WHEN** `detectRuntimeEnvironment()` returns
+- **THEN** stderr contains a Debug line with message `"detected environment"` and structured keys `os`, `arch`
 
 #### Scenario: Existing-agent detection logs result
 
 - **GIVEN** `--debug` is enabled
-- **WHEN** `CheckExistingOneAgent` runs and an agent is detected at `/opt/dynatrace/oneagent`
-- **THEN** stderr contains a Debug line with message `"existing oneagent detected"` and keys `path`, `force_override`
+- **WHEN** `runPreflightChecks` runs the existing-install check
+- **THEN** stderr contains a Debug line with message `"preflight: oneagent detection"` and key `is_update`
 
-#### Scenario: --force override logged explicitly
-
-- **GIVEN** `--debug` is enabled
-- **AND** `--force` is passed
-- **AND** an existing agent is detected
-- **WHEN** `CheckExistingOneAgent` proceeds past the detection
-- **THEN** stderr contains a Debug line with `force_override == true`
-
-#### Scenario: Privilege check logs outcome
+#### Scenario: Sudo availability logged when check runs
 
 - **GIVEN** `--debug` is enabled
-- **WHEN** `CheckPrivilege` runs
-- **THEN** stderr contains a Debug line with message `"privilege check"` and keys `privileged`, `os`
+- **AND** `env.OS == "linux"` and `needsSudoFn()` returns `true`
+- **WHEN** `runPreflightChecks` confirms sudo is available
+- **THEN** stderr contains a Debug line with message `"preflight: sudo available"`
 
 #### Scenario: Agent config logged after resolution
 
 - **GIVEN** `--debug` is enabled
 - **WHEN** `ResolveAgentConfig` returns
-- **THEN** stderr contains a Debug line with message `"resolved agent config"` and keys `monitoring-mode`, `app_log_content_access`
+- **THEN** stderr contains a Debug line with message `"resolved agent config"` and keys `monitoring-mode`, `override_set`
 
 #### Scenario: Pre-flight logs suppressed without --debug
 
@@ -152,13 +320,20 @@ Each pre-flight stage SHALL emit a `logger.Debug` line at completion using the p
 
 ### Requirement: Pre-flight ordering
 
-Pre-flight checks SHALL run in the order: (1) environment detection, (2) existing-OneAgent check, (3) privilege check, (4) agent configuration resolution. The install SHALL NOT issue any HTTP request, mint any token, or download any artifact until all four steps return nil.
+`InstallOneAgentV2` SHALL execute stages in this order: (1) `detectRuntimeEnvironment`, (2) `validateEnvironment`, (3) `ResolveAgentConfig`, (4) `runPreflightChecks`, (5) `DownloadInstaller`. The install SHALL NOT issue any HTTP request, mint any token, or download any artifact until all four pre-download steps return nil.
 
-#### Scenario: Failed privilege check skips network work
+#### Scenario: Failed validation skips network work
 
-- **GIVEN** the privilege check fails
+- **GIVEN** `validateEnvironment` returns an error (e.g. unsupported platform)
 - **WHEN** `InstallOneAgentV2` runs
-- **THEN** the function returns the privilege error
+- **THEN** the function returns the validation error
+- **AND** `runPreflightChecks`, `ResolveEndpoints`, `MintInstallerToken`, `DownloadInstaller` are not called
+
+#### Scenario: Failed preflight skips network work
+
+- **GIVEN** `runPreflightChecks` returns an error (e.g. sudo not found)
+- **WHEN** `InstallOneAgentV2` runs
+- **THEN** the function returns the preflight error
 - **AND** `ResolveEndpoints`, `MintInstallerToken`, `DownloadInstaller` are not called
 
 ### Requirement: Dynamic endpoint resolution via tenant API

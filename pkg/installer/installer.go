@@ -141,35 +141,36 @@ func AppsURL(environmentURL string) string {
 	return envURL // unknown domain — return as-is
 }
 
-// ExtractTenantID extracts the tenant/environment ID (first DNS label) from a
-// Dynatrace environment URL.
-// e.g. "https://abc12345.live.dynatrace.com" → "abc12345"
+// ExtractTenantID extracts the tenant/environment ID from a Dynatrace URL.
+//
+// SaaS (Live/Apps): first DNS label — "https://abc12345.live.dynatrace.com" → "abc12345"
+// Managed (/e/<id>): ID from the path — "https://host.example.com/e/abc12345" → "abc12345"
 func ExtractTenantID(environmentURL string) string {
-	s := environmentURL
-	if !strings.Contains(s, "://") {
-		s = "https://" + s
-	}
-	u, err := url.Parse(s)
-	if err != nil || u.Host == "" {
-		// Strip any scheme before searching for the first DNS label.
-		raw := environmentURL
-		if i := strings.Index(raw, "://"); i >= 0 {
-			raw = raw[i+3:]
+	u, err := url.Parse(environmentURL)
+	if err == nil && u.Host != "" {
+		// Managed URL: path contains /e/<tenantId>
+		if idx := strings.Index(u.Path, "/e/"); idx >= 0 {
+			segment := u.Path[idx+3:]
+			if slash := strings.Index(segment, "/"); slash >= 0 {
+				segment = segment[:slash]
+			}
+			if segment != "" {
+				return segment
+			}
 		}
-		if idx := strings.Index(raw, "."); idx > 0 {
-			return raw[:idx]
+		host := u.Hostname()
+		if idx := strings.Index(host, "."); idx > 0 {
+			return host[:idx]
 		}
-		return raw
+		return host
 	}
-	// Managed URL: /e/<tenantId>
-	if parts := strings.SplitN(strings.Trim(u.Path, "/"), "/", 3); len(parts) >= 2 && parts[0] == "e" && parts[1] != "" {
-		return parts[1]
+	// Fallback: take everything before the first dot.
+	s := strings.TrimPrefix(environmentURL, "https://")
+	s = strings.TrimPrefix(s, "http://")
+	if idx := strings.Index(s, "."); idx > 0 {
+		return s[:idx]
 	}
-	host := u.Hostname()
-	if idx := strings.Index(host, "."); idx > 0 {
-		return host[:idx]
-	}
-	return host
+	return s
 }
 
 // RunCommand runs a named executable with the provided arguments, streaming its
