@@ -46,6 +46,12 @@ The system SHALL include the `kspm.mappedHostPaths` block and `kspmNodeConfigura
 - **WHEN** distro is `"kubernetes"` or empty
 - **THEN** rendered manifest contains `mappedHostPaths` block
 
+#### Scenario: KSPM rendered for local dev distros (minikube, kind, k3s)
+
+- **GIVEN** `InstallKubernetes()` is called
+- **WHEN** distro is `"minikube"`, `"kind"`, or `"k3s"`
+- **THEN** rendered manifest contains `mappedHostPaths` block, no privileged or readonly-volume annotations, and no `kubeletPath` field — identical behavior to generic `"kubernetes"`
+
 #### Scenario: KSPM omitted for GKE
 
 - **GIVEN** `InstallKubernetes()` is called
@@ -133,7 +139,7 @@ The system SHALL set the appropriate `kubeletPath` in the rendered DynaKube spec
 #### Scenario: kubeletPath absent for standard distros
 
 - **GIVEN** `InstallKubernetes()` is called
-- **WHEN** distro is GKE, GKE-Autopilot, EKS, AKS, OpenShift, RKE, or generic kubernetes
+- **WHEN** distro is GKE, GKE-Autopilot, EKS, AKS, OpenShift, RKE, generic kubernetes, minikube, kind, or k3s
 - **THEN** rendered manifest does NOT contain `kubeletPath`
 
 ### Requirement: Templates block belongs only in DynaKube #2 (agents), not DynaKube #1 (monitoring)
