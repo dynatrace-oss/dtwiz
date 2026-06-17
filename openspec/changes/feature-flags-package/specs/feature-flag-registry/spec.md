@@ -90,6 +90,8 @@ The following commands and setup flows are gated behind the `Experimental` flag:
 - `dtwiz update otel`
 - The `MethodOtelUpdate` recommendation in `dtwiz setup` (patch existing OTel Collector)
 
+The cobra flag description for `--experimental` in the registry entry SHALL enumerate all gated features so that `dtwiz --help` remains accurate. When a new experimental feature is added, its description SHALL be updated.
+
 #### Scenario: Experimental install command hidden from help by default
 
 - **GIVEN** neither `--experimental` nor `DTWIZ_EXPERIMENTAL` is set

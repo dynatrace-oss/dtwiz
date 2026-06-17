@@ -49,7 +49,7 @@ var registry = []CLIFeatureFlag{
 		"experimental",
 		"DTWIZ_EXPERIMENTAL",
 		false,
-		"enable experimental features (demo installation, Docker in recommendations)",
+		"enable experimental features (demo installation, Docker and OTel update in recommendations)",
 		false,
 	},
 }

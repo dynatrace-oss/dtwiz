@@ -67,3 +67,4 @@ Gate the `dtwiz update otel` command and the corresponding `setup` recommendatio
 - [x] 7.3 Add `updateCmd.HelpFunc` override to call `ApplyCLIOverrides` and toggle `updateOtelCmd.Hidden` before rendering help, so `--experimental --help` reveals the subcommand
 - [x] 7.4 In `cmd/setup.go`, extend the experimental filter to also skip `MethodOtelUpdate` recommendations when `Experimental` is not enabled
 - [x] 7.5 Add tests in `cmd/cancel_test.go`: `TestUpdateOtelCmd_HiddenByDefault`, `TestUpdateOtelCmd_VisibleWhenExperimental`, `TestUpdateOtelCmd_RunE_BlockedWithoutExperimental`
+- [x] 7.6 Update the `--experimental` cobra flag description in `pkg/featureflags/featureflags.go` to mention OTel update alongside demo and Docker, so `dtwiz --help` reflects all gated features

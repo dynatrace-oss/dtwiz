@@ -52,6 +52,7 @@ func TestUpdateCmd_OtelRegistered(t *testing.T) {
 func TestUpdateOtelCmd_HiddenByDefault(t *testing.T) {
 	t.Setenv("DTWIZ_EXPERIMENTAL", "")
 	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
+	if !updateOtelCmd.Hidden {
 		t.Error("expected update otel subcommand to be hidden when experimental is not enabled")
 	}
 }
