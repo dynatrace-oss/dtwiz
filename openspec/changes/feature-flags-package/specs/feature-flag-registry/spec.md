@@ -81,29 +81,76 @@ The package SHALL expose `RegisterFlags(flags *pflag.FlagSet)` that registers a 
 
 Subcommands that are experimental SHALL be registered with `Hidden: true` by default and unhidden only when `featureflags.IsEnabled(featureflags.Experimental)` returns `true`. Because `PersistentPreRun` is not called when `--help` is requested, commands that conditionally show hidden subcommands SHALL override their `HelpFunc` to call `ApplyCLIOverrides` before delegating to the default help renderer. Execution of an experimental command without the flag enabled SHALL return an error directing the user to `--experimental` or `DTWIZ_EXPERIMENTAL=true`.
 
-#### Scenario: Experimental command hidden from help by default
+Any command that defines its own `PersistentPreRun` (which overrides root's) SHALL call `featureflags.ApplyCLIOverrides` within that `PersistentPreRun` so that `--experimental` and other feature flags take effect for its subcommands.
+
+The following commands and setup flows are gated behind the `Experimental` flag:
+
+- `dtwiz install docker`
+- `dtwiz install demo`
+- `dtwiz update otel`
+- The `MethodOtelUpdate` recommendation in `dtwiz setup` (patch existing OTel Collector)
+
+The cobra flag description for `--experimental` in the registry entry SHALL enumerate all gated features so that `dtwiz --help` remains accurate. When a new experimental feature is added, its description SHALL be updated.
+
+#### Scenario: Experimental install command hidden from help by default
 
 - **GIVEN** neither `--experimental` nor `DTWIZ_EXPERIMENTAL` is set
 - **WHEN** a user runs `dtwiz install --help`
 - **THEN** the `docker` subcommand does NOT appear in the available commands list
 
-#### Scenario: Experimental command visible with env var
+#### Scenario: Experimental install command visible with env var
 
 - **GIVEN** `DTWIZ_EXPERIMENTAL=true` is set in the environment
 - **WHEN** a user runs `dtwiz install --help`
 - **THEN** the `docker` subcommand appears in the available commands list
 
-#### Scenario: Experimental command visible with CLI flag
+#### Scenario: Experimental install command visible with CLI flag
 
 - **GIVEN** `--experimental` is passed on the command line
 - **WHEN** a user runs `dtwiz install --experimental --help`
 - **THEN** the `docker` subcommand appears in the available commands list
 
-#### Scenario: Experimental command blocked at execution without flag
+#### Scenario: Experimental install command blocked at execution without flag
 
 - **GIVEN** neither `--experimental` nor `DTWIZ_EXPERIMENTAL` is set
 - **WHEN** a user runs `dtwiz install docker`
 - **THEN** the command exits with an error: `docker installation is an experimental feature; enable it with --experimental or DTWIZ_EXPERIMENTAL=true`
+
+#### Scenario: `update otel` hidden from help by default
+
+- **GIVEN** neither `--experimental` nor `DTWIZ_EXPERIMENTAL` is set
+- **WHEN** a user runs `dtwiz update --help`
+- **THEN** the `otel` subcommand does NOT appear in the available commands list
+
+#### Scenario: `update otel` visible with experimental flag
+
+- **GIVEN** `--experimental` or `DTWIZ_EXPERIMENTAL=true` is set
+- **WHEN** a user runs `dtwiz update --help`
+- **THEN** the `otel` subcommand appears in the available commands list
+
+#### Scenario: `update otel` blocked at execution without flag
+
+- **GIVEN** neither `--experimental` nor `DTWIZ_EXPERIMENTAL` is set
+- **WHEN** a user runs `dtwiz update otel`
+- **THEN** the command exits with an error: `otel update is an experimental feature; enable it with --experimental or DTWIZ_EXPERIMENTAL=true`
+
+### Requirement: `Experimental` flag gates `setup` recommendations
+
+The `dtwiz setup` interactive flow SHALL exclude experimental recommendations from the selectable list when `Experimental` is not enabled. Specifically, `MethodOtelUpdate` (patch existing OTel Collector) and `MethodDocker` SHALL NOT appear as options unless `featureflags.IsEnabled(featureflags.Experimental)` returns `true`.
+
+#### Scenario: OTel update option absent from setup without experimental
+
+- **GIVEN** an OTel Collector is running on the host
+- **AND** neither `--experimental` nor `DTWIZ_EXPERIMENTAL` is set
+- **WHEN** a user runs `dtwiz setup`
+- **THEN** the "patch existing OpenTelemetry Collector" option does NOT appear in the recommendation list
+
+#### Scenario: OTel update option present in setup with experimental
+
+- **GIVEN** an OTel Collector is running on the host
+- **AND** `--experimental` or `DTWIZ_EXPERIMENTAL=true` is set
+- **WHEN** a user runs `dtwiz setup`
+- **THEN** the "patch existing OpenTelemetry Collector" option appears in the recommendation list
 
 ### Requirement: Test helper `SetCLIOverrideForTest`
 

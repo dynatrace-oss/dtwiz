@@ -54,7 +54,8 @@ var setupCmd = &cobra.Command{
 		var actionable []recommender.Recommendation
 		for _, r := range recs {
 			if !r.Done && r.Method != recommender.MethodNotSupported && !r.ComingSoon {
-				if r.Method == recommender.MethodDocker && !featureflags.IsEnabled(featureflags.Experimental) {
+				if !featureflags.IsEnabled(featureflags.Experimental) &&
+					(r.Method == recommender.MethodDocker || r.Method == recommender.MethodOtelUpdate) {
 					continue
 				}
 				actionable = append(actionable, r)

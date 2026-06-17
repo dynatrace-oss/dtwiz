@@ -54,4 +54,17 @@ End-to-end verification of all flows.
 Manually evaluate whether Docker, Kubernetes, OneAgent, AWS, Azure, and GCP analysis/recommendations should be gated behind feature flags (Platform, OTel, and Services are already GA and excluded from this evaluation).
 
 - [x] 6.1 Review each analyzer in `pkg/analyzer/` and each recommendation method in `pkg/recommender/` — determine if any non-GA capability would benefit from a feature flag
-- [x] 6.2 Document findings: Docker recommendation and demo app installation are gated behind `Experimental` (`--experimental` / `DTWIZ_EXPERIMENTAL`). Kubernetes, OneAgent, AWS, Azure, and GCP are GA and remain ungated.
+- [x] 6.2 Document findings: Docker recommendation, demo app installation, and OTel Collector update are gated behind `Experimental` (`--experimental` / `DTWIZ_EXPERIMENTAL`). Kubernetes, OneAgent, AWS, Azure, and GCP are GA and remain ungated.
+
+## 7. Gate `dtwiz update otel` behind `Experimental`
+
+Gate the `dtwiz update otel` command and the corresponding `setup` recommendation behind the `Experimental` feature flag.
+
+**Files:** `cmd/update.go` (modify), `cmd/setup.go` (modify), `cmd/cancel_test.go` (modify)
+
+- [x] 7.1 Set `Hidden: true` on `updateOtelCmd` and add feature flag guard at the top of its `RunE` returning an error when `Experimental` is not enabled
+- [x] 7.2 Fix `updateCmd.PersistentPreRun` to call `logger.Init`, `logger.Verbose`, `logger.Debug`, and `featureflags.ApplyCLIOverrides` — it overrides root's `PersistentPreRun`, so `--experimental` was not being applied for `update` subcommands
+- [x] 7.3 Add `updateCmd.HelpFunc` override to call `ApplyCLIOverrides` and toggle `updateOtelCmd.Hidden` before rendering help, so `--experimental --help` reveals the subcommand
+- [x] 7.4 In `cmd/setup.go`, extend the experimental filter to also skip `MethodOtelUpdate` recommendations when `Experimental` is not enabled
+- [x] 7.5 Add tests in `cmd/cancel_test.go`: `TestUpdateOtelCmd_HiddenByDefault`, `TestUpdateOtelCmd_VisibleWhenExperimental`, `TestUpdateOtelCmd_RunE_BlockedWithoutExperimental`
+- [x] 7.6 Update the `--experimental` cobra flag description in `pkg/featureflags/featureflags.go` to mention OTel update alongside demo and Docker, so `dtwiz --help` reflects all gated features
