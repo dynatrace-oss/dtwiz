@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.25] - 2026-06-17
+
+### Added
+
+- `install oneagent`: pre-flight connectivity checks — TCP-probes all required Dynatrace endpoints in parallel before installation and prints latency or error per endpoint; failures are non-blocking (warning shown, install continues)
+- `install oneagent`: automatically determine target OS and architecture from the Dynatrace API before downloading the installer
+
+### Changed
+
+- `update otel` is now hidden behind the `Experimental` feature flag; it remains fully functional but is only visible and accessible when `--experimental` or `DTWIZ_EXPERIMENTAL=true` is set
+- `setup` flow excludes `update otel` from the actionable recommendation list when the `Experimental` flag is not enabled
+
 ## [0.2.24] - 2026-06-15
 
 ### Added
@@ -340,7 +352,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.24...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.25...HEAD
+[0.2.25]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.24...v0.2.25
 [0.2.24]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.23...v0.2.24
 [0.2.23]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.22...v0.2.23
 [0.2.22]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.21...v0.2.22
