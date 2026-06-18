@@ -120,8 +120,10 @@ func ProbeK8sSubVariant(distro string) string {
 func probeK8sSubVariant(distro string, run cmdRunner) string {
 	switch distro {
 	case "GKE":
-		output, err := run(5*time.Second, "kubectl", "get", "namespace", "kube-system",
-			"-o", "jsonpath={.metadata.annotations}")
+		// GKE Autopilot nodes always use the "gk3-" name prefix; Standard nodes use "gke-".
+		// This is the officially documented signal per GKE Autopilot node naming conventions.
+		output, err := run(5*time.Second, "kubectl", "get", "nodes",
+			"-o", "jsonpath={.items[*].metadata.name}")
 		if err != nil {
 			display.PrintWarning("GKE Autopilot probe", err)
 		}
@@ -166,8 +168,10 @@ func ClassifyK8sSubVariant(distro, output string, err error) string {
 	}
 	switch distro {
 	case "GKE":
-		if strings.Contains(output, "autopilot.gke.io") {
-			return "GKE-Autopilot"
+		for _, name := range strings.Fields(output) {
+			if strings.HasPrefix(name, "gk3-") {
+				return "GKE-Autopilot"
+			}
 		}
 	case "EKS":
 		if strings.Contains(strings.ToLower(output), "bottlerocket") {

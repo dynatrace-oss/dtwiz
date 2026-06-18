@@ -56,13 +56,13 @@ func TestProbeK8sSubVariant(t *testing.T) {
 		{
 			name:   "GKE Autopilot detected",
 			distro: "GKE",
-			calls:  []fakeCall{{"autopilot.gke.io/enabled:true", nil}},
+			calls:  []fakeCall{{"gk3-my-cluster-pool-1-abc123-xyz", nil}},
 			want:   "GKE-Autopilot",
 		},
 		{
 			name:   "GKE Standard unchanged",
 			distro: "GKE",
-			calls:  []fakeCall{{"other-annotation:value", nil}},
+			calls:  []fakeCall{{"gke-my-cluster-pool-1-abc123-xyz", nil}},
 			want:   "GKE",
 		},
 		{
@@ -181,8 +181,8 @@ func TestClassifyK8sSubVariant(t *testing.T) {
 		err    error
 		want   string
 	}{
-		{"GKE", `{"autopilot.gke.io/enabled":"true"}`, nil, "GKE-Autopilot"},
-		{"GKE", `{"other-annotation":"value"}`, nil, "GKE"},
+		{"GKE", "gk3-my-cluster-pool-1-abc123-xyz", nil, "GKE-Autopilot"},
+		{"GKE", "gke-my-cluster-pool-1-abc123-xyz", nil, "GKE"},
 		{"GKE", "", errProbe, "GKE"},
 		{"EKS", "Bottlerocket OS 1.14.0", nil, "EKS-Bottlerocket"},
 		{"EKS", "Amazon Linux 2", nil, "EKS"},

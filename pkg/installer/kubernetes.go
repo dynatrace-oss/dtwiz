@@ -25,6 +25,11 @@ const (
 	dynakubeEECRepository    = "public.ecr.aws/dynatrace/dynatrace-eec"
 	dynakubeEECTag           = "1.337.60.20260603-063549"
 	dynakubeCodeModulesImage = "public.ecr.aws/dynatrace/dynatrace-codemodules:1.337.60.20260603-063549"
+
+	// helmOperatorNightlyVersion is used for all non-GKE distros.
+	helmOperatorNightlyVersion = "0.0.0-nightly-chart"
+	// helmChartGHCR is the default chart source for non-GKE distros.
+	helmChartGHCR = "oci://ghcr.io/dynatrace/dynatrace-operator"
 )
 
 // dynakubeTemplateData holds the values substituted into dynakube.tmpl.
@@ -88,9 +93,12 @@ func sanitizeK8sName(name string) string {
 	if name == "" {
 		return "dynakube"
 	}
-	// Kubernetes names must be at most 63 characters.
-	if len(name) > 63 {
-		name = name[:63]
+	// DynaKube names are limited to 32 characters when OTel collectors are enabled.
+	// The operator also generates labels which adds 39 chars to the base name.
+	// Kubernetes labels must be ≤ 63 chars, so base ≤ 24.
+	const maxLen = 23
+	if len(name) > maxLen {
+		name = name[:maxLen]
 		name = strings.TrimRight(name, "-")
 	}
 	return name
@@ -149,35 +157,49 @@ func isOperatorInstalled() bool {
 
 // helmOperatorArgs builds the `helm install` argument slice.
 // Helm v3 uses --atomic; Helm v4+ uses --rollback-on-failure.
-func helmOperatorArgs(helmMajor int) []string {
+// disableCSI adds --set csidriver.enabled=false, required on GKE Autopilot.
+// version selects the chart version (nightly or stable).
+func helmOperatorArgs(helmMajor int, disableCSI bool) []string {
 	rollbackFlag := "--atomic"
 	if helmMajor >= 4 {
 		rollbackFlag = "--rollback-on-failure"
 	}
-	return []string{
+	args := []string{
 		"install", "dynatrace-operator",
-		"oci://ghcr.io/dynatrace/dynatrace-operator",
-		"--version", "0.0.0-nightly-chart",
+		helmChartGHCR,
+		"--version", helmOperatorNightlyVersion,
 		"--create-namespace",
 		"--namespace", "dynatrace",
 		rollbackFlag,
+		"--timeout", "10m",
 	}
+	if disableCSI {
+		args = append(args, "--set", "csidriver.enabled=false")
+	}
+	return args
 }
 
 // helmOperatorUpgradeArgs builds the `helm upgrade` argument slice used when
 // the dynatrace-operator release already exists.
-func helmOperatorUpgradeArgs(helmMajor int) []string {
+// disableCSI adds --set csidriver.enabled=false, required on GKE Autopilot.
+// version selects the chart version (nightly or stable).
+func helmOperatorUpgradeArgs(helmMajor int, disableCSI bool) []string {
 	rollbackFlag := "--atomic"
 	if helmMajor >= 4 {
 		rollbackFlag = "--rollback-on-failure"
 	}
-	return []string{
+	args := []string{
 		"upgrade", "dynatrace-operator",
-		"oci://ghcr.io/dynatrace/dynatrace-operator",
-		"--version", "0.0.0-nightly-chart",
+		helmChartGHCR,
+		"--version", helmOperatorNightlyVersion,
 		"--namespace", "dynatrace",
 		rollbackFlag,
+		"--timeout", "10m",
 	}
+	if disableCSI {
+		args = append(args, "--set", "csidriver.enabled=false")
+	}
+	return args
 }
 
 // applyDynakube writes the DynaKube CR YAML to a temp file and runs
@@ -351,6 +373,7 @@ func InstallKubernetes(envURL, token, clusterName, distro string, dryRun bool) e
 	}
 
 	// --- Determine Helm command ---
+	disableCSI := distro == "GKE-Autopilot"
 	var helmArgs []string
 	helmMajor := 3 // sensible default for display; re-detected before execution
 	if isHelmInstalled() {
@@ -359,9 +382,9 @@ func InstallKubernetes(envURL, token, clusterName, distro string, dryRun bool) e
 		}
 	}
 	if isOperatorInstalled() {
-		helmArgs = helmOperatorUpgradeArgs(helmMajor)
+		helmArgs = helmOperatorUpgradeArgs(helmMajor, disableCSI)
 	} else {
-		helmArgs = helmOperatorArgs(helmMajor)
+		helmArgs = helmOperatorArgs(helmMajor, disableCSI)
 	}
 	helmCmd := "helm " + strings.Join(helmArgs, " ")
 
@@ -420,9 +443,9 @@ func InstallKubernetes(envURL, token, clusterName, distro string, dryRun bool) e
 		if v, err := helmMajorVersion(); err == nil {
 			helmMajor = v
 			if isOperatorInstalled() {
-				helmArgs = helmOperatorUpgradeArgs(helmMajor)
+				helmArgs = helmOperatorUpgradeArgs(helmMajor, disableCSI)
 			} else {
-				helmArgs = helmOperatorArgs(helmMajor)
+				helmArgs = helmOperatorArgs(helmMajor, disableCSI)
 			}
 		}
 	}

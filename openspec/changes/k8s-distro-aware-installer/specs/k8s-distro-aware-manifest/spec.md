@@ -164,6 +164,22 @@ Per the Dynatrace Kubernetes onboarding guidelines for each supported distributi
 - **WHEN** the manifest is rendered
 - **THEN** DynaKube #2 `templates` contains EEC, OTel collector, and log module image refs; `telemetryIngest`, `logMonitoring: {}`, and `extensions.prometheus: {}` are also present in DynaKube #2
 
+### Requirement: Helm CSI driver disabled on GKE Autopilot
+
+The system SHALL pass `--set csidriver.enabled=false` to the Helm install/upgrade command when the distribution is `"GKE-Autopilot"`. GKE Autopilot blocks privileged containers and write-mode hostPath mounts, both of which are required by the Dynatrace CSI driver DaemonSet. The CSI driver is not needed when `applicationMonitoring: {}` is used.
+
+#### Scenario: CSI driver disabled on GKE Autopilot install
+
+- **GIVEN** `InstallKubernetes()` is called
+- **WHEN** distro is `"GKE-Autopilot"`
+- **THEN** the Helm command includes `--set csidriver.enabled=false`
+
+#### Scenario: CSI driver enabled on all other distros
+
+- **GIVEN** `InstallKubernetes()` is called
+- **WHEN** distro is any value other than `"GKE-Autopilot"`
+- **THEN** the Helm command does NOT include `--set csidriver.enabled=false`
+
 ### Requirement: ClusterRoleBinding included in all rendered manifests
 
 The system SHALL include a `ClusterRoleBinding` for `dynatrace-kubernetes-monitoring-sensitive` in every rendered manifest, binding to the `dynatrace-activegate` service account.
