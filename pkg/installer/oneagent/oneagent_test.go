@@ -217,8 +217,8 @@ func TestInstallOneAgentV2_AllEndpointsFailed_BlocksInstall(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when all endpoints are unreachable")
 	}
-	if !strings.Contains(err.Error(), "no reachable communication endpoints") {
-		t.Errorf("error = %q, want message containing 'no reachable communication endpoints'", err)
+	if !strings.Contains(err.Error(), "no communication endpoints reachable") {
+		t.Errorf("error = %q, want message containing 'no communication endpoints reachable'", err)
 	}
 	if downloadCalled {
 		t.Error("installer download must not be attempted when all endpoints are unreachable")
@@ -256,9 +256,14 @@ func TestInstallOneAgentV2_PartialEndpointsFailed_ContinuesToDownload(t *testing
 	defer srv.Close()
 
 	c := newMockClient(t, srv.URL)
-	_ = InstallOneAgentV2(c, InstallOptions{NoVerifySignature: true})
+	err := InstallOneAgentV2(c, InstallOptions{})
+	// Partial failure: at least one endpoint reachable, so connectivity passes.
+	// Any error must come from the download stage, not connectivity.
+	if err != nil && strings.Contains(err.Error(), "no communication endpoints reachable") {
+		t.Errorf("partial failure should not block install, got: %v", err)
+	}
 	if !downloadCalled {
-		t.Error("install should proceed to download when only some endpoints are unreachable")
+		t.Error("installer download must be attempted when at least one endpoint is reachable")
 	}
 }
 

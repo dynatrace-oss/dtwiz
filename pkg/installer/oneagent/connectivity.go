@@ -98,10 +98,11 @@ func printConnectivityReport(report ConnectivityReport) {
 	}
 }
 
-// printConnectivityWarning prints a warning block for failed endpoints during a
-// normal install run (failures are non-blocking).
-func printConnectivityWarning(report ConnectivityReport) {
-	display.Header("Warning: some endpoints are unreachable")
+// printConnectivityFailure prints the failed endpoints and a proxy hint.
+// Called immediately before returning a connectivity error so the user can see
+// which endpoints are unreachable before reading the error message.
+func printConnectivityFailure(report ConnectivityReport) {
+	display.Header("Connectivity check failed")
 	for _, r := range report.Results {
 		if !r.Reachable {
 			display.PrintStatusLine(r.Endpoint.String(), "✗ "+r.Error, display.ColorError)

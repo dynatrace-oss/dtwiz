@@ -111,13 +111,12 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 
 	if !opts.SkipConnectivityCheck {
 		report := checkAllEndpointsFn(endpoints, connectivityProbeTimeout)
-		if !report.AllPassed {
-			printConnectivityWarning(report)
-			if report.AllFailed() {
-				return fmt.Errorf("no reachable communication endpoints (%d/%d failed); deploy an ActiveGate on this network, set HTTP_PROXY/HTTPS_PROXY, or pass --skip-connectivity-check to override",
-					report.FailedCount, len(report.Results))
-			}
+		if report.AllFailed() {
+			printConnectivityFailure(report)
+			return fmt.Errorf("no communication endpoints reachable; deploy an ActiveGate on this network, set HTTP_PROXY/HTTPS_PROXY, or pass --skip-connectivity-check to override")
 		}
+		reachable := len(report.Results) - report.FailedCount
+		display.PrintStatusLine("connectivity", fmt.Sprintf("✓ %d/%d endpoints reachable", reachable, len(report.Results)), display.ColorOK)
 	} else {
 		logger.Debug("skipping connectivity probe", "reason", "--skip-connectivity-check")
 	}
