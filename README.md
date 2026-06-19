@@ -82,13 +82,13 @@ The `main` channel is rebuilt automatically on every push to `main` and is inten
 | `dtwiz recommend` | Generate ranked ingestion recommendations |
 | `dtwiz install oneagent` | Install Dynatrace OneAgent on this host |
 | `dtwiz install kubernetes` | Deploy Dynatrace Operator on Kubernetes |
-| `dtwiz install docker` | Install Dynatrace OneAgent for Docker |
+| `dtwiz install docker` | Install Dynatrace OneAgent for Docker *(experimental; enable with --experimental or DTWIZ_EXPERIMENTAL=true)* |
 | `dtwiz install otel` | Install/configure OTel Collector and instrument your application |
 | `dtwiz install otel-collector` | Install the Dynatrace OpenTelemetry Collector only |
 | `dtwiz install otel-java` | Instrument a Java project with OpenTelemetry |
 | `dtwiz install otel-node` | Instrument a Node.js project with OpenTelemetry |
 | `dtwiz install otel-python` | Instrument a Python project with OpenTelemetry |
-| `dtwiz install demo` | Download the "schnitzel" demo app and instrument it end-to-end |
+| `dtwiz install demo` | Download the "schnitzel" demo app and instrument it end-to-end *(experimental; enable with --experimental or DTWIZ_EXPERIMENTAL=true)* |
 | `dtwiz install aws` | Set up Dynatrace AWS CloudFormation integration |
 | `dtwiz install aws-lambda` | Install Dynatrace Lambda Layer on all functions |
 | `dtwiz install azure` | Set up Dynatrace Azure Monitor integration *(coming soon)* |
