@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/client"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
@@ -171,6 +172,96 @@ func TestInstallOneAgentV2_ConnectivityPass_ContinuesToDownload(t *testing.T) {
 		t.Error("download API was not called — install should have proceeded past the connectivity check")
 	}
 }
+
+// withCheckAllEndpoints overrides checkAllEndpointsFn for the duration of the
+// test, returning a fixed ConnectivityReport instead of performing real TCP dials.
+func withCheckAllEndpoints(t *testing.T, report ConnectivityReport) {
+	t.Helper()
+	orig := checkAllEndpointsFn
+	checkAllEndpointsFn = func(_ []Endpoint, _ time.Duration) ConnectivityReport { return report }
+	t.Cleanup(func() { checkAllEndpointsFn = orig })
+}
+
+func TestInstallOneAgentV2_AllEndpointsFailed_BlocksInstall(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("OneAgent not supported on macOS")
+	}
+
+	allFailed := ConnectivityReport{
+		Results: []ConnectivityResult{
+			{Endpoint: Endpoint{Host: "10.0.0.1", Port: 9999}, Reachable: false, Error: "i/o timeout"},
+			{Endpoint: Endpoint{Host: "10.0.0.2", Port: 9999}, Reachable: false, Error: "i/o timeout"},
+		},
+		AllPassed:   false,
+		FailedCount: 2,
+	}
+	withCheckAllEndpoints(t, allFailed)
+	withElevation(t, true)
+
+	downloadCalled := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == endpointsAPIPath {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("10.0.0.1:9999;10.0.0.2:9999"))
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/v1/deployment/installer/agent/") {
+			downloadCalled = true
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	c := newMockClient(t, srv.URL)
+	err := InstallOneAgentV2(c, InstallOptions{})
+	if err == nil {
+		t.Fatal("expected error when all endpoints are unreachable")
+	}
+	if !strings.Contains(err.Error(), "no reachable communication endpoints") {
+		t.Errorf("error = %q, want message containing 'no reachable communication endpoints'", err)
+	}
+	if downloadCalled {
+		t.Error("installer download must not be attempted when all endpoints are unreachable")
+	}
+}
+
+func TestInstallOneAgentV2_PartialEndpointsFailed_ContinuesToDownload(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("OneAgent not supported on macOS")
+	}
+
+	partialFailed := ConnectivityReport{
+		Results: []ConnectivityResult{
+			{Endpoint: Endpoint{Host: "10.0.0.1", Port: 9999}, Reachable: true},
+			{Endpoint: Endpoint{Host: "10.0.0.2", Port: 9999}, Reachable: false, Error: "i/o timeout"},
+		},
+		AllPassed:   false,
+		FailedCount: 1,
+	}
+	withCheckAllEndpoints(t, partialFailed)
+	withElevation(t, true)
+
+	downloadCalled := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == endpointsAPIPath {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("10.0.0.1:9999;10.0.0.2:9999"))
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/v1/deployment/installer/agent/") {
+			downloadCalled = true
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	c := newMockClient(t, srv.URL)
+	_ = InstallOneAgentV2(c, InstallOptions{NoVerifySignature: true})
+	if !downloadCalled {
+		t.Error("install should proceed to download when only some endpoints are unreachable")
+	}
+}
+
 func TestDetectRuntimeEnvironment(t *testing.T) {
 	env := detectRuntimeEnvironment()
 	if env.OS == "" {

@@ -56,6 +56,10 @@ func ResolveAgentConfig(opts InstallOptions) AgentConfig {
 
 const connectivityProbeTimeout = 5 * time.Second
 
+// checkAllEndpointsFn is the function used to probe communication endpoints.
+// Overridable in tests to avoid real TCP dials.
+var checkAllEndpointsFn = CheckAllEndpoints
+
 func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 	env := detectRuntimeEnvironment()
 	logger.Debug("detected environment", "os", env.OS, "arch", env.Arch)
@@ -106,9 +110,13 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 	}
 
 	if !opts.SkipConnectivityCheck {
-		report := CheckAllEndpoints(endpoints, connectivityProbeTimeout)
+		report := checkAllEndpointsFn(endpoints, connectivityProbeTimeout)
 		if !report.AllPassed {
 			printConnectivityWarning(report)
+			if report.AllFailed() {
+				return fmt.Errorf("no reachable communication endpoints (%d/%d failed); deploy an ActiveGate on this network, set HTTP_PROXY/HTTPS_PROXY, or pass --skip-connectivity-check to override",
+					report.FailedCount, len(report.Results))
+			}
 		}
 	} else {
 		logger.Debug("skipping connectivity probe", "reason", "--skip-connectivity-check")

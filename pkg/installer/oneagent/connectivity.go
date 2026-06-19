@@ -26,6 +26,11 @@ type ConnectivityReport struct {
 	FailedCount int
 }
 
+// AllFailed reports whether every endpoint in the report was unreachable.
+func (r ConnectivityReport) AllFailed() bool {
+	return len(r.Results) > 0 && r.FailedCount == len(r.Results)
+}
+
 // CheckAllEndpoints probes each endpoint concurrently via TCP and returns a
 // consolidated report. Probes run in parallel; total time is bounded by the
 // slowest single probe.

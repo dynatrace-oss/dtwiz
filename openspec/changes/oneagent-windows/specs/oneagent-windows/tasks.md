@@ -6,23 +6,23 @@ Before implementing, review the design and spec documents to understand the requ
 
 **Files:** `design.md`, `spec.md`
 
-- [ ] 0.1 Read `design.md` and `spec.md` to understand Windows-specific requirements and cross-platform considerations
-- [ ] 0.2 Identify and document any unclear assumptions about Authenticode verification or installer paths
-- [ ] 0.3 Review existing Windows-specific code patterns (build tags, `_windows.go` files) in the codebase
-- [ ] 0.4 Confirm error messages, temporary file handling, and elevation behavior align with the specification
+- [x] 0.1 Read `design.md` and `spec.md` to understand Windows-specific requirements and cross-platform considerations
+- [x] 0.2 Identify and document any unclear assumptions about Authenticode verification or installer paths
+- [x] 0.3 Review existing Windows-specific code patterns (build tags, `_windows.go` files) in the codebase
+- [x] 0.4 Confirm error messages, temporary file handling, and elevation behavior align with the specification
 
 ## 11. Windows-Specific Support
 
 Complete Windows-specific implementation not covered inline by earlier tasks: correct installer download URL/extension, Authenticode signature verification via PowerShell, and temp-file permission handling. Earlier tasks (2.7b, 5.3, 6.2, 7) reference Windows but leave the platform-specific logic as stubs or TODOs. This spec consolidates all Windows-specific work.
 
-**Files:** `pkg/installer/oneagent/` (extend), `pkg/installer/oneagent/oneagent_test.go` (extend), `pkg/installer/preflight_windows.go` (create or extend), `pkg/installer/sudo_windows.go` (extend)
+**Files:** `pkg/installer/oneagent/` (extend), `pkg/installer/oneagent/oneagent_test.go` (extend), `pkg/installer/oneagent/elevation_windows.go` (create), `pkg/installer/oneagent/elevation_unix.go` (create)
 
 ### Part A — Windows installer download
 
-- [ ] 11.1 In `DownloadInstaller` (Task 5.1), map `env.OS == "windows"` to the installer request path/query `/api/v1/deployment/installer/agent/windows/default/latest?arch=x86`; the Linux branch uses `/unix/default/<arch>/`
-- [ ] 11.2 Save the Windows temp file with a `.exe` extension so the OS recognises it as an executable (use `os.CreateTemp("", "dynatrace-oneagent-*.exe")`)
-- [ ] 11.3 Skip `os.Chmod(tmpPath, 0o700)` on Windows — NTFS ACLs are not meaningful in the same way; guard with `if runtime.GOOS != "windows"`
-- [ ] 11.4 Unit tests: `DownloadInstaller` with `env.OS == "windows"` produces a request URL containing the Windows path segment and a temp file ending in `.exe`; `env.OS == "linux"` path is unchanged
+- [x] 11.1 In `DownloadInstaller` (Task 5.1), map `env.OS == "windows"` to the installer request path/query `/api/v1/deployment/installer/agent/windows/default/latest?arch=x86`; the Linux branch uses `/unix/default/<arch>/`
+- [x] 11.2 Save the Windows temp file with a `.exe` extension so the OS recognises it as an executable (use `os.CreateTemp("", "dynatrace-oneagent-*.exe")`)
+- [x] 11.3 Skip `os.Chmod(tmpPath, 0o700)` on Windows — NTFS ACLs are not meaningful in the same way; guard with `if runtime.GOOS != "windows"`
+- [x] 11.4 Unit tests: `DownloadInstaller` with `env.OS == "windows"` produces a request URL containing the Windows path segment and a temp file ending in `.exe`; `env.OS == "linux"` path is unchanged
 
 ### Part B — Windows Authenticode signature verification
 
@@ -36,10 +36,12 @@ Complete Windows-specific implementation not covered inline by earlier tasks: co
 
 ### Part C — Windows privilege check
 
-- [ ] 11.12 Implement `isAdminWindows() bool` in `pkg/installer/preflight_windows.go` (build tag `//go:build windows`) using `golang.org/x/sys/windows` to check process token SID membership in the local Administrators group
-- [ ] 11.13 Wire `isAdminWindows` into `CheckPrivilege()` (Task 2.7b) for the `runtime.GOOS == "windows"` branch; the Unix branch stays unchanged
-- [ ] 11.14 Inject the check via a package-level `var isAdmin = isAdminWindows` variable so tests can replace it without requiring elevated privileges at test time
-- [ ] 11.15 Unit test: set `isAdmin = func() bool { return false }` → `CheckPrivilege` returns the administrator-required error; `isAdmin = func() bool { return true }` → returns nil
+Implementation diverged from the original design: the check lives in `runPreflightChecks()` rather than a standalone `CheckPrivilege()` function, and uses a warn-then-continue model in interactive mode instead of a hard reject. Interactive sessions print a UAC notice and proceed; `--quiet` mode fails fast.
+
+- [x] 11.12 Implement `isElevated() bool` in `pkg/installer/oneagent/elevation_windows.go` (build tag `//go:build windows`) using `golang.org/x/sys/windows` to check process token SID membership in the local Administrators group; add a no-op `elevation_unix.go` counterpart (returns `true`) with `//go:build !windows`
+- [x] 11.13 Wire `isElevatedFn` into `runPreflightChecks()` in `pkg/installer/oneagent/preflight.go` for the `env.OS == "windows"` branch: if not elevated and `opts.Quiet`, return error; if not elevated and interactive, print a UAC warning via `display.PrintWarning` and continue; skip the check during `--dry-run` and `--connectivity-check-only`
+- [x] 11.14 Inject the check via a package-level `var isElevatedFn = isElevated` variable in `preflight.go` so tests can replace it without requiring elevated privileges at test time
+- [x] 11.15 Unit tests in `pkg/installer/oneagent/preflight_test.go`: `withElevation(t, false)` + `Quiet: true` → error containing "Administrator"; `withElevation(t, false)` + interactive → nil (warning printed); `withElevation(t, true)` → nil; `DryRun: true` → nil regardless of elevation; `ConnectivityCheckOnly: true` → nil regardless of elevation
 
 ### Part D — Windows integration test
 

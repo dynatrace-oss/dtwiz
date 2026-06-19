@@ -5,16 +5,13 @@ package analyzer
 import "strings"
 
 // detectOneAgent checks for a running Dynatrace OneAgent on Windows.
+//
+// Only the service-running check is used. The oneagentctl binary fallback was
+// removed: after MSI uninstallation, binaries may persist on disk (pending
+// deletion until reboot) while the service is removed immediately, making the
+// binary check an unreliable indicator of a running agent.
 func detectOneAgent() bool {
-	// Check whether the OneAgent Windows service is running.
 	ok, out := runCmd("powershell", "-NoProfile", "-Command",
 		"Get-Service -Name 'Dynatrace OneAgent' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Status")
-	if ok && strings.EqualFold(strings.TrimSpace(out), "Running") {
-		return true
-	}
-
-	// Check for oneagentctl in PATH (works when the service has a
-	// non-standard name or was installed in a custom location).
-	ok, _ = runCmd("oneagentctl", "--version")
-	return ok
+	return ok && strings.EqualFold(strings.TrimSpace(out), "Running")
 }
