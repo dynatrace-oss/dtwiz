@@ -13,9 +13,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fatih/color"
+
 	"github.com/dynatrace-oss/dtwiz/pkg/client"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
-	"github.com/fatih/color"
 )
 
 // newTestClassicClient creates a ClassicClient pointing at the given test server URL.
