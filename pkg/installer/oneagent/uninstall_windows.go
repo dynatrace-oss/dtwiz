@@ -15,7 +15,7 @@ func printPlan() {
 }
 
 func runUninstall() error {
-	psScript := `$app = Get-WmiObject win32_product -filter "Name like 'Dynatrace OneAgent'"; if ($app -eq $null) { Write-Error 'Dynatrace OneAgent not found'; exit 1 }; msiexec /x $app.IdentifyingNumber /quiet /l*vx uninstall.log; exit $LASTEXITCODE`
+	psScript := `$app = Get-WmiObject win32_product -filter "Name like 'Dynatrace OneAgent'"; if ($app -eq $null) { Write-Error 'Dynatrace OneAgent not found'; exit 1 }; $p = Start-Process msiexec -ArgumentList "/x $($app.IdentifyingNumber) /quiet /l*vx uninstall.log" -Verb RunAs -Wait -PassThru; exit $p.ExitCode`
 
 	logger.Debug("running WMI uninstall", "method", "msiexec")
 	display.PrintStatusLine("uninstall", "looking up Dynatrace OneAgent via WMI...", display.ColorMessage)
