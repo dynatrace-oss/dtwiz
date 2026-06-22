@@ -3,7 +3,6 @@ package oneagent
 import (
 	"fmt"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
@@ -43,16 +42,8 @@ func runPreflightChecks(env Environment, opts InstallOptions) (preflightResult, 
 		logger.Debug("preflight: sudo available")
 	}
 
-	if env.OS == "windows" && !opts.DryRun && !opts.ConnectivityCheckOnly {
-		if isElevatedFn() {
-			logger.Debug("preflight: running as Administrator")
-		} else {
-			if opts.Quiet {
-				return preflightResult{}, fmt.Errorf("installer requires Administrator privileges: run from an elevated terminal or omit --quiet to allow UAC prompt")
-			}
-			display.PrintWarning("notice", fmt.Errorf("OneAgent installer will request Administrator privileges via UAC"))
-			logger.Debug("preflight: not elevated, UAC prompt will be requested")
-		}
+	if env.OS == "windows" && !opts.DryRun && !opts.ConnectivityCheckOnly && !isElevatedFn() && opts.Quiet {
+		return preflightResult{}, fmt.Errorf("installer requires Administrator privileges: run from an elevated terminal or omit --quiet to allow UAC prompt")
 	}
 
 	return result, nil

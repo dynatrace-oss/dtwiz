@@ -12,7 +12,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/client"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
@@ -173,36 +172,21 @@ func TestInstallOneAgentV2_ConnectivityPass_ContinuesToDownload(t *testing.T) {
 	}
 }
 
-// withCheckAllEndpoints overrides checkAllEndpointsFn for the duration of the
-// test, returning a fixed ConnectivityReport instead of performing real TCP dials.
-func withCheckAllEndpoints(t *testing.T, report ConnectivityReport) {
-	t.Helper()
-	orig := checkAllEndpointsFn
-	checkAllEndpointsFn = func(_ []Endpoint, _ time.Duration) ConnectivityReport { return report }
-	t.Cleanup(func() { checkAllEndpointsFn = orig })
-}
-
-func TestInstallOneAgentV2_AllEndpointsFailed_BlocksInstall(t *testing.T) {
+// TestInstallOneAgentV2_AllEndpointsFailed_ContinuesToDownload verifies that
+// when all endpoints are unreachable the install is not blocked — a warning is
+// printed and the download proceeds.
+func TestInstallOneAgentV2_AllEndpointsFailed_ContinuesToDownload(t *testing.T) {
 	if runtime.GOOS == "darwin" {
 		t.Skip("OneAgent not supported on macOS")
 	}
-
-	allFailed := ConnectivityReport{
-		Results: []ConnectivityResult{
-			{Endpoint: Endpoint{Host: "10.0.0.1", Port: 9999}, Reachable: false, Error: "i/o timeout"},
-			{Endpoint: Endpoint{Host: "10.0.0.2", Port: 9999}, Reachable: false, Error: "i/o timeout"},
-		},
-		AllPassed:   false,
-		FailedCount: 2,
-	}
-	withCheckAllEndpoints(t, allFailed)
 	withElevation(t, true)
 
 	downloadCalled := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == endpointsAPIPath {
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("10.0.0.1:9999;10.0.0.2:9999"))
+			// Port 1 is refused immediately on loopback — fast failure without timeout.
+			_, _ = w.Write([]byte("127.0.0.1:1"))
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/api/v1/deployment/installer/agent/") {
@@ -214,14 +198,11 @@ func TestInstallOneAgentV2_AllEndpointsFailed_BlocksInstall(t *testing.T) {
 
 	c := newMockClient(t, srv.URL)
 	err := InstallOneAgentV2(c, InstallOptions{})
-	if err == nil {
-		t.Fatal("expected error when all endpoints are unreachable")
+	if err != nil && strings.Contains(err.Error(), "no communication endpoints reachable") {
+		t.Errorf("all-failed connectivity must not block install, got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "no communication endpoints reachable") {
-		t.Errorf("error = %q, want message containing 'no communication endpoints reachable'", err)
-	}
-	if downloadCalled {
-		t.Error("installer download must not be attempted when all endpoints are unreachable")
+	if !downloadCalled {
+		t.Error("installer download must be attempted even when all endpoints are unreachable")
 	}
 }
 
@@ -229,23 +210,18 @@ func TestInstallOneAgentV2_PartialEndpointsFailed_ContinuesToDownload(t *testing
 	if runtime.GOOS == "darwin" {
 		t.Skip("OneAgent not supported on macOS")
 	}
-
-	partialFailed := ConnectivityReport{
-		Results: []ConnectivityResult{
-			{Endpoint: Endpoint{Host: "10.0.0.1", Port: 9999}, Reachable: true},
-			{Endpoint: Endpoint{Host: "10.0.0.2", Port: 9999}, Reachable: false, Error: "i/o timeout"},
-		},
-		AllPassed:   false,
-		FailedCount: 1,
-	}
-	withCheckAllEndpoints(t, partialFailed)
 	withElevation(t, true)
+
+	ln, addr := startTCPListener(t)
+	defer ln.Close()
+	go acceptLoop(ln)
 
 	downloadCalled := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == endpointsAPIPath {
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("10.0.0.1:9999;10.0.0.2:9999"))
+			// One reachable endpoint, one that will be refused immediately.
+			_, _ = w.Write([]byte(addr + ";127.0.0.1:1"))
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/api/v1/deployment/installer/agent/") {
@@ -257,8 +233,6 @@ func TestInstallOneAgentV2_PartialEndpointsFailed_ContinuesToDownload(t *testing
 
 	c := newMockClient(t, srv.URL)
 	err := InstallOneAgentV2(c, InstallOptions{})
-	// Partial failure: at least one endpoint reachable, so connectivity passes.
-	// Any error must come from the download stage, not connectivity.
 	if err != nil && strings.Contains(err.Error(), "no communication endpoints reachable") {
 		t.Errorf("partial failure should not block install, got: %v", err)
 	}

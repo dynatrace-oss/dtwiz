@@ -26,11 +26,6 @@ type ConnectivityReport struct {
 	FailedCount int
 }
 
-// AllFailed reports whether every endpoint in the report was unreachable.
-func (r ConnectivityReport) AllFailed() bool {
-	return len(r.Results) > 0 && r.FailedCount == len(r.Results)
-}
-
 // CheckAllEndpoints probes each endpoint concurrently via TCP and returns a
 // consolidated report. Probes run in parallel; total time is bounded by the
 // slowest single probe.
@@ -98,11 +93,10 @@ func printConnectivityReport(report ConnectivityReport) {
 	}
 }
 
-// printConnectivityFailure prints the failed endpoints and a proxy hint.
-// Called immediately before returning a connectivity error so the user can see
-// which endpoints are unreachable before reading the error message.
-func printConnectivityFailure(report ConnectivityReport) {
-	display.Header("Connectivity check failed")
+// printConnectivityWarning prints a warning block for failed endpoints during a
+// normal install run (failures are non-blocking).
+func printConnectivityWarning(report ConnectivityReport) {
+	display.Header("Warning: some endpoints are unreachable")
 	for _, r := range report.Results {
 		if !r.Reachable {
 			display.PrintStatusLine(r.Endpoint.String(), "✗ "+r.Error, display.ColorError)

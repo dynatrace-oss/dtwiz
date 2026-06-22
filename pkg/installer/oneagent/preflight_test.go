@@ -159,7 +159,7 @@ func TestRunPreflightChecks_Windows_NotElevated_Interactive(t *testing.T) {
 	withOneAgentDetected(t, false)
 	withElevation(t, false)
 
-	// Interactive (not quiet): warning is printed but no error returned.
+	// Interactive (not quiet): no error returned — UAC will handle elevation.
 	_, err := runPreflightChecks(Environment{OS: "windows", Arch: "x86"}, InstallOptions{})
 	if err != nil {
 		t.Fatalf("expected no error in interactive mode, got: %v", err)
