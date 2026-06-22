@@ -71,8 +71,15 @@ func TestUninstallOneAgentV2_Confirmed_ScriptMissing(t *testing.T) {
 	}
 }
 
-// --- cleanupInstallDir ---
+// withRunCommand overrides runCommandFn for the duration of the test.
+func withRunCommand(t *testing.T, fn func(name string, args ...string) error) {
+	t.Helper()
+	orig := runCommandFn
+	runCommandFn = fn
+	t.Cleanup(func() { runCommandFn = orig })
+}
 
+// --- cleanupInstallDir ---
 func TestCleanupInstallDir_PathAbsent(t *testing.T) {
 	dir := t.TempDir()
 	absent := filepath.Join(dir, "nonexistent")
@@ -127,5 +134,75 @@ func TestCleanupInstallDir_NonEmptyDir(t *testing.T) {
 	}
 	if _, err := os.Stat(target); !os.IsNotExist(err) {
 		t.Error("expected directory tree to be removed")
+	}
+}
+
+func TestRunUninstall_ScriptMissing_Error(t *testing.T) {
+	withInstallDir(t, t.TempDir()) // dir exists but has no agent/uninstall.sh
+	withNeedsSudo(t, false)
+
+	err := runUninstall()
+	if err == nil {
+		t.Fatal("expected error when uninstall script is missing")
+	}
+	if !strings.Contains(err.Error(), "agent/uninstall.sh") {
+		t.Errorf("error = %q, want script path in message", err.Error())
+	}
+}
+
+func TestRunUninstall_NeedsNoSudo_ArgvStartsWithScript(t *testing.T) {
+	dir := t.TempDir()
+	withInstallDir(t, dir)
+	withNeedsSudo(t, false)
+	createStubScript(t, dir, 0)
+
+	expectedScript := uninstallScriptPath()
+	var capturedName string
+	withRunCommand(t, func(name string, _ ...string) error {
+		capturedName = name
+		return nil
+	})
+
+	flush := captureStdout(t)
+	if err := runUninstall(); err != nil {
+		flush()
+		t.Fatalf("unexpected error: %v", err)
+	}
+	flush()
+
+	if capturedName != expectedScript {
+		t.Errorf("argv[0] = %q, want script path %q", capturedName, expectedScript)
+	}
+}
+
+func TestRunUninstall_NeedsSudo_ArgvStartsWithSudo(t *testing.T) {
+	dir := t.TempDir()
+	withInstallDir(t, dir)
+	withNeedsSudo(t, true)
+	createStubScript(t, dir, 0)
+
+	const stubSudo = "/stub/sudo"
+	withSudoPath(t, stubSudo)
+
+	var capturedName string
+	var capturedArgs []string
+	withRunCommand(t, func(name string, args ...string) error {
+		capturedName = name
+		capturedArgs = args
+		return nil
+	})
+
+	flush := captureStdout(t)
+	// runUninstall will attempt cleanupInstallDir with sudo via installer.RunCommand
+	// (not runCommandFn). That call will fail since /stub/sudo doesn't exist — the
+	// failure is only a warning and does not affect the return value we care about.
+	_ = runUninstall()
+	flush()
+
+	if capturedName != stubSudo {
+		t.Errorf("argv[0] = %q, want sudo path %q", capturedName, stubSudo)
+	}
+	if len(capturedArgs) == 0 || capturedArgs[0] != uninstallScriptPath() {
+		t.Errorf("argv[1] = %v, want uninstall script path %q", capturedArgs, uninstallScriptPath())
 	}
 }

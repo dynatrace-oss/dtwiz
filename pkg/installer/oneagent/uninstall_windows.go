@@ -10,6 +10,14 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
+// runUninstallFn is the function called by UninstallOneAgentV2 to execute the
+// platform-specific uninstall logic. Overridable in tests.
+var runUninstallFn = runUninstall
+
+// runCommandFn executes the uninstall subprocess. Overridable in tests to
+// capture argv without spawning a real process.
+var runCommandFn = installer.RunCommand
+
 func printPlan() {
 	fmt.Println("  Method:     WMI product lookup + msiexec /x (quiet)")
 }
@@ -20,7 +28,7 @@ func runUninstall() error {
 	logger.Debug("running WMI uninstall", "method", "msiexec")
 	display.PrintStatusLine("uninstall", "looking up Dynatrace OneAgent via WMI...", display.ColorMessage)
 
-	if err := installer.RunCommand("powershell", "-NoProfile", "-Command", psScript); err != nil {
+	if err := runCommandFn("powershell", "-NoProfile", "-Command", psScript); err != nil {
 		return fmt.Errorf("OneAgent uninstall failed: %w", err)
 	}
 	logger.Verbose("WMI uninstall completed")

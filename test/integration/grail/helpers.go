@@ -29,3 +29,10 @@ func tracesByServiceQuery(serviceName string) string {
 		serviceName,
 	)
 }
+
+func hostByNameQuery(hostName string) string {
+	return fmt.Sprintf(
+		`smartscapeNodes "HOST", from: -30m, to: now() | filter name == "%s"`,
+		hostName,
+	)
+}
