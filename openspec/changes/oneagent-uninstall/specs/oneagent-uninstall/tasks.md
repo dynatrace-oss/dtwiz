@@ -25,7 +25,7 @@
 **Files:** `pkg/installer/oneagent/uninstall_windows.go` (new), `//go:build windows`
 
 - [x] 3.1 `printPlan()`: WMI method description; no status line
-- [x] 3.2 `runUninstall()`: status line, PowerShell WMI + msiexec, log note
+- [x] 3.2 `runUninstall()`: status line, PowerShell WMI + `Start-Process msiexec -Verb RunAs -Wait -PassThru` (blocks until msiexec finishes), log note
 
 ## 4. cmd/uninstall.go routing
 

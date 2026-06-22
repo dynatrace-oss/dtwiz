@@ -95,7 +95,7 @@ On Windows, `VerifyInstallerSignature` SHALL verify the installer's Authenticode
 
 On Windows, `runPreflightChecks` SHALL verify the process token belongs to the BUILTIN\Administrators group and handle the result differently based on whether the session is interactive or quiet.
 
-- **Interactive mode** (no `--quiet`): if not elevated, print a warning via `display.PrintWarning` that UAC will be requested, then continue. The installer `.exe` triggers UAC itself.
+- **Interactive mode** (no `--quiet`): if not elevated, proceed silently — the installer `.exe` triggers UAC itself.
 - **Quiet mode** (`--quiet`): if not elevated, fail fast with an actionable error so unattended runs don't hang waiting for a UAC dialog that can never appear.
 - **Dry-run / connectivity-check-only**: skip the elevation check entirely.
 
@@ -110,16 +110,13 @@ The implementation lives in `pkg/installer/oneagent/`:
 - **GIVEN** the process is running with Administrator elevation
 - **WHEN** `runPreflightChecks` runs on Windows
 - **THEN** it proceeds without warning or error
-- **AND** a Debug log confirms `"preflight: running as Administrator"`
 
 #### Scenario: Non-admin process in interactive mode
 
 - **GIVEN** the process is running without Administrator rights
 - **AND** `opts.Quiet == false`
 - **WHEN** `runPreflightChecks` runs on Windows
-- **THEN** it prints a warning: `"OneAgent installer will request Administrator privileges via UAC"`
-- **AND** returns nil (install proceeds; UAC prompt comes from the installer EXE)
-- **AND** a Debug log confirms `"preflight: not elevated, UAC prompt will be requested"`
+- **THEN** it returns nil (install proceeds; UAC prompt comes from the installer EXE)
 
 #### Scenario: Non-admin process in quiet mode
 

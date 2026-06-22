@@ -140,13 +140,21 @@ After the Linux uninstall script runs, `cleanupInstallDir` SHALL remove the stub
 
 ### Requirement: Windows uninstall uses WMI + msiexec
 
-On Windows, `runUninstall` SHALL use PowerShell to query WMI for the Dynatrace OneAgent product and uninstall it via `msiexec /x`. The uninstall log SHALL be written to `uninstall.log` in the current directory.
+On Windows, `runUninstall` SHALL use PowerShell to query WMI for the Dynatrace OneAgent product and uninstall it via `msiexec /x`. msiexec SHALL be invoked via `Start-Process -Verb RunAs -Wait -PassThru` so that PowerShell blocks until the elevated msiexec process finishes, ensuring the success message is only shown after the uninstall actually completes. The uninstall log SHALL be written to `uninstall.log` in the current directory.
 
 #### Scenario: WMI query returns no product
 
 - **GIVEN** the WMI query finds no Dynatrace OneAgent product
 - **WHEN** `runUninstall()` runs
 - **THEN** it returns an error
+
+#### Scenario: msiexec completes before success is reported
+
+- **GIVEN** OneAgent is installed
+- **AND** the user confirms the uninstall prompt
+- **WHEN** `runUninstall()` returns nil
+- **THEN** msiexec has fully completed (not merely spawned)
+- **AND** `"OneAgent uninstalled successfully"` is printed only after `runUninstall()` returns
 
 ---
 

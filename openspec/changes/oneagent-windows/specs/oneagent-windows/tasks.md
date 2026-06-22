@@ -39,9 +39,9 @@ Complete Windows-specific implementation not covered inline by earlier tasks: co
 Implementation diverged from the original design: the check lives in `runPreflightChecks()` rather than a standalone `CheckPrivilege()` function, and uses a warn-then-continue model in interactive mode instead of a hard reject. Interactive sessions print a UAC notice and proceed; `--quiet` mode fails fast.
 
 - [x] 11.12 Implement `isElevated() bool` in `pkg/installer/oneagent/elevation_windows.go` (build tag `//go:build windows`) using `golang.org/x/sys/windows` to check process token SID membership in the local Administrators group; add a no-op `elevation_unix.go` counterpart (returns `true`) with `//go:build !windows`
-- [x] 11.13 Wire `isElevatedFn` into `runPreflightChecks()` in `pkg/installer/oneagent/preflight.go` for the `env.OS == "windows"` branch: if not elevated and `opts.Quiet`, return error; if not elevated and interactive, print a UAC warning via `display.PrintWarning` and continue; skip the check during `--dry-run` and `--connectivity-check-only`
+- [x] 11.13 Wire `isElevatedFn` into `runPreflightChecks()` in `pkg/installer/oneagent/preflight.go` for the `env.OS == "windows"` branch: if not elevated and `opts.Quiet`, return error; if not elevated and interactive, proceed silently (UAC comes from the installer EXE); skip the check during `--dry-run` and `--connectivity-check-only`
 - [x] 11.14 Inject the check via a package-level `var isElevatedFn = isElevated` variable in `preflight.go` so tests can replace it without requiring elevated privileges at test time
-- [x] 11.15 Unit tests in `pkg/installer/oneagent/preflight_test.go`: `withElevation(t, false)` + `Quiet: true` → error containing "Administrator"; `withElevation(t, false)` + interactive → nil (warning printed); `withElevation(t, true)` → nil; `DryRun: true` → nil regardless of elevation; `ConnectivityCheckOnly: true` → nil regardless of elevation
+- [x] 11.15 Unit tests in `pkg/installer/oneagent/preflight_test.go`: `withElevation(t, false)` + `Quiet: true` → error containing "Administrator"; `withElevation(t, false)` + interactive → nil; `withElevation(t, true)` → nil; `DryRun: true` → nil regardless of elevation; `ConnectivityCheckOnly: true` → nil regardless of elevation
 
 ### Part D — Windows integration test
 
