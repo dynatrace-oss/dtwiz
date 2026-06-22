@@ -1,3 +1,5 @@
+# Design: OneAgent Integration Tests
+
 ## Context
 
 The OneAgent V2 package (`pkg/installer/oneagent/`) is well-structured for testing: `oneAgentInstallDir`, `needsSudoFn`, and `sudoPathFn` are all package-level `var`s that tests can redirect. The install path (`InstallOneAgentV2`) and platform-specific detection and install-agent helpers have good unit test coverage in `oneagent_test.go`, `detect_unix_test.go`, `install_agent_test.go`, and `uninstall_unix_test.go`.
@@ -10,12 +12,14 @@ What's missing:
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Test all branches of `UninstallOneAgentV2`: not-installed, dry-run, confirm-accept, confirm-decline, AutoConfirm.
 - Test the lifecycle state transition: post-install dir exists → `oneAgentInstalled()` true → uninstall → dir gone.
 - Use real stub shell scripts and real file I/O — e2e style, matching the OTel Collector integration test pattern.
 - All new tests in `pkg/installer/oneagent/`, same package, using existing test helpers.
 
 **Non-Goals:**
+
 - Testing the V1 (`installer.UninstallOneAgent`) path.
 - CLI command-level tests (`cmd/` layer) — no cmd-layer tests exist anywhere in the codebase.
 - Windows lifecycle tests — Windows detection and uninstall paths require WMI/PowerShell, out of scope.
@@ -24,7 +28,7 @@ What's missing:
 
 ## Decisions
 
-**Decision 1: Introduce `runUninstallFn` and `runCommandFn` as injectable vars**
+### Decision 1: Introduce `runUninstallFn` and `runCommandFn` as injectable vars
 
 Add two injectable vars to `uninstall_unix.go` (and the Windows equivalent):
 
@@ -33,7 +37,7 @@ Add two injectable vars to `uninstall_unix.go` (and the Windows equivalent):
 
 Update `UninstallOneAgentV2` in `uninstall.go` to call `runUninstallFn()`, and update `runUninstall()` in `uninstall_unix.go` to call `runCommandFn(...)` instead of `installer.RunCommand(...)` directly.
 
-**Decision 2: Orchestration and lifecycle tests use real stub shell scripts (e2e style)**
+### Decision 2: Orchestration and lifecycle tests use real stub shell scripts (e2e style)
 
 All tests that exercise the accept/execute path use a real `#!/bin/sh\nexit 0` stub written to the temp install dir. The full chain runs without mocking intermediate functions: `oneAgentInstalled()` → `printPlan()` → `runUninstallFn()` → `runCommandFn()` (real subprocess) → `cleanupInstallDir()`. Tests verify filesystem state outcomes (dir present/absent) rather than spy-call counts.
 
@@ -42,15 +46,16 @@ This aligns with the OTel Collector integration test pattern, where tests exerci
 Only `runCommandFn` is injected in tasks 3.2/3.3 where the goal is to verify subprocess argv with and without sudo, since real sudo cannot be assumed in CI.
 
 Behavioral assertions used instead of spy-call counts:
+
 - Accept path: assert install dir is gone after the call (removed by `cleanupInstallDir`).
 - Decline path: assert install dir still exists.
 - Script failure path: assert non-nil error returned (stub script exits 1).
 
-**Decision 3: New test file `uninstall_test.go` for cross-platform orchestration**
+### Decision 3: New test file `uninstall_test.go` for cross-platform orchestration
 
 Orchestration tests (not-installed, dry-run, decline, accept) are placed in a new `uninstall_test.go` with no build tag. All tests that depend on Unix install dir detection use `skipNonLinux(t)`, matching the existing pattern. Unix-specific tests (sudo path, cleanup) go in `uninstall_unix_test.go`.
 
-**Decision 4: Real-tenant e2e test mirrors the OTel e2e pattern, adapted for a system-wide agent**
+### Decision 4: Real-tenant e2e test mirrors the OTel e2e pattern, adapted for a system-wide agent
 
 The e2e test (`test/e2e/oneagent_test.go`, `//go:build integration`) reuses the existing `test/integration` harness: `SetupIntegration(t)` for tenant credentials/client, `installer.AutoConfirm = true` to drive the uninstall prompt, and the `grail` poller for the success signal. It diverges from the OTel test where OneAgent's nature forces it:
 

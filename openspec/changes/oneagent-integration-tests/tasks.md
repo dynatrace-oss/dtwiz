@@ -1,3 +1,5 @@
+# Tasks: OneAgent Integration Tests
+
 ## 1. Make runUninstall injectable (production change)
 
 - [x] 1.1 In `pkg/installer/oneagent/uninstall_unix.go`, declare `var runUninstallFn = runUninstall` and update `UninstallOneAgentV2` in `uninstall.go` to call `runUninstallFn()` instead of `runUninstall()` directly

@@ -1,3 +1,5 @@
+# Proposal: OneAgent Integration Tests
+
 ## Why
 
 The OneAgent V2 install and uninstall functions (`InstallOneAgentV2`, `UninstallOneAgentV2`) each have isolated unit tests, but there are no tests that exercise the full lifecycle: install → detect installed state → uninstall → verify cleanup. A regression in state detection or cleanup logic would go undetected until production.
