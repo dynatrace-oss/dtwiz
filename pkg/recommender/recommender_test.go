@@ -225,8 +225,8 @@ func TestGenerateRecommendations_Azure(t *testing.T) {
 	for _, r := range recs {
 		if r.Method == recommender.MethodAzure {
 			found = true
-			if !r.ComingSoon {
-				t.Error("expected ComingSoon=true for Azure recommendation")
+			if r.ComingSoon {
+				t.Error("expected ComingSoon=false for Azure recommendation")
 			}
 		}
 	}
