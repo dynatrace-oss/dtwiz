@@ -46,10 +46,17 @@ lint:
 	golangci-lint run ./...
 
 test-integration:
-	@if [ -z "$(TEST_DT_ENVIRONMENT)" ]; then echo "ERROR: TEST_DT_ENVIRONMENT is not set" >&2; exit 1; fi
-	@if [ -z "$(TEST_DT_ACCESS_TOKEN)" ]; then echo "ERROR: TEST_DT_ACCESS_TOKEN is not set" >&2; exit 1; fi
-	@if [ -z "$(TEST_DT_PLATFORM_TOKEN)" ]; then echo "ERROR: TEST_DT_PLATFORM_TOKEN is not set" >&2; exit 1; fi
-	$(GO) test -v -race -tags integration -timeout 5m ./test/e2e/...
+ifndef TEST_DT_ENVIRONMENT
+	$(error TEST_DT_ENVIRONMENT is not set)
+endif
+ifndef TEST_DT_PLATFORM_TOKEN
+	$(error TEST_DT_PLATFORM_TOKEN is not set)
+endif
+ifeq ($(OS),Windows_NT)
+	$(GO) test -v -tags integration -timeout 5m $(if $(RUN),-run $(RUN),) ./test/e2e/...
+else
+	$(GO) test -v -race -tags integration -timeout 5m $(if $(RUN),-run $(RUN),) ./test/e2e/...
+endif
 
 clean:
 	rm -f $(BINARY)
