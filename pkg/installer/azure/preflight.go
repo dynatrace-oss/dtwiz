@@ -6,26 +6,23 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 // azurePreflightChecks runs all pre-mutation checks:
-//  1. dtctl on PATH
-//  2. az on PATH
-//  3. az account show — must succeed (user is logged in)
-//  4. auto-detect management group
-//  5. RBAC checkAccess hard gate
+//  1. az on PATH
+//  2. az account show — must succeed (user is logged in)
+//  3. auto-detect management group
+//  4. RBAC checkAccess hard gate
 func azurePreflightChecks(runner cmdRunner, envURL, platformToken string) (subscriptionID, tenantID, mgmtGroupID string, err error) {
-	// 1. dtctl must be on PATH
-	if _, err = execLookPath("dtctl"); err != nil {
-		return "", "", "", fmt.Errorf("dtctl not found — install it from https://docs.dynatrace.com/docs/deliver/dynatrace-cli")
-	}
-
-	// 2. az must be on PATH
+	// 1. az must be on PATH
 	if _, err = execLookPath("az"); err != nil {
 		return "", "", "", fmt.Errorf("Azure CLI (az) not found — install it from https://aka.ms/installazurecliwindows") //nolint:staticcheck // ST1005: "Azure CLI" is a product name
 	}
 
-	// 3. Check Azure login
+	// 2. Check Azure login
 	accountJSON, err := runner("az", []string{"account", "show", "-o", "json"}, nil)
 	if err != nil {
 		return "", "", "", fmt.Errorf("Not logged in to Azure — run `az login` and retry") //nolint:staticcheck // ST1005: user-facing message
@@ -40,17 +37,20 @@ func azurePreflightChecks(runner cmdRunner, envURL, platformToken string) (subsc
 	}
 	subscriptionID = account.ID
 	tenantID = account.Tenant
+	logger.Debug("az account show", "subscriptionID", subscriptionID, "tenantID", tenantID)
 
-	// 4. Detect management group
+	// 3. Detect management group
 	mgmtGroupID, err = azureDetectMgmtGroup(runner, subscriptionID, tenantID)
 	if err != nil {
 		return "", "", "", err
 	}
+	logger.Debug("management group selected", "scope", mgmtGroupID)
 
-	// 5. RBAC checkAccess
+	// 4. RBAC checkAccess
 	if err = azureCheckRBAC(runner, mgmtGroupID); err != nil {
 		return "", "", "", err
 	}
+	logger.Debug("RBAC check passed", "scope", mgmtGroupID)
 
 	return subscriptionID, tenantID, mgmtGroupID, nil
 }
@@ -61,7 +61,7 @@ func azurePreflightChecks(runner cmdRunner, envURL, platformToken string) (subsc
 func azureDetectMgmtGroup(runner cmdRunner, subscriptionID, tenantID string) (string, error) {
 	out, err := runner("az", []string{"account", "management-group", "list", "-o", "json"}, nil)
 	if err != nil {
-		fmt.Printf("  Warning: could not list management groups (%s); using subscription scope\n", err)
+		display.ColorWarning.Printf("  Warning: could not list management groups (%v); using subscription scope\n", err)
 		return "/subscriptions/" + subscriptionID, nil
 	}
 
@@ -71,7 +71,7 @@ func azureDetectMgmtGroup(runner cmdRunner, subscriptionID, tenantID string) (st
 	}
 	var groups []mgGroup
 	if err = json.Unmarshal([]byte(out), &groups); err != nil {
-		fmt.Printf("  Warning: could not parse management groups output; using subscription scope\n")
+		display.ColorWarning.Printf("  Warning: could not parse management groups output; using subscription scope\n")
 		return "/subscriptions/" + subscriptionID, nil
 	}
 
@@ -129,6 +129,7 @@ func azureCheckRBAC(runner cmdRunner, mgmtGroupID string) error {
 		mgSegment,
 	)
 	body := `{"actions":[{"id":"Microsoft.Authorization/roleAssignments/write"}]}`
+	logger.Debug("checking RBAC", "url", url)
 
 	out, err := runner("az", []string{"rest", "--method", "POST", "--url", url, "--body", body}, nil)
 	if err != nil {

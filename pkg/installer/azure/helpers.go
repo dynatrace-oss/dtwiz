@@ -3,7 +3,6 @@ package azure
 import (
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 func azureBuildFedCredJSON(connID, envURL string) (string, error) {
 	appsURL := installer.AppsURL(envURL)
 	audience := strings.TrimPrefix(appsURL, "https://") + "/svc-id/com.dynatrace.da"
+	logger.Debug("federated credential", "connID", connID, "audience", audience)
 
 	payload := map[string]interface{}{
 		"name":      fedCredName,
@@ -27,25 +27,6 @@ func azureBuildFedCredJSON(connID, envURL string) (string, error) {
 		return "", fmt.Errorf("building federated credential JSON: %w", err)
 	}
 	return string(b), nil
-}
-
-// azureParseConnectionID extracts the connection ID from dtctl output.
-// Tries JSON first (id field), then falls back to a UUID pattern in table output.
-func azureParseConnectionID(stdout string) (string, error) {
-	var result struct {
-		ID string `json:"id"`
-	}
-	if err := json.Unmarshal([]byte(stdout), &result); err == nil && result.ID != "" {
-		return result.ID, nil
-	}
-
-	// Fallback: look for a UUID-like string
-	uuidRe := regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
-	if m := uuidRe.FindString(strings.ToLower(stdout)); m != "" {
-		return m, nil
-	}
-
-	return "", fmt.Errorf("could not parse connection ID from dtctl output: %q", stdout)
 }
 
 // azureGetSPObjectID retrieves the Service Principal object ID for a given

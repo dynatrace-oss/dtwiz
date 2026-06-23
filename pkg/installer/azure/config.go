@@ -2,11 +2,8 @@
 package azure
 
 import (
-	"os"
 	"os/exec"
 	"strings"
-
-	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 // execLookPath is a variable alias for exec.LookPath, allowing tests to stub it.
@@ -42,17 +39,6 @@ func realRunner(name string, args []string, env []string) (string, error) {
 	}
 	out, err := cmd.Output()
 	return string(out), err
-}
-
-// dtctlEnv builds an environment slice that inherits the current process
-// environment and appends DT_ENVIRONMENT and DT_PLATFORM_TOKEN for dtctl.
-// The platform token is never logged in plain text.
-func dtctlEnv(envURL, platformToken string) []string {
-	env := os.Environ()
-	env = append(env, "DT_ENVIRONMENT="+envURL)
-	env = append(env, "DT_PLATFORM_TOKEN="+platformToken)
-	logger.Debug("dtctl env", "DT_ENVIRONMENT", envURL, "DT_PLATFORM_TOKEN", "***")
-	return env
 }
 
 // maskToken replaces all occurrences of token in s with ***.

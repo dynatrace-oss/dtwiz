@@ -7,33 +7,6 @@ import (
 	"time"
 )
 
-func TestAzurePreflightDtctlNotFound(t *testing.T) {
-	origLookPath := execLookPath
-	execLookPath = func(name string) (string, error) {
-		if name == "dtctl" {
-			return "", fmt.Errorf("exec: %q: executable file not found in $PATH", name)
-		}
-		return origLookPath(name)
-	}
-	defer func() { execLookPath = origLookPath }()
-
-	runner := func(name string, args []string, _ []string) (string, error) {
-		t.Errorf("runner should not be called when dtctl is not found, got: %s %v", name, args)
-		return "", nil
-	}
-
-	err := installAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if !strings.Contains(err.Error(), "dtctl not found") {
-		t.Errorf("expected 'dtctl not found' in error, got: %v", err)
-	}
-	if !strings.Contains(err.Error(), "https://docs.dynatrace.com") {
-		t.Errorf("expected install hint URL in error, got: %v", err)
-	}
-}
-
 func TestAzurePreflightAzNotFound(t *testing.T) {
 	origLookPath := execLookPath
 	execLookPath = func(name string) (string, error) {
@@ -46,7 +19,7 @@ func TestAzurePreflightAzNotFound(t *testing.T) {
 
 	runner := func(_ string, _ []string, _ []string) (string, error) { return "", nil }
 
-	err := installAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep)
+	err := installAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep, &noopDTClient{})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -65,7 +38,7 @@ func TestAzurePreflightNotLoggedIn(t *testing.T) {
 		return "", nil
 	}
 
-	err := installAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep)
+	err := installAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep, &noopDTClient{})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -93,7 +66,7 @@ func TestAzurePreflightRBACDenied(t *testing.T) {
 	}
 
 	err := captureStdoutErr(func() error {
-		return installAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep)
+		return installAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep, &noopDTClient{})
 	})
 	if err == nil {
 		t.Fatal("expected RBAC denied error, got nil")

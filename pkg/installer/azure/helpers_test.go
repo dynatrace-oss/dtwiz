@@ -61,15 +61,61 @@ func captureStdoutReturn(fn func() (string, error)) (string, error) {
 
 func noSleep(_ time.Duration) {}
 
-// stubExecLookPath overrides execLookPath to pretend dtctl and az are always
-// available. Returns a restore function to defer.
+// stubExecLookPath overrides execLookPath to pretend az is always available.
+// Returns a restore function to defer.
 func stubExecLookPath(t *testing.T) func() {
 	t.Helper()
 	orig := execLookPath
-	execLookPath = func(name string) (string, error) {
-		return "/usr/local/bin/" + name, nil
+	execLookPath = func(_ string) (string, error) {
+		return "/usr/local/bin/az", nil
 	}
 	return func() { execLookPath = orig }
+}
+
+// ── mock dtclient implementations ─────────────────────────────────────────────
+
+// noopDTClient is used in tests that never reach the DT API calls.
+type noopDTClient struct{}
+
+func (noopDTClient) createConnection(string) (string, error) {
+	return "", fmt.Errorf("unexpected createConnection call")
+}
+func (noopDTClient) updateConnection(string, string, string, string) error {
+	return fmt.Errorf("unexpected updateConnection call")
+}
+func (noopDTClient) createMonitoring(string, string) error {
+	return fmt.Errorf("unexpected createMonitoring call")
+}
+
+// fakeDTClient records calls for assertion.
+type fakeDTClient struct {
+	connObjectID string
+	connErr      error
+	updateErr    error
+	monErr       error
+
+	updateCalledWith struct{ objectID, name, tenantID, clientID string }
+	monCalledWith   struct{ configName, connObjectID string }
+}
+
+func happyFakeDTClient() *fakeDTClient {
+	return &fakeDTClient{connObjectID: "a1b2c3d4-0000-0000-0000-000000000001"}
+}
+
+func (f *fakeDTClient) createConnection(string) (string, error) {
+	return f.connObjectID, f.connErr
+}
+func (f *fakeDTClient) updateConnection(objectID, name, tenantID, clientID string) error {
+	f.updateCalledWith.objectID = objectID
+	f.updateCalledWith.name = name
+	f.updateCalledWith.tenantID = tenantID
+	f.updateCalledWith.clientID = clientID
+	return f.updateErr
+}
+func (f *fakeDTClient) createMonitoring(configName, connObjectID string) error {
+	f.monCalledWith.configName = configName
+	f.monCalledWith.connObjectID = connObjectID
+	return f.monErr
 }
 
 // ── stock test fixtures ───────────────────────────────────────────────────────
@@ -77,7 +123,6 @@ func stubExecLookPath(t *testing.T) func() {
 const stockAccountJSON = `{"id":"sub-abc123","tenantId":"tenant-xyz","name":"my-sub"}`
 const stockMgmtGroupJSON = `[{"id":"/providers/Microsoft.Management/managementGroups/tenant-xyz","tenantId":"tenant-xyz","name":"root"}]`
 const stockRBACJSON = `[{"actionId":"Microsoft.Authorization/roleAssignments/write","accessDecision":"Allowed"}]`
-const stockConnectionJSON = `{"id":"a1b2c3d4-0000-0000-0000-000000000001","name":"dtwiz-azure"}`
 const stockSPJSON = `{"appId":"client-id-000","tenant":"tenant-xyz","displayName":"dtwiz-azure"}`
 const stockSPShowJSON = `{"id":"object-id-111","appId":"client-id-000"}`
 
@@ -118,54 +163,6 @@ func TestAzureBuildFederatedCredJSON(t *testing.T) {
 			}
 			if !strings.Contains(got, tc.wantAudience) {
 				t.Errorf("audience: want %q in output, got: %s", tc.wantAudience, got)
-			}
-		})
-	}
-}
-
-func TestAzureParseConnectionID(t *testing.T) {
-	cases := []struct {
-		name    string
-		input   string
-		want    string
-		wantErr bool
-	}{
-		{
-			name:  "JSON id field",
-			input: `{"id":"a1b2c3d4-0000-0000-0000-000000000000","name":"dtwiz-azure"}`,
-			want:  "a1b2c3d4-0000-0000-0000-000000000000",
-		},
-		{
-			name:  "table output fallback UUID",
-			input: "Connection created: 11223344-5566-7788-aabb-ccddeeff0011",
-			want:  "11223344-5566-7788-aabb-ccddeeff0011",
-		},
-		{
-			name:    "malformed — no UUID",
-			input:   "error: something went wrong",
-			wantErr: true,
-		},
-		{
-			name:    "empty",
-			input:   "",
-			wantErr: true,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := azureParseConnectionID(tc.input)
-			if tc.wantErr {
-				if err == nil {
-					t.Errorf("expected error, got %q", got)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if got != tc.want {
-				t.Errorf("want %q, got %q", tc.want, got)
 			}
 		})
 	}

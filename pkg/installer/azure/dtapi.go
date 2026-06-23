@@ -1,0 +1,261 @@
+package azure
+
+import (
+	"encoding/json"
+	"fmt"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/dynatrace-oss/dtctl/sdk/httpclient"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
+)
+
+const (
+	settingsAPI        = "/platform/classic/environment-api/v2/settings/objects"
+	connectionSchemaID = "builtin:hyperscaler-authentication.connections.azure"
+	extensionName      = "com.dynatrace.extension.da-azure"
+	extensionAPI       = "/platform/extensions/v2/extensions/" + extensionName
+	monitoringAPI      = extensionAPI + "/monitoring-configurations"
+)
+
+// dtclient performs the three Dynatrace Platform API calls needed for the Azure integration.
+type dtclient interface {
+	createConnection(name string) (objectID string, err error)
+	updateConnection(objectID, name, tenantID, clientID string) error
+	createMonitoring(configName, connectionObjectID string) error
+}
+
+// ─── SDK implementation ───────────────────────────────────────────────────────
+
+type sdkDTClient struct {
+	c *httpclient.Client
+}
+
+func newSDKDTClient(envURL, platformToken string) (*sdkDTClient, error) {
+	appsURL := installer.AppsURL(envURL)
+	c, err := httpclient.New(appsURL, httpclient.WithToken(platformToken))
+	if err != nil {
+		return nil, fmt.Errorf("creating Dynatrace API client: %w", err)
+	}
+	return &sdkDTClient{c: c}, nil
+}
+
+// ─── connection types ─────────────────────────────────────────────────────────
+
+type connFedCred struct {
+	DirectoryID   string   `json:"directoryId,omitempty"`
+	ApplicationID string   `json:"applicationId,omitempty"`
+	Consumers     []string `json:"consumers"`
+}
+
+type connValue struct {
+	Name                        string       `json:"name"`
+	Type                        string       `json:"type"`
+	FederatedIdentityCredential *connFedCred `json:"federatedIdentityCredential,omitempty"`
+}
+
+// ─── createConnection ─────────────────────────────────────────────────────────
+
+func (d *sdkDTClient) createConnection(name string) (string, error) {
+	type createBody struct {
+		SchemaID string    `json:"schemaId"`
+		Scope    string    `json:"scope"`
+		Value    connValue `json:"value"`
+	}
+	type createResp struct {
+		ObjectID string `json:"objectId"`
+		Error    *struct {
+			Message string `json:"message"`
+		} `json:"error,omitempty"`
+	}
+
+	body := []createBody{{
+		SchemaID: connectionSchemaID,
+		Scope:    "environment",
+		Value: connValue{
+			Name: name,
+			Type: "federatedIdentityCredential",
+			FederatedIdentityCredential: &connFedCred{
+				Consumers: []string{"SVC:com.dynatrace.da"},
+			},
+		},
+	}}
+
+	resp, err := d.c.HTTP().R().SetBody(body).Post(settingsAPI)
+	if err != nil {
+		return "", fmt.Errorf("create connection: %w", err)
+	}
+	if resp.IsError() {
+		return "", fmt.Errorf("create connection: status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	var result []createResp
+	if err := json.Unmarshal(resp.Body(), &result); err != nil {
+		return "", fmt.Errorf("create connection: parse response: %w", err)
+	}
+	if len(result) == 0 {
+		return "", fmt.Errorf("create connection: empty response")
+	}
+	if result[0].Error != nil {
+		return "", fmt.Errorf("create connection: %s", result[0].Error.Message)
+	}
+	logger.Debug("connection created", "objectId", result[0].ObjectID)
+	return result[0].ObjectID, nil
+}
+
+// ─── updateConnection ─────────────────────────────────────────────────────────
+
+func (d *sdkDTClient) updateConnection(objectID, name, tenantID, clientID string) error {
+	// Fetch current object to get schemaVersion for If-Match optimistic lock.
+	type getResp struct {
+		SchemaVersion string    `json:"schemaVersion"`
+		Value         connValue `json:"value"`
+	}
+
+	var current getResp
+	getResp_, err := d.c.HTTP().R().SetResult(&current).Get(fmt.Sprintf("%s/%s", settingsAPI, objectID))
+	if err != nil {
+		return fmt.Errorf("update connection: get current: %w", err)
+	}
+	if getResp_.IsError() {
+		return fmt.Errorf("update connection: get current: status %d: %s", getResp_.StatusCode(), getResp_.String())
+	}
+
+	body := map[string]interface{}{
+		"value": connValue{
+			Name: name,
+			Type: "federatedIdentityCredential",
+			FederatedIdentityCredential: &connFedCred{
+				DirectoryID:   tenantID,
+				ApplicationID: clientID,
+				Consumers:     []string{"SVC:com.dynatrace.da"},
+			},
+		},
+	}
+	logger.Debug("updating connection", "objectId", objectID, "tenantID", tenantID, "clientID", clientID)
+
+	resp, err := d.c.HTTP().R().
+		SetBody(body).
+		SetHeader("If-Match", current.SchemaVersion).
+		Put(fmt.Sprintf("%s/%s", settingsAPI, objectID))
+	if err != nil {
+		return fmt.Errorf("update connection: %w", err)
+	}
+	if resp.IsError() {
+		return fmt.Errorf("update connection: status %d: %s", resp.StatusCode(), resp.String())
+	}
+	return nil
+}
+
+// ─── createMonitoring ─────────────────────────────────────────────────────────
+
+func (d *sdkDTClient) createMonitoring(configName, connectionObjectID string) error {
+	version, err := d.latestExtensionVersion()
+	if err != nil {
+		return fmt.Errorf("create monitoring: %w", err)
+	}
+	logger.Debug("using extension version", "version", version)
+
+	type credential struct {
+		Enabled      bool   `json:"enabled"`
+		Description  string `json:"description"`
+		ConnectionID string `json:"connectionId"`
+		Type         string `json:"type"`
+	}
+	type monBody struct {
+		Enabled     bool         `json:"enabled"`
+		Description string       `json:"description"`
+		Version     string       `json:"version"`
+		FeatureSets []string     `json:"featureSets"`
+		Azure       struct {
+			Credentials []credential `json:"credentials"`
+		} `json:"azure"`
+	}
+
+	var b monBody
+	b.Enabled = true
+	b.Description = configName
+	b.Version = version
+	b.FeatureSets = []string{}
+	b.Azure.Credentials = []credential{{
+		Enabled:      true,
+		Description:  configName,
+		ConnectionID: connectionObjectID,
+		Type:         "federatedIdentityCredential",
+	}}
+
+	bodyBytes, err := json.Marshal(b)
+	if err != nil {
+		return fmt.Errorf("create monitoring: marshal: %w", err)
+	}
+
+	resp, err := d.c.HTTP().R().
+		SetHeader("Content-Type", "application/json").
+		SetBody(bodyBytes).
+		Post(monitoringAPI)
+	if err != nil {
+		return fmt.Errorf("create monitoring: %w", err)
+	}
+	if resp.IsError() {
+		return fmt.Errorf("create monitoring: status %d: %s", resp.StatusCode(), resp.String())
+	}
+	return nil
+}
+
+func (d *sdkDTClient) latestExtensionVersion() (string, error) {
+	type extItem struct {
+		Version string `json:"version"`
+	}
+	type extResp struct {
+		Items []extItem `json:"items"`
+	}
+
+	var result extResp
+	resp, err := d.c.HTTP().R().SetResult(&result).Get(extensionAPI)
+	if err != nil {
+		return "", fmt.Errorf("get extension versions: %w", err)
+	}
+	if resp.IsError() {
+		return "", fmt.Errorf("get extension versions: status %d: %s", resp.StatusCode(), resp.String())
+	}
+	if len(result.Items) == 0 {
+		return "", fmt.Errorf("no versions found for extension %s", extensionName)
+	}
+
+	versions := make([]string, 0, len(result.Items))
+	for _, item := range result.Items {
+		if item.Version != "" {
+			versions = append(versions, item.Version)
+		}
+	}
+	sort.Slice(versions, func(i, j int) bool {
+		return cmpSemver(versions[i], versions[j]) > 0
+	})
+	return versions[0], nil
+}
+
+func cmpSemver(a, b string) int {
+	ap, bp := strings.Split(a, "."), strings.Split(b, ".")
+	n := len(ap)
+	if len(bp) > n {
+		n = len(bp)
+	}
+	for i := range n {
+		ai, bi := 0, 0
+		if i < len(ap) {
+			ai, _ = strconv.Atoi(ap[i])
+		}
+		if i < len(bp) {
+			bi, _ = strconv.Atoi(bp[i])
+		}
+		if ai != bi {
+			if ai > bi {
+				return 1
+			}
+			return -1
+		}
+	}
+	return 0
+}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 // azureBuildStepCommands returns a human-readable one-liner per step.
@@ -30,7 +31,7 @@ func azureBuildStepCommands(cfg azureConfig) []string {
 	audience := strings.TrimPrefix(appsURL, "https://") + "/svc-id/com.dynatrace.da"
 
 	return []string{
-		fmt.Sprintf("dtctl create azure connection --name %s --type federatedIdentityCredential  [DT_ENVIRONMENT=%s DT_PLATFORM_TOKEN=***]",
+		fmt.Sprintf("DT Settings API: create Azure connection '%s' (federatedIdentityCredential)  [env=%s token=***]",
 			cfg.ConnectionName, cfg.EnvURL),
 		fmt.Sprintf("az ad sp create-for-rbac --name %s --create-password false -o json",
 			cfg.ConnectionName),
@@ -39,17 +40,15 @@ func azureBuildStepCommands(cfg azureConfig) []string {
 		fmt.Sprintf("az ad sp show --id %s -o json", clientID),
 		fmt.Sprintf(`az role assignment create --assignee-object-id %s --role "Monitoring Reader" --scope %s --assignee-principal-type ServicePrincipal --description "Dynatrace Monitoring"`,
 			objectID, cfg.ManagementGroupID),
-		fmt.Sprintf("dtctl update azure connection --name %s --directoryId %s --applicationId %s  [DT_ENVIRONMENT=%s DT_PLATFORM_TOKEN=***]",
+		fmt.Sprintf("DT Settings API: update Azure connection '%s' with tenantId=%s applicationId=%s  [env=%s token=***]",
 			cfg.ConnectionName, cfg.TenantID, clientID, cfg.EnvURL),
-		fmt.Sprintf("dtctl create azure monitoring --name %s --credentials %s  [DT_ENVIRONMENT=%s DT_PLATFORM_TOKEN=***]",
-			cfg.ConfigurationName, cfg.ConnectionName, cfg.EnvURL),
+		fmt.Sprintf("DT Extensions API: create Azure monitoring configuration '%s'  [env=%s token=***]",
+			cfg.ConfigurationName, cfg.EnvURL),
 	}
 }
 
 // azurePrintPreview prints the installation summary and command list.
 func azurePrintPreview(cfg azureConfig) {
-	sep := strings.Repeat("─", 60)
-
 	fmt.Println()
 	display.ColorMessage.Println("  Dynatrace Azure Monitor Integration")
 	fmt.Println()
@@ -59,9 +58,9 @@ func azurePrintPreview(cfg azureConfig) {
 	fmt.Printf("  Connection name:    %s\n", cfg.ConnectionName)
 	fmt.Printf("  Configuration name: %s\n", cfg.ConfigurationName)
 	fmt.Println()
-	fmt.Printf("  %s\n", sep)
+	display.PrintSectionDivider()
 	display.ColorMessage.Println("  Commands to be executed:")
-	fmt.Printf("  %s\n", sep)
+	display.PrintSectionDivider()
 
 	steps := azureBuildStepCommands(cfg)
 	for i, s := range steps {
@@ -69,16 +68,19 @@ func azurePrintPreview(cfg azureConfig) {
 		fmt.Printf("  Step %d: %s\n", i+1, masked)
 	}
 
-	fmt.Printf("  %s\n\n", sep)
+	display.PrintSectionDivider()
+	fmt.Println()
 }
 
 // azureRunStep executes one numbered step, prints progress, and returns stdout.
 func azureRunStep(n, total int, runner cmdRunner, name string, args []string, env []string, desc string) (string, error) {
 	fmt.Printf("  Step %d/%d: %s...\n", n, total, desc)
+	logger.Debug("running step", "step", n, "cmd", name, "args", args)
 	out, err := runner(name, args, env)
 	if err != nil {
 		return out, fmt.Errorf("step %d: %w", n, err)
 	}
+	logger.Debug("step output", "step", n, "stdout", out)
 	return out, nil
 }
 
@@ -88,7 +90,7 @@ func azurePartialFailureHint(cfg azureConfig, completedSteps map[int]bool) {
 		return
 	}
 	fmt.Println()
-	fmt.Println("  The following resources were already created and may need to be cleaned up:")
+	display.ColorWarning.Println("  The following resources were already created and may need to be cleaned up:")
 	if completedSteps[1] {
 		fmt.Printf("    • DT connection '%s' — delete with: dtctl delete azure connection --name %s\n",
 			cfg.ConnectionName, cfg.ConnectionName)
@@ -105,28 +107,33 @@ func azurePartialFailureHint(cfg azureConfig, completedSteps map[int]bool) {
 	}
 }
 
-// InstallAzure sets up the Dynatrace Azure Monitor integration using dtctl and az.
+// InstallAzure sets up the Dynatrace Azure Monitor integration using the DT Platform API and az.
 //
 // The 7-step workflow:
-//  1. dtctl create azure connection
+//  1. DT Settings API: create Azure connection (federatedIdentityCredential)
 //  2. az ad sp create-for-rbac
 //  3. az ad app federated-credential create
 //  4. az ad sp show (with retry for Entra propagation delay)
 //  5. az role assignment create
-//  6. dtctl update azure connection
-//  7. dtctl create azure monitoring
+//  6. DT Settings API: update Azure connection (set tenantId + applicationId)
+//  7. DT Extensions API: create Azure monitoring configuration
 func InstallAzure(envURL, platformToken string, dryRun bool, startTime time.Time) error {
-	return installAzureWithRunner(envURL, platformToken, dryRun, startTime, realRunner, time.Sleep)
+	dtc, err := newSDKDTClient(envURL, platformToken)
+	if err != nil {
+		return err
+	}
+	return installAzureWithRunner(envURL, platformToken, dryRun, startTime, realRunner, time.Sleep, dtc)
 }
 
 // installAzureWithRunner is the testable core of InstallAzure. It accepts
-// injected runner and sleeper to allow unit-testing without real az/dtctl calls.
+// injected runner, sleeper, and dtclient to allow unit-testing without real az/API calls.
 func installAzureWithRunner(
 	envURL, platformToken string,
 	dryRun bool,
 	_ time.Time,
 	runner cmdRunner,
 	sleeper func(time.Duration),
+	dtc dtclient,
 ) error {
 	const (
 		connectionName    = "dtwiz-azure"
@@ -176,32 +183,18 @@ func installAzureWithRunner(
 	}
 	fmt.Println()
 
-	dtEnv := dtctlEnv(envURL, platformToken)
 	completed := make(map[int]bool)
 
 	// ── Step 1: create DT connection ──────────────────────────────────────────
-	out1, err := azureRunStep(1, totalSteps, runner, "dtctl",
-		[]string{"create", "azure", "connection", "--name", connectionName, "--type", "federatedIdentityCredential", "-o", "json"},
-		dtEnv, "Create Dynatrace Azure connection")
-	if err != nil {
-		// Retry without -o json (older dtctl versions may not support it)
-		out1, err = azureRunStep(1, totalSteps, runner, "dtctl",
-			[]string{"create", "azure", "connection", "--name", connectionName, "--type", "federatedIdentityCredential"},
-			dtEnv, "Create Dynatrace Azure connection (table output)")
-	}
-	if err != nil {
-		azurePartialFailureHint(cfg, completed)
-		return err
-	}
-	completed[1] = true
-
-	connID, err := azureParseConnectionID(out1)
+	fmt.Printf("  Step 1/%d: Create Dynatrace Azure connection...\n", totalSteps)
+	connObjectID, err := dtc.createConnection(connectionName)
 	if err != nil {
 		azurePartialFailureHint(cfg, completed)
 		return fmt.Errorf("step 1: %w", err)
 	}
-	cfg.ConnectionID = connID
-	fmt.Printf("  ✓ Connection created: %s\n", connID)
+	completed[1] = true
+	cfg.ConnectionID = connObjectID
+	display.ColorOK.Printf("  ✓ Connection created: %s\n", connObjectID)
 
 	// ── Step 2: register Azure SP ─────────────────────────────────────────────
 	out2, err := azureRunStep(2, totalSteps, runner, "az",
@@ -225,10 +218,10 @@ func installAzureWithRunner(
 	if sp.Tenant != "" {
 		cfg.TenantID = sp.Tenant
 	}
-	fmt.Printf("  ✓ Service Principal created: %s\n", cfg.ClientID)
+	display.ColorOK.Printf("  ✓ Service Principal created: %s\n", cfg.ClientID)
 
 	// ── Step 3: create federated credential ──────────────────────────────────
-	fedJSON, err := azureBuildFedCredJSON(connID, envURL)
+	fedJSON, err := azureBuildFedCredJSON(connObjectID, envURL)
 	if err != nil {
 		azurePartialFailureHint(cfg, completed)
 		return err
@@ -241,7 +234,7 @@ func installAzureWithRunner(
 		return err
 	}
 	completed[3] = true
-	fmt.Printf("  ✓ Federated credential created\n")
+	display.ColorOK.Println("  ✓ Federated credential created")
 
 	// ── Step 4: get SP object ID (with retry) ─────────────────────────────────
 	fmt.Printf("  Step 4/%d: Retrieve SP object ID...\n", totalSteps)
@@ -251,7 +244,7 @@ func installAzureWithRunner(
 		return fmt.Errorf("step 4: %w", err)
 	}
 	cfg.ObjectID = objectID
-	fmt.Printf("  ✓ SP object ID: %s\n", objectID)
+	display.ColorOK.Printf("  ✓ SP object ID: %s\n", objectID)
 
 	// ── Step 5: assign Monitoring Reader ─────────────────────────────────────
 	_, err = azureRunStep(5, totalSteps, runner, "az",
@@ -269,27 +262,23 @@ func installAzureWithRunner(
 		return err
 	}
 	completed[5] = true
-	fmt.Printf("  ✓ Monitoring Reader role assigned\n")
+	display.ColorOK.Println("  ✓ Monitoring Reader role assigned")
 
 	// ── Step 6: update DT connection ─────────────────────────────────────────
-	_, err = azureRunStep(6, totalSteps, runner, "dtctl",
-		[]string{"update", "azure", "connection", "--name", connectionName, "--directoryId", cfg.TenantID, "--applicationId", cfg.ClientID},
-		dtEnv, "Update Dynatrace Azure connection")
-	if err != nil {
+	fmt.Printf("  Step 6/%d: Update Dynatrace Azure connection...\n", totalSteps)
+	if err = dtc.updateConnection(connObjectID, connectionName, cfg.TenantID, cfg.ClientID); err != nil {
 		azurePartialFailureHint(cfg, completed)
-		return err
+		return fmt.Errorf("step 6: %w", err)
 	}
-	fmt.Printf("  ✓ Connection updated\n")
+	display.ColorOK.Println("  ✓ Connection updated")
 
 	// ── Step 7: create monitoring configuration ───────────────────────────────
-	_, err = azureRunStep(7, totalSteps, runner, "dtctl",
-		[]string{"create", "azure", "monitoring", "--name", configurationName, "--credentials", connectionName},
-		dtEnv, "Create Azure monitoring configuration")
-	if err != nil {
+	fmt.Printf("  Step 7/%d: Create Azure monitoring configuration...\n", totalSteps)
+	if err = dtc.createMonitoring(configurationName, connObjectID); err != nil {
 		azurePartialFailureHint(cfg, completed)
-		return err
+		return fmt.Errorf("step 7: %w", err)
 	}
-	fmt.Printf("  ✓ Monitoring configuration created\n")
+	display.ColorOK.Println("  ✓ Monitoring configuration created")
 
 	fmt.Println()
 	display.ColorMessage.Println("  Azure Monitor integration setup complete!")
