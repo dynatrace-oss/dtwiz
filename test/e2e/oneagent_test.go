@@ -4,8 +4,10 @@ package e2e_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -36,10 +38,8 @@ func oneAgentInstallDir() string {
 //
 // It mirrors TestOTelAutoInstrumentation but, because OneAgent installs
 // system-wide and there is exactly one agent per host, it runs as a single
-// serial case rather than a parallel table, and gates on elevated privileges.
-// On Linux it requires root (non-root triggers an interactive sudo prompt that
-// hangs CI). On Windows the installer exe handles UAC elevation itself via its
-// embedded manifest — no admin pre-check is needed.
+// serial case rather than a parallel table, and gates on root on Linux
+// (non-root triggers an interactive sudo prompt that hangs CI).
 func TestOneAgentLifecycle(t *testing.T) {
 	switch runtime.GOOS {
 	case "linux", "windows":
@@ -60,12 +60,12 @@ func TestOneAgentLifecycle(t *testing.T) {
 	installer.AutoConfirm = true
 	t.Cleanup(func() { installer.AutoConfirm = originalAutoConfirm })
 
-	// Always attempt to remove the agent, even if a later assertion fails, so the
-	// runner is never left permanently monitored. The explicit uninstall below is
-	// still the asserted path; this is a safety net for early failures.
+	// Safety-net cleanup: only runs if install succeeded, so the host is never
+	// left permanently monitored if a later assertion fails.
+	installed := false
 	t.Cleanup(func() {
-		if _, err := os.Stat(installDir); err != nil {
-			return // already gone (or never installed)
+		if !installed {
+			return
 		}
 		if uerr := oneagent.UninstallOneAgentV2(oneagent.UninstallOptions{}); uerr != nil {
 			t.Logf("cleanup: uninstall failed: %v", uerr)
@@ -75,10 +75,10 @@ func TestOneAgentLifecycle(t *testing.T) {
 	t.Log("installing OneAgent (fullstack)")
 	if err := oneagent.InstallOneAgentV2(env.Client, oneagent.InstallOptions{
 		HostGroup: env.TestID, // unique tag to aid correlation and manual debugging
-		Quiet:     true,
 	}); err != nil {
 		t.Fatalf("InstallOneAgentV2: %v", err)
 	}
+	installed = true
 	if _, err := os.Stat(installDir); err != nil {
 		t.Fatalf("expected install dir %s to exist after install: %v", installDir, err)
 	}
@@ -99,8 +99,20 @@ func TestOneAgentLifecycle(t *testing.T) {
 	if err := oneagent.UninstallOneAgentV2(oneagent.UninstallOptions{}); err != nil {
 		t.Fatalf("UninstallOneAgentV2: %v", err)
 	}
-	if _, err := os.Stat(installDir); !os.IsNotExist(err) {
-		t.Errorf("expected install dir %s to be gone after uninstall, stat err = %v", installDir, err)
+	installed = false // uninstall succeeded; safety-net cleanup is no longer needed
+	if runtime.GOOS == "windows" {
+		// On Windows, MSI uninstallers leave the install directory behind with
+		// residual logs/config. Check the service is gone instead.
+		out, err := exec.Command("powershell", "-NoProfile", "-Command",
+			"if (Get-Service -Name 'Dynatrace OneAgent' -ErrorAction SilentlyContinue) { 'present' }",
+		).Output()
+		if err == nil && strings.Contains(string(out), "present") {
+			t.Errorf("expected Dynatrace OneAgent service to be gone after uninstall")
+		}
+	} else {
+		if _, err := os.Stat(installDir); !os.IsNotExist(err) {
+			t.Errorf("expected install dir %s to be gone after uninstall, stat err = %v", installDir, err)
+		}
 	}
 }
 
