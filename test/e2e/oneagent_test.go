@@ -4,10 +4,8 @@ package e2e_test
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 	"time"
 
@@ -40,9 +38,8 @@ func oneAgentInstallDir() string {
 // system-wide and there is exactly one agent per host, it runs as a single
 // serial case rather than a parallel table, and gates on elevated privileges.
 // On Linux it requires root (non-root triggers an interactive sudo prompt that
-// hangs CI). On Windows it requires an elevated (admin) process — the installer
-// exe requests UAC elevation via its manifest, but when launched from a
-// non-elevated parent the handle becomes invalid and the wait fails.
+// hangs CI). On Windows the installer exe handles UAC elevation itself via its
+// embedded manifest — no admin pre-check is needed.
 func TestOneAgentLifecycle(t *testing.T) {
 	switch runtime.GOOS {
 	case "linux", "windows":
@@ -50,12 +47,7 @@ func TestOneAgentLifecycle(t *testing.T) {
 	default:
 		t.Skipf("OneAgent install is not supported on %s", runtime.GOOS)
 	}
-	if runtime.GOOS == "windows" {
-		out, err := exec.Command("net", "session").CombinedOutput()
-		if err != nil || strings.Contains(string(out), "Access is denied") {
-			t.Skip("OneAgent install on Windows requires an elevated (admin) process; re-run as administrator")
-		}
-	} else if os.Geteuid() != 0 {
+	if runtime.GOOS != "windows" && os.Geteuid() != 0 {
 		t.Skip("OneAgent install requires root; re-run as root (interactive sudo would hang)")
 	}
 
