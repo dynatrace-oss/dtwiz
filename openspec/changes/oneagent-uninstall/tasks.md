@@ -41,13 +41,13 @@ Create `pkg/installer/oneagent/uninstall_windows.go` (`//go:build windows`).
 
 ## 4. Wire in cmd
 
-Update `cmd/uninstall.go` to route to V2 when `OneAgentPoC` is enabled.
+Update `cmd/uninstall.go` to always use V2.
 
 **Files:** `cmd/uninstall.go`
 
-- [x] 4.1 Import `featureflags` and `oneagent` packages
-- [x] 4.2 In `uninstallOneAgentCmd.RunE`: check `featureflags.IsEnabled(featureflags.OneAgentPoC)` and call `oneagent.UninstallOneAgentV2(oneagent.UninstallOptions{DryRun: uninstallDryRun})`
-- [x] 4.3 Handle `installer.ErrInstallCancelled` in the V2 branch (return nil)
+- [x] 4.1 Import `oneagent` package
+- [x] 4.2 In `uninstallOneAgentCmd.RunE`: call `oneagent.UninstallOneAgentV2(oneagent.UninstallOptions{DryRun: uninstallDryRun})` directly — no feature flag check
+- [x] 4.3 Handle `installer.ErrInstallCancelled` (return nil)
 
 ## 5. Tests
 

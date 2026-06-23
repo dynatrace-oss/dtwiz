@@ -62,29 +62,9 @@ At Task 8, the `pkg/installer/oneagent/` package replaces the old `InstallOneAge
 
 This split keeps each concern isolated, makes rollback mechanical (delete the directory), and avoids touching the old call sites until Task 8.
 
-### 2. Feature flag: `ONEAGENT_POC`, removed at Task 8
+### 2. Feature flag: `ONEAGENT_POC` (removed)
 
-`pkg/featureflags/featureflags.go` already supports adding new flags via a single registry entry. We add:
-
-```go
-const (
-    AllRuntimes Flag = iota
-    OneAgentPoC
-)
-
-// ...registry entry: name "oneagent-poc", env "DTWIZ_ONEAGENT_POC", default false
-```
-
-During Tasks 1–7, `cmd/install.go`'s `installOneAgentCmd.RunE` branches:
-
-```go
-if featureflags.IsEnabled(featureflags.OneAgentPoC) {
-    return oneagent.InstallOneAgentV2(c, opts)
-}
-return installer.InstallOneAgent(c.Classic, installDryRun, quiet, hostGroup)
-```
-
-At Task 8, the branch is deleted, `InstallOneAgent` is replaced with the v2 implementation, and the `OneAgentPoC` registry entry + constant are removed. The cobra `--oneagent-poc` flag disappears with the registry entry.
+During Tasks 1–7, `cmd/install.go`'s `installOneAgentCmd.RunE` branched on a `OneAgentPoC` feature flag (`DTWIZ_ONEAGENT_POC` env var, `--oneagent-poc` CLI flag). The branch has since been removed: `InstallOneAgentV2` is now the unconditional default in `cmd/install.go` and `cmd/setup.go`, the `OneAgentPoC` constant and registry entry have been deleted from `pkg/featureflags`, and the `--oneagent-poc` CLI flag no longer exists.
 
 ### 3. End-to-end flow
 

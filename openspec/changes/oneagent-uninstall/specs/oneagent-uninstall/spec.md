@@ -158,24 +158,12 @@ On Windows, `runUninstall` SHALL use PowerShell to query WMI for the Dynatrace O
 
 ---
 
-### Requirement: Feature flag gates V2 path
+### Requirement: V2 is the default path
 
-The V2 path is gated by the existing `OneAgentPoC` flag (`--oneagent-poc` / `DTWIZ_ONEAGENT_POC`). No separate uninstall flag exists. The V1 path (`installer.UninstallOneAgent`) remains the default.
-
-#### Scenario: Flag disabled — V1 runs
-
-- **GIVEN** `OneAgentPoC` is not enabled
-- **WHEN** `dtwiz uninstall oneagent` runs
-- **THEN** `installer.UninstallOneAgent` is called
-
-#### Scenario: Flag enabled — V2 runs
-
-- **GIVEN** `DTWIZ_ONEAGENT_POC=true` is set (or `--oneagent-poc` is passed)
-- **WHEN** `dtwiz uninstall oneagent` runs
-- **THEN** `oneagent.UninstallOneAgentV2` is called
+`dtwiz uninstall oneagent` always calls `oneagent.UninstallOneAgentV2`. There is no feature flag gate and no V1 fallback.
 
 #### Scenario: ErrInstallCancelled is a clean exit
 
-- **GIVEN** the V2 path is active and the user declines the confirmation prompt
+- **GIVEN** the user declines the confirmation prompt
 - **WHEN** `dtwiz uninstall oneagent` returns
 - **THEN** the CLI exits with code 0

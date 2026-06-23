@@ -17,12 +17,14 @@ Set up the foundational structure for the OneAgent PoC implementation: feature f
 
 **Files:** `pkg/featureflags/featureflags.go` (extend), `pkg/installer/oneagent/oneagent.go` (create), `pkg/installer/oneagent/download.go` (create), `pkg/installer/oneagent/verify.go` (create), `pkg/installer/oneagent/oneagent_test.go` (create), `cmd/install.go` (extend), `cmd/setup.go` (extend)
 
-### Feature Flag
+### Feature Flag (removed)
 
-- [x] 1.1 Add `OneAgentPoC` constant to the flag enum in `pkg/featureflags/featureflags.go`
-- [x] 1.2 Add a registry entry for `ONEAGENT_POC` with env var `DTWIZ_ONEAGENT_POC`, default `false`
-- [x] 1.3 Unit test: `IsEnabled(featureflags.OneAgentPoC)` returns `false` by default
-- [x] 1.4 Unit test: set `DTWIZ_ONEAGENT_POC=true` and verify `IsEnabled` returns `true`
+> The `OneAgentPoC` constant, registry entry, and associated tests were added as scaffolding and have since been removed when `InstallOneAgentV2` became the default.
+
+- [x] 1.1 ~~Add `OneAgentPoC` constant to the flag enum~~ (removed)
+- [x] 1.2 ~~Add a registry entry for `ONEAGENT_POC`~~ (removed)
+- [x] 1.3 ~~Unit test: `IsEnabled(featureflags.OneAgentPoC)` returns `false` by default~~ (removed)
+- [x] 1.4 ~~Unit test: set `DTWIZ_ONEAGENT_POC=true` and verify `IsEnabled` returns `true`~~ (removed)
 
 ### Package: pkg/installer/oneagent/
 
@@ -44,17 +46,11 @@ Set up the foundational structure for the OneAgent PoC implementation: feature f
 - [x] 1.14 Each flag is properly documented in the cobra command definition
 - [x] 1.15 Unit test: flags parse correctly from the command line
 
-### Feature-Flag Branching
+### Feature-Flag Branching (removed)
 
-- [x] 1.16 In `cmd/install.go`'s `installOneAgentCmd.RunE`, add branching:
+> The branching was added as scaffolding and subsequently removed. `cmd/install.go` and `cmd/setup.go` now call `InstallOneAgentV2` unconditionally.
 
-  ```go
-  if featureflags.IsEnabled(featureflags.OneAgentPoC) {
-      return oneagent.InstallOneAgentV2(c, opts)
-  }
-  return installer.InstallOneAgent(c.Classic, installDryRun, quiet, hostGroup)
-  ```
-
-- [x] 1.17 Add a comment marking the branching point: `// Task 1 — feature-flag branching; remove at Task 8`
-- [x] 1.18 Verify existing `InstallOneAgent` call path is unchanged when the flag is disabled (default)
-- [x] 1.19 Update `cmd/setup.go` to import `pkg/installer/oneagent` and call `oneagent.InstallOneAgentV2(c, oneagent.InstallOptions{...})`
+- [x] 1.16 ~~Add feature-flag branching in `cmd/install.go`~~ (removed)
+- [x] 1.17 ~~Add comment marking the branching point~~ (removed)
+- [x] 1.18 ~~Verify existing `InstallOneAgent` call path is unchanged when flag is disabled~~ (removed)
+- [x] 1.19 `cmd/setup.go` calls `oneagent.InstallOneAgentV2(c, oneagent.InstallOptions{...})` unconditionally

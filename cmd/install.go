@@ -67,17 +67,10 @@ var installOneAgentCmd = &cobra.Command{
 			Quiet:                 quiet,
 		}
 
-		if featureflags.IsEnabled(featureflags.OneAgentPoC) {
-			if err := oneagent.InstallOneAgentV2(c, opts); err != nil {
-				if errors.Is(err, installer.ErrInstallCancelled) {
-					return nil
-				}
-				return err
+		if err := oneagent.InstallOneAgentV2(c, opts); err != nil {
+			if errors.Is(err, installer.ErrInstallCancelled) {
+				return nil
 			}
-			return nil
-		}
-
-		if err := installer.InstallOneAgent(c.Classic, installDryRun, quiet, hostGroup); err != nil {
 			return err
 		}
 		if !installDryRun {

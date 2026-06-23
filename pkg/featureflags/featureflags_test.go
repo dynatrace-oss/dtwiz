@@ -62,20 +62,6 @@ func TestIsEnabled_UnknownFlag(t *testing.T) {
 	}
 }
 
-func TestIsEnabled_OneAgentPoC_DefaultFalse(t *testing.T) {
-	t.Setenv("DTWIZ_ONEAGENT_POC", "")
-	if IsEnabled(OneAgentPoC) {
-		t.Error("expected OneAgentPoC to be disabled by default")
-	}
-}
-
-func TestIsEnabled_OneAgentPoC_EnvTrue(t *testing.T) {
-	t.Setenv("DTWIZ_ONEAGENT_POC", "true")
-	if !IsEnabled(OneAgentPoC) {
-		t.Error("expected OneAgentPoC to be enabled with DTWIZ_ONEAGENT_POC=true")
-	}
-}
-
 func TestIsEnabled_Experimental_DefaultFalse(t *testing.T) {
 	t.Setenv("DTWIZ_EXPERIMENTAL", "")
 	if IsEnabled(Experimental) {

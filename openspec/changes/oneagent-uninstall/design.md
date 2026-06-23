@@ -13,8 +13,6 @@
 - Platform split via `//go:build !windows` / `//go:build windows`, same as `detect_unix.go`/`detect_windows.go` in this package.
 - All user-facing output via `display.PrintStatusLine`; no `color.New(...)` calls.
 - Diagnostics via `logger.Debug`/`logger.Verbose` only.
-- Gated by the existing `OneAgentPoC` flag — no separate uninstall flag.
-
 **Non-Goals:**
 
 - Changing uninstall mechanics — script path, WMI query, and msiexec command match V1 exactly.
@@ -47,11 +45,7 @@ V1's `removeResidualDir` is unexported in `pkg/installer`. V2 re-implements the 
 
 On decline, `UninstallOneAgentV2` returns `installer.ErrInstallCancelled` (matching `InstallOneAgentV2`). `cmd/uninstall.go` treats it as a clean exit (`errors.Is` guard, same as `uninstallAWSLambdaCmd` and `uninstallOtelCmd`).
 
-### 7. Feature flag
-
-V2 is gated by the existing `OneAgentPoC` flag (`--oneagent-poc` / `DTWIZ_ONEAGENT_POC`). Install and uninstall share the same gate.
-
-### 8. Logging
+### 7. Logging
 
 | Stage | Level | Message | Keys |
 |---|---|---|---|

@@ -28,20 +28,9 @@ This change provides all five without implementing any business logic.
 
 ## Decisions
 
-### 1. Feature flag: `ONEAGENT_POC`, disabled by default
+### 1. Feature flag: `ONEAGENT_POC` (removed)
 
-The flag lives in `pkg/featureflags/featureflags.go` as a single constant and registry entry:
-
-```go
-const (
-    AllRuntimes Flag = iota
-    OneAgentPoC
-)
-
-// registry entry: name "oneagent-poc", env "DTWIZ_ONEAGENT_POC", default false
-```
-
-Default-false means existing behavior is preserved. At Task 8, the constant and registry entry are deleted in a single mechanical commit; no search-and-replace needed.
+The flag was added to `pkg/featureflags/featureflags.go` as a temporary development gate (constant + registry entry, default false). It has since been removed: `InstallOneAgentV2` and `UninstallOneAgentV2` are now the unconditional defaults, and the `OneAgentPoC` constant and registry entry no longer exist.
 
 ### 2. New package: pkg/installer/oneagent/
 
@@ -109,21 +98,9 @@ opts := oneagent.InstallOptions{
 
 This replaces the positional `(dryRun, quiet, hostGroup)` signature at Task 8 but uses the new struct immediately.
 
-### 6. Feature-flag branching in cmd/install.go
+### 6. Feature-flag branching in cmd/install.go (removed)
 
-The command handler branches based on the feature flag:
-
-```go
-// Task 1 — feature-flag branching; remove at Task 8
-if featureflags.IsEnabled(featureflags.OneAgentPoC) {
-    return oneagent.InstallOneAgentV2(c, opts)
-}
-
-// Existing flow (default)
-return installer.InstallOneAgent(c.Classic, installDryRun, quiet, hostGroup)
-```
-
-The comment is a clear marker for Task 8 search-and-replace: remove the if-block, keep only the existing `InstallOneAgent` call, then replace it with the `InstallOneAgentV2` code at Task 8.
+The command handler previously branched on `featureflags.IsEnabled(featureflags.OneAgentPoC)`. This branch has been removed: `cmd/install.go` and `cmd/setup.go` now call `InstallOneAgentV2` unconditionally.
 
 ### 7. Test file: pkg/installer/oneagent/oneagent_test.go
 
@@ -135,9 +112,4 @@ Created with:
 
 ### 8. No breaking changes during development
 
-The existing `InstallOneAgent` signature and behavior are unchanged. By default (with `ONEAGENT_POC=false`), `dtwiz install oneagent` runs the old flow. Only when the flag is explicitly enabled does it attempt the new flow (which returns "not yet implemented" until Tasks 2–7 are complete).
-
-## Risks / Trade-offs
-
-- **Feature flag adds a code path:** During development, both code paths exist. The old path must continue working. This is the trade-off for parallel development and trivial rollback.
-- **Stub errors are not user-friendly:** Until Tasks 2–7 are implemented, enabling the feature flag produces "not yet implemented" errors. This is intentional — the flag is for development/testing only, not for users.
+During development (Tasks 1–7), the existing `InstallOneAgent` remained the default. The feature flag and branching have since been removed; `InstallOneAgentV2` is the only path.

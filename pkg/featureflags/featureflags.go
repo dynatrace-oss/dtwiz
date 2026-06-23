@@ -13,7 +13,6 @@ type Flag int
 
 const (
 	AllRuntimes Flag = iota
-	OneAgentPoC
 	Experimental
 )
 
@@ -34,14 +33,6 @@ var registry = []CLIFeatureFlag{
 		"DTWIZ_ALL_RUNTIMES",
 		false,
 		"enable all runtimes for OTel auto-instrumentation",
-		false,
-	},
-	{
-		OneAgentPoC,
-		"oneagent-poc",
-		"DTWIZ_ONEAGENT_POC",
-		false,
-		"enable the new OneAgent PoC installer flow (development only)",
 		false,
 	},
 	{

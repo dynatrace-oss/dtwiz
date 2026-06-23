@@ -1,28 +1,8 @@
-# OneAgent PoC Scaffolding and Feature Flag
+# OneAgent PoC Scaffolding
+
+> **Note:** The `OneAgentPoC` feature flag and the V1/V2 branching described in this spec were temporary development scaffolding. The flag has since been removed: `InstallOneAgentV2` and `UninstallOneAgentV2` are now the unconditional defaults.
 
 ## ADDED Requirements
-
-### Requirement: Feature flag registry entry for ONEAGENT_POC
-
-`pkg/featureflags/featureflags.go` SHALL add a new flag constant and registry entry for `ONEAGENT_POC`. The flag SHALL default to false (disabled) during development. It SHALL be removable at the end of Task 8 with a single constant deletion and one registry entry removal.
-
-#### Scenario: Feature flag defaults to false
-
-- **GIVEN** `DTWIZ_ONEAGENT_POC` environment variable is not set
-- **WHEN** the application initializes feature flags
-- **THEN** `featureflags.IsEnabled(featureflags.OneAgentPoC)` returns `false`
-
-#### Scenario: Feature flag can be enabled via environment variable
-
-- **GIVEN** `DTWIZ_ONEAGENT_POC=true` is set in the environment
-- **WHEN** the application initializes feature flags
-- **THEN** `featureflags.IsEnabled(featureflags.OneAgentPoC)` returns `true`
-
-#### Scenario: Feature flag appears in help and status output
-
-- **GIVEN** the feature flag is registered in the flag registry
-- **WHEN** `dtwiz --help` runs and `dtwiz status` is executed
-- **THEN** the flag appears in `dtwiz status` output showing its enabled/disabled state, and in help text if feature-flag listing is exposed
 
 ### Requirement: New package pkg/installer/oneagent/ with core installer logic
 
@@ -60,30 +40,9 @@ Type definitions: `Environment`, `AgentConfig`, `InstallOptions`
 - **WHEN** `go test ./pkg/installer/oneagent/... -v` runs
 - **THEN** all tests pass without errors
 
-### Requirement: Feature-flag branching in cmd/install.go
+### Requirement: ~~Feature-flag branching in cmd/install.go~~ (removed)
 
-`cmd/install.go` SHALL add feature-flag branching in the `installOneAgentCmd.RunE` handler to conditionally call `InstallOneAgentV2` or the existing `InstallOneAgent`:
-
-```go
-if featureflags.IsEnabled(featureflags.OneAgentPoC) {
-    return oneagent.InstallOneAgentV2(c, opts)
-}
-return installer.InstallOneAgent(c.Classic, installDryRun, quiet, hostGroup)
-```
-
-The branching point SHALL be clearly marked with a comment indicating "Task 1 — feature-flag branching; remove at Task 8".
-
-#### Scenario: Feature flag gates the new flow
-
-- **GIVEN** `DTWIZ_ONEAGENT_POC=false` (default)
-- **WHEN** `dtwiz install oneagent` runs
-- **THEN** the existing `InstallOneAgent` code path is executed
-
-#### Scenario: Feature flag enables the new flow
-
-- **GIVEN** `DTWIZ_ONEAGENT_POC=true`
-- **WHEN** `dtwiz install oneagent` runs
-- **THEN** the new `InstallOneAgentV2` code path is executed
+> **Removed:** The feature-flag branch in `cmd/install.go` and `cmd/setup.go` has been deleted. `InstallOneAgentV2` is now called unconditionally.
 
 ### Requirement: CLI flag definitions for Task 2–7
 
