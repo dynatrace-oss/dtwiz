@@ -108,16 +108,43 @@ func runElevatedInstaller(argv []string) (int, error) {
 	return 0, nil
 }
 
-// quoteWindowsArgs joins args into a parameter string for ShellExecuteEx,
-// quoting args that contain spaces, tabs, or double-quotes.
+// quoteWindowsArgs joins args into a parameter string for ShellExecuteEx
+// following CommandLineToArgvW escaping rules.
 func quoteWindowsArgs(args []string) string {
 	parts := make([]string, len(args))
 	for i, a := range args {
-		if strings.ContainsAny(a, " \t\"") {
-			parts[i] = `"` + strings.ReplaceAll(a, `"`, `\"`) + `"`
-		} else {
-			parts[i] = a
-		}
+		parts[i] = quoteWindowsArg(a)
 	}
 	return strings.Join(parts, " ")
+}
+
+// quoteWindowsArg quotes a single argument per CommandLineToArgvW semantics:
+// backslashes are only special immediately before a double-quote or at the end
+// of a quoted string, where they must be doubled.
+func quoteWindowsArg(s string) string {
+	if s != "" && !strings.ContainsAny(s, " \t\"") {
+		return s
+	}
+	var b strings.Builder
+	b.WriteByte('"')
+	slashes := 0
+	for _, c := range s {
+		switch c {
+		case '\\':
+			slashes++
+		case '"':
+			// Double the preceding backslashes, then escape the quote.
+			b.WriteString(strings.Repeat(`\`, slashes*2))
+			slashes = 0
+			b.WriteString(`\"`)
+		default:
+			b.WriteString(strings.Repeat(`\`, slashes))
+			slashes = 0
+			b.WriteRune(c)
+		}
+	}
+	// Trailing backslashes precede the closing quote and must be doubled.
+	b.WriteString(strings.Repeat(`\`, slashes*2))
+	b.WriteByte('"')
+	return b.String()
 }

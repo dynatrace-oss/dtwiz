@@ -60,9 +60,12 @@ func TestOneAgentInstalled_DirectoryAloneIsNotSufficient(t *testing.T) {
 	t.Setenv("PATH", "")
 
 	// Simulate the leftover install directory that persists after MSI uninstall.
-	dir := t.TempDir()
-	t.Setenv("ProgramFiles", filepath.Dir(dir))
-	// Even if %ProgramFiles%\dynatrace\oneagent exists, detection must return false
+	programFiles := t.TempDir()
+	t.Setenv("ProgramFiles", programFiles)
+	if err := os.MkdirAll(filepath.Join(programFiles, "Dynatrace", "OneAgent"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Even if %ProgramFiles%\Dynatrace\OneAgent exists, detection must return false
 	// without a service or binary — the directory check was removed precisely for this.
 	if oneAgentInstalled() {
 		t.Error("expected false: leftover install directory must not trigger detected-as-installed")

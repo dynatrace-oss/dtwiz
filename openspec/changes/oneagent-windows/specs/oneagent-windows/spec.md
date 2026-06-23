@@ -165,25 +165,27 @@ The Windows install command SHALL be built distinctly from the Linux version, wi
 - **THEN** the argv does NOT include `--set-server=...`
 - **AND** only includes `--set-monitoring-mode`, `--set-app-log-content-access`, and optionally `--set-host-group`
 
-### Requirement: Windows execution uses native UAC
+### Requirement: Windows execution uses ShellExecuteEx for elevation
 
-The Windows execution path relies on the native Windows UAC mechanism embedded in the installer `.exe`. A preflight check (see "Windows privilege check" above) warns the user proactively in interactive sessions and blocks execution in quiet mode.
+When not already running as Administrator, dtwiz uses `ShellExecuteEx` with the `runas` verb to launch the installer with elevated privileges, then waits for the process to exit via `WaitForSingleObject` and retrieves its exit code. When already elevated, the installer runs directly via `RunCommandWithExitCode`. A preflight check (see "Windows privilege check" above) warns the user proactively in interactive sessions and blocks execution in quiet mode.
+
+`ExecuteInstallCommand` takes two parameters: `(argv []string, quiet bool)`.
 
 #### Scenario: Windows direct execution without sudo
 
 - **GIVEN** `env.OS == "windows"`
-- **WHEN** `ExecuteInstallCommand(argv, false, false)` runs
-- **THEN** the subprocess is invoked with the argv directly
-- **AND** no `sudo` prefix is prepended
-- **AND** the installer `.exe` triggers UAC elevation if the process is not already elevated
+- **WHEN** `ExecuteInstallCommand(argv, false)` runs
+- **THEN** no `sudo` prefix is prepended
+- **AND** if the process is already elevated, the installer runs directly via `RunCommandWithExitCode`
+- **AND** if the process is not elevated, dtwiz launches the installer via `ShellExecuteEx` with the `runas` verb and waits for it to finish
 
-#### Scenario: Windows UAC elevation requested by installer (interactive)
+#### Scenario: Windows UAC elevation managed by dtwiz (interactive)
 
 - **GIVEN** the installer `.exe` is run in an interactive session without prior elevation
 - **AND** the preflight warning has already been displayed
-- **WHEN** the Windows UAC elevation dialog appears
-- **THEN** the installer requests elevation via standard Windows mechanisms
-- **AND** dtwiz itself does not attempt to re-launch or manage elevation
+- **WHEN** `runElevatedInstaller` calls `ShellExecuteEx` with the `runas` verb
+- **THEN** Windows shows the UAC consent dialog to grant Administrator privileges
+- **AND** dtwiz waits for the elevated installer process to exit before reporting success or failure
 
 ### Requirement: Windows integration test scenarios
 
