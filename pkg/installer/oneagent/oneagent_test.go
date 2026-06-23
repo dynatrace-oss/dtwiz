@@ -171,6 +171,76 @@ func TestInstallOneAgentV2_ConnectivityPass_ContinuesToDownload(t *testing.T) {
 		t.Error("download API was not called — install should have proceeded past the connectivity check")
 	}
 }
+
+// TestInstallOneAgentV2_AllEndpointsFailed_ContinuesToDownload verifies that
+// when all endpoints are unreachable the install is not blocked — a warning is
+// printed and the download proceeds.
+func TestInstallOneAgentV2_AllEndpointsFailed_ContinuesToDownload(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("OneAgent not supported on macOS")
+	}
+	withElevation(t, true)
+
+	downloadCalled := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == endpointsAPIPath {
+			w.WriteHeader(http.StatusOK)
+			// Port 1 is refused immediately on loopback — fast failure without timeout.
+			_, _ = w.Write([]byte("127.0.0.1:1"))
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/v1/deployment/installer/agent/") {
+			downloadCalled = true
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	c := newMockClient(t, srv.URL)
+	err := InstallOneAgentV2(c, InstallOptions{})
+	if err != nil && strings.Contains(err.Error(), "no communication endpoints reachable") {
+		t.Errorf("all-failed connectivity must not block install, got: %v", err)
+	}
+	if !downloadCalled {
+		t.Error("installer download must be attempted even when all endpoints are unreachable")
+	}
+}
+
+func TestInstallOneAgentV2_PartialEndpointsFailed_ContinuesToDownload(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("OneAgent not supported on macOS")
+	}
+	withElevation(t, true)
+
+	ln, addr := startTCPListener(t)
+	defer ln.Close()
+	go acceptLoop(ln)
+
+	downloadCalled := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == endpointsAPIPath {
+			w.WriteHeader(http.StatusOK)
+			// One reachable endpoint, one that will be refused immediately.
+			_, _ = w.Write([]byte(addr + ";127.0.0.1:1"))
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/v1/deployment/installer/agent/") {
+			downloadCalled = true
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	c := newMockClient(t, srv.URL)
+	err := InstallOneAgentV2(c, InstallOptions{})
+	if err != nil && strings.Contains(err.Error(), "no communication endpoints reachable") {
+		t.Errorf("partial failure should not block install, got: %v", err)
+	}
+	if !downloadCalled {
+		t.Error("installer download must be attempted when at least one endpoint is reachable")
+	}
+}
+
 func TestDetectRuntimeEnvironment(t *testing.T) {
 	env := detectRuntimeEnvironment()
 	if env.OS == "" {

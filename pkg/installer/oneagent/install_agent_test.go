@@ -288,6 +288,9 @@ func TestExecuteInstallCommand_NonQuiet(t *testing.T) {
 }
 
 func TestExecuteInstallCommand_BinaryNotFound(t *testing.T) {
+	// Force the elevated code path so Windows CI doesn't block on a ShellExecuteEx
+	// UAC dialog waiting for a non-existent binary.
+	withElevation(t, true)
 	code, err := ExecuteInstallCommand([]string{"/nonexistent/binary/dtwiz-test-sentinel"}, true)
 	if err == nil {
 		t.Fatal("expected error when binary does not exist")

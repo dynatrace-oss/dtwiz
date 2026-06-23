@@ -145,14 +145,10 @@ var setupCmd = &cobra.Command{
 		var installErr error
 		switch selected.Method {
 		case recommender.MethodOneAgent:
-			if featureflags.IsEnabled(featureflags.OneAgentPoC) {
-				installErr = oneagent.InstallOneAgentV2(c, oneagent.InstallOptions{
-					DryRun:         setupDryRun,
-					MonitoringMode: string(installer.InstallModeFullStack),
-				})
-			} else {
-				installErr = installer.InstallOneAgent(c.Classic, setupDryRun, false, "")
-			}
+			installErr = oneagent.InstallOneAgentV2(c, oneagent.InstallOptions{
+				DryRun:         setupDryRun,
+				MonitoringMode: string(installer.InstallModeFullStack),
+			})
 		case recommender.MethodKubernetes:
 			k8sClusterName := ""
 			k8sDistro := ""

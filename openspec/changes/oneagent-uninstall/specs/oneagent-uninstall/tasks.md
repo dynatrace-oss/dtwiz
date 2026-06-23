@@ -25,15 +25,15 @@
 **Files:** `pkg/installer/oneagent/uninstall_windows.go` (new), `//go:build windows`
 
 - [x] 3.1 `printPlan()`: WMI method description; no status line
-- [x] 3.2 `runUninstall()`: status line, PowerShell WMI + msiexec, log note
+- [x] 3.2 `runUninstall()`: status line, PowerShell WMI + `Start-Process msiexec -Verb RunAs -Wait -PassThru` (blocks until msiexec finishes), log note
 
 ## 4. cmd/uninstall.go routing
 
 **Files:** `cmd/uninstall.go`
 
-- [x] 4.1 Import `featureflags` and `oneagent` packages
-- [x] 4.2 Check `featureflags.IsEnabled(featureflags.OneAgentPoC)` in `uninstallOneAgentCmd.RunE`
-- [x] 4.3 `errors.Is(err, installer.ErrInstallCancelled)` → return nil in V2 branch
+- [x] 4.1 Import `oneagent` package
+- [x] 4.2 Call `oneagent.UninstallOneAgentV2` directly in `uninstallOneAgentCmd.RunE` — V2 is the default, no feature flag check
+- [x] 4.3 `errors.Is(err, installer.ErrInstallCancelled)` → return nil
 
 ## 5. Tests
 

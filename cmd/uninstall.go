@@ -42,14 +42,11 @@ var uninstallOneAgentCmd = &cobra.Command{
 	Short: "Uninstall Dynatrace OneAgent from this host",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if featureflags.IsEnabled(featureflags.OneAgentPoC) {
-			err := oneagent.UninstallOneAgentV2(oneagent.UninstallOptions{DryRun: uninstallDryRun})
-			if errors.Is(err, installer.ErrInstallCancelled) {
-				return nil
-			}
-			return err
+		err := oneagent.UninstallOneAgentV2(oneagent.UninstallOptions{DryRun: uninstallDryRun})
+		if errors.Is(err, installer.ErrInstallCancelled) {
+			return nil
 		}
-		return installer.UninstallOneAgent(uninstallDryRun)
+		return err
 	},
 }
 

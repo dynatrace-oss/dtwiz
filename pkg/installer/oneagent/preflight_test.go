@@ -118,6 +118,7 @@ func TestRunPreflightChecks_ExistingInstall_Quiet(t *testing.T) {
 
 func TestRunPreflightChecks_Windows_SkipsSudo(t *testing.T) {
 	withOneAgentDetected(t, false)
+	withElevation(t, true)
 
 	sudoCalled := false
 	orig := sudoPathFn
@@ -133,5 +134,67 @@ func TestRunPreflightChecks_Windows_SkipsSudo(t *testing.T) {
 	}
 	if sudoCalled {
 		t.Error("sudoPathFn should not be called on non-Linux env.OS")
+	}
+}
+
+// withElevation overrides isElevatedFn for the duration of the test.
+func withElevation(t *testing.T, elevated bool) {
+	t.Helper()
+	orig := isElevatedFn
+	isElevatedFn = func() bool { return elevated }
+	t.Cleanup(func() { isElevatedFn = orig })
+}
+
+func TestRunPreflightChecks_Windows_Elevated(t *testing.T) {
+	withOneAgentDetected(t, false)
+	withElevation(t, true)
+
+	_, err := runPreflightChecks(Environment{OS: "windows", Arch: "x86"}, InstallOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error when already elevated: %v", err)
+	}
+}
+
+func TestRunPreflightChecks_Windows_NotElevated_Interactive(t *testing.T) {
+	withOneAgentDetected(t, false)
+	withElevation(t, false)
+
+	// Interactive (not quiet): no error returned — UAC will handle elevation.
+	_, err := runPreflightChecks(Environment{OS: "windows", Arch: "x86"}, InstallOptions{})
+	if err != nil {
+		t.Fatalf("expected no error in interactive mode, got: %v", err)
+	}
+}
+
+func TestRunPreflightChecks_Windows_NotElevated_Quiet(t *testing.T) {
+	withOneAgentDetected(t, false)
+	withElevation(t, false)
+
+	_, err := runPreflightChecks(Environment{OS: "windows", Arch: "x86"}, InstallOptions{Quiet: true})
+	if err == nil {
+		t.Fatal("expected error when not elevated in quiet mode")
+	}
+	if !strings.Contains(err.Error(), "Administrator") {
+		t.Errorf("error = %q, want message containing 'Administrator'", err)
+	}
+}
+
+func TestRunPreflightChecks_Windows_NotElevated_DryRun(t *testing.T) {
+	withOneAgentDetected(t, false)
+	withElevation(t, false)
+
+	_, err := runPreflightChecks(Environment{OS: "windows", Arch: "x86"}, InstallOptions{DryRun: true})
+	if err != nil {
+		t.Fatalf("elevation check should be skipped in dry-run, got: %v", err)
+	}
+}
+
+func TestRunPreflightChecks_Windows_NotElevated_ConnectivityCheckOnly(t *testing.T) {
+	withOneAgentDetected(t, false)
+	withElevation(t, false)
+
+	_, err := runPreflightChecks(Environment{OS: "windows", Arch: "x86"}, InstallOptions{ConnectivityCheckOnly: true})
+	if err != nil {
+		t.Fatalf("elevation check should be skipped for connectivity-check-only, got: %v", err)
 	}
 }

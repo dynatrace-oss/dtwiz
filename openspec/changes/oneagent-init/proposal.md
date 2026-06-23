@@ -6,7 +6,7 @@ This change lays that foundation without touching the core installer logic.
 
 ## What Changes
 
-- **Feature flag:** `ONEAGENT_POC` (env var `DTWIZ_ONEAGENT_POC`) added to `pkg/featureflags` — disabled by default, removable in a single commit at the end of Task 8.
+- **Feature flag:** `ONEAGENT_POC` (env var `DTWIZ_ONEAGENT_POC`) added to `pkg/featureflags` as a temporary development gate — has since been removed; `InstallOneAgentV2` is now the unconditional default.
 - **New package:** `pkg/installer/oneagent/` with entry point `InstallOneAgentV2()` and implementations split across three files: `oneagent.go` (types, entry point, config resolution), `download.go` (installer download), `verify.go` (CMS signature verification).
 - **Type definitions:** `Environment`, `AgentConfig`, `InstallOptions` — all exported in `pkg/installer/oneagent`.
 - **Tests:** `pkg/installer/oneagent/oneagent_test.go` with HTTP mock helpers and full test coverage.
@@ -25,6 +25,5 @@ This change lays that foundation without touching the core installer logic.
 
 - **New package:** `pkg/installer/oneagent/` (`oneagent.go`, `download.go`, `verify.go`, `oneagent_test.go`)
 - **Modified files:** `pkg/featureflags/featureflags.go` (new constant + registry entry), `cmd/install.go` (new flags + branching), `cmd/setup.go` (new import + call)
-- **No changes to existing behavior** — by default (`ONEAGENT_POC=false`), `dtwiz install oneagent` uses the existing flow.
-- **Rollback:** Delete `pkg/installer/oneagent/`, remove the feature flag constant and registry entry, revert `cmd/install.go` and `cmd/setup.go` changes.
+- **No changes to existing behavior** — by default (`ONEAGENT_POC=false`), `dtwiz install oneagent` used the existing flow. The flag has since been removed; the V2 flow is now unconditional.
 - **Pre-requisite:** This change must land before Tasks 2–7 can be implemented.

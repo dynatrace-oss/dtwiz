@@ -4,7 +4,7 @@ The existing `dtwiz install oneagent` flow in `pkg/installer/oneagent.go` is a t
 
 This change replaces the OneAgent installer flow with a production-ready, zero-config installer aligned with the OneAgent Installation PoC epic. The new flow validates the environment up front, resolves tenant endpoints dynamically from the Dynatrace tenant API, mints a short-lived installer-scoped token, verifies the downloaded installer signature on Linux, executes with proper privilege elevation, and confirms host registration with the tenant before reporting success.
 
-The new flow is gated behind `ONEAGENT_POC` during development. Once Task 8 lands, the flag is removed and the new flow becomes the only flow.
+The new flow was gated behind `ONEAGENT_POC` during development. The flag has since been removed and the new flow is now the only flow.
 
 ## What Changes
 
@@ -17,7 +17,7 @@ The new flow is gated behind `ONEAGENT_POC` during development. Once Task 8 land
 - Post-install verification polls Grail via the Platform API (`POST <apps-url>/platform/storage/query/v1/query:execute`) with a DQL `smartscapeNodes HOST` query filtered on the local hostname, for up to 2 minutes; timeout is a warning, not a failure. This matches the existing `WatchIngest` post-install flow (`pkg/installer/ingest_watch.go`) rather than introducing a parallel classic-API call path.
 - Optional parallel TCP connectivity probe of all resolved endpoints; failures abort the install.
 - New flags on `dtwiz install oneagent`: `--force`, `--monitoring-mode`, `--no-verify-signature`, `--skip-connectivity-check`, `--connectivity-check-only`, `--print-endpoints`. `--dry-run` already exists on the parent `install` command.
-- `ONEAGENT_POC` feature flag added to `pkg/featureflags/featureflags.go` during development; removed at end of Task 8 when the new flow replaces the old.
+- `ONEAGENT_POC` feature flag was added to `pkg/featureflags/featureflags.go` during development and has since been removed; `InstallOneAgentV2` is now the unconditional default.
 
 ## Capabilities
 
@@ -40,12 +40,8 @@ The new flow is gated behind `ONEAGENT_POC` during development. Once Task 8 land
 - **New package:** `pkg/installer/oneagent/` (source split across `oneagent.go`, `download.go`, `verify.go`; tests in `oneagent_test.go`), `test/e2e/oneagent_test.go` (optional, Task 11).
 - **Modified files:**
   - `pkg/installer/oneagent.go` — extended in Task 2 to return the `Environment` struct; replaced entirely in Task 8.
-  - `pkg/featureflags/featureflags.go` — `ONEAGENT_POC` added in Task 1; removed in Task 8.
-  - `cmd/install.go` — new flags wired on `installOneAgentCmd`; feature-flag branching during development; flag removed in Task 8.
+  - `pkg/featureflags/featureflags.go` — `ONEAGENT_POC` added in Task 1; subsequently removed when V2 became the default.
+  - `cmd/install.go` — new flags wired on `installOneAgentCmd`; feature-flag branching removed, V2 is now unconditional.
 - **No changes:** `pkg/analyzer/detect_oneagent_*.go` is reused for the existing-OneAgent preflight; `pkg/client/` provides the HTTP client; `pkg/installer/sudo_*.go` provides privilege elevation.
 - **Breaking change:** `InstallOneAgent`'s signature changes in Task 8 (struct-based options). All callers (`cmd/install.go`, `cmd/setup.go`) update together.
-- **Rollback:**
-  - During development: set `DTWIZ_ONEAGENT_POC=false` (default) to fall back to the existing flow.
-  - Pre-Task-8: delete `pkg/installer/oneagent/` and revert `cmd/install.go`/`pkg/featureflags/featureflags.go`.
-  - Post-Task-8: the old flow no longer exists; rollback is a git revert of the Task-8 commit.
-- **Feature flag:** `ONEAGENT_POC` (env `DTWIZ_ONEAGENT_POC`, CLI `--oneagent-poc`) — temporary, removed at the end of Task 8.
+- **Rollback:** The old flow no longer exists. Rollback requires reverting the commit that made `InstallOneAgentV2` unconditional.

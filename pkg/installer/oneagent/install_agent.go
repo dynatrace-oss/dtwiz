@@ -76,7 +76,7 @@ func ExecuteInstallCommand(argv []string, quiet bool) (int, error) {
 	if !quiet {
 		display.PrintStatusLine("execute", "Executing installer...", display.ColorMessage)
 	}
-	code, err := installer.RunCommandWithExitCode(argv, quiet)
+	code, err := runInstaller(argv, quiet)
 	logger.Verbose("installer exited", "exit_code", code, "duration", time.Since(start))
 	if err != nil {
 		return code, fmt.Errorf("installer %w", err)

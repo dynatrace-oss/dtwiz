@@ -93,27 +93,50 @@ On Windows, `VerifyInstallerSignature` SHALL verify the installer's Authenticode
 
 ### Requirement: Windows privilege check
 
-On Windows, `CheckPrivilege` SHALL verify the process token belongs to the BUILTIN\Administrators group before any network work.
+On Windows, `runPreflightChecks` SHALL verify the process token belongs to the BUILTIN\Administrators group and handle the result differently based on whether the session is interactive or quiet.
 
-#### Scenario: Process token admin check
+- **Interactive mode** (no `--quiet`): if not elevated, proceed silently — the installer `.exe` triggers UAC itself.
+- **Quiet mode** (`--quiet`): if not elevated, fail fast with an actionable error so unattended runs don't hang waiting for a UAC dialog that can never appear.
+- **Dry-run / connectivity-check-only**: skip the elevation check entirely.
 
-- **GIVEN** the process is running with administrator elevation
-- **WHEN** `CheckPrivilege()` runs on Windows
-- **THEN** it returns nil
-- **AND** a Debug log confirms `"privilege check"` with `privileged == true`
+The implementation lives in `pkg/installer/oneagent/`:
 
-#### Scenario: Non-admin process rejected
+- `elevation_windows.go` (`//go:build windows`) — `isElevated() bool` using `golang.org/x/sys/windows` token SID membership
+- `elevation_unix.go` (`//go:build !windows`) — `isElevated() bool` returns `true` (privilege handled by sudo on Unix)
+- `preflight.go` — `var isElevatedFn = isElevated` injectable var; check runs inside `runPreflightChecks`
 
-- **GIVEN** the process is running without administrator rights
-- **WHEN** `CheckPrivilege()` runs on Windows
-- **THEN** it returns an error: `"This command requires administrator privileges. Please run as an administrator."`
-- **AND** a Debug log confirms `privileged == false, os == "windows"`
+#### Scenario: Process is already elevated
+
+- **GIVEN** the process is running with Administrator elevation
+- **WHEN** `runPreflightChecks` runs on Windows
+- **THEN** it proceeds without warning or error
+
+#### Scenario: Non-admin process in interactive mode
+
+- **GIVEN** the process is running without Administrator rights
+- **AND** `opts.Quiet == false`
+- **WHEN** `runPreflightChecks` runs on Windows
+- **THEN** it returns nil (install proceeds; UAC prompt comes from the installer EXE)
+
+#### Scenario: Non-admin process in quiet mode
+
+- **GIVEN** the process is running without Administrator rights
+- **AND** `opts.Quiet == true`
+- **WHEN** `runPreflightChecks` runs on Windows
+- **THEN** it returns an error: `"installer requires Administrator privileges: run from an elevated terminal or omit --quiet to allow UAC prompt"`
+
+#### Scenario: Privilege check skipped in dry-run
+
+- **GIVEN** `opts.DryRun == true` or `opts.ConnectivityCheckOnly == true`
+- **WHEN** `runPreflightChecks` runs on Windows
+- **THEN** no elevation check is performed
+- **AND** no warning or error is emitted
 
 #### Scenario: Privilege check uses test-injectable helper
 
 - **GIVEN** a test needs to mock the admin check
-- **WHEN** the test sets a package-level `isAdmin` variable to a custom function
-- **THEN** `CheckPrivilege()` uses that function instead of the real Windows API call
+- **WHEN** the test sets the package-level `isElevatedFn` variable to a custom function
+- **THEN** `runPreflightChecks` uses that function instead of the real Windows API call
 - **AND** no elevated privileges are required at test time
 
 ### Requirement: Windows install command construction
@@ -142,24 +165,27 @@ The Windows install command SHALL be built distinctly from the Linux version, wi
 - **THEN** the argv does NOT include `--set-server=...`
 - **AND** only includes `--set-monitoring-mode`, `--set-app-log-content-access`, and optionally `--set-host-group`
 
-### Requirement: Windows execution uses native UAC
+### Requirement: Windows execution uses ShellExecuteEx for elevation
 
-The Windows execution path relies on the native Windows UAC mechanism embedded in the installer `.exe`.
+When not already running as Administrator, dtwiz uses `ShellExecuteEx` with the `runas` verb to launch the installer with elevated privileges, then waits for the process to exit via `WaitForSingleObject` and retrieves its exit code. When already elevated, the installer runs directly via `RunCommandWithExitCode`. A preflight check (see "Windows privilege check" above) warns the user proactively in interactive sessions and blocks execution in quiet mode.
+
+`ExecuteInstallCommand` takes two parameters: `(argv []string, quiet bool)`.
 
 #### Scenario: Windows direct execution without sudo
 
 - **GIVEN** `env.OS == "windows"`
-- **WHEN** `ExecuteInstallCommand(argv, false, false)` runs
-- **THEN** the subprocess is invoked with the argv directly
-- **AND** no `sudo` prefix is prepended
-- **AND** the installer `.exe` triggers UAC elevation if needed
+- **WHEN** `ExecuteInstallCommand(argv, false)` runs
+- **THEN** no `sudo` prefix is prepended
+- **AND** if the process is already elevated, the installer runs directly via `RunCommandWithExitCode`
+- **AND** if the process is not elevated, dtwiz launches the installer via `ShellExecuteEx` with the `runas` verb and waits for it to finish
 
-#### Scenario: Windows UAC elevation requested by installer
+#### Scenario: Windows UAC elevation managed by dtwiz (interactive)
 
-- **GIVEN** the installer `.exe` is run on a non-admin account
-- **WHEN** the Windows UAC elevation dialog appears
-- **THEN** the installer request elevation via standard Windows mechanisms
-- **AND** the executing process does not attempt to manage elevation
+- **GIVEN** the installer `.exe` is run in an interactive session without prior elevation
+- **AND** the preflight warning has already been displayed
+- **WHEN** `runElevatedInstaller` calls `ShellExecuteEx` with the `runas` verb
+- **THEN** Windows shows the UAC consent dialog to grant Administrator privileges
+- **AND** dtwiz waits for the elevated installer process to exit before reporting success or failure
 
 ### Requirement: Windows integration test scenarios
 
@@ -208,14 +234,14 @@ Windows-specific code shall use consistent Go build tags and file naming convent
 
 #### Scenario: Windows-specific files use correct build tags
 
-- **GIVEN** implementation files like `preflight_windows.go` exist
+- **GIVEN** implementation files like `elevation_windows.go` and `detect_windows.go` exist
 - **WHEN** examined for build tags
 - **THEN** they contain `//go:build windows` at the top
-- **AND** Unix-specific counterparts (`preflight_unix.go`) contain `//go:build !windows`
+- **AND** Unix-specific counterparts (`elevation_unix.go`, `detect_unix.go`) contain `//go:build !windows`
 
 #### Scenario: Shared code handles both platforms
 
-- **GIVEN** functions like `CheckPrivilege` that have platform-specific implementations
-- **WHEN** the shared `pkg/installer/oneagent/` calls the function
+- **GIVEN** functions like `isElevated` that have platform-specific implementations
+- **WHEN** the shared `pkg/installer/oneagent/preflight.go` calls `isElevatedFn()`
 - **THEN** the function dispatch is automatic via build tags
-- **AND** no runtime platform checks are needed within the function call site
+- **AND** no additional runtime platform checks are needed within the call site

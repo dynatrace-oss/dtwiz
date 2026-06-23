@@ -11,13 +11,17 @@ import (
 // Overridable in tests.
 var oneAgentInstalledFn = oneAgentInstalled
 
+// isElevatedFn reports whether the process has the privileges required to run
+// the installer. Overridable in tests.
+var isElevatedFn = isElevated
+
 type preflightResult struct {
 	IsUpdate bool
 }
 
 // runPreflightChecks validates system readiness before any network operation.
 // Checks run in order: existing-install detection, update-confirmation prompt,
-// and sudo availability (Linux non-root only).
+// sudo availability (Linux non-root only), and elevation check (Windows only).
 func runPreflightChecks(env Environment, opts InstallOptions) (preflightResult, error) {
 	var result preflightResult
 
@@ -36,6 +40,10 @@ func runPreflightChecks(env Environment, opts InstallOptions) (preflightResult, 
 			return preflightResult{}, fmt.Errorf("sudo not found: install sudo or run dtwiz as root")
 		}
 		logger.Debug("preflight: sudo available")
+	}
+
+	if env.OS == "windows" && !opts.DryRun && !opts.ConnectivityCheckOnly && !isElevatedFn() && opts.Quiet {
+		return preflightResult{}, fmt.Errorf("installer requires Administrator privileges: run from an elevated terminal or omit --quiet to allow UAC prompt")
 	}
 
 	return result, nil
