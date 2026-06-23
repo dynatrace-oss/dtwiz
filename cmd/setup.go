@@ -13,6 +13,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/azure"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
 	"github.com/dynatrace-oss/dtwiz/pkg/recommender"
 )
@@ -174,6 +175,8 @@ var setupCmd = &cobra.Command{
 			installErr = installer.UpdateOtelConfigInteractive(envURL, classicTok, platformTok, setupDryRun)
 		case recommender.MethodAWS:
 			installErr = installer.InstallAWS(c.Platform, envURL, platformTok, setupDryRun, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
+		case recommender.MethodAzure:
+			installErr = azure.InstallAzure(envURL, platformTok, setupDryRun, StartTime)
 		default:
 			return fmt.Errorf("unsupported method: %s", selected.Method)
 		}
