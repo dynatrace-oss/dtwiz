@@ -13,5 +13,6 @@ import "strings"
 func detectOneAgent() bool {
 	ok, out := runCmd("powershell", "-NoProfile", "-Command",
 		"Get-Service -Name 'Dynatrace OneAgent' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Status")
-	return ok && strings.EqualFold(strings.TrimSpace(out), "Running")
+	status := strings.ToLower(strings.TrimSpace(out))
+	return ok && (status == "running" || status == "stopped")
 }
