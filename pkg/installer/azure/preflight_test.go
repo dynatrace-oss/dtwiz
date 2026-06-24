@@ -1,11 +1,26 @@
 package azure
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fatih/color"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 )
+
+// captureColorOutput captures text written via fatih/color (display.Color* helpers).
+func captureColorOutput(fn func()) string {
+	var buf bytes.Buffer
+	orig := color.Output
+	color.Output = &buf
+	defer func() { color.Output = orig }()
+	fn()
+	return buf.String()
+}
 
 func TestAzurePreflightAzNotFound(t *testing.T) {
 	origLookPath := execLookPath
@@ -47,44 +62,75 @@ func TestAzurePreflightNotLoggedIn(t *testing.T) {
 	}
 }
 
-// TestAzurePreflightRBACDenied verifies that when the principal lacks
-// roleAssignments/write, the RBAC check runs at subscription scope and aborts
-// before any mutation.
-func TestAzurePreflightRBACDenied(t *testing.T) {
-	defer stubExecLookPath(t)()
-
-	mutatingCalls := 0
-	var checkAccessURL string
-	runner := func(name string, args []string, _ []string) (string, error) {
-		switch {
-		case name == "az" && len(args) > 0 && args[0] == "account" && args[1] == "show":
-			return stockAccountJSON, nil
-		case name == "az" && len(args) > 0 && args[0] == "rest":
+// TestAzureCheckRBACAdvisory verifies the RBAC check is advisory: it warns but
+// never blocks, whether the check call fails or reports insufficient access.
+func TestAzureCheckRBACAdvisory(t *testing.T) {
+	t.Run("denied — warns at subscription scope, does not block", func(t *testing.T) {
+		var checkAccessURL string
+		runner := func(_ string, args []string, _ []string) (string, error) {
 			for i, a := range args {
 				if a == "--url" && i+1 < len(args) {
 					checkAccessURL = args[i+1]
 				}
 			}
 			return `[{"actionId":"Microsoft.Authorization/roleAssignments/write","accessDecision":"Denied"}]`, nil
+		}
+		out := captureColorOutput(func() {
+			azureCheckRBAC(runner, "/subscriptions/sub-abc123")
+		})
+		if !strings.Contains(out, "Warning") {
+			t.Errorf("expected a warning on denied access, got: %s", out)
+		}
+		if !strings.Contains(checkAccessURL, "/subscriptions/sub-abc123/providers/Microsoft.Authorization/checkAccess") {
+			t.Errorf("expected checkAccess at subscription scope, got URL: %q", checkAccessURL)
+		}
+	})
+
+	t.Run("check call fails — warns 'could not validate', does not block", func(t *testing.T) {
+		runner := func(_ string, _ []string, _ []string) (string, error) {
+			return "", fmt.Errorf("exit status 1: InvalidResourceType")
+		}
+		out := captureColorOutput(func() {
+			azureCheckRBAC(runner, "/subscriptions/sub-abc123")
+		})
+		if !strings.Contains(out, "could not validate") {
+			t.Errorf("expected 'could not validate' warning, got: %s", out)
+		}
+	})
+}
+
+// TestAzurePreflightContinuesPastRBACDenial verifies that a denied RBAC check
+// does not abort the install — the flow proceeds to the first mutating step.
+func TestAzurePreflightContinuesPastRBACDenial(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	runner := func(name string, args []string, _ []string) (string, error) {
+		switch {
+		case name == "az" && len(args) > 0 && args[0] == "account" && args[1] == "show":
+			return stockAccountJSON, nil
+		case name == "az" && len(args) > 0 && args[0] == "rest":
+			return `[{"actionId":"Microsoft.Authorization/roleAssignments/write","accessDecision":"Denied"}]`, nil
 		default:
-			mutatingCalls++
 			return "{}", nil
 		}
 	}
 
+	// createConnection (step 1) errors — but only reachable if we get past preflight.
+	dtc := &fakeDTClient{connErr: fmt.Errorf("boom from step 1")}
+
 	err := captureStdoutErr(func() error {
-		return installAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep, &noopDTClient{})
+		return installAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep, dtc)
 	})
 	if err == nil {
-		t.Fatal("expected RBAC denied error, got nil")
+		t.Fatal("expected step 1 error, got nil")
 	}
-	if !strings.Contains(err.Error(), "RBAC") && !strings.Contains(err.Error(), "permissions") {
-		t.Errorf("expected RBAC/permissions error, got: %v", err)
+	if strings.Contains(err.Error(), "RBAC") || strings.Contains(err.Error(), "checkAccess") {
+		t.Errorf("preflight should not block on RBAC denial; got: %v", err)
 	}
-	if !strings.Contains(checkAccessURL, "/subscriptions/sub-abc123/providers/Microsoft.Authorization/checkAccess") {
-		t.Errorf("expected checkAccess at subscription scope, got URL: %q", checkAccessURL)
-	}
-	if mutatingCalls != 0 {
-		t.Errorf("expected no mutating calls after RBAC denial, got %d", mutatingCalls)
+	if !strings.Contains(err.Error(), "boom from step 1") {
+		t.Errorf("expected to reach step 1 past advisory RBAC check, got: %v", err)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -12,7 +13,7 @@ import (
 // scope used for the integration:
 //  1. az on PATH
 //  2. az account show — must succeed (user is logged in)
-//  3. RBAC checkAccess hard gate at subscription scope
+//  3. RBAC checkAccess at subscription scope (advisory only — warns, never blocks)
 //
 // The integration always operates at subscription scope (/subscriptions/<id>).
 func azurePreflightChecks(runner cmdRunner, envURL, platformToken string) (subscriptionID, tenantID string, err error) {
@@ -38,20 +39,21 @@ func azurePreflightChecks(runner cmdRunner, envURL, platformToken string) (subsc
 	tenantID = account.Tenant
 	logger.Debug("az account show", "subscriptionID", subscriptionID, "tenantID", tenantID)
 
-	// 3. RBAC checkAccess at subscription scope
-	if err = azureCheckRBAC(runner, "/subscriptions/"+subscriptionID); err != nil {
-		return "", "", err
-	}
-	logger.Debug("RBAC check passed", "scope", "/subscriptions/"+subscriptionID)
+	// 3. RBAC checkAccess at subscription scope (advisory)
+	azureCheckRBAC(runner, "/subscriptions/"+subscriptionID)
 
 	return subscriptionID, tenantID, nil
 }
 
-// azureCheckRBAC verifies the current principal has Microsoft.Authorization/roleAssignments/write
-// at the given subscription scope. Aborts if access is not allowed.
-func azureCheckRBAC(runner cmdRunner, subscriptionScope string) error {
+// azureCheckRBAC makes a best-effort check that the current principal can create
+// role assignments at the given subscription scope. It is advisory only: if the
+// check cannot be completed (e.g. the principal lacks rights to read
+// authorization data) or reports insufficient access, it prints a warning and
+// returns. It never blocks — the role-assignment step surfaces the definitive
+// error if permissions are actually missing.
+func azureCheckRBAC(runner cmdRunner, subscriptionScope string) {
 	url := fmt.Sprintf(
-		"https://management.azure.com%s/providers/Microsoft.Authorization/checkAccess?api-version=2022-04-01",
+		"https://management.azure.com%s/providers/Microsoft.Authorization/checkAccess?api-version=2018-09-01-preview",
 		subscriptionScope,
 	)
 	body := `{"actions":[{"id":"Microsoft.Authorization/roleAssignments/write"}]}`
@@ -59,10 +61,12 @@ func azureCheckRBAC(runner cmdRunner, subscriptionScope string) error {
 
 	out, err := runner("az", []string{"rest", "--method", "POST", "--url", url, "--body", body}, nil)
 	if err != nil {
-		return fmt.Errorf("RBAC check failed: %w", err)
+		display.ColorWarning.Printf("  Warning: could not validate Azure permissions (%v); continuing\n", err)
+		return
 	}
 	if !strings.Contains(out, `"accessDecision":"Allowed"`) {
-		return fmt.Errorf("insufficient Azure RBAC permissions — your account needs Microsoft.Authorization/roleAssignments/write at subscription scope (e.g. the Owner or User Access Administrator role) to assign Monitoring Reader")
+		display.ColorWarning.Println("  Warning: your account may lack Microsoft.Authorization/roleAssignments/write at subscription scope (Owner or User Access Administrator); continuing — role assignment may fail")
+		return
 	}
-	return nil
+	logger.Debug("RBAC check passed", "scope", subscriptionScope)
 }
