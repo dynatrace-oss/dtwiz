@@ -69,32 +69,50 @@ func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc 
 	}
 	fmt.Println()
 
-	totalSteps := 0
+	totalSteps := uninstallStepCount(configID, connObjectID, clientID)
+	if err := runUninstallSteps(0, totalSteps, configID, connObjectID, clientID, runner, dtc); err != nil {
+		return err
+	}
+
+	fmt.Println()
+	display.ColorMessage.Println("  Azure Monitor integration removed.")
+	fmt.Println()
+	return nil
+}
+
+// uninstallStepCount returns the number of deletion steps based on what resources exist.
+func uninstallStepCount(configID, connObjectID, clientID string) int {
+	n := 0
 	if configID != "" {
-		totalSteps++
+		n++
 	}
 	if clientID != "" {
-		totalSteps += 3
+		n += 3
 	}
 	if connObjectID != "" {
-		totalSteps++
+		n++
 	}
-	step := 0
+	return n
+}
 
-	// ── Delete monitoring configuration ───────────────────────────────────────
+// runUninstallSteps executes the deletion steps without a preview or confirmation.
+// offset shifts the displayed step numbers (0 for a standalone uninstall, N for a reinstall).
+// total is the grand total of steps shown to the user.
+func runUninstallSteps(offset, total int, configID, connObjectID, clientID string, runner cmdRunner, dtc dtclient) error {
+	step := offset
+
 	if configID != "" {
 		step++
-		fmt.Printf("  Step %d/%d: Delete Azure monitoring configuration...\n", step, totalSteps)
+		fmt.Printf("  Step %d/%d: Delete Azure monitoring configuration...\n", step, total)
 		if err := dtc.deleteMonitoring(configID); err != nil {
 			return fmt.Errorf("step %d: %w", step, err)
 		}
 		display.ColorOK.Println("  ✓ Monitoring configuration deleted")
 	}
 
-	// ── Delete Azure resources ─────────────────────────────────────────────────
 	if clientID != "" {
 		step++
-		if _, err = azureRunStep(step, totalSteps, runner, "az",
+		if _, err := azureRunStep(step, total, runner, "az",
 			[]string{"ad", "app", "federated-credential", "delete",
 				"--id", clientID,
 				"--federated-credential-id", fedCredName},
@@ -104,7 +122,7 @@ func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc 
 		display.ColorOK.Println("  ✓ Federated credential deleted")
 
 		step++
-		if _, err = azureRunStep(step, totalSteps, runner, "az",
+		if _, err := azureRunStep(step, total, runner, "az",
 			[]string{"role", "assignment", "delete",
 				"--assignee", clientID,
 				"--role", "Monitoring Reader"},
@@ -114,7 +132,7 @@ func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc 
 		display.ColorOK.Println("  ✓ Role assignment deleted")
 
 		step++
-		if _, err = azureRunStep(step, totalSteps, runner, "az",
+		if _, err := azureRunStep(step, total, runner, "az",
 			[]string{"ad", "sp", "delete", "--id", clientID},
 			nil, "Delete Azure Service Principal"); err != nil {
 			return err
@@ -122,20 +140,34 @@ func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc 
 		display.ColorOK.Println("  ✓ Service Principal deleted")
 	}
 
-	// ── Delete DT connection ───────────────────────────────────────────────────
 	if connObjectID != "" {
 		step++
-		fmt.Printf("  Step %d/%d: Delete Dynatrace Azure connection...\n", step, totalSteps)
+		fmt.Printf("  Step %d/%d: Delete Dynatrace Azure connection...\n", step, total)
 		if err := dtc.deleteConnection(connObjectID); err != nil {
 			return fmt.Errorf("step %d: %w", step, err)
 		}
 		display.ColorOK.Println("  ✓ Connection deleted")
 	}
 
-	fmt.Println()
-	display.ColorMessage.Println("  Azure Monitor integration removed.")
-	fmt.Println()
 	return nil
+}
+
+// azureUninstallBuildSteps returns the human-readable step descriptions for the uninstall phase.
+// Used in the combined update preview.
+func azureUninstallBuildSteps(configID, connObjectID, clientID, configName, connName string) []string {
+	var steps []string
+	if configID != "" {
+		steps = append(steps, fmt.Sprintf("DT Extensions API: delete monitoring configuration '%s'", configName))
+	}
+	if clientID != "" {
+		steps = append(steps, fmt.Sprintf("az ad app federated-credential delete --id %s --federated-credential-id %s", clientID, fedCredName))
+		steps = append(steps, fmt.Sprintf("az role assignment delete --assignee %s --role \"Monitoring Reader\"", clientID))
+		steps = append(steps, fmt.Sprintf("az ad sp delete --id %s", clientID))
+	}
+	if connObjectID != "" {
+		steps = append(steps, fmt.Sprintf("DT Settings API: delete Azure connection '%s' (id: %s)", connName, connObjectID))
+	}
+	return steps
 }
 
 func azureUninstallPrintPreview(envURL, configID, connObjectID, clientID, configName, connName string) {
@@ -161,22 +193,8 @@ func azureUninstallPrintPreview(envURL, configID, connObjectID, clientID, config
 	display.ColorMessage.Println("  Steps to be executed:")
 	display.PrintSectionDivider()
 
-	step := 0
-	if configID != "" {
-		step++
-		fmt.Printf("  Step %d: DT Extensions API: delete monitoring configuration '%s'\n", step, configName)
-	}
-	if clientID != "" {
-		step++
-		fmt.Printf("  Step %d: az ad app federated-credential delete --id %s --federated-credential-id %s\n", step, clientID, fedCredName)
-		step++
-		fmt.Printf("  Step %d: az role assignment delete --assignee %s --role \"Monitoring Reader\"\n", step, clientID)
-		step++
-		fmt.Printf("  Step %d: az ad sp delete --id %s\n", step, clientID)
-	}
-	if connObjectID != "" {
-		step++
-		fmt.Printf("  Step %d: DT Settings API: delete Azure connection '%s' (id: %s)\n", step, connName, connObjectID)
+	for i, s := range azureUninstallBuildSteps(configID, connObjectID, clientID, configName, connName) {
+		fmt.Printf("  Step %d: %s\n", i+1, s)
 	}
 
 	display.PrintSectionDivider()

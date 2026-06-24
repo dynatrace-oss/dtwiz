@@ -69,8 +69,24 @@ var setupCmd = &cobra.Command{
 			return nil
 		}
 
+		// Pre-check Azure status so we can badge the Azure entry in the list.
+		azureConfigured := false
+		if envURL, _, platformTok, credErr := getDtEnvironment(); credErr == nil {
+			if exists, _ := azure.ConnectionExists(envURL, platformTok); exists {
+				azureConfigured = true
+			}
+		}
+
 		for i, r := range actionable {
-			fmt.Printf("  %s  %s\n", display.ColorHeader.Sprintf("[%d]", i+1), r.Title)
+			title := r.Title
+			if r.Method == recommender.MethodAzure {
+				if azureConfigured {
+					title += "  [update]"
+				} else {
+					title += "  [install]"
+				}
+			}
+			fmt.Printf("  %s  %s\n", display.ColorHeader.Sprintf("[%d]", i+1), title)
 		}
 		// Show coming-soon items (informational only, not selectable).
 		for _, r := range recs {
@@ -146,17 +162,11 @@ var setupCmd = &cobra.Command{
 			return err
 		}
 
-		if selected.Method == recommender.MethodAzure {
-			if exists, _ := azure.ConnectionExists(envURL, platformTok); exists {
-				display.Header(fmt.Sprintf("Updating: %s", selected.Title))
-				fmt.Println()
-				fmt.Println("  The Azure Monitor integration is already configured.")
-				fmt.Println("  To reconfigure it, run `dtwiz uninstall azure` first, then run setup again.")
-				fmt.Println()
-				return nil
-			}
+		headerVerb := "Installing"
+		if selected.Method == recommender.MethodAzure && azureConfigured {
+			headerVerb = "Updating"
 		}
-		display.Header(fmt.Sprintf("Installing: %s", selected.Title))
+		display.Header(fmt.Sprintf("%s: %s", headerVerb, selected.Title))
 
 		c, err := setupClientFromCreds(envURL, classicTok, platformTok)
 		if err != nil {
@@ -187,7 +197,11 @@ var setupCmd = &cobra.Command{
 		case recommender.MethodAWS:
 			installErr = installer.InstallAWS(c.Platform, envURL, platformTok, setupDryRun, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
 		case recommender.MethodAzure:
-			installErr = azure.InstallAzure(envURL, platformTok, setupDryRun, StartTime)
+			if azureConfigured {
+				installErr = azure.UpdateAzure(envURL, platformTok, setupDryRun, StartTime)
+			} else {
+				installErr = azure.InstallAzure(envURL, platformTok, setupDryRun, StartTime)
+			}
 		default:
 			return fmt.Errorf("unsupported method: %s", selected.Method)
 		}

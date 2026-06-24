@@ -192,26 +192,41 @@ func installAzureWithRunner(
 	}
 	fmt.Println()
 
+	cfg, err = runInstallSteps(0, totalSteps, cfg, runner, sleeper, dtc)
+	if err != nil {
+		return err
+	}
+	fmt.Println()
+	display.ColorMessage.Println("  Azure Monitor integration setup complete!")
+	fmt.Println()
+	return nil
+}
+
+// runInstallSteps executes the 7-step Azure installation without a preview or confirmation.
+// offset shifts the displayed step numbers (0 for a standalone install, N for a reinstall).
+// total is the grand total of steps shown to the user.
+// Semantic completed keys 1/2/3/5 are used by azurePartialFailureHint regardless of offset.
+func runInstallSteps(offset, total int, cfg azureConfig, runner cmdRunner, sleeper func(time.Duration), dtc dtclient) (azureConfig, error) {
 	completed := make(map[int]bool)
 
-	// ── Step 1: create DT connection ──────────────────────────────────────────
-	fmt.Printf("  Step 1/%d: Create Dynatrace Azure connection...\n", totalSteps)
-	connObjectID, err := dtc.createConnection(connectionName)
+	// ── Step 1 ────────────────────────────────────────────────────────────────
+	fmt.Printf("  Step %d/%d: Create Dynatrace Azure connection...\n", offset+1, total)
+	connObjectID, err := dtc.createConnection(cfg.ConnectionName)
 	if err != nil {
 		azurePartialFailureHint(cfg, completed)
-		return fmt.Errorf("step 1: %w", err)
+		return cfg, fmt.Errorf("step %d: %w", offset+1, err)
 	}
 	completed[1] = true
 	cfg.ConnectionID = connObjectID
 	display.ColorOK.Printf("  ✓ Connection created: %s\n", connObjectID)
 
-	// ── Step 2: register Azure SP ─────────────────────────────────────────────
-	out2, err := azureRunStep(2, totalSteps, runner, "az",
-		[]string{"ad", "sp", "create-for-rbac", "--name", connectionName, "--create-password", "false", "-o", "json"},
+	// ── Step 2 ────────────────────────────────────────────────────────────────
+	out2, err := azureRunStep(offset+2, total, runner, "az",
+		[]string{"ad", "sp", "create-for-rbac", "--name", cfg.ConnectionName, "--create-password", "false", "-o", "json"},
 		nil, "Register Azure Service Principal")
 	if err != nil {
 		azurePartialFailureHint(cfg, completed)
-		return err
+		return cfg, err
 	}
 	completed[2] = true
 
@@ -221,7 +236,7 @@ func installAzureWithRunner(
 	}
 	if err = json.Unmarshal([]byte(out2), &sp); err != nil {
 		azurePartialFailureHint(cfg, completed)
-		return fmt.Errorf("step 2: parsing SP output: %w", err)
+		return cfg, fmt.Errorf("step %d: parsing SP output: %w", offset+2, err)
 	}
 	cfg.ClientID = sp.AppID
 	if sp.Tenant != "" {
@@ -229,34 +244,34 @@ func installAzureWithRunner(
 	}
 	display.ColorOK.Printf("  ✓ Service Principal created: %s\n", cfg.ClientID)
 
-	// ── Step 3: create federated credential ──────────────────────────────────
-	fedJSON, err := azureBuildFedCredJSON(connObjectID, envURL)
+	// ── Step 3 ────────────────────────────────────────────────────────────────
+	fedJSON, err := azureBuildFedCredJSON(connObjectID, cfg.EnvURL)
 	if err != nil {
 		azurePartialFailureHint(cfg, completed)
-		return err
+		return cfg, err
 	}
-	_, err = azureRunStep(3, totalSteps, runner, "az",
+	_, err = azureRunStep(offset+3, total, runner, "az",
 		[]string{"ad", "app", "federated-credential", "create", "--id", cfg.ClientID, "--parameters", fedJSON},
 		nil, "Create federated credential")
 	if err != nil {
 		azurePartialFailureHint(cfg, completed)
-		return err
+		return cfg, err
 	}
 	completed[3] = true
 	display.ColorOK.Println("  ✓ Federated credential created")
 
-	// ── Step 4: get SP object ID (with retry) ─────────────────────────────────
-	fmt.Printf("  Step 4/%d: Retrieve SP object ID...\n", totalSteps)
+	// ── Step 4 ────────────────────────────────────────────────────────────────
+	fmt.Printf("  Step %d/%d: Retrieve SP object ID...\n", offset+4, total)
 	objectID, err := azureGetSPObjectID(runner, cfg.ClientID, sleeper)
 	if err != nil {
 		azurePartialFailureHint(cfg, completed)
-		return fmt.Errorf("step 4: %w", err)
+		return cfg, fmt.Errorf("step %d: %w", offset+4, err)
 	}
 	cfg.ObjectID = objectID
 	display.ColorOK.Printf("  ✓ SP object ID: %s\n", objectID)
 
-	// ── Step 5: assign Monitoring Reader ─────────────────────────────────────
-	_, err = azureRunStep(5, totalSteps, runner, "az",
+	// ── Step 5 ────────────────────────────────────────────────────────────────
+	_, err = azureRunStep(offset+5, total, runner, "az",
 		[]string{
 			"role", "assignment", "create",
 			"--assignee-object-id", cfg.ObjectID,
@@ -268,29 +283,26 @@ func installAzureWithRunner(
 		nil, "Assign Monitoring Reader role")
 	if err != nil {
 		azurePartialFailureHint(cfg, completed)
-		return err
+		return cfg, err
 	}
 	completed[5] = true
 	display.ColorOK.Println("  ✓ Monitoring Reader role assigned")
 
-	// ── Step 6: update DT connection ─────────────────────────────────────────
-	fmt.Printf("  Step 6/%d: Update Dynatrace Azure connection...\n", totalSteps)
-	if err = dtc.updateConnection(connObjectID, connectionName, cfg.TenantID, cfg.ClientID); err != nil {
+	// ── Step 6 ────────────────────────────────────────────────────────────────
+	fmt.Printf("  Step %d/%d: Update Dynatrace Azure connection...\n", offset+6, total)
+	if err = dtc.updateConnection(connObjectID, cfg.ConnectionName, cfg.TenantID, cfg.ClientID); err != nil {
 		azurePartialFailureHint(cfg, completed)
-		return fmt.Errorf("step 6: %w", err)
+		return cfg, fmt.Errorf("step %d: %w", offset+6, err)
 	}
 	display.ColorOK.Println("  ✓ Connection updated")
 
-	// ── Step 7: create monitoring configuration ───────────────────────────────
-	fmt.Printf("  Step 7/%d: Create Azure monitoring configuration...\n", totalSteps)
-	if err = dtc.createMonitoring(configurationName, connObjectID); err != nil {
+	// ── Step 7 ────────────────────────────────────────────────────────────────
+	fmt.Printf("  Step %d/%d: Create Azure monitoring configuration...\n", offset+7, total)
+	if err = dtc.createMonitoring(cfg.ConfigurationName, connObjectID); err != nil {
 		azurePartialFailureHint(cfg, completed)
-		return fmt.Errorf("step 7: %w", err)
+		return cfg, fmt.Errorf("step %d: %w", offset+7, err)
 	}
 	display.ColorOK.Println("  ✓ Monitoring configuration created")
 
-	fmt.Println()
-	display.ColorMessage.Println("  Azure Monitor integration setup complete!")
-	fmt.Println()
-	return nil
+	return cfg, nil
 }
