@@ -61,6 +61,9 @@ func TestUpdateAzureDryRun(t *testing.T) {
 		switch {
 		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "show":
 			return stockAccountJSON, nil
+		case name == "az" && len(args) > 1 && args[0] == "ad" && args[1] == "signed-in-user":
+			// read-only preflight call — not a mutation
+			return `{"id":"user-object-id"}`, nil
 		case name == "az" && len(args) > 0 && args[0] == "rest":
 			return stockRBACJSON, nil
 		default:

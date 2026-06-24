@@ -294,10 +294,23 @@ func runInstallSteps(offset, total int, cfg azureConfig, runner cmdRunner, sleep
 	display.ColorOK.Println("  ✓ Monitoring Reader role assigned")
 
 	// ── Step 6 ────────────────────────────────────────────────────────────────
+	// Retry on AADSTS70025 ("no configured federated identity credentials"):
+	// Entra takes several seconds to propagate a newly created federated credential.
 	fmt.Printf("  Step %d/%d: Update Dynatrace Azure connection...\n", offset+6, total)
-	if err = dtc.updateConnection(connObjectID, cfg.ConnectionName, cfg.TenantID, cfg.ClientID); err != nil {
+	var updateErr error
+	for attempt := 0; attempt < 5; attempt++ {
+		if attempt > 0 {
+			logger.Debug("federated credential not yet propagated, retrying step 6", "attempt", attempt)
+			sleeper(5 * time.Second)
+		}
+		updateErr = dtc.updateConnection(connObjectID, cfg.ConnectionName, cfg.TenantID, cfg.ClientID)
+		if updateErr == nil || !strings.Contains(updateErr.Error(), "AADSTS70025") {
+			break
+		}
+	}
+	if updateErr != nil {
 		azurePartialFailureHint(cfg, completed)
-		return cfg, fmt.Errorf("step %d: %w", offset+6, err)
+		return cfg, fmt.Errorf("step %d: %w", offset+6, updateErr)
 	}
 	display.ColorOK.Println("  ✓ Connection updated")
 

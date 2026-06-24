@@ -68,6 +68,11 @@ func TestAzureCheckRBACAdvisory(t *testing.T) {
 	t.Run("denied — warns at subscription scope, does not block", func(t *testing.T) {
 		var checkAccessURL string
 		runner := func(_ string, args []string, _ []string) (string, error) {
+			// First call is az ad signed-in-user show — return a valid user.
+			if len(args) > 1 && args[0] == "ad" && args[1] == "signed-in-user" {
+				return `{"id":"user-object-id"}`, nil
+			}
+			// Second call is az rest (checkAccess) — return denied.
 			for i, a := range args {
 				if a == "--url" && i+1 < len(args) {
 					checkAccessURL = args[i+1]
@@ -87,7 +92,12 @@ func TestAzureCheckRBACAdvisory(t *testing.T) {
 	})
 
 	t.Run("check call fails — warns 'could not validate', does not block", func(t *testing.T) {
-		runner := func(_ string, _ []string, _ []string) (string, error) {
+		runner := func(_ string, args []string, _ []string) (string, error) {
+			// First call is az ad signed-in-user show — return a valid user.
+			if len(args) > 1 && args[0] == "ad" && args[1] == "signed-in-user" {
+				return `{"id":"user-object-id"}`, nil
+			}
+			// Second call is az rest (checkAccess) — simulate failure.
 			return "", fmt.Errorf("exit status 1: InvalidResourceType")
 		}
 		out := captureColorOutput(func() {

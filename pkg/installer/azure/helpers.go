@@ -67,6 +67,25 @@ func azureDeleteFedCred(runner cmdRunner, clientID string) error {
 	return err
 }
 
+// azureLookupSPClientIDByName finds the appId of the first Service Principal
+// with the given display name. Returns ("", nil) if none is found.
+// Used as a fallback in the update flow when the DT connection has no stored clientID
+// (e.g., a previous install failed before step 6 updated the connection).
+func azureLookupSPClientIDByName(runner cmdRunner, name string) (string, error) {
+	out, err := runner("az", []string{"ad", "sp", "list", "--display-name", name, "-o", "json"}, nil)
+	if err != nil {
+		return "", fmt.Errorf("az ad sp list: %w", err)
+	}
+	var sps []struct {
+		AppID string `json:"appId"`
+	}
+	if err := json.Unmarshal([]byte(out), &sps); err != nil || len(sps) == 0 {
+		return "", nil
+	}
+	logger.Debug("found existing SP by display name", "name", name, "appId", sps[0].AppID)
+	return sps[0].AppID, nil
+}
+
 // azureGetSPObjectID retrieves the Service Principal object ID for a given
 // application client ID. It retries up to 5 times with a 3-second sleep
 // between attempts to handle Entra eventual consistency after SP creation.

@@ -76,6 +76,14 @@ func updateAzureWithRunner(
 	configID, connObjectID, clientID := mr.id, cr.objectID, cr.clientID
 	subscriptionID, tenantID := pr.subscriptionID, pr.tenantID
 
+	// If the DT connection has no stored clientID (previous install failed before step 6),
+	// look up the existing SP by display name so the uninstall phase can clean it up.
+	if clientID == "" {
+		if id, err := azureLookupSPClientIDByName(runner, connectionName); err == nil && id != "" {
+			clientID = id
+		}
+	}
+
 	installCfg := azureConfig{
 		ConnectionName:    connectionName,
 		ConfigurationName: configurationName,
