@@ -46,10 +46,10 @@ lint:
 	golangci-lint run ./...
 
 test-integration:
-ifndef TEST_DT_ENVIRONMENT
+ifeq ($(strip $(TEST_DT_ENVIRONMENT)),)
 	$(error TEST_DT_ENVIRONMENT is not set)
 endif
-ifndef TEST_DT_PLATFORM_TOKEN
+ifeq ($(strip $(TEST_DT_PLATFORM_TOKEN)),)
 	$(error TEST_DT_PLATFORM_TOKEN is not set)
 endif
 ifeq ($(OS),Windows_NT)
