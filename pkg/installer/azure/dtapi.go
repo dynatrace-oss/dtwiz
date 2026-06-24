@@ -244,6 +244,7 @@ func (d *sdkDTClient) listMonitoringLocations() ([]string, error) {
 		return nil, fmt.Errorf("list monitoring locations: status %d: %s", resp.StatusCode(), resp.String())
 	}
 
+	logger.Debug("raw extension schema", "body", string(resp.Body()))
 	locations, err := parseLocationFilteringEnum(resp.Body())
 	if err != nil {
 		return nil, fmt.Errorf("list monitoring locations: %w", err)
