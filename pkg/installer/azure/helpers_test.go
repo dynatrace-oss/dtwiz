@@ -145,6 +145,48 @@ const stockSPShowJSON = `{"id":"object-id-111","appId":"client-id-000"}`
 
 // ── helpers.go tests ──────────────────────────────────────────────────────────
 
+func TestAzureIssuerURL(t *testing.T) {
+	cases := []struct {
+		name   string
+		envURL string
+		want   string
+	}{
+		{
+			name:   "prod live",
+			envURL: "https://abc.live.dynatrace.com",
+			want:   "https://token.dynatrace.com",
+		},
+		{
+			name:   "prod apps",
+			envURL: "https://abc.apps.dynatrace.com",
+			want:   "https://token.dynatrace.com",
+		},
+		{
+			name:   "lab classic",
+			envURL: "https://xyz.dynatracelabs.com",
+			want:   "https://token.dynatracelabs.com",
+		},
+		{
+			name:   "dev env",
+			envURL: "https://rrx28105.dev.apps.dynatracelabs.com",
+			want:   "https://dev.token.dynatracelabs.com",
+		},
+		{
+			name:   "sprint env",
+			envURL: "https://rrx28105.sprint.apps.dynatracelabs.com",
+			want:   "https://sprint.token.dynatracelabs.com",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := azureIssuerURL(tc.envURL)
+			if got != tc.want {
+				t.Errorf("azureIssuerURL(%q) = %q, want %q", tc.envURL, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestAzureBuildFederatedCredJSON(t *testing.T) {
 	cases := []struct {
 		name         string
@@ -152,6 +194,7 @@ func TestAzureBuildFederatedCredJSON(t *testing.T) {
 		envURL       string
 		wantSubject  string
 		wantAudience string
+		wantIssuer   string
 	}{
 		{
 			name:         "prod",
@@ -159,6 +202,7 @@ func TestAzureBuildFederatedCredJSON(t *testing.T) {
 			envURL:       "https://abc.live.dynatrace.com",
 			wantSubject:  "dt:connection-id/conn-123",
 			wantAudience: "abc.apps.dynatrace.com/svc-id/com.dynatrace.da",
+			wantIssuer:   "https://token.dynatrace.com",
 		},
 		{
 			name:         "lab",
@@ -166,6 +210,15 @@ func TestAzureBuildFederatedCredJSON(t *testing.T) {
 			envURL:       "https://xyz.dynatracelabs.com",
 			wantSubject:  "dt:connection-id/conn-456",
 			wantAudience: "xyz.apps.dynatracelabs.com/svc-id/com.dynatrace.da",
+			wantIssuer:   "https://token.dynatracelabs.com",
+		},
+		{
+			name:         "dev env",
+			connID:       "conn-789",
+			envURL:       "https://rrx28105.dev.apps.dynatracelabs.com",
+			wantSubject:  "dt:connection-id/conn-789",
+			wantAudience: "rrx28105.dev.apps.dynatracelabs.com/svc-id/com.dynatrace.da",
+			wantIssuer:   "https://dev.token.dynatracelabs.com",
 		},
 	}
 
@@ -180,6 +233,9 @@ func TestAzureBuildFederatedCredJSON(t *testing.T) {
 			}
 			if !strings.Contains(got, tc.wantAudience) {
 				t.Errorf("audience: want %q in output, got: %s", tc.wantAudience, got)
+			}
+			if !strings.Contains(got, tc.wantIssuer) {
+				t.Errorf("issuer: want %q in output, got: %s", tc.wantIssuer, got)
 			}
 		})
 	}

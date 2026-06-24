@@ -10,15 +10,42 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
+// azureIssuerURL derives the federated identity issuer URL from the Dynatrace environment URL.
+//
+// The issuer mirrors the apps URL structure:
+//   - *.apps.dynatrace.com            → https://token.dynatrace.com
+//   - *.dev.apps.dynatracelabs.com    → https://dev.token.dynatracelabs.com
+//   - *.sprint.apps.dynatracelabs.com → https://sprint.token.dynatracelabs.com
+func azureIssuerURL(envURL string) string {
+	appsURL := installer.AppsURL(envURL)
+	host := strings.TrimPrefix(appsURL, "https://")
+	host = strings.TrimRight(host, "/")
+
+	appsIdx := strings.Index(host, ".apps.")
+	if appsIdx < 0 {
+		return "https://token.dynatrace.com"
+	}
+	domain := host[appsIdx+6:] // e.g. "dynatrace.com" or "dynatracelabs.com"
+	beforeApps := host[:appsIdx] // e.g. "rrx28105" or "rrx28105.dev"
+
+	parts := strings.Split(beforeApps, ".")
+	if len(parts) >= 2 {
+		qualifier := parts[len(parts)-1]
+		return "https://" + qualifier + ".token." + domain
+	}
+	return "https://token." + domain
+}
+
 // azureBuildFedCredJSON builds the JSON body for the federated credential creation.
 func azureBuildFedCredJSON(connID, envURL string) (string, error) {
 	appsURL := installer.AppsURL(envURL)
 	audience := strings.TrimPrefix(appsURL, "https://") + "/svc-id/com.dynatrace.da"
-	logger.Debug("federated credential", "connID", connID, "audience", audience)
+	issuer := azureIssuerURL(envURL)
+	logger.Debug("federated credential", "connID", connID, "audience", audience, "issuer", issuer)
 
 	payload := map[string]interface{}{
 		"name":      fedCredName,
-		"issuer":    "https://token.dynatrace.com",
+		"issuer":    issuer,
 		"subject":   "dt:connection-id/" + connID,
 		"audiences": []string{audience},
 	}

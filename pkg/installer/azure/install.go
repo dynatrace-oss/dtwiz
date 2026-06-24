@@ -29,14 +29,15 @@ func azureBuildStepCommands(cfg azureConfig) []string {
 
 	appsURL := installer.AppsURL(cfg.EnvURL)
 	audience := strings.TrimPrefix(appsURL, "https://") + "/svc-id/com.dynatrace.da"
+	issuer := azureIssuerURL(cfg.EnvURL)
 
 	return []string{
 		fmt.Sprintf("DT Settings API: create Azure connection '%s' (federatedIdentityCredential)  [env=%s token=***]",
 			cfg.ConnectionName, cfg.EnvURL),
 		fmt.Sprintf("az ad sp create-for-rbac --name %s --create-password false -o json",
 			cfg.ConnectionName),
-		fmt.Sprintf(`az ad app federated-credential create --id %s --parameters '{"name":"%s","issuer":"https://token.dynatrace.com","subject":"dt:connection-id/%s","audiences":["%s"]}'`,
-			clientID, fedCredName, connID, audience),
+		fmt.Sprintf(`az ad app federated-credential create --id %s --parameters '{"name":"%s","issuer":"%s","subject":"dt:connection-id/%s","audiences":["%s"]}'`,
+			clientID, fedCredName, issuer, connID, audience),
 		fmt.Sprintf("az ad sp show --id %s -o json", clientID),
 		fmt.Sprintf(`az role assignment create --assignee-object-id %s --role "Monitoring Reader" --scope %s --assignee-principal-type ServicePrincipal --description "Dynatrace Monitoring"`,
 			objectID, cfg.Scope),

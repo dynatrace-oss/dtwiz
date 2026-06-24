@@ -35,15 +35,35 @@ func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc 
 		configurationName = "dtwiz-azure"
 	)
 
-	// ── Lookup ─────────────────────────────────────────────────────────────────
-	configID, err := dtc.findMonitoringConfig(configurationName)
-	if err != nil {
-		return err
+	// ── Lookup (parallel) ─────────────────────────────────────────────────────
+	type monitorRes struct {
+		id  string
+		err error
 	}
-	connObjectID, clientID, err := dtc.findConnection(connectionName)
-	if err != nil {
-		return err
+	type connRes struct {
+		objectID string
+		clientID string
+		err      error
 	}
+	monitorCh := make(chan monitorRes, 1)
+	connCh := make(chan connRes, 1)
+	go func() {
+		id, err := dtc.findMonitoringConfig(configurationName)
+		monitorCh <- monitorRes{id: id, err: err}
+	}()
+	go func() {
+		objectID, clientID, err := dtc.findConnection(connectionName)
+		connCh <- connRes{objectID: objectID, clientID: clientID, err: err}
+	}()
+	mr := <-monitorCh
+	cr := <-connCh
+	if mr.err != nil {
+		return mr.err
+	}
+	if cr.err != nil {
+		return cr.err
+	}
+	configID, connObjectID, clientID := mr.id, cr.objectID, cr.clientID
 
 	if configID == "" && connObjectID == "" {
 		fmt.Println("  No Azure Monitor integration resources found — nothing to uninstall.")

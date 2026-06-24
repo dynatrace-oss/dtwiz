@@ -31,21 +31,50 @@ func updateAzureWithRunner(
 		configurationName = "dtwiz-azure"
 	)
 
-	// ── Lookup existing resources ──────────────────────────────────────────────
-	configID, err := dtc.findMonitoringConfig(configurationName)
-	if err != nil {
-		return err
+	// ── Lookup existing resources + preflight (parallel) ──────────────────────
+	type monitorRes struct {
+		id  string
+		err error
 	}
-	connObjectID, clientID, err := dtc.findConnection(connectionName)
-	if err != nil {
-		return err
+	type connRes struct {
+		objectID string
+		clientID string
+		err      error
 	}
-
-	// ── Preflight for the install phase ───────────────────────────────────────
-	subscriptionID, tenantID, err := azurePreflightChecks(runner, envURL, platformToken)
-	if err != nil {
-		return err
+	type preflightRes struct {
+		subscriptionID string
+		tenantID       string
+		err            error
 	}
+	monitorCh := make(chan monitorRes, 1)
+	connCh := make(chan connRes, 1)
+	preflightCh := make(chan preflightRes, 1)
+	go func() {
+		id, err := dtc.findMonitoringConfig(configurationName)
+		monitorCh <- monitorRes{id: id, err: err}
+	}()
+	go func() {
+		objectID, clientID, err := dtc.findConnection(connectionName)
+		connCh <- connRes{objectID: objectID, clientID: clientID, err: err}
+	}()
+	go func() {
+		subID, tenID, err := azurePreflightChecks(runner, envURL, platformToken)
+		preflightCh <- preflightRes{subscriptionID: subID, tenantID: tenID, err: err}
+	}()
+	mr := <-monitorCh
+	cr := <-connCh
+	pr := <-preflightCh
+	if mr.err != nil {
+		return mr.err
+	}
+	if cr.err != nil {
+		return cr.err
+	}
+	if pr.err != nil {
+		return pr.err
+	}
+	configID, connObjectID, clientID := mr.id, cr.objectID, cr.clientID
+	subscriptionID, tenantID := pr.subscriptionID, pr.tenantID
 
 	installCfg := azureConfig{
 		ConnectionName:    connectionName,

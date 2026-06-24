@@ -52,12 +52,29 @@ func azurePreflightChecks(runner cmdRunner, envURL, platformToken string) (subsc
 // returns. It never blocks — the role-assignment step surfaces the definitive
 // error if permissions are actually missing.
 func azureCheckRBAC(runner cmdRunner, subscriptionScope string) {
+	// Resolve the caller's object ID — required by the checkAccess API as the Subject.
+	userJSON, err := runner("az", []string{"ad", "signed-in-user", "show", "-o", "json"}, nil)
+	if err != nil {
+		logger.Debug("could not resolve signed-in user for RBAC check, skipping", "err", err)
+		return
+	}
+	var user struct {
+		ID string `json:"id"`
+	}
+	if err = json.Unmarshal([]byte(userJSON), &user); err != nil || user.ID == "" {
+		logger.Debug("could not parse signed-in user response for RBAC check, skipping", "err", err)
+		return
+	}
+
 	url := fmt.Sprintf(
 		"https://management.azure.com%s/providers/Microsoft.Authorization/checkAccess?api-version=2018-09-01-preview",
 		subscriptionScope,
 	)
-	body := `{"actions":[{"id":"Microsoft.Authorization/roleAssignments/write"}]}`
-	logger.Debug("checking RBAC", "url", url)
+	body := fmt.Sprintf(
+		`{"subject":{"objectId":%q},"actions":[{"id":"Microsoft.Authorization/roleAssignments/write"}]}`,
+		user.ID,
+	)
+	logger.Debug("checking RBAC", "url", url, "objectId", user.ID)
 
 	out, err := runner("az", []string{"rest", "--method", "POST", "--url", url, "--body", body}, nil)
 	if err != nil {
@@ -65,7 +82,7 @@ func azureCheckRBAC(runner cmdRunner, subscriptionScope string) {
 		return
 	}
 	if !strings.Contains(out, `"accessDecision":"Allowed"`) {
-		display.ColorWarning.Println("  Warning: your account may lack Microsoft.Authorization/roleAssignments/write at subscription scope (Owner or User Access Administrator); continuing — role assignment may fail")
+		display.ColorWarning.Println("  Warning: your account may lack Microsoft.Authorization/roleAssignments/write at subscription scope — you may need Owner or User Access Administrator role; continuing")
 		return
 	}
 	logger.Debug("RBAC check passed", "scope", subscriptionScope)
