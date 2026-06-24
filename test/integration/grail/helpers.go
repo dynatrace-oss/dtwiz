@@ -25,7 +25,14 @@ func sleepOrCancel(ctx context.Context, d time.Duration) error {
 
 func tracesByServiceQuery(serviceName string) string {
 	return fmt.Sprintf(
-		`smartscapeNodes "SERVICE", from: -30m, to: now() | filter name == "%s"`,
+		`smartscapeNodes "SERVICE", from: -30m, to: now() | filter name == %q`,
 		serviceName,
+	)
+}
+
+func hostByNameQuery(hostName string) string {
+	return fmt.Sprintf(
+		`smartscapeNodes "HOST", from: -30m, to: now() | filter name == %q`,
+		hostName,
 	)
 }

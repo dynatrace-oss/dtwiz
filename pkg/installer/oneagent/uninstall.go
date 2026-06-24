@@ -38,7 +38,7 @@ func UninstallOneAgentV2(opts UninstallOptions) error {
 		return installer.ErrInstallCancelled
 	}
 
-	if err := runUninstall(); err != nil {
+	if err := runUninstallFn(); err != nil {
 		return err
 	}
 

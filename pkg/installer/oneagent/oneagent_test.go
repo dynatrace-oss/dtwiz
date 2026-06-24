@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fatih/color"
+
 	"github.com/dynatrace-oss/dtwiz/pkg/client"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 )
@@ -312,16 +314,22 @@ func TestValidateEnvironment(t *testing.T) {
 
 // captureStdout replaces os.Stdout with a pipe for the duration of the test
 // and returns a function that restores it and returns the captured output.
-// Only fmt.Printf / fmt.Print calls are captured; color.Output is not.
+// Captures both fmt.Printf / fmt.Print calls and display.PrintStatusLine output
+// (which writes to color.Output).
 func captureStdout(t *testing.T) func() string {
 	t.Helper()
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("captureStdout: %v", err)
 	}
-	orig := os.Stdout
+	origStdout := os.Stdout
+	origColor := color.Output
 	os.Stdout = w
-	t.Cleanup(func() { os.Stdout = orig })
+	color.Output = w
+	t.Cleanup(func() {
+		os.Stdout = origStdout
+		color.Output = origColor
+	})
 	return func() string {
 		w.Close()
 		var buf bytes.Buffer

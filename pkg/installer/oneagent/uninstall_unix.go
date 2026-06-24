@@ -15,6 +15,14 @@ import (
 // stateDir holds OneAgent configuration that the uninstall script preserves.
 const stateDir = "/var/lib/dynatrace/oneagent"
 
+// runUninstallFn is the function called by UninstallOneAgentV2 to execute the
+// platform-specific uninstall logic. Overridable in tests.
+var runUninstallFn = runUninstall
+
+// runCommandFn executes the uninstall subprocess. Overridable in tests to
+// capture argv without spawning a real process.
+var runCommandFn = installer.RunCommand
+
 // uninstallScriptPath derives the uninstall script location from
 // oneAgentInstallDir (declared in detect_unix.go) so detection and uninstall
 // always agree on the install root — including when tests redirect it.
@@ -54,7 +62,7 @@ func runUninstall() error {
 	logger.Debug("running uninstall script", "argv", args)
 
 	display.PrintStatusLine("uninstall", "running uninstall script...", display.ColorMessage)
-	if err := installer.RunCommand(args[0], args[1:]...); err != nil {
+	if err := runCommandFn(args[0], args[1:]...); err != nil {
 		return fmt.Errorf("OneAgent uninstall failed: %w", err)
 	}
 	logger.Verbose("uninstall script completed")
