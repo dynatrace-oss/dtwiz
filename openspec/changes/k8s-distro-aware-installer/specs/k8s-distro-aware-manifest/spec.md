@@ -182,6 +182,18 @@ The system SHALL pass `--set csidriver.enabled=false` to the Helm install/upgrad
 - **WHEN** distro is any value other than `"GKE-Autopilot"`
 - **THEN** the Helm command does NOT include `--set csidriver.enabled=false`
 
+### Requirement: ClusterRole aggregation label SHALL NOT appear in rendered manifests
+
+The label `rbac.dynatrace.com/aggregate-to-monitoring: "true"` was used in Dynatrace Operator **≤ 1.8.0** to aggregate ClusterRoles into the `dynatrace-kubernetes-monitoring` aggregated ClusterRole. Starting with Operator **1.9.0**, aggregated ClusterRoles are no longer used — the operator uses standard ClusterRoles exclusively. dtwiz targets Operator ≥ 1.7.0; this label MUST NOT appear in any rendered manifest.
+
+Reference: [Dynatrace Docs — ClusterRole aggregation](https://docs.dynatrace.com/docs/ingest-from/setup-on-k8s/guides/deployment-and-configuration/cluster-role-aggregation#default-permissions)
+
+#### Scenario: Aggregation label absent
+
+- **GIVEN** `InstallKubernetes()` is called
+- **WHEN** any distro string is passed
+- **THEN** rendered manifest does NOT contain `rbac.dynatrace.com/aggregate-to-monitoring`
+
 ### Requirement: ClusterRoleBinding included in all rendered manifests
 
 The system SHALL include a `ClusterRoleBinding` for `dynatrace-kubernetes-monitoring-sensitive` in every rendered manifest, binding to the `dynatrace-activegate` service account.

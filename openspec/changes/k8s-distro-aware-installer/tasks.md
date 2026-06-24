@@ -48,6 +48,6 @@
 
 ## 6. Manifest Assertion Tests
 
-- [ ] 6.1 Create `pkg/installer/kubernetes_test.go` with `TestRenderDynakubeTemplate_Distros` table test — one row per distro string: `GKE`, `GKE-Autopilot`, `EKS`, `EKS-Bottlerocket`, `AKS`, `IKS`, `OpenShift`, `RKE`, `TKGI`, `kubernetes`, `minikube`, `kind`, `k3s`
-- [ ] 6.2 For each row assert specific substrings present or absent in rendered YAML: `mappedHostPaths` present/absent per KSPM expectation, correct annotation key present/absent, `kubeletPath` value present/absent with correct path, `ClusterRoleBinding` always present
-- [ ] 6.3 Run `make test` and `make lint` — all pass
+- [x] 6.1 Create `pkg/installer/kubernetes_test.go` with `TestRenderDynakubeTemplate_Distros` table test — one row per distro string: `GKE`, `GKE-Autopilot`, `EKS`, `EKS-Bottlerocket`, `AKS`, `IKS`, `OpenShift`, `RKE`, `TKGI`, `kubernetes`, `minikube`, `kind`, `k3s`
+- [x] 6.2 For each row assert specific substrings present or absent in rendered YAML: `mappedHostPaths` present/absent per KSPM expectation, correct annotation key present/absent, `kubeletPath` value present/absent with correct path, `ClusterRoleBinding` always present
+- [x] 6.3 Run `make test` and `make lint` — all pass

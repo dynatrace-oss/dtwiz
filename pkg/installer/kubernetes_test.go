@@ -52,44 +52,15 @@ func TestRenderDynakubeTemplate_NoPlaceholders(t *testing.T) {
 	}
 }
 
-func TestDistroTemplateData_UseEphemeralVolume(t *testing.T) {
-	ephemeralDistros := []string{"EKS", "EKS-Bottlerocket"}
-	for _, distro := range ephemeralDistros {
-		d := distroTemplateData(baseTemplateData(), distro)
-		if !d.UseEphemeralVolume {
-			t.Errorf("distro %q: expected UseEphemeralVolume=true", distro)
-		}
-	}
-
-	nonEphemeralDistros := []string{"GKE", "GKE-Autopilot", "AKS", "OpenShift", "IKS", "TKGI", "RKE", "kubernetes", "minikube", "kind", "k3s", ""}
-	for _, distro := range nonEphemeralDistros {
-		d := distroTemplateData(baseTemplateData(), distro)
-		if d.UseEphemeralVolume {
-			t.Errorf("distro %q: expected UseEphemeralVolume=false", distro)
-		}
-	}
-}
-
-func TestRenderDynakubeTemplate_EphemeralVolume_EKS(t *testing.T) {
-	for _, distro := range []string{"EKS", "EKS-Bottlerocket"} {
+func TestRenderDynakubeTemplate_NoAggregationLabel(t *testing.T) {
+	// aggregate-to-monitoring label deprecated since Operator 1.9.0; must never appear.
+	for _, distro := range []string{"EKS", "EKS-Bottlerocket", "GKE", "OpenShift", "AKS", "kubernetes", ""} {
 		out, err := renderDynakubeTemplate(distroTemplateData(baseTemplateData(), distro))
 		if err != nil {
 			t.Fatalf("distro %q: renderDynakubeTemplate: %v", distro, err)
 		}
-		if !strings.Contains(out, "useEphemeralVolume: true") {
-			t.Errorf("distro %q: expected useEphemeralVolume: true in manifest", distro)
-		}
-	}
-}
-
-func TestRenderDynakubeTemplate_EphemeralVolume_NonEKS(t *testing.T) {
-	for _, distro := range []string{"GKE", "GKE-Autopilot", "AKS", "OpenShift", "kubernetes", ""} {
-		out, err := renderDynakubeTemplate(distroTemplateData(baseTemplateData(), distro))
-		if err != nil {
-			t.Fatalf("distro %q: renderDynakubeTemplate: %v", distro, err)
-		}
-		if strings.Contains(out, "useEphemeralVolume") {
-			t.Errorf("distro %q: unexpected useEphemeralVolume in manifest", distro)
+		if strings.Contains(out, "aggregate-to-monitoring") {
+			t.Errorf("distro %q: manifest must not contain rbac.dynatrace.com/aggregate-to-monitoring label", distro)
 		}
 	}
 }
