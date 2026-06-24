@@ -17,14 +17,9 @@ metadata:
   namespace: dynatrace
   labels:
     dynatrace.com/created-by: "dynatrace.kubernetes"
-{{- if or .PrivilegedAnnotation .ReadOnlyVolume }}
-  annotations:
 {{- if .PrivilegedAnnotation }}
+  annotations:
     feature.dynatrace.com/oneagent-privileged: "true"
-{{- end }}
-{{- if .ReadOnlyVolume }}
-    feature.dynatrace.com/injection-readonly-volume: "true"
-{{- end }}
 {{- end }}
 spec:
   apiUrl: {{ .APIURL }}
@@ -68,14 +63,9 @@ metadata:
   namespace: dynatrace
   labels:
     dynatrace.com/created-by: "dynatrace.kubernetes"
-{{- if or .PrivilegedAnnotation .ReadOnlyVolume }}
-  annotations:
 {{- if .PrivilegedAnnotation }}
+  annotations:
     feature.dynatrace.com/oneagent-privileged: "true"
-{{- end }}
-{{- if .ReadOnlyVolume }}
-    feature.dynatrace.com/injection-readonly-volume: "true"
-{{- end }}
 {{- end }}
 spec:
   apiUrl: {{ .APIURL }}
@@ -127,7 +117,6 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
-    rbac.dynatrace.com/aggregate-to-monitoring: "true"
     dynatrace.com/created-by: "dynatrace.kubernetes"
   name: dynatrace-kubernetes-monitoring-sensitive
 rules:

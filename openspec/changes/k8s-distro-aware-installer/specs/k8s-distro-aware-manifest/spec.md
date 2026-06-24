@@ -104,21 +104,23 @@ The system SHALL add `feature.dynatrace.com/oneagent-privileged: "true"` to the 
 - **WHEN** distro is any value other than `"OpenShift"`
 - **THEN** neither DynaKube in the rendered manifest contains `oneagent-privileged`
 
-### Requirement: Bottlerocket manifests carry readonly-volume annotation on both DynaKubes
+### Requirement: Bottlerocket manifests SHALL NOT carry the injection-readonly-volume annotation
 
-The system SHALL add `feature.dynatrace.com/injection-readonly-volume: "true"` to the metadata annotations of both DynaKube objects when the distribution is EKS-Bottlerocket.
+The `feature.dynatrace.com/injection-readonly-volume: "true"` annotation was required for Dynatrace Operator **0.12.0+** and **< 1.7.0** to make the injected CSI volume read-only on Bottlerocket nodes. Starting with Operator **1.7.0**, read-only CSI volumes are injected automatically — no annotation is needed. dtwiz targets Operator ≥ 1.7.0; the annotation MUST NOT be added to any DynaKube manifest regardless of distro.
 
-#### Scenario: Annotation present on both DynaKubes
+Reference: [Dynatrace Docs — injection-readonly-volume](https://docs.dynatrace.com/docs/ingest-from/setup-on-k8s/guides/networking-security-compliance/advanced-security-configurations/injection-readonly-volume)
+
+#### Scenario: Annotation absent on EKS-Bottlerocket
 
 - **GIVEN** `InstallKubernetes()` is called
 - **WHEN** distro is `"EKS-Bottlerocket"`
-- **THEN** both DynaKube objects in the rendered manifest contain `feature.dynatrace.com/injection-readonly-volume: "true"`
+- **THEN** neither DynaKube in the rendered manifest contains `feature.dynatrace.com/injection-readonly-volume`
 
-#### Scenario: Annotation absent on non-Bottlerocket distros
+#### Scenario: Annotation absent on all other distros
 
 - **GIVEN** `InstallKubernetes()` is called
-- **WHEN** distro is any value other than `"EKS-Bottlerocket"`
-- **THEN** neither DynaKube contains `injection-readonly-volume`
+- **WHEN** distro is any value
+- **THEN** no DynaKube in the rendered manifest contains `feature.dynatrace.com/injection-readonly-volume`
 
 ### Requirement: Non-standard kubelet paths set in manifest for IKS and TKGI
 
