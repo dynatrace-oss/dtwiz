@@ -27,9 +27,9 @@ const (
 	dynakubeCodeModulesImage = "public.ecr.aws/dynatrace/dynatrace-codemodules:1.337.60.20260603-063549"
 
 	// helmOperatorNightlyVersion is used for all non-GKE distros.
-	helmOperatorNightlyVersion = "0.0.0-nightly-chart"
+	helmOperatorNightlyVersion = "1.10.0-rc.0"
 	// helmChartGHCR is the default chart source for non-GKE distros.
-	helmChartGHCR = "oci://ghcr.io/dynatrace/dynatrace-operator"
+	helmChartGHCR = "oci://public.ecr.aws/dynatrace/dynatrace-operator"
 )
 
 // dynakubeTemplateData holds the values substituted into dynakube.tmpl.
