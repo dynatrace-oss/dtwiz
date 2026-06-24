@@ -2,6 +2,7 @@
 package azure
 
 import (
+	"fmt"
 	"os/exec"
 	"strings"
 )
@@ -38,6 +39,11 @@ func realRunner(name string, args []string, env []string) (string, error) {
 		cmd.Env = env
 	}
 	out, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok && len(exitErr.Stderr) > 0 {
+			return string(out), fmt.Errorf("%w: %s", err, strings.TrimSpace(string(exitErr.Stderr)))
+		}
+	}
 	return string(out), err
 }
 
