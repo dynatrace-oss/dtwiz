@@ -254,8 +254,19 @@ func runInstallSteps(offset, total int, cfg azureConfig, runner cmdRunner, sleep
 		[]string{"ad", "app", "federated-credential", "create", "--id", cfg.ClientID, "--parameters", fedJSON},
 		nil, "Create federated credential")
 	if err != nil {
-		azurePartialFailureHint(cfg, completed)
-		return cfg, err
+		if strings.Contains(strings.ToLower(err.Error()), "already exists") {
+			// Stale credential left from a previous partial install — replace it.
+			if delErr := azureDeleteFedCred(runner, cfg.ClientID); delErr != nil {
+				azurePartialFailureHint(cfg, completed)
+				return cfg, fmt.Errorf("step %d: removing stale federated credential: %w", offset+3, delErr)
+			}
+			_, err = runner("az", []string{"ad", "app", "federated-credential", "create",
+				"--id", cfg.ClientID, "--parameters", fedJSON}, nil)
+		}
+		if err != nil {
+			azurePartialFailureHint(cfg, completed)
+			return cfg, fmt.Errorf("step %d: %w", offset+3, err)
+		}
 	}
 	completed[3] = true
 	display.ColorOK.Println("  ✓ Federated credential created")

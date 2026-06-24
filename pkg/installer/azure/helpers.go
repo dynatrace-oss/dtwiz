@@ -29,6 +29,17 @@ func azureBuildFedCredJSON(connID, envURL string) (string, error) {
 	return string(b), nil
 }
 
+// azureDeleteFedCred deletes the dtwiz-managed federated credential from an App Registration.
+// A "not found" error is treated as success — the goal is already achieved.
+func azureDeleteFedCred(runner cmdRunner, clientID string) error {
+	_, err := runner("az", []string{"ad", "app", "federated-credential", "delete",
+		"--id", clientID, "--federated-credential-id", fedCredName}, nil)
+	if err != nil && strings.Contains(strings.ToLower(err.Error()), "not found") {
+		return nil
+	}
+	return err
+}
+
 // azureGetSPObjectID retrieves the Service Principal object ID for a given
 // application client ID. It retries up to 5 times with a 3-second sleep
 // between attempts to handle Entra eventual consistency after SP creation.

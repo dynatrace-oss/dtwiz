@@ -112,12 +112,9 @@ func runUninstallSteps(offset, total int, configID, connObjectID, clientID strin
 
 	if clientID != "" {
 		step++
-		if _, err := azureRunStep(step, total, runner, "az",
-			[]string{"ad", "app", "federated-credential", "delete",
-				"--id", clientID,
-				"--federated-credential-id", fedCredName},
-			nil, "Delete federated credential"); err != nil {
-			return err
+		fmt.Printf("  Step %d/%d: Delete federated credential...\n", step, total)
+		if err := azureDeleteFedCred(runner, clientID); err != nil {
+			return fmt.Errorf("step %d: %w", step, err)
 		}
 		display.ColorOK.Println("  ✓ Federated credential deleted")
 
