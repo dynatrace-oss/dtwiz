@@ -136,7 +136,6 @@ var setupCmd = &cobra.Command{
 
 		selected := actionable[choice-1]
 		fmt.Println()
-		display.Header(fmt.Sprintf("Installing: %s", selected.Title))
 
 		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
@@ -146,6 +145,18 @@ var setupCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+
+		if selected.Method == recommender.MethodAzure {
+			if exists, _ := azure.ConnectionExists(envURL, platformTok); exists {
+				display.Header(fmt.Sprintf("Updating: %s", selected.Title))
+				fmt.Println()
+				fmt.Println("  The Azure Monitor integration is already configured.")
+				fmt.Println("  To reconfigure it, run `dtwiz uninstall azure` first, then run setup again.")
+				fmt.Println()
+				return nil
+			}
+		}
+		display.Header(fmt.Sprintf("Installing: %s", selected.Title))
 
 		c, err := setupClientFromCreds(envURL, classicTok, platformTok)
 		if err != nil {

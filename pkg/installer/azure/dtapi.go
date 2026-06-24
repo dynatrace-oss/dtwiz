@@ -20,11 +20,16 @@ const (
 	monitoringAPI      = extensionAPI + "/monitoring-configurations"
 )
 
-// dtclient performs the three Dynatrace Platform API calls needed for the Azure integration.
+// dtclient performs the Dynatrace Platform API calls needed for the Azure integration.
 type dtclient interface {
 	createConnection(name string) (objectID string, err error)
 	updateConnection(objectID, name, tenantID, clientID string) error
 	createMonitoring(configName, connectionObjectID string) error
+	// uninstall
+	findConnection(name string) (objectID, clientID string, err error)
+	deleteConnection(objectID string) error
+	findMonitoringConfig(name string) (configID string, err error)
+	deleteMonitoring(configID string) error
 }
 
 // ─── SDK implementation ───────────────────────────────────────────────────────
@@ -234,6 +239,98 @@ func (d *sdkDTClient) latestExtensionVersion() (string, error) {
 		return cmpSemver(versions[i], versions[j]) > 0
 	})
 	return versions[0], nil
+}
+
+// ─── findConnection ───────────────────────────────────────────────────────────
+
+func (d *sdkDTClient) findConnection(name string) (objectID, clientID string, err error) {
+	type item struct {
+		ObjectID string    `json:"objectId"`
+		Value    connValue `json:"value"`
+	}
+	type listResp struct {
+		Items []item `json:"items"`
+	}
+	var result listResp
+	r, err := d.c.HTTP().R().
+		SetResult(&result).
+		SetQueryParam("schemaIds", connectionSchemaID).
+		SetQueryParam("scopes", "environment").
+		Get(settingsAPI)
+	if err != nil {
+		return "", "", fmt.Errorf("find connection: %w", err)
+	}
+	if r.IsError() {
+		return "", "", fmt.Errorf("find connection: status %d: %s", r.StatusCode(), r.String())
+	}
+	for _, it := range result.Items {
+		if it.Value.Name == name {
+			appID := ""
+			if it.Value.FederatedIdentityCredential != nil {
+				appID = it.Value.FederatedIdentityCredential.ApplicationID
+			}
+			logger.Debug("found connection", "objectId", it.ObjectID, "name", name, "appId", appID)
+			return it.ObjectID, appID, nil
+		}
+	}
+	logger.Debug("connection not found", "name", name)
+	return "", "", nil
+}
+
+// ─── deleteConnection ─────────────────────────────────────────────────────────
+
+func (d *sdkDTClient) deleteConnection(objectID string) error {
+	r, err := d.c.HTTP().R().Delete(fmt.Sprintf("%s/%s", settingsAPI, objectID))
+	if err != nil {
+		return fmt.Errorf("delete connection: %w", err)
+	}
+	if r.IsError() {
+		return fmt.Errorf("delete connection: status %d: %s", r.StatusCode(), r.String())
+	}
+	return nil
+}
+
+// ─── findMonitoringConfig ─────────────────────────────────────────────────────
+
+func (d *sdkDTClient) findMonitoringConfig(name string) (string, error) {
+	type item struct {
+		ObjectID string `json:"objectId"`
+		Value    struct {
+			Description string `json:"description"`
+		} `json:"value"`
+	}
+	type listResp struct {
+		Items []item `json:"items"`
+	}
+	var result listResp
+	r, err := d.c.HTTP().R().SetResult(&result).Get(monitoringAPI)
+	if err != nil {
+		return "", fmt.Errorf("find monitoring config: %w", err)
+	}
+	if r.IsError() {
+		return "", fmt.Errorf("find monitoring config: status %d: %s", r.StatusCode(), r.String())
+	}
+	for _, it := range result.Items {
+		if it.Value.Description == name {
+			logger.Debug("found monitoring config", "objectId", it.ObjectID, "name", name)
+			return it.ObjectID, nil
+		}
+	}
+	logger.Debug("monitoring config not found", "name", name)
+	return "", nil
+}
+
+// ─── deleteMonitoring ─────────────────────────────────────────────────────────
+
+func (d *sdkDTClient) deleteMonitoring(configID string) error {
+	r, err := d.c.HTTP().R().Delete(fmt.Sprintf("%s/%s", monitoringAPI, configID))
+	if err != nil {
+		return fmt.Errorf("delete monitoring config: %w", err)
+	}
+	if r.IsError() {
+		return fmt.Errorf("delete monitoring config: status %d: %s", r.StatusCode(), r.String())
+	}
+	return nil
 }
 
 func cmpSemver(a, b string) int {

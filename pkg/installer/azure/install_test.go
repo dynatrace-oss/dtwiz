@@ -213,6 +213,42 @@ func TestAzureObjectIDFlowsToStep5(t *testing.T) {
 	}
 }
 
+func TestAzureConnectionAlreadyExistsIsRejected(t *testing.T) {
+	defer stubExecLookPath(t)()
+
+	azMutatingCalls := 0
+	runner := func(name string, args []string, _ []string) (string, error) {
+		switch {
+		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "show":
+			return stockAccountJSON, nil
+		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "management-group":
+			return stockMgmtGroupJSON, nil
+		case name == "az" && len(args) > 0 && args[0] == "rest":
+			return stockRBACJSON, nil
+		default:
+			azMutatingCalls++
+			return "{}", nil
+		}
+	}
+
+	dtc := &fakeDTClient{
+		connObjectID:     "a1b2c3d4-0000-0000-0000-000000000001",
+		findConnObjectID: "existing-conn-id", // simulate existing connection
+	}
+	err := captureStdoutErr(func() error {
+		return installAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep, dtc)
+	})
+	if err == nil {
+		t.Fatal("expected error for existing connection, got nil")
+	}
+	if !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("expected 'already exists' in error, got: %v", err)
+	}
+	if azMutatingCalls != 0 {
+		t.Errorf("expected 0 az mutating calls, got %d", azMutatingCalls)
+	}
+}
+
 // ── failure injection tests ───────────────────────────────────────────────────
 
 func TestAzureStep1FailsNoAzMutations(t *testing.T) {

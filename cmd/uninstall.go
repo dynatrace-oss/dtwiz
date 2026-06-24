@@ -8,6 +8,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/azure"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
@@ -104,6 +105,25 @@ var uninstallOtelCmd = &cobra.Command{
 	},
 }
 
+var uninstallAzureCmd = &cobra.Command{
+	Use:   "azure",
+	Short: "Remove the Dynatrace Azure Monitor integration",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		envURL, _, platformTok, err := getDtEnvironment()
+		if err != nil {
+			return err
+		}
+		if err := azure.UninstallAzure(envURL, platformTok, uninstallDryRun); err != nil {
+			if errors.Is(err, installer.ErrInstallCancelled) {
+				return nil
+			}
+			return err
+		}
+		return nil
+	},
+}
+
 var uninstallSelfCmd = &cobra.Command{
 	Use:   "self",
 	Short: "Remove the dtwiz binary and its PATH entry",
@@ -124,6 +144,7 @@ func init() {
 	uninstallCmd.AddCommand(uninstallOneAgentCmd)
 	uninstallCmd.AddCommand(uninstallAWSCmd)
 	uninstallCmd.AddCommand(uninstallAWSLambdaCmd)
+	uninstallCmd.AddCommand(uninstallAzureCmd)
 	uninstallCmd.AddCommand(uninstallOtelCmd)
 	uninstallCmd.AddCommand(uninstallSelfCmd)
 }

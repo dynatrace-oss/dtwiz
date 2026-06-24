@@ -86,6 +86,10 @@ func (noopDTClient) updateConnection(string, string, string, string) error {
 func (noopDTClient) createMonitoring(string, string) error {
 	return fmt.Errorf("unexpected createMonitoring call")
 }
+func (noopDTClient) findConnection(string) (string, string, error)  { return "", "", nil }
+func (noopDTClient) deleteConnection(string) error                  { return nil }
+func (noopDTClient) findMonitoringConfig(string) (string, error)    { return "", nil }
+func (noopDTClient) deleteMonitoring(string) error                  { return nil }
 
 // fakeDTClient records calls for assertion.
 type fakeDTClient struct {
@@ -94,12 +98,29 @@ type fakeDTClient struct {
 	updateErr    error
 	monErr       error
 
+	// uninstall
+	findConnObjectID string
+	findConnClientID string
+	findConnErr      error
+	deleteConnErr    error
+	findMonConfigID  string
+	findMonErr       error
+	deleteMonErr     error
+
 	updateCalledWith struct{ objectID, name, tenantID, clientID string }
 	monCalledWith   struct{ configName, connObjectID string }
 }
 
 func happyFakeDTClient() *fakeDTClient {
 	return &fakeDTClient{connObjectID: "a1b2c3d4-0000-0000-0000-000000000001"}
+}
+
+func happyUninstallFakeDTClient() *fakeDTClient {
+	return &fakeDTClient{
+		findConnObjectID: "conn-obj-001",
+		findConnClientID: "client-id-000",
+		findMonConfigID:  "mon-config-001",
+	}
 }
 
 func (f *fakeDTClient) createConnection(string) (string, error) {
@@ -117,6 +138,14 @@ func (f *fakeDTClient) createMonitoring(configName, connObjectID string) error {
 	f.monCalledWith.connObjectID = connObjectID
 	return f.monErr
 }
+func (f *fakeDTClient) findConnection(string) (string, string, error) {
+	return f.findConnObjectID, f.findConnClientID, f.findConnErr
+}
+func (f *fakeDTClient) deleteConnection(string) error { return f.deleteConnErr }
+func (f *fakeDTClient) findMonitoringConfig(string) (string, error) {
+	return f.findMonConfigID, f.findMonErr
+}
+func (f *fakeDTClient) deleteMonitoring(string) error { return f.deleteMonErr }
 
 // ── stock test fixtures ───────────────────────────────────────────────────────
 

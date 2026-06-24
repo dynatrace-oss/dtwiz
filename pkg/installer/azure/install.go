@@ -147,6 +147,15 @@ func installAzureWithRunner(
 		return err
 	}
 
+	// ── Existence check ────────────────────────────────────────────────────────
+	existingConnID, _, err := dtc.findConnection(connectionName)
+	if err != nil {
+		return fmt.Errorf("checking existing connection: %w", err)
+	}
+	if existingConnID != "" {
+		return fmt.Errorf("Azure connection '%s' already exists — run `dtwiz uninstall azure` to remove it first", connectionName)
+	}
+
 	// Normalise: if the returned scope is a bare subscription ID, it's already
 	// the full fallback path; otherwise ensure it's the full mgmt-group path.
 	mgScope := mgmtGroupID
