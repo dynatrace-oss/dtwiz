@@ -24,7 +24,7 @@ const (
 type dtclient interface {
 	createConnection(name string) (objectID string, err error)
 	updateConnection(objectID, name, tenantID, clientID string) error
-	createMonitoring(configName, connectionObjectID string) error
+	createMonitoring(configName, connectionObjectID, clientID, subscriptionID string) error
 	// uninstall
 	findConnection(name string) (objectID, clientID string, err error)
 	deleteConnection(objectID string) error
@@ -156,7 +156,7 @@ func (d *sdkDTClient) updateConnection(objectID, name, tenantID, clientID string
 
 // ─── createMonitoring ─────────────────────────────────────────────────────────
 
-func (d *sdkDTClient) createMonitoring(configName, connectionObjectID string) error {
+func (d *sdkDTClient) createMonitoring(configName, connectionObjectID, clientID, subscriptionID string) error {
 	version, err := d.latestExtensionVersion()
 	if err != nil {
 		return fmt.Errorf("create monitoring: %w", err)
@@ -164,34 +164,48 @@ func (d *sdkDTClient) createMonitoring(configName, connectionObjectID string) er
 	logger.Debug("using extension version", "version", version)
 
 	type credential struct {
-		Enabled      bool   `json:"enabled"`
-		Description  string `json:"description"`
-		ConnectionID string `json:"connectionId"`
-		Type         string `json:"type"`
+		Enabled           bool   `json:"enabled"`
+		Description       string `json:"description"`
+		ConnectionID      string `json:"connectionId"`
+		ServicePrincipalID string `json:"servicePrincipalId"`
+		Type              string `json:"type"`
+	}
+	type azureBlock struct {
+		SubscriptionFilteringMode string       `json:"subscriptionFilteringMode"`
+		SubscriptionFiltering     []string     `json:"subscriptionFiltering"`
+		Credentials               []credential `json:"credentials"`
 	}
 	type monBody struct {
-		Enabled     bool     `json:"enabled"`
-		Description string   `json:"description"`
-		Version     string   `json:"version"`
-		FeatureSets []string `json:"featureSets"`
-		Azure       struct {
-			Credentials []credential `json:"credentials"`
-		} `json:"azure"`
+		Enabled     bool       `json:"enabled"`
+		Description string     `json:"description"`
+		Version     string     `json:"version"`
+		FeatureSets []string   `json:"featureSets"`
+		Azure       azureBlock `json:"azure"`
 	}
 
-	var b monBody
-	b.Enabled = true
-	b.Description = configName
-	b.Version = version
-	b.FeatureSets = []string{}
-	b.Azure.Credentials = []credential{{
-		Enabled:      true,
-		Description:  configName,
-		ConnectionID: connectionObjectID,
-		Type:         "federatedIdentityCredential",
-	}}
+	v := monBody{
+		Enabled:     true,
+		Description: configName,
+		Version:     version,
+		FeatureSets: []string{},
+		Azure: azureBlock{
+			SubscriptionFilteringMode: "INCLUDE",
+			SubscriptionFiltering:     []string{subscriptionID},
+			Credentials: []credential{{
+				Enabled:           true,
+				Description:       configName,
+				ConnectionID:      connectionObjectID,
+				ServicePrincipalID: clientID,
+				Type:              "FEDERATED",
+			}},
+		},
+	}
 
-	bodyBytes, err := json.Marshal(b)
+	envelope := map[string]interface{}{
+		"scope": "integration-azure",
+		"value": v,
+	}
+	bodyBytes, err := json.Marshal(envelope)
 	if err != nil {
 		return fmt.Errorf("create monitoring: marshal: %w", err)
 	}
