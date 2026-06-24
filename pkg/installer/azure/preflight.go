@@ -111,22 +111,19 @@ func azureDetectMgmtGroup(runner cmdRunner, subscriptionID, tenantID string) (st
 }
 
 // azureCheckRBAC verifies the current principal has Microsoft.Authorization/roleAssignments/write
-// at the management group scope. Aborts if access is not allowed.
+// at the target scope (management group or subscription fallback). Aborts if access is not allowed.
 func azureCheckRBAC(runner cmdRunner, mgmtGroupID string) error {
-	// Extract the bare segment (group name) from the full resource path.
-	mgSegment := mgmtGroupID
-	if idx := strings.LastIndex(mgmtGroupID, "/"); idx >= 0 {
-		mgSegment = mgmtGroupID[idx+1:]
-	}
-
-	// Subscription fallback scope — skip mgmt-group-specific checkAccess.
+	// mgmtGroupID is a full scope path for both cases:
+	//   management group: /providers/Microsoft.Management/managementGroups/<name>
+	//   subscription:     /subscriptions/<id>
+	scopeLabel := "management group scope"
 	if strings.HasPrefix(mgmtGroupID, "/subscriptions/") {
-		return nil
+		scopeLabel = "subscription scope"
 	}
 
 	url := fmt.Sprintf(
-		"https://management.azure.com/providers/Microsoft.Management/managementGroups/%s/providers/Microsoft.Authorization/checkAccess?api-version=2022-04-01",
-		mgSegment,
+		"https://management.azure.com%s/providers/Microsoft.Authorization/checkAccess?api-version=2022-04-01",
+		mgmtGroupID,
 	)
 	body := `{"actions":[{"id":"Microsoft.Authorization/roleAssignments/write"}]}`
 	logger.Debug("checking RBAC", "url", url)
@@ -136,7 +133,7 @@ func azureCheckRBAC(runner cmdRunner, mgmtGroupID string) error {
 		return fmt.Errorf("RBAC check failed: %w", err)
 	}
 	if !strings.Contains(out, `"accessDecision":"Allowed"`) {
-		return fmt.Errorf("insufficient Azure RBAC permissions — need Microsoft.Authorization/roleAssignments/write at management group scope")
+		return fmt.Errorf("insufficient Azure RBAC permissions — your account needs Microsoft.Authorization/roleAssignments/write at %s (e.g. the Owner or User Access Administrator role) to assign Monitoring Reader", scopeLabel)
 	}
 	return nil
 }
