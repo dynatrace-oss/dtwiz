@@ -7,7 +7,7 @@ endif
 
 BINARY := dtwiz
 GO     := go
-VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+VERSION ?= dev
 MD_LINT_CLI_IMAGE := "ghcr.io/igorshubovych/markdownlint-cli:v0.31.1"
 
 build:
