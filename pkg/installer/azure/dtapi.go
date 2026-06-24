@@ -24,7 +24,8 @@ const (
 type dtclient interface {
 	createConnection(name string) (objectID string, err error)
 	updateConnection(objectID, name, tenantID, clientID string) error
-	createMonitoring(configName, connectionObjectID, clientID, subscriptionID string) error
+	createMonitoring(configName, connectionObjectID, clientID, subscriptionID string, locations []string) error
+	listMonitoringLocations() ([]string, error)
 	// uninstall
 	findConnection(name string) (objectID, clientID string, err error)
 	deleteConnection(objectID string) error
@@ -156,7 +157,7 @@ func (d *sdkDTClient) updateConnection(objectID, name, tenantID, clientID string
 
 // ─── createMonitoring ─────────────────────────────────────────────────────────
 
-func (d *sdkDTClient) createMonitoring(configName, connectionObjectID, clientID, subscriptionID string) error {
+func (d *sdkDTClient) createMonitoring(configName, connectionObjectID, clientID, subscriptionID string, locations []string) error {
 	version, err := d.latestExtensionVersion()
 	if err != nil {
 		return fmt.Errorf("create monitoring: %w", err)
@@ -173,6 +174,7 @@ func (d *sdkDTClient) createMonitoring(configName, connectionObjectID, clientID,
 	type azureBlock struct {
 		SubscriptionFilteringMode string       `json:"subscriptionFilteringMode"`
 		SubscriptionFiltering     []string     `json:"subscriptionFiltering"`
+		LocationFiltering         []string     `json:"locationFiltering"`
 		Credentials               []credential `json:"credentials"`
 	}
 	type monBody struct {
@@ -191,6 +193,7 @@ func (d *sdkDTClient) createMonitoring(configName, connectionObjectID, clientID,
 		Azure: azureBlock{
 			SubscriptionFilteringMode: "INCLUDE",
 			SubscriptionFiltering:     []string{subscriptionID},
+			LocationFiltering:         locations,
 			Credentials: []credential{{
 				Enabled:           true,
 				Description:       configName,
@@ -221,6 +224,92 @@ func (d *sdkDTClient) createMonitoring(configName, connectionObjectID, clientID,
 		return fmt.Errorf("create monitoring: status %d: %s", resp.StatusCode(), resp.String())
 	}
 	return nil
+}
+
+// ─── listMonitoringLocations ──────────────────────────────────────────────────
+
+// listMonitoringLocations fetches the da-azure extension's monitoring configuration
+// schema and extracts the valid values for the locationFiltering field.
+func (d *sdkDTClient) listMonitoringLocations() ([]string, error) {
+	version, err := d.latestExtensionVersion()
+	if err != nil {
+		return nil, fmt.Errorf("list monitoring locations: %w", err)
+	}
+
+	resp, err := d.c.HTTP().R().Get(fmt.Sprintf("%s/%s/schema", extensionAPI, version))
+	if err != nil {
+		return nil, fmt.Errorf("list monitoring locations: %w", err)
+	}
+	if resp.IsError() {
+		return nil, fmt.Errorf("list monitoring locations: status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	locations, err := parseLocationFilteringEnum(resp.Body())
+	if err != nil {
+		return nil, fmt.Errorf("list monitoring locations: %w", err)
+	}
+	logger.Debug("fetched azure monitoring locations from DT schema", "count", len(locations))
+	return locations, nil
+}
+
+// parseLocationFilteringEnum navigates the da-azure extension JSON Schema to extract
+// the enum of valid location names from:
+//
+//	properties → azure → properties → locationFiltering → items → enum
+func parseLocationFilteringEnum(schema []byte) ([]string, error) {
+	var root map[string]interface{}
+	if err := json.Unmarshal(schema, &root); err != nil {
+		return nil, fmt.Errorf("parse monitoring schema: %w", err)
+	}
+
+	nav := func(obj map[string]interface{}, key string) (map[string]interface{}, error) {
+		v, ok := obj[key]
+		if !ok {
+			return nil, fmt.Errorf("missing key %q in monitoring schema", key)
+		}
+		m, ok := v.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("key %q in monitoring schema is not an object", key)
+		}
+		return m, nil
+	}
+
+	cur := root
+	var err error
+	for _, key := range []string{"properties", "azure", "properties", "locationFiltering"} {
+		if cur, err = nav(cur, key); err != nil {
+			return nil, err
+		}
+	}
+
+	itemsVal, ok := cur["items"]
+	if !ok {
+		return nil, fmt.Errorf("missing \"items\" in locationFiltering schema")
+	}
+	items, ok := itemsVal.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("\"items\" in locationFiltering schema is not an object")
+	}
+
+	enumVal, ok := items["enum"]
+	if !ok {
+		return nil, fmt.Errorf("no \"enum\" in locationFiltering.items schema")
+	}
+	rawList, ok := enumVal.([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("\"enum\" in locationFiltering.items is not an array")
+	}
+
+	locations := make([]string, 0, len(rawList))
+	for _, item := range rawList {
+		if s, ok := item.(string); ok {
+			locations = append(locations, s)
+		}
+	}
+	if len(locations) == 0 {
+		return nil, fmt.Errorf("no location values found in locationFiltering.items.enum")
+	}
+	return locations, nil
 }
 
 func (d *sdkDTClient) latestExtensionVersion() (string, error) {

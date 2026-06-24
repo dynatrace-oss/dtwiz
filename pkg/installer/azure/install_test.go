@@ -38,14 +38,14 @@ func (f *fakeAzureRunner) run(name string, args []string, _ []string) (string, e
 	return call.stdout, call.err
 }
 
-// buildHappyPathAzRunner returns a runner that handles only the az steps (2–5).
+// buildHappyPathAzRunner returns a runner that handles the az steps for the install flow.
 func buildHappyPathAzRunner(t *testing.T) *fakeAzureRunner {
 	t.Helper()
 	return &fakeAzureRunner{
 		t: t,
 		calls: []fakeCall{
 			{name: "az", stdout: stockAccountJSON}, // preflight: account show
-			{name: "az", stdout: stockRBACJSON},    // preflight: checkAccess
+			{name: "az", stdout: stockRBACJSON},    // preflight: signed-in-user (fails parse → RBAC skipped)
 			{name: "az", stdout: stockSPJSON},      // step 2
 			{name: "az", stdout: `{}`},             // step 3
 			{name: "az", stdout: stockSPShowJSON},  // step 4

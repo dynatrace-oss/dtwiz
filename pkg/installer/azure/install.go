@@ -316,7 +316,12 @@ func runInstallSteps(offset, total int, cfg azureConfig, runner cmdRunner, sleep
 
 	// ── Step 7 ────────────────────────────────────────────────────────────────
 	fmt.Printf("  Step %d/%d: Create Azure monitoring configuration...\n", offset+7, total)
-	if err = dtc.createMonitoring(cfg.ConfigurationName, connObjectID, cfg.ClientID, cfg.SubscriptionID); err != nil {
+	locations, err := dtc.listMonitoringLocations()
+	if err != nil {
+		azurePartialFailureHint(cfg, completed)
+		return cfg, fmt.Errorf("step %d: fetching Azure locations: %w", offset+7, err)
+	}
+	if err = dtc.createMonitoring(cfg.ConfigurationName, connObjectID, cfg.ClientID, cfg.SubscriptionID, locations); err != nil {
 		azurePartialFailureHint(cfg, completed)
 		return cfg, fmt.Errorf("step %d: %w", offset+7, err)
 	}
