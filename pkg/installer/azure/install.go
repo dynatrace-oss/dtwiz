@@ -39,7 +39,7 @@ func azureBuildStepCommands(cfg azureConfig) []string {
 			clientID, fedCredName, connID, audience),
 		fmt.Sprintf("az ad sp show --id %s -o json", clientID),
 		fmt.Sprintf(`az role assignment create --assignee-object-id %s --role "Monitoring Reader" --scope %s --assignee-principal-type ServicePrincipal --description "Dynatrace Monitoring"`,
-			objectID, cfg.ManagementGroupID),
+			objectID, cfg.Scope),
 		fmt.Sprintf("DT Settings API: update Azure connection '%s' with tenantId=%s applicationId=%s  [env=%s token=***]",
 			cfg.ConnectionName, cfg.TenantID, clientID, cfg.EnvURL),
 		fmt.Sprintf("DT Extensions API: create Azure monitoring configuration '%s'  [env=%s token=***]",
@@ -54,7 +54,7 @@ func azurePrintPreview(cfg azureConfig) {
 	fmt.Println()
 	fmt.Printf("  Environment:        %s\n", cfg.EnvURL)
 	fmt.Printf("  Tenant ID:          %s\n", cfg.TenantID)
-	fmt.Printf("  Management group:   %s\n", cfg.ManagementGroupID)
+	fmt.Printf("  Subscription:       %s\n", cfg.SubscriptionID)
 	fmt.Printf("  Connection name:    %s\n", cfg.ConnectionName)
 	fmt.Printf("  Configuration name: %s\n", cfg.ConfigurationName)
 	fmt.Println()
@@ -142,7 +142,7 @@ func installAzureWithRunner(
 	)
 
 	// ── Preflight ──────────────────────────────────────────────────────────────
-	subscriptionID, tenantID, mgmtGroupID, err := azurePreflightChecks(runner, envURL, platformToken)
+	subscriptionID, tenantID, err := azurePreflightChecks(runner, envURL, platformToken)
 	if err != nil {
 		return err
 	}
@@ -156,13 +156,6 @@ func installAzureWithRunner(
 		return fmt.Errorf("Azure connection '%s' already exists — run `dtwiz uninstall azure` to remove it first", connectionName)
 	}
 
-	// Normalise: if the returned scope is a bare subscription ID, it's already
-	// the full fallback path; otherwise ensure it's the full mgmt-group path.
-	mgScope := mgmtGroupID
-	if !strings.HasPrefix(mgmtGroupID, "/") {
-		mgScope = "/providers/Microsoft.Management/managementGroups/" + mgmtGroupID
-	}
-
 	cfg := azureConfig{
 		ConnectionName:    connectionName,
 		ConfigurationName: configurationName,
@@ -170,7 +163,7 @@ func installAzureWithRunner(
 		PlatformToken:     platformToken,
 		TenantID:          tenantID,
 		SubscriptionID:    subscriptionID,
-		ManagementGroupID: mgScope,
+		Scope:             "/subscriptions/" + subscriptionID,
 	}
 
 	// ── Preview ────────────────────────────────────────────────────────────────
@@ -287,7 +280,7 @@ func runInstallSteps(offset, total int, cfg azureConfig, runner cmdRunner, sleep
 			"role", "assignment", "create",
 			"--assignee-object-id", cfg.ObjectID,
 			"--role", "Monitoring Reader",
-			"--scope", cfg.ManagementGroupID,
+			"--scope", cfg.Scope,
 			"--assignee-principal-type", "ServicePrincipal",
 			"--description", "Dynatrace Monitoring",
 		},

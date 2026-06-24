@@ -15,7 +15,6 @@ func buildUpdateAzRunner(t *testing.T) *fakeAzureRunner {
 		calls: []fakeCall{
 			// preflight
 			{name: "az", stdout: stockAccountJSON},
-			{name: "az", stdout: stockMgmtGroupJSON},
 			{name: "az", stdout: stockRBACJSON},
 			// uninstall phase: fedcred delete, role delete, sp delete
 			{name: "az", stdout: `{}`},
@@ -62,8 +61,6 @@ func TestUpdateAzureDryRun(t *testing.T) {
 		switch {
 		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "show":
 			return stockAccountJSON, nil
-		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "management-group":
-			return stockMgmtGroupJSON, nil
 		case name == "az" && len(args) > 0 && args[0] == "rest":
 			return stockRBACJSON, nil
 		default:
@@ -90,8 +87,6 @@ func TestUpdateAzureCancelled(t *testing.T) {
 		switch {
 		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "show":
 			return stockAccountJSON, nil
-		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "management-group":
-			return stockMgmtGroupJSON, nil
 		case name == "az" && len(args) > 0 && args[0] == "rest":
 			return stockRBACJSON, nil
 		default:
@@ -114,8 +109,6 @@ func TestUpdateAzurePreviewShowsBothPhases(t *testing.T) {
 		switch {
 		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "show":
 			return stockAccountJSON, nil
-		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "management-group":
-			return stockMgmtGroupJSON, nil
 		case name == "az" && len(args) > 0 && args[0] == "rest":
 			return stockRBACJSON, nil
 		default:

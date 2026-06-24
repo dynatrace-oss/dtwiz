@@ -23,7 +23,7 @@ type azureConfig struct {
 	PlatformToken     string
 	TenantID          string
 	SubscriptionID    string
-	ManagementGroupID string
+	Scope             string // subscription scope: /subscriptions/<id>
 	ConnectionID      string // filled after step 1
 	ClientID          string // filled after step 2
 	ObjectID          string // filled after step 4

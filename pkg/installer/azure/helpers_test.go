@@ -48,17 +48,6 @@ func captureStdoutErr(fn func() error) error {
 	return err
 }
 
-func captureStdoutReturn(fn func() (string, error)) (string, error) {
-	r, w, _ := os.Pipe()
-	old := os.Stdout
-	os.Stdout = w
-	val, err := fn()
-	os.Stdout = old
-	w.Close()
-	io.ReadAll(r) //nolint:errcheck
-	return val, err
-}
-
 func noSleep(_ time.Duration) {}
 
 // stubExecLookPath overrides execLookPath to pretend az is always available.
@@ -86,10 +75,10 @@ func (noopDTClient) updateConnection(string, string, string, string) error {
 func (noopDTClient) createMonitoring(string, string) error {
 	return fmt.Errorf("unexpected createMonitoring call")
 }
-func (noopDTClient) findConnection(string) (string, string, error)  { return "", "", nil }
-func (noopDTClient) deleteConnection(string) error                  { return nil }
-func (noopDTClient) findMonitoringConfig(string) (string, error)    { return "", nil }
-func (noopDTClient) deleteMonitoring(string) error                  { return nil }
+func (noopDTClient) findConnection(string) (string, string, error) { return "", "", nil }
+func (noopDTClient) deleteConnection(string) error                 { return nil }
+func (noopDTClient) findMonitoringConfig(string) (string, error)   { return "", nil }
+func (noopDTClient) deleteMonitoring(string) error                 { return nil }
 
 // fakeDTClient records calls for assertion.
 type fakeDTClient struct {
@@ -108,7 +97,7 @@ type fakeDTClient struct {
 	deleteMonErr     error
 
 	updateCalledWith struct{ objectID, name, tenantID, clientID string }
-	monCalledWith   struct{ configName, connObjectID string }
+	monCalledWith    struct{ configName, connObjectID string }
 }
 
 func happyFakeDTClient() *fakeDTClient {
@@ -150,7 +139,6 @@ func (f *fakeDTClient) deleteMonitoring(string) error { return f.deleteMonErr }
 // ── stock test fixtures ───────────────────────────────────────────────────────
 
 const stockAccountJSON = `{"id":"sub-abc123","tenantId":"tenant-xyz","name":"my-sub"}`
-const stockMgmtGroupJSON = `[{"id":"/providers/Microsoft.Management/managementGroups/tenant-xyz","tenantId":"tenant-xyz","name":"root"}]`
 const stockRBACJSON = `[{"actionId":"Microsoft.Authorization/roleAssignments/write","accessDecision":"Allowed"}]`
 const stockSPJSON = `{"appId":"client-id-000","tenant":"tenant-xyz","displayName":"dtwiz-azure"}`
 const stockSPShowJSON = `{"id":"object-id-111","appId":"client-id-000"}`
@@ -195,50 +183,4 @@ func TestAzureBuildFederatedCredJSON(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestAzureMgmtGroupSelection(t *testing.T) {
-	t.Run("tenant root present — select it", func(t *testing.T) {
-		runner := func(_ string, _ []string, _ []string) (string, error) {
-			return `[
-				{"id":"/providers/Microsoft.Management/managementGroups/other-group","tenantId":"tenant-abc","name":"other"},
-				{"id":"/providers/Microsoft.Management/managementGroups/tenant-abc","tenantId":"tenant-abc","name":"root"}
-			]`, nil
-		}
-		got, err := azureDetectMgmtGroup(runner, "sub-123", "tenant-abc")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if got != "/providers/Microsoft.Management/managementGroups/tenant-abc" {
-			t.Errorf("unexpected group: %s", got)
-		}
-	})
-
-	t.Run("single group — use it", func(t *testing.T) {
-		runner := func(_ string, _ []string, _ []string) (string, error) {
-			return `[{"id":"/providers/Microsoft.Management/managementGroups/only-group","tenantId":"tenant-xyz","name":"only"}]`, nil
-		}
-		got, err := azureDetectMgmtGroup(runner, "sub-123", "tenant-xyz")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if got != "/providers/Microsoft.Management/managementGroups/only-group" {
-			t.Errorf("unexpected group: %s", got)
-		}
-	})
-
-	t.Run("MG list fails — subscription fallback", func(t *testing.T) {
-		runner := func(_ string, _ []string, _ []string) (string, error) {
-			return "", fmt.Errorf("az command failed")
-		}
-		got, err := captureStdoutReturn(func() (string, error) {
-			return azureDetectMgmtGroup(runner, "sub-fallback-123", "tenant-abc")
-		})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if got != "/subscriptions/sub-fallback-123" {
-			t.Errorf("expected subscription scope fallback, got: %s", got)
-		}
-	})
 }

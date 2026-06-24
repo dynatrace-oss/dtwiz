@@ -14,7 +14,8 @@ func TestAzureMaskToken(t *testing.T) {
 			EnvURL:            "https://abc.live.dynatrace.com",
 			PlatformToken:     secret,
 			TenantID:          "tenant-id-123",
-			ManagementGroupID: "/providers/Microsoft.Management/managementGroups/tenant-id-123",
+			SubscriptionID:    "sub-abc123",
+			Scope:             "/subscriptions/sub-abc123",
 		})
 	})
 	if strings.Contains(preview, secret) {

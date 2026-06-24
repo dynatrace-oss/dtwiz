@@ -47,43 +47,10 @@ func TestAzurePreflightNotLoggedIn(t *testing.T) {
 	}
 }
 
+// TestAzurePreflightRBACDenied verifies that when the principal lacks
+// roleAssignments/write, the RBAC check runs at subscription scope and aborts
+// before any mutation.
 func TestAzurePreflightRBACDenied(t *testing.T) {
-	defer stubExecLookPath(t)()
-
-	mutatingCalls := 0
-	runner := func(name string, args []string, _ []string) (string, error) {
-		switch {
-		case name == "az" && len(args) > 0 && args[0] == "account" && args[1] == "show":
-			return stockAccountJSON, nil
-		case name == "az" && len(args) > 0 && args[0] == "account" && args[1] == "management-group":
-			return stockMgmtGroupJSON, nil
-		case name == "az" && len(args) > 0 && args[0] == "rest":
-			return `[{"actionId":"Microsoft.Authorization/roleAssignments/write","accessDecision":"Denied"}]`, nil
-		default:
-			mutatingCalls++
-			return "{}", nil
-		}
-	}
-
-	err := captureStdoutErr(func() error {
-		return installAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep, &noopDTClient{})
-	})
-	if err == nil {
-		t.Fatal("expected RBAC denied error, got nil")
-	}
-	if !strings.Contains(err.Error(), "RBAC") && !strings.Contains(err.Error(), "permissions") {
-		t.Errorf("expected RBAC/permissions error, got: %v", err)
-	}
-	if mutatingCalls != 0 {
-		t.Errorf("expected no mutating calls after RBAC denial, got %d", mutatingCalls)
-	}
-}
-
-// TestAzurePreflightRBACDeniedSubscriptionFallback covers the case where the
-// management-group list fails (so we fall back to subscription scope) and the
-// principal lacks roleAssignments/write. The RBAC check must still run at the
-// subscription scope and abort before any mutation.
-func TestAzurePreflightRBACDeniedSubscriptionFallback(t *testing.T) {
 	defer stubExecLookPath(t)()
 
 	mutatingCalls := 0
@@ -92,8 +59,6 @@ func TestAzurePreflightRBACDeniedSubscriptionFallback(t *testing.T) {
 		switch {
 		case name == "az" && len(args) > 0 && args[0] == "account" && args[1] == "show":
 			return stockAccountJSON, nil
-		case name == "az" && len(args) > 0 && args[0] == "account" && args[1] == "management-group":
-			return "", fmt.Errorf("exit status 1") // mgmt group list fails → subscription fallback
 		case name == "az" && len(args) > 0 && args[0] == "rest":
 			for i, a := range args {
 				if a == "--url" && i+1 < len(args) {

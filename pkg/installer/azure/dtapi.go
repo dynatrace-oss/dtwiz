@@ -170,10 +170,10 @@ func (d *sdkDTClient) createMonitoring(configName, connectionObjectID string) er
 		Type         string `json:"type"`
 	}
 	type monBody struct {
-		Enabled     bool         `json:"enabled"`
-		Description string       `json:"description"`
-		Version     string       `json:"version"`
-		FeatureSets []string     `json:"featureSets"`
+		Enabled     bool     `json:"enabled"`
+		Description string   `json:"description"`
+		Version     string   `json:"version"`
+		FeatureSets []string `json:"featureSets"`
 		Azure       struct {
 			Credentials []credential `json:"credentials"`
 		} `json:"azure"`

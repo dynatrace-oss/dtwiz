@@ -44,13 +44,12 @@ func buildHappyPathAzRunner(t *testing.T) *fakeAzureRunner {
 	return &fakeAzureRunner{
 		t: t,
 		calls: []fakeCall{
-			{name: "az", stdout: stockAccountJSON},  // preflight: account show
-			{name: "az", stdout: stockMgmtGroupJSON}, // preflight: mgmt group list
-			{name: "az", stdout: stockRBACJSON},      // preflight: checkAccess
-			{name: "az", stdout: stockSPJSON},        // step 2
-			{name: "az", stdout: `{}`},               // step 3
-			{name: "az", stdout: stockSPShowJSON},    // step 4
-			{name: "az", stdout: `{}`},               // step 5
+			{name: "az", stdout: stockAccountJSON}, // preflight: account show
+			{name: "az", stdout: stockRBACJSON},    // preflight: checkAccess
+			{name: "az", stdout: stockSPJSON},      // step 2
+			{name: "az", stdout: `{}`},             // step 3
+			{name: "az", stdout: stockSPShowJSON},  // step 4
+			{name: "az", stdout: `{}`},             // step 5
 		},
 	}
 }
@@ -93,8 +92,6 @@ func TestAzureDryRun(t *testing.T) {
 		switch {
 		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "show":
 			return stockAccountJSON, nil
-		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "management-group":
-			return stockMgmtGroupJSON, nil
 		case name == "az" && len(args) > 0 && args[0] == "rest":
 			return stockRBACJSON, nil
 		default:
@@ -221,8 +218,6 @@ func TestAzureConnectionAlreadyExistsIsRejected(t *testing.T) {
 		switch {
 		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "show":
 			return stockAccountJSON, nil
-		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "management-group":
-			return stockMgmtGroupJSON, nil
 		case name == "az" && len(args) > 0 && args[0] == "rest":
 			return stockRBACJSON, nil
 		default:
@@ -262,8 +257,6 @@ func TestAzureStep1FailsNoAzMutations(t *testing.T) {
 		switch {
 		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "show":
 			return stockAccountJSON, nil
-		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "management-group":
-			return stockMgmtGroupJSON, nil
 		case name == "az" && len(args) > 0 && args[0] == "rest":
 			return stockRBACJSON, nil
 		default:
@@ -294,8 +287,6 @@ func TestAzureStep2FailsMentionsDTConnection(t *testing.T) {
 		switch {
 		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "show":
 			return stockAccountJSON, nil
-		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "management-group":
-			return stockMgmtGroupJSON, nil
 		case name == "az" && len(args) > 0 && args[0] == "rest":
 			return stockRBACJSON, nil
 		case name == "az" && len(args) > 1 && args[0] == "ad" && args[1] == "sp":
@@ -336,8 +327,6 @@ func TestAzureStep5FailsAllCleanupHints(t *testing.T) {
 		switch {
 		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "show":
 			return stockAccountJSON, nil
-		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "management-group":
-			return stockMgmtGroupJSON, nil
 		case name == "az" && len(args) > 0 && args[0] == "rest":
 			return stockRBACJSON, nil
 		case name == "az" && len(args) > 2 && args[0] == "ad" && args[1] == "sp" && args[2] == "create-for-rbac":
@@ -391,8 +380,6 @@ func TestAzureStep4RetrySucceeds(t *testing.T) {
 		switch {
 		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "show":
 			return stockAccountJSON, nil
-		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "management-group":
-			return stockMgmtGroupJSON, nil
 		case name == "az" && len(args) > 0 && args[0] == "rest":
 			return stockRBACJSON, nil
 		case name == "az" && len(args) > 2 && args[0] == "ad" && args[1] == "sp" && args[2] == "create-for-rbac":

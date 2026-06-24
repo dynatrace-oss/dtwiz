@@ -2,7 +2,6 @@ package azure
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
@@ -43,13 +42,9 @@ func updateAzureWithRunner(
 	}
 
 	// ── Preflight for the install phase ───────────────────────────────────────
-	subscriptionID, tenantID, mgmtGroupID, err := azurePreflightChecks(runner, envURL, platformToken)
+	subscriptionID, tenantID, err := azurePreflightChecks(runner, envURL, platformToken)
 	if err != nil {
 		return err
-	}
-	mgScope := mgmtGroupID
-	if !strings.HasPrefix(mgmtGroupID, "/") {
-		mgScope = "/providers/Microsoft.Management/managementGroups/" + mgmtGroupID
 	}
 
 	installCfg := azureConfig{
@@ -59,7 +54,7 @@ func updateAzureWithRunner(
 		PlatformToken:     platformToken,
 		TenantID:          tenantID,
 		SubscriptionID:    subscriptionID,
-		ManagementGroupID: mgScope,
+		Scope:             "/subscriptions/" + subscriptionID,
 	}
 
 	// ── Build combined step list ───────────────────────────────────────────────
@@ -74,7 +69,7 @@ func updateAzureWithRunner(
 	fmt.Println()
 	fmt.Printf("  Environment:        %s\n", envURL)
 	fmt.Printf("  Tenant ID:          %s\n", tenantID)
-	fmt.Printf("  Management group:   %s\n", mgScope)
+	fmt.Printf("  Subscription:       %s\n", subscriptionID)
 	fmt.Printf("  Connection name:    %s\n", connectionName)
 	fmt.Printf("  Configuration name: %s\n", configurationName)
 	fmt.Println()
