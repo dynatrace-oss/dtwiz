@@ -13,7 +13,7 @@
 ## 2. Detection Unit Tests
 
 - [x] 2.1 Add table rows to `TestDetectK8sDistribution` in `pkg/analyzer/analyzer_test.go` for IKS (server URL signal) and RKE (gitVersion `+rke2` signal)
-- [x] 2.2 Add `TestProbeK8sSubVariant` in `pkg/analyzer/analyzer_test.go` using fake kubectl (PATH injection via `t.TempDir`): assert GKE→GKE-Autopilot when annotation present, GKE→GKE when absent, EKS→EKS-Bottlerocket when osImage matches, EKS→EKS when not, TKGI probe triggers on unknown distro, all probes return parent on kubectl error
+- [x] 2.2 Add `TestProbeK8sSubVariant` in `pkg/analyzer/analyzer_test.go` using fake kubectl (PATH injection via `t.TempDir`): assert GKE→GKE-Autopilot when node name has `gk3-` prefix, GKE→GKE when no `gk3-` prefix found, EKS→EKS-Bottlerocket when osImage matches, EKS→EKS when not, TKGI probe triggers on unknown distro, all probes return parent on kubectl error
 - [x] 2.3 Run `make test` and `make lint` — all pass
 
 ## 3. Wire Distro into Installer Signature

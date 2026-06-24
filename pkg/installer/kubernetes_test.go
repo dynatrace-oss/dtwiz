@@ -234,6 +234,63 @@ func TestRenderDynakubeTemplate_SecretAndRBAC(t *testing.T) {
 	}
 }
 
+func TestHelmOperatorArgs_RollbackFlag(t *testing.T) {
+	for _, tc := range []struct {
+		helmMajor int
+		wantFlag  string
+	}{
+		{3, "--atomic"},
+		{4, "--rollback-on-failure"},
+	} {
+		args := helmOperatorArgs(tc.helmMajor, false)
+		found := false
+		for _, a := range args {
+			if a == tc.wantFlag {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("helmMajor=%d: expected %q in install args", tc.helmMajor, tc.wantFlag)
+		}
+
+		args = helmOperatorUpgradeArgs(tc.helmMajor, false)
+		found = false
+		for _, a := range args {
+			if a == tc.wantFlag {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("helmMajor=%d: expected %q in upgrade args", tc.helmMajor, tc.wantFlag)
+		}
+	}
+}
+
+func TestHelmOperatorArgs_DisableCSI(t *testing.T) {
+	for _, disableCSI := range []bool{true, false} {
+		for _, fn := range []struct {
+			name string
+			args []string
+		}{
+			{"install", helmOperatorArgs(3, disableCSI)},
+			{"upgrade", helmOperatorUpgradeArgs(3, disableCSI)},
+		} {
+			hasCSIFlag := false
+			for i, a := range fn.args {
+				if a == "--set" && i+1 < len(fn.args) && fn.args[i+1] == "csidriver.enabled=false" {
+					hasCSIFlag = true
+				}
+			}
+			if disableCSI && !hasCSIFlag {
+				t.Errorf("%s: disableCSI=true but --set csidriver.enabled=false not found", fn.name)
+			}
+			if !disableCSI && hasCSIFlag {
+				t.Errorf("%s: disableCSI=false but --set csidriver.enabled=false present", fn.name)
+			}
+		}
+	}
+}
+
 func TestRenderDynakubeTemplate_TwoDynaKubes(t *testing.T) {
 	out, err := renderDynakubeTemplate(baseTemplateData())
 	if err != nil {

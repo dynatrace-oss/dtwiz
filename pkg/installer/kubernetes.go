@@ -26,10 +26,10 @@ const (
 	dynakubeEECTag           = "1.337.60.20260603-063549"
 	dynakubeCodeModulesImage = "public.ecr.aws/dynatrace/dynatrace-codemodules:1.337.60.20260603-063549"
 
-	// helmOperatorNightlyVersion is the operator chart version pinned by dtwiz.
-	helmOperatorNightlyVersion = "1.10.0-rc.0"
-	// helmChartGHCR is the operator chart OCI registry reference (currently hosted on public.ecr.aws).
-	helmChartGHCR = "oci://public.ecr.aws/dynatrace/dynatrace-operator"
+	// dynatraceOperatorVersion is the operator chart version pinned by dtwiz.
+	dynatraceOperatorVersion = "1.10.0-rc.0"
+	// dynatraceOperatorOCI is the OCI chart reference hosted on public.ecr.aws.
+	dynatraceOperatorOCI = "oci://public.ecr.aws/dynatrace/dynatrace-operator"
 )
 
 // dynakubeTemplateData holds the values substituted into dynakube.tmpl.
@@ -91,8 +91,8 @@ func sanitizeK8sName(name string) string {
 		return "dynakube"
 	}
 	// DynaKube names are limited to 32 characters when OTel collectors are enabled.
-	// The operator also generates labels which adds 39 chars to the base name.
-	// Kubernetes labels must be ≤ 63 chars, so base ≤ 24.
+	// Kubernetes labels must be ≤ 63 chars; the operator appends suffixes to the
+	// DynaKube name in generated labels, so base names are capped at 23 chars.
 	const maxLen = 23
 	if len(name) > maxLen {
 		name = name[:maxLen]
@@ -155,7 +155,6 @@ func isOperatorInstalled() bool {
 // helmOperatorArgs builds the `helm install` argument slice.
 // Helm v3 uses --atomic; Helm v4+ uses --rollback-on-failure.
 // disableCSI adds --set csidriver.enabled=false, required on GKE Autopilot.
-// version selects the chart version (nightly or stable).
 func helmOperatorArgs(helmMajor int, disableCSI bool) []string {
 	rollbackFlag := "--atomic"
 	if helmMajor >= 4 {
@@ -163,8 +162,8 @@ func helmOperatorArgs(helmMajor int, disableCSI bool) []string {
 	}
 	args := []string{
 		"install", "dynatrace-operator",
-		helmChartGHCR,
-		"--version", helmOperatorNightlyVersion,
+		dynatraceOperatorOCI,
+		"--version", dynatraceOperatorVersion,
 		"--create-namespace",
 		"--namespace", "dynatrace",
 		rollbackFlag,
@@ -179,7 +178,6 @@ func helmOperatorArgs(helmMajor int, disableCSI bool) []string {
 // helmOperatorUpgradeArgs builds the `helm upgrade` argument slice used when
 // the dynatrace-operator release already exists.
 // disableCSI adds --set csidriver.enabled=false, required on GKE Autopilot.
-// version selects the chart version (nightly or stable).
 func helmOperatorUpgradeArgs(helmMajor int, disableCSI bool) []string {
 	rollbackFlag := "--atomic"
 	if helmMajor >= 4 {
@@ -187,8 +185,8 @@ func helmOperatorUpgradeArgs(helmMajor int, disableCSI bool) []string {
 	}
 	args := []string{
 		"upgrade", "dynatrace-operator",
-		helmChartGHCR,
-		"--version", helmOperatorNightlyVersion,
+		dynatraceOperatorOCI,
+		"--version", dynatraceOperatorVersion,
 		"--namespace", "dynatrace",
 		rollbackFlag,
 		"--timeout", "10m",
