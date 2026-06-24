@@ -25,15 +25,15 @@
 
 ## 4. Distro-to-Template Mapping
 
-- [x] 4.1 Add fields to `dynakubeTemplateData` struct in `pkg/installer/kubernetes.go`: `EnableKSPM bool`, `PrivilegedAnnotation bool`, `ReadOnlyVolume bool`, `KubeletPath string`
-- [x] 4.2 Implement `distroTemplateData(base dynakubeTemplateData, distro string) dynakubeTemplateData` in `pkg/installer/kubernetes.go` — set fields per distro: KSPM true for EKS/AKS/kubernetes/minikube/kind/k3s/empty (minikube, kind, and k3s use the same config as the generic "other" YAML — standard Linux paths, no platform-managed posture scanning); `PrivilegedAnnotation` true for OpenShift; `ReadOnlyVolume` true for EKS-Bottlerocket; `KubeletPath` `/var/data/kubelet` for IKS, `/var/vcap/data/kubelet` for TKGI; RKE/GKE/GKE-Autopilot/EKS-Bottlerocket/IKS/TKGI/OpenShift map to no KSPM unless noted above
+- [x] 4.1 Add fields to `dynakubeTemplateData` struct in `pkg/installer/kubernetes.go`: `EnableKSPM bool`, `PrivilegedAnnotation bool`, `KubeletPath string`
+- [x] 4.2 Implement `distroTemplateData(base dynakubeTemplateData, distro string) dynakubeTemplateData` in `pkg/installer/kubernetes.go` — set fields per distro: KSPM true for EKS/AKS/kubernetes/minikube/kind/k3s/empty (minikube, kind, and k3s use the same config as the generic "other" YAML — standard Linux paths, no platform-managed posture scanning); `PrivilegedAnnotation` true for OpenShift; `KubeletPath` `/var/data/kubelet` for IKS, `/var/vcap/data/kubelet` for TKGI; RKE/GKE/GKE-Autopilot/EKS-Bottlerocket/IKS/TKGI/OpenShift map to no KSPM unless noted above
 - [x] 4.3 Call `distroTemplateData()` in `InstallKubernetes()` before passing data to `renderDynakubeTemplate()`
 
 ## 5. Update DynaKube Template
 
 - [x] 5.1 Wrap KSPM block in `dynakube.tmpl` with `{{if .EnableKSPM}} ... {{end}}` — covers both `kspm.mappedHostPaths` and `templates.kspmNodeConfigurationCollector` blocks
-- [x] 5.2 Add conditional annotation block to DynaKube #1 (monitoring) metadata in `dynakube.tmpl`: `{{if .PrivilegedAnnotation}}annotations:\n  feature.dynatrace.com/oneagent-privileged: "true"{{end}}` and equivalent for `ReadOnlyVolume`
-- [x] 5.3 Add identical conditional annotation block to DynaKube #2 (agents) metadata in `dynakube.tmpl`
+- [x] 5.2 Add conditional annotation block to DynaKube #1 (monitoring) metadata in `dynakube.tmpl`: `{{if .PrivilegedAnnotation}}annotations:\n  feature.dynatrace.com/oneagent-privileged: "true"{{end}}`
+- [x] 5.3 Add identical conditional annotation block to DynaKube #2 (agents) metadata in `dynakube.tmpl`: `{{if .PrivilegedAnnotation}}annotations:\n  feature.dynatrace.com/oneagent-privileged: "true"{{end}}`
 - [x] 5.4 Add conditional kubelet path field to both DynaKube specs in `dynakube.tmpl`: `{{if .KubeletPath}}  kubeletPath: {{.KubeletPath}}{{end}}`
 - [x] 5.5 Add `ClusterRoleBinding` resource to `dynakube.tmpl` — bind `dynatrace-kubernetes-monitoring-sensitive` ClusterRole to `dynatrace-activegate` ServiceAccount in `dynatrace` namespace
 

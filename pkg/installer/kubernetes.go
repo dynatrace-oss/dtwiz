@@ -26,9 +26,9 @@ const (
 	dynakubeEECTag           = "1.337.60.20260603-063549"
 	dynakubeCodeModulesImage = "public.ecr.aws/dynatrace/dynatrace-codemodules:1.337.60.20260603-063549"
 
-	// helmOperatorNightlyVersion is used for all non-GKE distros.
+	// helmOperatorNightlyVersion is the operator chart version pinned by dtwiz.
 	helmOperatorNightlyVersion = "1.10.0-rc.0"
-	// helmChartGHCR is the default chart source for non-GKE distros.
+	// helmChartGHCR is the operator chart OCI registry reference (currently hosted on public.ecr.aws).
 	helmChartGHCR = "oci://public.ecr.aws/dynatrace/dynatrace-operator"
 )
 
@@ -44,7 +44,6 @@ type dynakubeTemplateData struct {
 	CodeModulesImage     string // full image reference for OneAgent code modules
 	EnableKSPM           bool   // inject kspm.mappedHostPaths + kspmNodeConfigurationCollector block
 	PrivilegedAnnotation bool   // add feature.dynatrace.com/oneagent-privileged: "true" (OpenShift)
-	ReadOnlyVolume       bool   // add feature.dynatrace.com/injection-readonly-volume: "true" (Bottlerocket)
 	KubeletPath          string // non-standard kubelet path (IKS: /var/data/kubelet, TKGI: /var/vcap/data/kubelet)
 }
 
@@ -57,8 +56,6 @@ func distroTemplateData(base dynakubeTemplateData, distro string) dynakubeTempla
 		base.EnableKSPM = true
 	case "OpenShift":
 		base.PrivilegedAnnotation = true
-	case "EKS-Bottlerocket":
-		base.ReadOnlyVolume = true
 	case "IKS":
 		base.KubeletPath = "/var/data/kubelet"
 	case "TKGI":
