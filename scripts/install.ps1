@@ -128,17 +128,24 @@ if ($Tag -eq "snapshot-main") {
 Write-Host "  * Download from github.com/${Repo}"
 Write-Host "  * Install to $InstallDir"
 Write-Host "  * Add $InstallDir to your user PATH (if not already present)"
-$OaUrl = "https://docs.dynatrace.com/docs/observe/infrastructure-observability/extensions/opentelemetry-host-monitoring"
-$Esc = [char]27
-$Bel = [char]7
-$HmLink = "${Esc}]8;;${OaUrl}${Bel}Host Monitoring${Esc}]8;;${Bel}"
+$HostMonitoringUrl = "https://docs.dynatrace.com/docs/observe/infrastructure-observability/extensions/opentelemetry-host-monitoring"
 Write-Host ""
 Write-Host "┌────────────────────────────────────────────────────────────────┐"
 Write-Host "│ ℹ️  This will enable OpenTelemetry service monitoring.         │"
 Write-Host "│                                                                │"
 Write-Host "│ If you also want to activate host monitoring, follow the       │"
-Write-Host "│ OpenTelemetry $HmLink instructions.                    │"
+if (-not [Console]::IsOutputRedirected) {
+    $Esc    = [char]27
+    $ST     = [char]27 + "\"
+    $HmLink = "${Esc}]8;;${HostMonitoringUrl}${ST}Host Monitoring${Esc}]8;;${ST}"
+    Write-Host "│ OpenTelemetry $HmLink instructions.                    │"
+} else {
+    Write-Host "│ OpenTelemetry Host Monitoring instructions.                    │"
+}
 Write-Host "└────────────────────────────────────────────────────────────────┘"
+if ([Console]::IsOutputRedirected) {
+    Write-Host "  Host Monitoring: $HostMonitoringUrl"
+}
 Write-Host ""
 $Confirm = Read-Host "Continue? [Y/n]"
 if ($Confirm -match '^[Nn]') {

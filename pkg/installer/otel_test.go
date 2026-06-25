@@ -179,18 +179,30 @@ func TestPrintProjectList_Formatting(t *testing.T) {
 	}
 
 	// Capture stdout (including color output).
-	old := os.Stdout
-	oldColorOut := color.Output
-	r, w, _ := os.Pipe()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("create pipe: %v", err)
+	}
+
+	oldStdout := os.Stdout
 	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = oldStdout })
+
+	oldColorOut := color.Output
 	color.Output = w
+	t.Cleanup(func() { color.Output = oldColorOut })
+
+	oldNoColor := color.NoColor
+	color.NoColor = true
+	t.Cleanup(func() { color.NoColor = oldNoColor })
 
 	printProjectList(projects)
 
 	w.Close()
-	os.Stdout = old
-	color.Output = oldColorOut
-	out, _ := io.ReadAll(r)
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
 	output := string(out)
 
 	checks := []string{

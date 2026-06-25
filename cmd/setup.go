@@ -38,7 +38,7 @@ var setupCmd = &cobra.Command{
 			fmt.Println()
 		}
 
-		fmt.Printf(" Looking for more deployment options beyond these popular ones? \033]8;;https://docs.dynatrace.com/docs/ingest-from\007Visit docs\033]8;;\007.\n\n")
+		fmt.Printf(" Looking for more deployment options beyond these popular ones? %s\n\n", display.Hyperlink("Visit docs", "https://docs.dynatrace.com/docs/ingest-from"))
 
 		display.Header("Analyzing system...")
 
@@ -85,7 +85,7 @@ var setupCmd = &cobra.Command{
 		fmt.Printf("  %s  %s\n", display.ColorDefault.Sprint("[u]"), display.ColorDefault.Sprint("Show uninstall commands"))
 		fmt.Printf("  %s  %s\n", display.ColorDefault.Sprint("[0]"), display.ColorDefault.Sprint("Cancel"))
 		fmt.Println()
-		display.ColorMessage.Print("  Enter number: ")
+		display.ColorMessage.Print("  Enter selection: ")
 
 		reader := bufio.NewReader(cmd.InOrStdin())
 		input, err := reader.ReadString('\n')

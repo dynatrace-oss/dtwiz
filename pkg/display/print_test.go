@@ -144,6 +144,38 @@ func TestPrintWarning_DiffersFromPrintError(t *testing.T) {
 	}
 }
 
+func TestHyperlink_NonTTY_PlainTextFallback(t *testing.T) {
+	got := hyperlink("Visit docs", "https://example.com", false)
+	want := "Visit docs (https://example.com)"
+	if got != want {
+		t.Errorf("hyperlink(tty=false) = %q, want %q", got, want)
+	}
+}
+
+func TestHyperlink_TTY_OSC8Format(t *testing.T) {
+	got := hyperlink("Visit docs", "https://example.com", true)
+	if !strings.HasPrefix(got, "\033]8;;") {
+		t.Errorf("hyperlink(tty=true) = %q, want OSC 8 prefix \\033]8;;", got)
+	}
+	if !strings.Contains(got, "https://example.com") {
+		t.Errorf("hyperlink(tty=true) = %q, want URL in output", got)
+	}
+	if !strings.Contains(got, "Visit docs") {
+		t.Errorf("hyperlink(tty=true) = %q, want link text in output", got)
+	}
+	if !strings.Contains(got, "\033\\") {
+		t.Errorf("hyperlink(tty=true) = %q, want ST terminator (ESC \\)", got)
+	}
+}
+
+func TestHyperlink_NonTTYEnvironment_NoEscapeCodes(t *testing.T) {
+	// In the test environment stdout is not a TTY — Hyperlink must return plain text.
+	got := Hyperlink("Visit docs", "https://example.com")
+	if strings.Contains(got, "\033") {
+		t.Errorf("Hyperlink() in non-TTY = %q, want no escape codes", got)
+	}
+}
+
 func TestPrintFlagLine_DiffersFromPrintStatusLine(t *testing.T) {
 	label, message := "DTWIZ_ALL_RUNTIMES", "✓ enabled (cli)"
 	flagLine := captureOutput(t, func() { PrintFlagLine(label, message, ColorOK) })

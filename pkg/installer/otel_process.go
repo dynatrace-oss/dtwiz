@@ -154,7 +154,6 @@ func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) 
 		}
 
 		deadline := time.Now().Add(portPollTimeout)
-		hintDone := make(chan struct{})
 		for time.Now().Before(deadline) {
 			var mu sync.Mutex
 			portsFound := 0
@@ -191,7 +190,6 @@ func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) 
 			}
 			time.Sleep(portPollInterval)
 		}
-		close(hintDone)
 	}
 
 	for i, p := range procs {
