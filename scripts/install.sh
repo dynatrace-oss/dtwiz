@@ -127,6 +127,14 @@ fi
 echo "  - Download from github.com/${REPO}"
 echo "  - Install to ${INSTALL_DIR}"
 echo "  - Add ${INSTALL_DIR} to your PATH (if not already present)"
+OA_URL="https://docs.dynatrace.com/docs/observe/infrastructure-observability/extensions/opentelemetry-host-monitoring"
+echo ""
+echo "┌────────────────────────────────────────────────────────────────┐"
+echo "│ ℹ️  This will enable OpenTelemetry service monitoring.         │"
+echo "│                                                                │"
+echo "│ If you also want to activate host monitoring, follow the       │"
+printf "│ OpenTelemetry \033]8;;%s\007Host Monitoring\033]8;;\007 instructions.                    │\n" "$OA_URL"
+echo "└────────────────────────────────────────────────────────────────┘"
 echo ""
 printf 'Continue? [Y/n] '
 read -r REPLY </dev/tty

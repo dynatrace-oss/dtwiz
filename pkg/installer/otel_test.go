@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fatih/color"
+
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 )
 
@@ -176,15 +178,18 @@ func TestPrintProjectList_Formatting(t *testing.T) {
 		{ScannedProject: ScannedProject{Path: "/home/user/go-svc", Markers: []string{"go.mod"}}, Runtime: "Go", ModuleName: "github.com/example/go-svc"},
 	}
 
-	// Capture stdout.
+	// Capture stdout (including color output).
 	old := os.Stdout
+	oldColorOut := color.Output
 	r, w, _ := os.Pipe()
 	os.Stdout = w
+	color.Output = w
 
 	printProjectList(projects)
 
 	w.Close()
 	os.Stdout = old
+	color.Output = oldColorOut
 	out, _ := io.ReadAll(r)
 	output := string(out)
 
@@ -198,7 +203,7 @@ func TestPrintProjectList_Formatting(t *testing.T) {
 		"/home/user/svc",
 		"pom.xml",
 		"github.com/example/go-svc",
-		"Skip",
+		"Skip — If skipped",
 	}
 	for _, c := range checks {
 		if !strings.Contains(output, c) {

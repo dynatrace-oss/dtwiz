@@ -38,6 +38,8 @@ var setupCmd = &cobra.Command{
 			fmt.Println()
 		}
 
+		fmt.Printf(" Looking for more deployment options beyond these popular ones? \033]8;;https://docs.dynatrace.com/docs/ingest-from\007Visit docs\033]8;;\007.\n\n")
+
 		display.Header("Analyzing system...")
 
 		info, err := analyzer.AnalyzeSystem()
