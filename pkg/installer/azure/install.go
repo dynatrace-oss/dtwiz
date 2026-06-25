@@ -154,7 +154,7 @@ func installAzureWithRunner(
 		return fmt.Errorf("checking existing connection: %w", err)
 	}
 	if existingConnID != "" {
-		return fmt.Errorf("Azure connection '%s' already exists — run `dtwiz uninstall azure` to remove it first", connectionName)
+		return fmt.Errorf("azure connection '%s' already exists — run `dtwiz uninstall azure` to remove it first", connectionName)
 	}
 
 	cfg := azureConfig{
@@ -186,7 +186,7 @@ func installAzureWithRunner(
 	}
 	fmt.Println()
 
-	cfg, err = runInstallSteps(0, totalSteps, cfg, runner, sleeper, dtc)
+	_, err = runInstallSteps(0, totalSteps, cfg, runner, sleeper, dtc)
 	if err != nil {
 		return err
 	}

@@ -273,16 +273,16 @@ func TestUpdateAzureEmptyClientIDLookupByName(t *testing.T) {
 	fr := &fakeAzureRunner{
 		t: t,
 		calls: []fakeCall{
-			{name: "az", stdout: stockAccountJSON},          // preflight: account show
-			{name: "az", stdout: stockRBACJSON},             // preflight: signed-in-user
+			{name: "az", stdout: stockAccountJSON},             // preflight: account show
+			{name: "az", stdout: stockRBACJSON},                // preflight: signed-in-user
 			{name: "az", stdout: `[{"appId":"found-app-id"}]`}, // sp list fallback lookup
-			{name: "az", stdout: `{}`},                     // fedcred delete
-			{name: "az", stdout: `{}`},                     // role delete
-			{name: "az", stdout: `{}`},                     // sp delete
-			{name: "az", stdout: stockSPJSON},               // install: sp create
-			{name: "az", stdout: `{}`},                     // install: fedcred create
-			{name: "az", stdout: stockSPShowJSON},           // install: sp show
-			{name: "az", stdout: `{}`},                     // install: role create
+			{name: "az", stdout: `{}`},                         // fedcred delete
+			{name: "az", stdout: `{}`},                         // role delete
+			{name: "az", stdout: `{}`},                         // sp delete
+			{name: "az", stdout: stockSPJSON},                  // install: sp create
+			{name: "az", stdout: `{}`},                         // install: fedcred create
+			{name: "az", stdout: stockSPShowJSON},              // install: sp show
+			{name: "az", stdout: `{}`},                         // install: role create
 		},
 	}
 

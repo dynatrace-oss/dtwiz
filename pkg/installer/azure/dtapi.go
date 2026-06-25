@@ -11,6 +11,7 @@ import (
 	"github.com/dynatrace-oss/dtctl/sdk/api/extension"
 	"github.com/dynatrace-oss/dtctl/sdk/api/settings"
 	"github.com/dynatrace-oss/dtctl/sdk/httpclient"
+
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )

@@ -25,7 +25,7 @@ func azureIssuerURL(envURL string) string {
 	if appsIdx < 0 {
 		return "https://token.dynatrace.com"
 	}
-	domain := host[appsIdx+6:] // e.g. "dynatrace.com" or "dynatracelabs.com"
+	domain := host[appsIdx+6:]   // e.g. "dynatrace.com" or "dynatracelabs.com"
 	beforeApps := host[:appsIdx] // e.g. "rrx28105" or "rrx28105.dev"
 
 	parts := strings.Split(beforeApps, ".")
