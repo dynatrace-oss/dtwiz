@@ -72,11 +72,8 @@ func (noopDTClient) createConnection(string) (string, error) {
 func (noopDTClient) updateConnection(string, string, string, string) error {
 	return fmt.Errorf("unexpected updateConnection call")
 }
-func (noopDTClient) createMonitoring(string, string, string, string, []string) error {
+func (noopDTClient) createMonitoring(string, string, string, string) error {
 	return fmt.Errorf("unexpected createMonitoring call")
-}
-func (noopDTClient) listMonitoringLocations() ([]string, error) {
-	return nil, fmt.Errorf("unexpected listMonitoringLocations call")
 }
 func (noopDTClient) findConnection(string) (string, string, error) { return "", "", nil }
 func (noopDTClient) deleteConnection(string) error                 { return nil }
@@ -125,13 +122,10 @@ func (f *fakeDTClient) updateConnection(objectID, name, tenantID, clientID strin
 	f.updateCalledWith.clientID = clientID
 	return f.updateErr
 }
-func (f *fakeDTClient) createMonitoring(configName, connObjectID, _, _ string, _ []string) error {
+func (f *fakeDTClient) createMonitoring(configName, connObjectID, _, _ string) error {
 	f.monCalledWith.configName = configName
 	f.monCalledWith.connObjectID = connObjectID
 	return f.monErr
-}
-func (f *fakeDTClient) listMonitoringLocations() ([]string, error) {
-	return []string{"eastus", "westus", "westeurope"}, nil
 }
 func (f *fakeDTClient) findConnection(string) (string, string, error) {
 	return f.findConnObjectID, f.findConnClientID, f.findConnErr

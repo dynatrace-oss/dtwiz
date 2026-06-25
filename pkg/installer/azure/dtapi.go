@@ -18,14 +18,18 @@ const (
 	extensionName      = "com.dynatrace.extension.da-azure"
 	extensionAPI       = "/platform/extensions/v2/extensions/" + extensionName
 	monitoringAPI      = extensionAPI + "/monitoring-configurations"
+
+	// Settings-schema enum keys exposing the valid values for the monitoring
+	// configuration. These match the keys dtctl reads from the same schema.
+	azureLocationEnumKey   = "dynatrace.datasource.azure:location"
+	azureFeatureSetEnumKey = "FeatureSetsType"
 )
 
 // dtclient performs the Dynatrace Platform API calls needed for the Azure integration.
 type dtclient interface {
 	createConnection(name string) (objectID string, err error)
 	updateConnection(objectID, name, tenantID, clientID string) error
-	createMonitoring(configName, connectionObjectID, clientID, subscriptionID string, locations []string) error
-	listMonitoringLocations() ([]string, error)
+	createMonitoring(configName, connectionObjectID, clientID, subscriptionID string) error
 	// uninstall
 	findConnection(name string) (objectID, clientID string, err error)
 	deleteConnection(objectID string) error
@@ -157,7 +161,7 @@ func (d *sdkDTClient) updateConnection(objectID, name, tenantID, clientID string
 
 // ─── createMonitoring ─────────────────────────────────────────────────────────
 
-func (d *sdkDTClient) createMonitoring(configName, connectionObjectID, clientID, subscriptionID string, locations []string) error {
+func (d *sdkDTClient) createMonitoring(configName, connectionObjectID, clientID, subscriptionID string) error {
 	version, err := d.latestExtensionVersion()
 	if err != nil {
 		return fmt.Errorf("create monitoring: %w", err)
@@ -165,11 +169,11 @@ func (d *sdkDTClient) createMonitoring(configName, connectionObjectID, clientID,
 	logger.Debug("using extension version", "version", version)
 
 	type credential struct {
-		Enabled           bool   `json:"enabled"`
-		Description       string `json:"description"`
-		ConnectionID      string `json:"connectionId"`
+		Enabled            bool   `json:"enabled"`
+		Description        string `json:"description"`
+		ConnectionID       string `json:"connectionId"`
 		ServicePrincipalID string `json:"servicePrincipalId"`
-		Type              string `json:"type"`
+		Type               string `json:"type"`
 	}
 	type azureBlock struct {
 		SubscriptionFilteringMode string       `json:"subscriptionFilteringMode"`
@@ -185,21 +189,42 @@ func (d *sdkDTClient) createMonitoring(configName, connectionObjectID, clientID,
 		Azure       azureBlock `json:"azure"`
 	}
 
+	// Mirror dtctl's defaults: monitor all locations and all "_essential" feature
+	// sets, both derived from the extension's settings schema enums.
+	schema, err := d.fetchExtensionSchema(version)
+	if err != nil {
+		return fmt.Errorf("create monitoring: %w", err)
+	}
+	locations := schema.enumValues(azureLocationEnumKey)
+	if len(locations) == 0 {
+		return fmt.Errorf("create monitoring: no locations found under enum %q in extension schema", azureLocationEnumKey)
+	}
+	featureSets := make([]string, 0)
+	for _, fs := range schema.enumValues(azureFeatureSetEnumKey) {
+		if strings.HasSuffix(fs, "_essential") {
+			featureSets = append(featureSets, fs)
+		}
+	}
+	if len(featureSets) == 0 {
+		return fmt.Errorf("create monitoring: no \"_essential\" feature sets found under enum %q in extension schema", azureFeatureSetEnumKey)
+	}
+	logger.Debug("monitoring defaults from schema", "locations", len(locations), "featureSets", len(featureSets))
+
 	v := monBody{
 		Enabled:     true,
 		Description: configName,
 		Version:     version,
-		FeatureSets: []string{},
+		FeatureSets: featureSets,
 		Azure: azureBlock{
 			SubscriptionFilteringMode: "INCLUDE",
 			SubscriptionFiltering:     []string{subscriptionID},
 			LocationFiltering:         locations,
 			Credentials: []credential{{
-				Enabled:           true,
-				Description:       configName,
-				ConnectionID:      connectionObjectID,
+				Enabled:            true,
+				Description:        configName,
+				ConnectionID:       connectionObjectID,
 				ServicePrincipalID: clientID,
-				Type:              "FEDERATED",
+				Type:               "FEDERATED",
 			}},
 		},
 	}
@@ -212,6 +237,7 @@ func (d *sdkDTClient) createMonitoring(configName, connectionObjectID, clientID,
 	if err != nil {
 		return fmt.Errorf("create monitoring: marshal: %w", err)
 	}
+	logger.Debug("create monitoring request", "url", monitoringAPI, "body", string(bodyBytes))
 
 	resp, err := d.c.HTTP().R().
 		SetHeader("Content-Type", "application/json").
@@ -223,94 +249,60 @@ func (d *sdkDTClient) createMonitoring(configName, connectionObjectID, clientID,
 	if resp.IsError() {
 		return fmt.Errorf("create monitoring: status %d: %s", resp.StatusCode(), resp.String())
 	}
+	logger.Debug("create monitoring response", "status", resp.StatusCode(), "body", resp.String())
 	return nil
 }
 
-// ─── listMonitoringLocations ──────────────────────────────────────────────────
+// ─── extension schema ─────────────────────────────────────────────────────────
 
-// listMonitoringLocations fetches the da-azure extension's monitoring configuration
-// schema and extracts the valid values for the locationFiltering field.
-func (d *sdkDTClient) listMonitoringLocations() ([]string, error) {
-	version, err := d.latestExtensionVersion()
-	if err != nil {
-		return nil, fmt.Errorf("list monitoring locations: %w", err)
-	}
-
-	resp, err := d.c.HTTP().R().Get(fmt.Sprintf("%s/%s/schema", extensionAPI, version))
-	if err != nil {
-		return nil, fmt.Errorf("list monitoring locations: %w", err)
-	}
-	if resp.IsError() {
-		return nil, fmt.Errorf("list monitoring locations: status %d: %s", resp.StatusCode(), resp.String())
-	}
-
-	logger.Debug("raw extension schema", "body", string(resp.Body()))
-	locations, err := parseLocationFilteringEnum(resp.Body())
-	if err != nil {
-		return nil, fmt.Errorf("list monitoring locations: %w", err)
-	}
-	logger.Debug("fetched azure monitoring locations from DT schema", "count", len(locations))
-	return locations, nil
+// extensionSchema is the minimal view of the da-azure settings schema we need:
+// a top-level map of enum name → list of allowed values.
+type extensionSchema struct {
+	Enums map[string]struct {
+		Items []struct {
+			Value string `json:"value"`
+		} `json:"items"`
+	} `json:"enums"`
 }
 
-// parseLocationFilteringEnum navigates the da-azure extension JSON Schema to extract
-// the enum of valid location names from:
-//
-//	properties → azure → properties → locationFiltering → items → enum
-func parseLocationFilteringEnum(schema []byte) ([]string, error) {
-	var root map[string]interface{}
-	if err := json.Unmarshal(schema, &root); err != nil {
-		return nil, fmt.Errorf("parse monitoring schema: %w", err)
+// enumValues returns all values of the named enum, or nil if absent.
+func (s *extensionSchema) enumValues(key string) []string {
+	e, ok := s.Enums[key]
+	if !ok {
+		return nil
 	}
-
-	nav := func(obj map[string]interface{}, key string) (map[string]interface{}, error) {
-		v, ok := obj[key]
-		if !ok {
-			return nil, fmt.Errorf("missing key %q in monitoring schema", key)
-		}
-		m, ok := v.(map[string]interface{})
-		if !ok {
-			return nil, fmt.Errorf("key %q in monitoring schema is not an object", key)
-		}
-		return m, nil
-	}
-
-	cur := root
-	var err error
-	for _, key := range []string{"properties", "azure", "properties", "locationFiltering"} {
-		if cur, err = nav(cur, key); err != nil {
-			return nil, err
+	out := make([]string, 0, len(e.Items))
+	for _, it := range e.Items {
+		if it.Value != "" {
+			out = append(out, it.Value)
 		}
 	}
+	return out
+}
 
-	itemsVal, ok := cur["items"]
-	if !ok {
-		return nil, fmt.Errorf("missing \"items\" in locationFiltering schema")
+// fetchExtensionSchema retrieves the settings schema for a given extension version.
+func (d *sdkDTClient) fetchExtensionSchema(version string) (*extensionSchema, error) {
+	resp, err := d.c.HTTP().R().Get(fmt.Sprintf("%s/%s/schema", extensionAPI, version))
+	if err != nil {
+		return nil, fmt.Errorf("fetch extension schema: %w", err)
 	}
-	items, ok := itemsVal.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("\"items\" in locationFiltering schema is not an object")
+	if resp.IsError() {
+		return nil, fmt.Errorf("fetch extension schema: status %d: %s", resp.StatusCode(), resp.String())
 	}
-
-	enumVal, ok := items["enum"]
-	if !ok {
-		return nil, fmt.Errorf("no \"enum\" in locationFiltering.items schema")
+	logger.Debug("raw extension schema", "version", version, "body", string(resp.Body()))
+	var schema extensionSchema
+	if err := json.Unmarshal(resp.Body(), &schema); err != nil {
+		return nil, fmt.Errorf("parse extension schema: %w", err)
 	}
-	rawList, ok := enumVal.([]interface{})
-	if !ok {
-		return nil, fmt.Errorf("\"enum\" in locationFiltering.items is not an array")
+	// Log the enum keys (small, readable) so a wrong/renamed key surfaces even
+	// when the raw body is truncated in the terminal.
+	keys := make([]string, 0, len(schema.Enums))
+	for k := range schema.Enums {
+		keys = append(keys, k)
 	}
-
-	locations := make([]string, 0, len(rawList))
-	for _, item := range rawList {
-		if s, ok := item.(string); ok {
-			locations = append(locations, s)
-		}
-	}
-	if len(locations) == 0 {
-		return nil, fmt.Errorf("no location values found in locationFiltering.items.enum")
-	}
-	return locations, nil
+	sort.Strings(keys)
+	logger.Debug("extension schema enum keys", "count", len(keys), "keys", keys)
+	return &schema, nil
 }
 
 func (d *sdkDTClient) latestExtensionVersion() (string, error) {
