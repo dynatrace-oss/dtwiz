@@ -75,10 +75,12 @@ var setupCmd = &cobra.Command{
 				fmt.Printf("  %s  %s\n", display.ColorDefault.Sprint(" · "), display.ColorDefault.Sprint(r.Title))
 			}
 		}
-		fmt.Println()
 		if featureflags.IsEnabled(featureflags.Experimental) {
+			fmt.Println()
 			fmt.Printf("  %s  %s\n", display.ColorDefault.Sprint("[d]"), display.ColorDefault.Sprint("Install demo app (schnitzel)"))
 		}
+		fmt.Println()
+		fmt.Printf("  %s  %s\n", display.ColorDefault.Sprint("[u]"), display.ColorDefault.Sprint("Show uninstall commands"))
 		fmt.Printf("  %s  %s\n", display.ColorDefault.Sprint("[0]"), display.ColorDefault.Sprint("Cancel"))
 		fmt.Println()
 		display.ColorMessage.Print("  Enter number: ")
@@ -93,6 +95,11 @@ var setupCmd = &cobra.Command{
 		if input == "" || input == "0" {
 			display.ColorDefault.Println("  Setup cancelled.")
 			return nil
+		}
+
+		if input == "u" {
+			fmt.Println()
+			return uninstallCmd.Help()
 		}
 
 		if input == "d" && featureflags.IsEnabled(featureflags.Experimental) {
