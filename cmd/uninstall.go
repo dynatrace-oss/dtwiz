@@ -34,7 +34,7 @@ var uninstallKubernetesCmd = &cobra.Command{
 	Short: "Remove Dynatrace Operator and DynaKube resources from Kubernetes",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		k8sInfo := analyzer.DetectKubernetes()
+		k8sInfo := analyzer.DetectKubernetesIdentity()
 		return installer.UninstallKubernetes(k8sInfo.Context, k8sInfo.Distribution)
 	},
 }
