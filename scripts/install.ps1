@@ -134,17 +134,17 @@ Write-Host "┌─────────────────────�
 Write-Host "│ ℹ️  This will enable OpenTelemetry service monitoring.         │"
 Write-Host "│                                                                │"
 Write-Host "│ If you also want to activate host monitoring, follow the       │"
-if (-not [Console]::IsOutputRedirected -and $env:WT_SESSION) {
+if (-not [Console]::IsOutputRedirected) {
     $Esc    = [char]27
     $ST     = [char]27 + "\"
-    $HmLink = "${Esc}]8;;${HostMonitoringUrl}${ST}Host Monitoring${Esc}]8;;${ST}"
-    Write-Host "│ OpenTelemetry $HmLink instructions.                    │"
+    $HmLink = "${Esc}]8;;${HostMonitoringUrl}${ST}OpenTelemetry Host Monitoring${Esc}]8;;${ST}"
+    Write-Host "│ $HmLink instructions.                    │"
 } else {
     Write-Host "│ OpenTelemetry Host Monitoring instructions.                    │"
 }
 Write-Host "└────────────────────────────────────────────────────────────────┘"
-if ([Console]::IsOutputRedirected -or -not $env:WT_SESSION) {
-    Write-Host "  Host Monitoring: $HostMonitoringUrl"
+if ([Console]::IsOutputRedirected) {
+    Write-Host "  OpenTelemetry Host Monitoring: $HostMonitoringUrl"
 }
 Write-Host ""
 $Confirm = Read-Host "Continue? [Y/n]"
