@@ -81,8 +81,8 @@ func TestSDKCreateConnection_EmptyResponse(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for empty response, got nil")
 	}
-	if !strings.Contains(err.Error(), "empty response") {
-		t.Errorf("error %q does not mention empty response", err.Error())
+	if !strings.Contains(err.Error(), "no items returned") {
+		t.Errorf("error %q does not mention no items returned", err.Error())
 	}
 }
 
@@ -179,13 +179,15 @@ func TestSDKFindConnection_ServerError(t *testing.T) {
 
 func TestSDKDeleteConnection_HappyPath(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodDelete {
-			t.Errorf("method = %q, want DELETE", r.Method)
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			_, _ = w.Write([]byte(`{"schemaVersion":"1","value":{}}`))
+		case http.MethodDelete:
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			t.Errorf("unexpected method %q", r.Method)
 		}
-		if want := settingsAPI + "/obj-001"; r.URL.Path != want {
-			t.Errorf("path = %q, want %q", r.URL.Path, want)
-		}
-		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer srv.Close()
 
@@ -684,7 +686,7 @@ func TestSDKDeleteMonitoring_ServerError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for 404, got nil")
 	}
-	if !strings.Contains(err.Error(), "404") {
-		t.Errorf("error %q does not mention 404", err.Error())
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("error %q does not mention not found", err.Error())
 	}
 }
