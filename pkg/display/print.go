@@ -64,7 +64,7 @@ func ClearPending() {
 // Hyperlink returns an OSC 8 hyperlink (ESC \ terminated) when stdout is a TTY,
 // falling back to "text (url)" on non-TTY outputs to avoid stray control characters.
 func Hyperlink(text, url string) string {
-	return hyperlink(text, url, isStdoutTTY())
+	return hyperlink(text, url, stdoutSupportsHyperlinks())
 }
 
 func hyperlink(text, url string, tty bool) string {

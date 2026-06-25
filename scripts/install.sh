@@ -133,13 +133,13 @@ echo "┌───────────────────────�
 echo "│ ℹ️  This will enable OpenTelemetry service monitoring.         │"
 echo "│                                                                │"
 echo "│ If you also want to activate host monitoring, follow the       │"
-if [ -t 1 ]; then
-    printf "│ OpenTelemetry \033]8;;%s\033\\Host Monitoring\033]8;;\033\\ instructions.                    │\n" "$HM_URL"
+if [ -t 1 ] && [ "${TERM_PROGRAM:-}" != "Apple_Terminal" ]; then
+    printf '│ OpenTelemetry \033]8;;%s\033\\Host Monitoring\033]8;;\033\\ instructions.                    │\n' "$HM_URL"
 else
     echo "│ OpenTelemetry Host Monitoring instructions.                    │"
 fi
 echo "└────────────────────────────────────────────────────────────────┘"
-if [ ! -t 1 ]; then
+if [ ! -t 1 ] || [ "${TERM_PROGRAM:-}" = "Apple_Terminal" ]; then
     echo "  Host Monitoring: ${HM_URL}"
 fi
 echo ""
