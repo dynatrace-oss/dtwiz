@@ -375,6 +375,159 @@ func TestAzureStep5FailsAllCleanupHints(t *testing.T) {
 	}
 }
 
+func TestAzureInstallCancelled(t *testing.T) {
+	// AutoConfirm is false (default) — ConfirmProceed reads from stdin; EOF → cancelled.
+	defer stubExecLookPath(t)()
+
+	runner := func(name string, args []string, _ []string) (string, error) {
+		switch {
+		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "show":
+			return stockAccountJSON, nil
+		case name == "az" && len(args) > 1 && args[0] == "ad" && args[1] == "signed-in-user":
+			return `{"id":"user-object-id"}`, nil
+		case name == "az" && len(args) > 0 && args[0] == "rest":
+			return stockRBACJSON, nil
+		default:
+			return "{}", nil
+		}
+	}
+
+	err := captureStdoutErr(func() error {
+		return installAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep, &noopDTClient{})
+	})
+	if !isErrInstallCancelled(err) {
+		t.Errorf("expected ErrInstallCancelled, got: %v", err)
+	}
+}
+
+func TestAzureStep3StaleFedCredReplaced(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	fedCredCreateAttempts := 0
+	fedCredDeleteCalled := false
+
+	runner := func(name string, args []string, _ []string) (string, error) {
+		switch {
+		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "show":
+			return stockAccountJSON, nil
+		case name == "az" && len(args) > 0 && args[0] == "rest":
+			return stockRBACJSON, nil
+		case name == "az" && len(args) > 2 && args[0] == "ad" && args[1] == "sp" && args[2] == "create-for-rbac":
+			return stockSPJSON, nil
+		case name == "az" && len(args) > 3 && args[0] == "ad" && args[1] == "app" &&
+			args[2] == "federated-credential" && args[3] == "create":
+			fedCredCreateAttempts++
+			if fedCredCreateAttempts == 1 {
+				return "", fmt.Errorf("A federated identity credential with the name '%s' already exists", fedCredName)
+			}
+			return `{}`, nil
+		case name == "az" && len(args) > 3 && args[0] == "ad" && args[1] == "app" &&
+			args[2] == "federated-credential" && args[3] == "delete":
+			fedCredDeleteCalled = true
+			return `{}`, nil
+		case name == "az" && len(args) > 2 && args[0] == "ad" && args[1] == "sp" && args[2] == "show":
+			return stockSPShowJSON, nil
+		case name == "az" && len(args) > 0 && args[0] == "role":
+			return `{}`, nil
+		default:
+			return "{}", nil
+		}
+	}
+
+	err := captureStdoutErr(func() error {
+		return installAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep, happyFakeDTClient())
+	})
+	if err != nil {
+		t.Fatalf("expected success after stale fedcred replacement, got: %v", err)
+	}
+	if !fedCredDeleteCalled {
+		t.Error("expected stale fedcred to be deleted before retry")
+	}
+	if fedCredCreateAttempts != 2 {
+		t.Errorf("expected 2 fedcred create attempts (1 fail + 1 success), got %d", fedCredCreateAttempts)
+	}
+}
+
+func TestAzureStep6AADSTS70025Retried(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	updateAttempts := 0
+	sleepCount := 0
+
+	dtc := &retryingDTClient{
+		fakeDTClient: happyFakeDTClient(),
+		updateFn: func(_, _, _, _ string) error {
+			updateAttempts++
+			if updateAttempts < 3 {
+				return fmt.Errorf("update failed: AADSTS70025: no federated credentials configured")
+			}
+			return nil
+		},
+	}
+
+	fr := buildHappyPathAzRunner(t)
+	testSleeper := func(_ time.Duration) { sleepCount++ }
+
+	err := captureStdoutErr(func() error {
+		return installAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, fr.run, testSleeper, dtc)
+	})
+	if err != nil {
+		t.Fatalf("expected success after AADSTS70025 retries, got: %v", err)
+	}
+	if updateAttempts != 3 {
+		t.Errorf("expected 3 update attempts (2 fail + 1 success), got %d", updateAttempts)
+	}
+	if sleepCount < 2 {
+		t.Errorf("expected at least 2 sleeps between retries, got %d", sleepCount)
+	}
+}
+
+func TestAzureStep6Fails(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	dtc := happyFakeDTClient()
+	dtc.updateErr = fmt.Errorf("update connection: API error")
+
+	err := captureStdoutErr(func() error {
+		return installAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, buildHappyPathAzRunner(t).run, noSleep, dtc)
+	})
+	if err == nil {
+		t.Fatal("expected error from step 6, got nil")
+	}
+	if !strings.Contains(err.Error(), "step 6") {
+		t.Errorf("error %q does not mention step 6", err.Error())
+	}
+}
+
+func TestAzureStep7Fails(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	dtc := happyFakeDTClient()
+	dtc.monErr = fmt.Errorf("create monitoring: API error")
+
+	err := captureStdoutErr(func() error {
+		return installAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, buildHappyPathAzRunner(t).run, noSleep, dtc)
+	})
+	if err == nil {
+		t.Fatal("expected error from step 7, got nil")
+	}
+	if !strings.Contains(err.Error(), "step 7") {
+		t.Errorf("error %q does not mention step 7", err.Error())
+	}
+}
+
 func TestAzureStep4RetrySucceeds(t *testing.T) {
 	old := installer.AutoConfirm
 	installer.AutoConfirm = true

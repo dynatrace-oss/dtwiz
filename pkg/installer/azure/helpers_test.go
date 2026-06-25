@@ -240,3 +240,125 @@ func TestAzureBuildFederatedCredJSON(t *testing.T) {
 		})
 	}
 }
+
+// ─── azureDeleteFedCred ───────────────────────────────────────────────────────
+
+func TestAzureDeleteFedCred_HappyPath(t *testing.T) {
+	runner := func(_ string, _ []string, _ []string) (string, error) { return "{}", nil }
+	if err := azureDeleteFedCred(runner, "client-id-000"); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestAzureDeleteFedCred_NotFoundTreatedAsSuccess(t *testing.T) {
+	runner := func(_ string, _ []string, _ []string) (string, error) {
+		return "", fmt.Errorf("Resource 'dtwiz-azure-Federated-Credential' was not found")
+	}
+	if err := azureDeleteFedCred(runner, "client-id-000"); err != nil {
+		t.Errorf("not-found should be treated as success, got: %v", err)
+	}
+}
+
+func TestAzureDeleteFedCred_OtherErrorReturned(t *testing.T) {
+	runner := func(_ string, _ []string, _ []string) (string, error) {
+		return "", fmt.Errorf("authorization denied")
+	}
+	if err := azureDeleteFedCred(runner, "client-id-000"); err == nil {
+		t.Error("expected error for non-not-found failure, got nil")
+	}
+}
+
+// ─── azureLookupSPClientIDByName ─────────────────────────────────────────────
+
+func TestAzureLookupSPClientIDByName_Found(t *testing.T) {
+	runner := func(_ string, _ []string, _ []string) (string, error) {
+		return `[{"appId":"found-app-id"}]`, nil
+	}
+	id, err := azureLookupSPClientIDByName(runner, "dtwiz-azure")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if id != "found-app-id" {
+		t.Errorf("appId = %q, want found-app-id", id)
+	}
+}
+
+func TestAzureLookupSPClientIDByName_NotFound(t *testing.T) {
+	runner := func(_ string, _ []string, _ []string) (string, error) { return `[]`, nil }
+	id, err := azureLookupSPClientIDByName(runner, "dtwiz-azure")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if id != "" {
+		t.Errorf("expected empty id for not-found, got %q", id)
+	}
+}
+
+func TestAzureLookupSPClientIDByName_RunnerError(t *testing.T) {
+	runner := func(_ string, _ []string, _ []string) (string, error) {
+		return "", fmt.Errorf("az command failed")
+	}
+	if _, err := azureLookupSPClientIDByName(runner, "dtwiz-azure"); err == nil {
+		t.Error("expected error from runner failure, got nil")
+	}
+}
+
+// ─── azureGetSPObjectID ───────────────────────────────────────────────────────
+
+func TestAzureGetSPObjectID_ForbiddenNoRetry(t *testing.T) {
+	callCount := 0
+	runner := func(_ string, _ []string, _ []string) (string, error) {
+		callCount++
+		return "", fmt.Errorf("exit status 1: 403 Forbidden")
+	}
+	if _, err := azureGetSPObjectID(runner, "client-id-000", noSleep); err == nil {
+		t.Fatal("expected error for 403, got nil")
+	}
+	if callCount != 1 {
+		t.Errorf("expected 1 call (no retry on 403), got %d", callCount)
+	}
+}
+
+func TestAzureGetSPObjectID_ExhaustedRetries(t *testing.T) {
+	runner := func(_ string, _ []string, _ []string) (string, error) {
+		return "", fmt.Errorf("Resource 'client-id-000' does not exist")
+	}
+	sleepCount := 0
+	testSleeper := func(_ time.Duration) { sleepCount++ }
+
+	_, err := azureGetSPObjectID(runner, "client-id-000", testSleeper)
+	if err == nil {
+		t.Fatal("expected error after exhausted retries, got nil")
+	}
+	if !strings.Contains(err.Error(), "exhausted retries") {
+		t.Errorf("error %q does not mention exhausted retries", err.Error())
+	}
+	if sleepCount != 4 {
+		t.Errorf("expected 4 sleeps for 5 attempts, got %d", sleepCount)
+	}
+}
+
+func TestAzureGetSPObjectID_JSONParseFail(t *testing.T) {
+	runner := func(_ string, _ []string, _ []string) (string, error) {
+		return "not valid json{{", nil
+	}
+	if _, err := azureGetSPObjectID(runner, "client-id-000", noSleep); err == nil {
+		t.Fatal("expected error for invalid JSON, got nil")
+	}
+}
+
+// ─── retryingDTClient ─────────────────────────────────────────────────────────
+
+// retryingDTClient wraps fakeDTClient and delegates updateConnection to a custom
+// function, allowing tests to vary behaviour across successive calls.
+type retryingDTClient struct {
+	*fakeDTClient
+	updateFn func(objectID, name, tenantID, clientID string) error
+}
+
+func (r *retryingDTClient) updateConnection(objectID, name, tenantID, clientID string) error {
+	if r.updateFn != nil {
+		return r.updateFn(objectID, name, tenantID, clientID)
+	}
+	return r.fakeDTClient.updateConnection(objectID, name, tenantID, clientID)
+}

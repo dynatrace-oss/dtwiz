@@ -116,3 +116,109 @@ func TestUninstallAzureFindConnectionError(t *testing.T) {
 		t.Fatal("expected error from findConnection failure, got nil")
 	}
 }
+
+func TestUninstallAzureFindMonitoringError(t *testing.T) {
+	dtc := &fakeDTClient{findMonErr: fmt.Errorf("monitoring API error")}
+	err := captureStdoutErr(func() error {
+		return uninstallAzureWithRunner("https://abc.live.dynatrace.com", false, nil, dtc)
+	})
+	if err == nil {
+		t.Fatal("expected error from findMonitoringConfig failure, got nil")
+	}
+}
+
+func TestUninstallAzureDeleteMonitoringFails(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+
+	dtc := &fakeDTClient{
+		findConnObjectID: "conn-obj-001",
+		findConnClientID: "client-id-000",
+		findMonConfigID:  "mon-config-001",
+		deleteMonErr:     fmt.Errorf("delete monitoring: API error"),
+	}
+	err := captureStdoutErr(func() error {
+		return uninstallAzureWithRunner("https://abc.live.dynatrace.com", false, nil, dtc)
+	})
+	if err == nil {
+		t.Fatal("expected error from deleteMonitoring failure, got nil")
+	}
+}
+
+func TestUninstallAzureDeleteFedCredFails(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+
+	runner := func(_ string, args []string, _ []string) (string, error) {
+		if len(args) > 3 && args[0] == "ad" && args[1] == "app" &&
+			args[2] == "federated-credential" && args[3] == "delete" {
+			return "", fmt.Errorf("authorization error")
+		}
+		return "{}", nil
+	}
+	err := captureStdoutErr(func() error {
+		return uninstallAzureWithRunner("https://abc.live.dynatrace.com", false, runner, happyUninstallFakeDTClient())
+	})
+	if err == nil {
+		t.Fatal("expected error from azureDeleteFedCred failure, got nil")
+	}
+}
+
+func TestUninstallAzureRoleDeleteFails(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+
+	runner := func(_ string, args []string, _ []string) (string, error) {
+		if len(args) > 1 && args[0] == "role" && args[1] == "assignment" {
+			return "", fmt.Errorf("insufficient permissions to delete role assignment")
+		}
+		return "{}", nil
+	}
+	err := captureStdoutErr(func() error {
+		return uninstallAzureWithRunner("https://abc.live.dynatrace.com", false, runner, happyUninstallFakeDTClient())
+	})
+	if err == nil {
+		t.Fatal("expected error from role assignment delete failure, got nil")
+	}
+}
+
+func TestUninstallAzureSPDeleteFails(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+
+	runner := func(_ string, args []string, _ []string) (string, error) {
+		if len(args) > 2 && args[0] == "ad" && args[1] == "sp" && args[2] == "delete" {
+			return "", fmt.Errorf("SP delete failed: not authorized")
+		}
+		return "{}", nil
+	}
+	err := captureStdoutErr(func() error {
+		return uninstallAzureWithRunner("https://abc.live.dynatrace.com", false, runner, happyUninstallFakeDTClient())
+	})
+	if err == nil {
+		t.Fatal("expected error from SP delete failure, got nil")
+	}
+}
+
+func TestUninstallAzureDeleteConnectionFails(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+
+	dtc := &fakeDTClient{
+		findConnObjectID: "conn-obj-001",
+		findConnClientID: "client-id-000",
+		findMonConfigID:  "mon-config-001",
+		deleteConnErr:    fmt.Errorf("delete connection: API error"),
+	}
+	err := captureStdoutErr(func() error {
+		return uninstallAzureWithRunner("https://abc.live.dynatrace.com", false, buildUninstallAzRunner(t).run, dtc)
+	})
+	if err == nil {
+		t.Fatal("expected error from deleteConnection failure, got nil")
+	}
+}

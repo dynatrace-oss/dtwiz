@@ -1,6 +1,7 @@
 package azure
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -136,4 +137,162 @@ func TestUpdateAzurePreviewShowsBothPhases(t *testing.T) {
 func isErrInstallCancelled(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "install cancelled") ||
 		err == installer.ErrInstallCancelled
+}
+
+func minimalAzRunner(name string, args []string, _ []string) (string, error) {
+	if name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "show" {
+		return stockAccountJSON, nil
+	}
+	return "{}", nil
+}
+
+func TestUpdateAzureFindMonitoringError(t *testing.T) {
+	defer stubExecLookPath(t)()
+
+	dtc := &fakeDTClient{findMonErr: fmt.Errorf("monitoring API error")}
+	err := captureStdoutErr(func() error {
+		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, minimalAzRunner, noSleep, dtc)
+	})
+	if err == nil {
+		t.Fatal("expected error from findMonitoringConfig failure, got nil")
+	}
+}
+
+func TestUpdateAzureFindConnectionError(t *testing.T) {
+	defer stubExecLookPath(t)()
+
+	dtc := &fakeDTClient{findConnErr: fmt.Errorf("connection API error")}
+	err := captureStdoutErr(func() error {
+		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, minimalAzRunner, noSleep, dtc)
+	})
+	if err == nil {
+		t.Fatal("expected error from findConnection failure, got nil")
+	}
+}
+
+func TestUpdateAzurePreflightFails(t *testing.T) {
+	defer stubExecLookPath(t)()
+
+	runner := func(name string, args []string, _ []string) (string, error) {
+		if name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "show" {
+			return "", fmt.Errorf("az login required")
+		}
+		return "{}", nil
+	}
+
+	err := captureStdoutErr(func() error {
+		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep, happyUninstallFakeDTClient())
+	})
+	if err == nil {
+		t.Fatal("expected error from preflight failure, got nil")
+	}
+	if !strings.Contains(err.Error(), "az login") {
+		t.Errorf("expected az login hint, got: %v", err)
+	}
+}
+
+func TestUpdateAzureUninstallPhaseFails(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	dtc := happyUninstallFakeDTClient()
+	dtc.deleteMonErr = fmt.Errorf("delete monitoring: API error")
+
+	runner := func(name string, args []string, _ []string) (string, error) {
+		switch {
+		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "show":
+			return stockAccountJSON, nil
+		case name == "az" && len(args) > 0 && args[0] == "rest":
+			return stockRBACJSON, nil
+		default:
+			return "{}", nil
+		}
+	}
+
+	err := captureStdoutErr(func() error {
+		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep, dtc)
+	})
+	if err == nil {
+		t.Fatal("expected error from uninstall phase failure, got nil")
+	}
+	if !strings.Contains(err.Error(), "uninstall phase") {
+		t.Errorf("expected 'uninstall phase' in error, got: %v", err)
+	}
+}
+
+func TestUpdateAzureInstallPhaseFails(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	dtc := happyUninstallFakeDTClient()
+	// connObjectID is used as the return value of createConnection; set connErr to fail step 1 of install.
+	dtc.connErr = fmt.Errorf("create connection: API error")
+	dtc.connObjectID = ""
+
+	runner := func(name string, args []string, _ []string) (string, error) {
+		switch {
+		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "show":
+			return stockAccountJSON, nil
+		case name == "az" && len(args) > 0 && args[0] == "rest":
+			return stockRBACJSON, nil
+		default:
+			// All az calls succeed — uninstall phase uses runner for fedcred/role/sp deletions.
+			return "{}", nil
+		}
+	}
+
+	err := captureStdoutErr(func() error {
+		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep, dtc)
+	})
+	if err == nil {
+		t.Fatal("expected error from install phase failure, got nil")
+	}
+	if !strings.Contains(err.Error(), "install phase") {
+		t.Errorf("expected 'install phase' in error, got: %v", err)
+	}
+}
+
+func TestUpdateAzureEmptyClientIDLookupByName(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	// Connection exists but has no stored clientID (install failed before step 6).
+	dtc := &fakeDTClient{
+		findConnObjectID: "conn-obj-001",
+		findConnClientID: "",
+		findMonConfigID:  "mon-config-001",
+		connObjectID:     "new-conn-obj-001",
+	}
+
+	fr := &fakeAzureRunner{
+		t: t,
+		calls: []fakeCall{
+			{name: "az", stdout: stockAccountJSON},          // preflight: account show
+			{name: "az", stdout: stockRBACJSON},             // preflight: signed-in-user
+			{name: "az", stdout: `[{"appId":"found-app-id"}]`}, // sp list fallback lookup
+			{name: "az", stdout: `{}`},                     // fedcred delete
+			{name: "az", stdout: `{}`},                     // role delete
+			{name: "az", stdout: `{}`},                     // sp delete
+			{name: "az", stdout: stockSPJSON},               // install: sp create
+			{name: "az", stdout: `{}`},                     // install: fedcred create
+			{name: "az", stdout: stockSPShowJSON},           // install: sp show
+			{name: "az", stdout: `{}`},                     // install: role create
+		},
+	}
+
+	err := captureStdoutErr(func() error {
+		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, fr.run, noSleep, dtc)
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fr.idx != len(fr.calls) {
+		t.Errorf("expected %d az calls, got %d", len(fr.calls), fr.idx)
+	}
 }
