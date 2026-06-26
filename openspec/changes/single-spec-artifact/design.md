@@ -1,3 +1,5 @@
+# Design
+
 ## Context
 
 `dtwiz uninstall kubernetes` runs 4 sequential steps to tear down the Dynatrace Operator. The original implementation returned immediately on any step error, skipping the remaining steps. This left the cluster in a partially uninstalled state — most visibly a lingering `dynatrace` namespace when the helm release was already absent. Additionally, Cobra's default `SilenceUsage=false` caused the full usage block to print on any error, and a redundant `fmt.Fprintln` in `Execute` doubled every error message.
@@ -5,11 +7,13 @@
 ## Goals / Non-Goals
 
 **Goals:**
+
 - All 4 uninstall steps always execute regardless of individual step failures
 - Usage block appears only for invalid invocations (bad flags, unknown subcommands), not runtime errors
 - Each error is printed exactly once
 
 **Non-Goals:**
+
 - Retrying failed steps
 - Changing the uninstall step order or what each step does
 

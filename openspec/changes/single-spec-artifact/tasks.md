@@ -1,8 +1,11 @@
+# Tasks
+
 ## 1. Uninstall Step Resilience
 
 - [x] 1.1 Refactor `UninstallKubernetes` in `pkg/installer/kubernetes_uninstall.go` to collect step errors into `[]error` and continue past failures
 - [x] 1.2 Print each step error inline with `fmt.Printf("  Error: %v\n", err)` before continuing
 - [x] 1.3 Return `errors.New("uninstall: one or more steps failed (see above)")` sentinel when any errors were collected
+- [x] 1.4 Move EdgeConnect deletion outside the DynaKube `else` block so it always runs independently (`pkg/installer/kubernetes_uninstall.go`)
 
 ## 2. Usage Suppression
 

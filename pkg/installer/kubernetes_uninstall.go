@@ -49,9 +49,10 @@ func UninstallKubernetes(kubeCtx, distro string) error {
 	if err := runCmdQuietFunc("kubectl", "delete", "dynakube", "-n", "dynatrace", "--all"); err != nil {
 		fmt.Printf("  Error: %v\n", err)
 		errs = append(errs, fmt.Errorf("deleting DynaKube resources: %w", err))
-	} else {
-		// EdgeConnect may not exist — ignore failure.
-		_ = runCmdQuietFunc("kubectl", "delete", "edgeconnect", "-n", "dynatrace", "--all")
+	}
+	// EdgeConnect may not exist — ignore failure. Always attempt regardless of DynaKube result.
+	_ = runCmdQuietFunc("kubectl", "delete", "edgeconnect", "-n", "dynatrace", "--all")
+	if len(errs) == 0 {
 		fmt.Println("  Custom resources deleted.")
 	}
 

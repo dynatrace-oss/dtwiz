@@ -82,6 +82,33 @@ func TestUninstallKubernetes_Success(t *testing.T) {
 	}
 }
 
+func TestUninstallKubernetes_EdgeConnectDeletedEvenWhenDynaKubeFails(t *testing.T) {
+	orig := AutoConfirm
+	AutoConfirm = true
+	t.Cleanup(func() { AutoConfirm = orig })
+
+	var calls []string
+	withFakeRunCmdQuiet(t, func(name string, args ...string) error {
+		calls = append(calls, name+" "+strings.Join(args, " "))
+		if name == "kubectl" && len(args) > 1 && args[0] == "delete" && args[1] == "dynakube" {
+			return errors.New("kubectl: not found")
+		}
+		return nil
+	})
+
+	captureStdout(t, func() { _ = UninstallKubernetes("my-ctx", "EKS") })
+
+	ranEdgeConnect := false
+	for _, c := range calls {
+		if strings.Contains(c, "delete edgeconnect") {
+			ranEdgeConnect = true
+		}
+	}
+	if !ranEdgeConnect {
+		t.Error("expected EdgeConnect deletion to run even when DynaKube delete fails")
+	}
+}
+
 func TestUninstallKubernetes_KubectlDeleteFails(t *testing.T) {
 	orig := AutoConfirm
 	AutoConfirm = true

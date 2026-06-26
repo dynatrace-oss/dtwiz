@@ -1,3 +1,5 @@
+# Proposal
+
 ## Why
 
 `dtwiz uninstall kubernetes` would stop at the first failing step, leaving the cluster in a dirty state — most commonly a lingering `dynatrace` namespace when helm had no release to uninstall. Error output was also noisy: the usage block appeared on runtime errors, and every error was printed twice.
