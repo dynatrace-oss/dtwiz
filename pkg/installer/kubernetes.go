@@ -25,18 +25,43 @@ const (
 	dynakubeEECRepository    = "public.ecr.aws/dynatrace/dynatrace-eec"
 	dynakubeEECTag           = "1.337.60.20260603-063549"
 	dynakubeCodeModulesImage = "public.ecr.aws/dynatrace/dynatrace-codemodules:1.337.60.20260603-063549"
+
+	// dynatraceOperatorVersion is the operator chart version pinned by dtwiz.
+	dynatraceOperatorVersion = "1.10.0-rc.0"
+	// dynatraceOperatorOCI is the OCI chart reference hosted on public.ecr.aws.
+	dynatraceOperatorOCI = "oci://public.ecr.aws/dynatrace/dynatrace-operator"
 )
 
 // dynakubeTemplateData holds the values substituted into dynakube.tmpl.
 type dynakubeTemplateData struct {
-	ClusterName      string // sanitised Kubernetes resource name
-	APIURL           string // full Dynatrace API URL incl. /api suffix
-	APIToken         string // raw API token
-	DataIngestToken  string // raw data-ingest token
-	ActiveGateImage  string // full image reference for ActiveGate pods
-	EECRepository    string // OCI repository for the EEC image
-	EECTag           string // tag for the EEC image
-	CodeModulesImage string // full image reference for OneAgent code modules
+	ClusterName          string // sanitised Kubernetes resource name
+	APIURL               string // full Dynatrace API URL incl. /api suffix
+	APIToken             string // raw API token
+	DataIngestToken      string // raw data-ingest token
+	ActiveGateImage      string // full image reference for ActiveGate pods
+	EECRepository        string // OCI repository for the EEC image
+	EECTag               string // tag for the EEC image
+	CodeModulesImage     string // full image reference for OneAgent code modules
+	EnableKSPM           bool   // inject kspm.mappedHostPaths + kspmNodeConfigurationCollector block
+	PrivilegedAnnotation bool   // add feature.dynatrace.com/oneagent-privileged: "true" (OpenShift)
+	KubeletPath          string // non-standard kubelet path (IKS: /var/data/kubelet, TKGI: /var/vcap/data/kubelet)
+}
+
+// distroTemplateData applies per-distribution overrides to the base template
+// data. Distributions not listed here use no KSPM, no annotations, and no
+// kubeletPath override (GKE, GKE-Autopilot, RKE).
+func distroTemplateData(base dynakubeTemplateData, distro string) dynakubeTemplateData {
+	switch distro {
+	case "EKS", "AKS", "kubernetes", "minikube", "kind", "k3s", "":
+		base.EnableKSPM = true
+	case "OpenShift":
+		base.PrivilegedAnnotation = true
+	case "IKS":
+		base.KubeletPath = "/var/data/kubelet"
+	case "TKGI":
+		base.KubeletPath = "/var/vcap/data/kubelet"
+	}
+	return base
 }
 
 // renderDynakubeTemplate fills dynakube.tmpl with the provided data and
@@ -65,9 +90,12 @@ func sanitizeK8sName(name string) string {
 	if name == "" {
 		return "dynakube"
 	}
-	// Kubernetes names must be at most 63 characters.
-	if len(name) > 63 {
-		name = name[:63]
+	// DynaKube names are limited to 32 characters when OTel collectors are enabled.
+	// Kubernetes labels must be ≤ 63 chars; the operator appends suffixes to the
+	// DynaKube name in generated labels, so base names are capped at 23 chars.
+	const maxLen = 23
+	if len(name) > maxLen {
+		name = name[:maxLen]
 		name = strings.TrimRight(name, "-")
 	}
 	return name
@@ -126,35 +154,47 @@ func isOperatorInstalled() bool {
 
 // helmOperatorArgs builds the `helm install` argument slice.
 // Helm v3 uses --atomic; Helm v4+ uses --rollback-on-failure.
-func helmOperatorArgs(helmMajor int) []string {
+// disableCSI adds --set csidriver.enabled=false, required on GKE Autopilot.
+func helmOperatorArgs(helmMajor int, disableCSI bool) []string {
 	rollbackFlag := "--atomic"
 	if helmMajor >= 4 {
 		rollbackFlag = "--rollback-on-failure"
 	}
-	return []string{
+	args := []string{
 		"install", "dynatrace-operator",
-		"oci://ghcr.io/dynatrace/dynatrace-operator",
-		"--version", "0.0.0-nightly-chart",
+		dynatraceOperatorOCI,
+		"--version", dynatraceOperatorVersion,
 		"--create-namespace",
 		"--namespace", "dynatrace",
 		rollbackFlag,
+		"--timeout", "10m",
 	}
+	if disableCSI {
+		args = append(args, "--set", "csidriver.enabled=false")
+	}
+	return args
 }
 
 // helmOperatorUpgradeArgs builds the `helm upgrade` argument slice used when
 // the dynatrace-operator release already exists.
-func helmOperatorUpgradeArgs(helmMajor int) []string {
+// disableCSI adds --set csidriver.enabled=false, required on GKE Autopilot.
+func helmOperatorUpgradeArgs(helmMajor int, disableCSI bool) []string {
 	rollbackFlag := "--atomic"
 	if helmMajor >= 4 {
 		rollbackFlag = "--rollback-on-failure"
 	}
-	return []string{
+	args := []string{
 		"upgrade", "dynatrace-operator",
-		"oci://ghcr.io/dynatrace/dynatrace-operator",
-		"--version", "0.0.0-nightly-chart",
+		dynatraceOperatorOCI,
+		"--version", dynatraceOperatorVersion,
 		"--namespace", "dynatrace",
 		rollbackFlag,
+		"--timeout", "10m",
 	}
+	if disableCSI {
+		args = append(args, "--set", "csidriver.enabled=false")
+	}
+	return args
 }
 
 // applyDynakube writes the DynaKube CR YAML to a temp file and runs
@@ -312,7 +352,7 @@ func InstallKubernetes(envURL, token, clusterName, distro string, dryRun bool) e
 	clusterName = resolveClusterName(clusterName, envURL)
 
 	// --- Build manifest ---
-	tmplData := dynakubeTemplateData{
+	tmplData := distroTemplateData(dynakubeTemplateData{
 		ClusterName:      clusterName,
 		APIURL:           apiURL + "/api",
 		APIToken:         token,
@@ -321,13 +361,14 @@ func InstallKubernetes(envURL, token, clusterName, distro string, dryRun bool) e
 		EECRepository:    dynakubeEECRepository,
 		EECTag:           dynakubeEECTag,
 		CodeModulesImage: dynakubeCodeModulesImage,
-	}
+	}, distro)
 	manifest, err := renderDynakubeTemplate(tmplData)
 	if err != nil {
 		return fmt.Errorf("rendering DynaKube manifest: %w", err)
 	}
 
 	// --- Determine Helm command ---
+	disableCSI := distro == "GKE-Autopilot"
 	var helmArgs []string
 	helmMajor := 3 // sensible default for display; re-detected before execution
 	if isHelmInstalled() {
@@ -336,9 +377,9 @@ func InstallKubernetes(envURL, token, clusterName, distro string, dryRun bool) e
 		}
 	}
 	if isOperatorInstalled() {
-		helmArgs = helmOperatorUpgradeArgs(helmMajor)
+		helmArgs = helmOperatorUpgradeArgs(helmMajor, disableCSI)
 	} else {
-		helmArgs = helmOperatorArgs(helmMajor)
+		helmArgs = helmOperatorArgs(helmMajor, disableCSI)
 	}
 	helmCmd := "helm " + strings.Join(helmArgs, " ")
 
@@ -397,9 +438,9 @@ func InstallKubernetes(envURL, token, clusterName, distro string, dryRun bool) e
 		if v, err := helmMajorVersion(); err == nil {
 			helmMajor = v
 			if isOperatorInstalled() {
-				helmArgs = helmOperatorUpgradeArgs(helmMajor)
+				helmArgs = helmOperatorUpgradeArgs(helmMajor, disableCSI)
 			} else {
-				helmArgs = helmOperatorArgs(helmMajor)
+				helmArgs = helmOperatorArgs(helmMajor, disableCSI)
 			}
 		}
 	}

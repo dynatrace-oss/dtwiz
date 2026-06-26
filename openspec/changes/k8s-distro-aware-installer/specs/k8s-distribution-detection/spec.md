@@ -4,24 +4,26 @@
 
 ### Requirement: Detect GKE Autopilot as distinct from GKE Standard
 
-The system SHALL identify a GKE Autopilot cluster by probing the `kube-system` namespace annotations for the `autopilot.gke.io` key after the parent GKE distro is confirmed. The returned distribution string SHALL be `"GKE-Autopilot"`.
+The system SHALL identify a GKE Autopilot cluster by checking node names after the parent GKE distro is confirmed. GKE Autopilot nodes always use the `gk3-` name prefix; GKE Standard nodes use `gke-`. The returned distribution string SHALL be `"GKE-Autopilot"`.
+
+Note: the `autopilot.gke.io` annotation previously used for this check is absent on current GKE Autopilot clusters. The `cloud.google.com/gke-provisioning` node label is also unreliable (reports `standard` on Autopilot nodes). Node name prefix is the officially documented signal per GKE Autopilot node naming conventions.
 
 #### Scenario: Autopilot cluster detected
 
 - **GIVEN** `DetectK8sDistribution` has returned `"GKE"`
-- **WHEN** `kubectl get namespace kube-system` annotations contain `autopilot.gke.io`
+- **WHEN** `kubectl get nodes -o jsonpath={.items[*].metadata.name}` returns at least one node name starting with `gk3-`
 - **THEN** `ProbeK8sSubVariant` returns `"GKE-Autopilot"`
 
 #### Scenario: Standard GKE cluster unchanged
 
 - **GIVEN** `DetectK8sDistribution` has returned `"GKE"`
-- **WHEN** `kube-system` annotations do NOT contain `autopilot.gke.io`
+- **WHEN** all node names start with `gke-` (no `gk3-` prefix found)
 - **THEN** `ProbeK8sSubVariant` returns `"GKE"`
 
 #### Scenario: Probe fails gracefully
 
 - **GIVEN** `DetectK8sDistribution` has returned `"GKE"`
-- **WHEN** the `kubectl get namespace kube-system` call returns an error or times out
+- **WHEN** the `kubectl get nodes` call returns an error or times out
 - **THEN** `ProbeK8sSubVariant` returns the parent distro unchanged (`"GKE"`)
 
 ### Requirement: Detect EKS Bottlerocket as distinct from EKS Standard
