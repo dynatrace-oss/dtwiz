@@ -21,6 +21,7 @@ var uninstallCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// uninstallCmd.PersistentPreRun overrides root's, so reproduce its behaviour here.
+		cmd.Root().SilenceUsage = true
 		logger.Init(debugFlag, verbosityFlag)
 		logger.Verbose("logging: verbose")
 		logger.Debug("logging: debug")

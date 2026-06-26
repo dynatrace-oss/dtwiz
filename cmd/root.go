@@ -83,7 +83,6 @@ func setupClient() (*client.Client, error) {
 func Execute(t time.Time) {
 	StartTime = t
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }

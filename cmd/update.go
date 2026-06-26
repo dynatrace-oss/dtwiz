@@ -20,6 +20,7 @@ var updateCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// updateCmd.PersistentPreRun overrides root's, so reproduce its behaviour here.
+		cmd.Root().SilenceUsage = true
 		logger.Init(debugFlag, verbosityFlag)
 		logger.Verbose("logging: verbose")
 		logger.Debug("logging: debug")

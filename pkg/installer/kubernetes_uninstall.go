@@ -1,6 +1,7 @@
 package installer
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
@@ -41,14 +42,18 @@ func UninstallKubernetes(kubeCtx, distro string) error {
 	}
 	fmt.Println()
 
+	var errs []error
+
 	// 1. Delete DynaKube and EdgeConnect CRs.
 	fmt.Println("  Step 1: Deleting DynaKube and EdgeConnect custom resources...")
 	if err := runCmdQuietFunc("kubectl", "delete", "dynakube", "-n", "dynatrace", "--all"); err != nil {
-		return fmt.Errorf("deleting DynaKube resources: %w", err)
+		fmt.Printf("  Error: %v\n", err)
+		errs = append(errs, fmt.Errorf("deleting DynaKube resources: %w", err))
+	} else {
+		// EdgeConnect may not exist — ignore failure.
+		_ = runCmdQuietFunc("kubectl", "delete", "edgeconnect", "-n", "dynatrace", "--all")
+		fmt.Println("  Custom resources deleted.")
 	}
-	// EdgeConnect may not exist — ignore failure.
-	_ = runCmdQuietFunc("kubectl", "delete", "edgeconnect", "-n", "dynatrace", "--all")
-	fmt.Println("  Custom resources deleted.")
 
 	// 2. Wait for managed pods to terminate.
 	fmt.Println("  Step 2: Waiting for managed pods to terminate (up to 5 min)...")
@@ -68,18 +73,26 @@ func UninstallKubernetes(kubeCtx, distro string) error {
 	// 3. Helm uninstall.
 	fmt.Println("  Step 3: Helm uninstall dynatrace-operator...")
 	if err := runCmdQuietFunc("helm", "uninstall", "dynatrace-operator", "-n", "dynatrace"); err != nil {
-		return fmt.Errorf("helm uninstall failed: %w", err)
+		fmt.Printf("  Error: %v\n", err)
+		errs = append(errs, fmt.Errorf("helm uninstall failed: %w", err))
+	} else {
+		fmt.Println("  Dynatrace Operator uninstalled.")
 	}
-	fmt.Println("  Dynatrace Operator uninstalled.")
 
 	// 4. Delete namespace.
 	fmt.Println("  Step 4: Deleting dynatrace namespace...")
 	if err := runCmdQuietFunc("kubectl", "delete", "namespace", "dynatrace"); err != nil {
-		return fmt.Errorf("deleting namespace: %w", err)
+		fmt.Printf("  Error: %v\n", err)
+		errs = append(errs, fmt.Errorf("deleting namespace: %w", err))
+	} else {
+		fmt.Println("  Namespace deleted.")
 	}
-	fmt.Println("  Namespace deleted.")
 
 	fmt.Println()
+	if len(errs) > 0 {
+		fmt.Println("  Uninstall completed with errors.")
+		return errors.New("uninstall: one or more steps failed (see above)")
+	}
 	fmt.Println("  Dynatrace Operator uninstalled successfully.")
 	return nil
 }
