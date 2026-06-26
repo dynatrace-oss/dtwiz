@@ -71,7 +71,7 @@ func hyperlink(text, url string, tty bool) string {
 	if tty {
 		return "\033]8;;" + url + "\033\\" + text + "\033]8;;\033\\"
 	}
-	return text + " (" + url + ")"
+	return text + ": " + url
 }
 
 func PrintError(label string, err error) {

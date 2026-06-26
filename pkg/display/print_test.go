@@ -146,7 +146,7 @@ func TestPrintWarning_DiffersFromPrintError(t *testing.T) {
 
 func TestHyperlink_NonTTY_PlainTextFallback(t *testing.T) {
 	got := hyperlink("Visit docs", "https://example.com", false)
-	want := "Visit docs (https://example.com)"
+	want := "Visit docs: https://example.com"
 	if got != want {
 		t.Errorf("hyperlink(tty=false) = %q, want %q", got, want)
 	}

@@ -206,7 +206,7 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 
 		n := globalScanCount.Add(1)
 		if n == largeScanThreshold {
-			fmt.Printf("  Scanning %s, this may take a moment…\n", dir)
+			fmt.Printf("  Scanning %s, this may take a moment…\n", workingDir)
 		} else if n == 2*largeScanThreshold {
 			fmt.Printf("  Tip: run dtwiz from the directory where your code lives for a faster scan.\n")
 		}
