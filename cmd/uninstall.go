@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
@@ -33,7 +34,8 @@ var uninstallKubernetesCmd = &cobra.Command{
 	Short: "Remove Dynatrace Operator and DynaKube resources from Kubernetes",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return installer.UninstallKubernetes()
+		k8sInfo := analyzer.DetectKubernetesIdentity()
+		return installer.UninstallKubernetes(k8sInfo.Context, k8sInfo.Distribution)
 	},
 }
 

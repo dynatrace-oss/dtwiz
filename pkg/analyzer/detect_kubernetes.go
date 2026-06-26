@@ -12,6 +12,30 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 )
 
+// fetchKubeContext returns the current kubectl context name, or empty string on failure.
+func fetchKubeContext() string {
+	_, ctx := runCmd("kubectl", "config", "current-context")
+	return ctx
+}
+
+// fetchKubeCluster returns the cluster name from the active kubeconfig context.
+func fetchKubeCluster() string {
+	_, cluster := runCmd("kubectl", "config", "view", "--minify", "-o", "jsonpath={.clusters[0].name}")
+	return cluster
+}
+
+// fetchKubeServerURL returns the API server URL from the active kubeconfig context.
+func fetchKubeServerURL() string {
+	_, serverURL := runCmd("kubectl", "config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
+	return serverURL
+}
+
+// resolveDistro identifies the K8s distribution by running heuristic detection
+// followed by sub-variant probing.
+func resolveDistro(kubeCtx, cluster, serverURL, serverVersion string) string {
+	return ProbeK8sSubVariant(DetectK8sDistribution(kubeCtx, cluster, serverURL, serverVersion))
+}
+
 // DetectKubernetes checks for a reachable Kubernetes cluster.
 func DetectKubernetes() *KubernetesInfo {
 	info := &KubernetesInfo{}
@@ -28,15 +52,9 @@ func DetectKubernetes() *KubernetesInfo {
 		wg                                     sync.WaitGroup
 	)
 	wg.Add(5)
-	go func() { defer wg.Done(); _, ctx = runCmd("kubectl", "config", "current-context") }()
-	go func() {
-		defer wg.Done()
-		_, cluster = runCmd("kubectl", "config", "view", "--minify", "-o", "jsonpath={.clusters[0].name}")
-	}()
-	go func() {
-		defer wg.Done()
-		_, serverURL = runCmd("kubectl", "config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
-	}()
+	go func() { defer wg.Done(); ctx = fetchKubeContext() }()
+	go func() { defer wg.Done(); cluster = fetchKubeCluster() }()
+	go func() { defer wg.Done(); serverURL = fetchKubeServerURL() }()
 	go func() { defer wg.Done(); _, ver = runCmd("kubectl", "version", "-o", "json") }()
 	go func() { defer wg.Done(); _, nodesOut = runCmd("kubectl", "get", "nodes", "--no-headers", "-o", "name") }()
 	wg.Wait()
@@ -48,8 +66,25 @@ func DetectKubernetes() *KubernetesInfo {
 		info.NodeCount = len(strings.Split(strings.TrimSpace(nodesOut), "\n"))
 	}
 
-	parent := DetectK8sDistribution(ctx, cluster, serverURL, info.ServerVersion)
-	info.Distribution = ProbeK8sSubVariant(parent)
+	info.Distribution = resolveDistro(ctx, cluster, serverURL, info.ServerVersion)
+	return info
+}
+
+// DetectKubernetesIdentity returns only the kubectl context and K8s distribution.
+// It skips the availability check, version lookup, node count, and sub-variant probes
+// that require a live cluster connection — suitable for use before user confirmation.
+func DetectKubernetesIdentity() *KubernetesInfo {
+	info := &KubernetesInfo{}
+
+	var cluster, serverURL string
+	var wg sync.WaitGroup
+	wg.Add(3)
+	go func() { defer wg.Done(); info.Context = fetchKubeContext() }()
+	go func() { defer wg.Done(); cluster = fetchKubeCluster() }()
+	go func() { defer wg.Done(); serverURL = fetchKubeServerURL() }()
+	wg.Wait()
+
+	info.Distribution = resolveDistro(info.Context, cluster, serverURL, "")
 	return info
 }
 
