@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fatih/color"
+
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 )
 
@@ -176,16 +178,31 @@ func TestPrintProjectList_Formatting(t *testing.T) {
 		{ScannedProject: ScannedProject{Path: "/home/user/go-svc", Markers: []string{"go.mod"}}, Runtime: "Go", ModuleName: "github.com/example/go-svc"},
 	}
 
-	// Capture stdout.
-	old := os.Stdout
-	r, w, _ := os.Pipe()
+	// Capture stdout (including color output).
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("create pipe: %v", err)
+	}
+
+	oldStdout := os.Stdout
 	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = oldStdout })
+
+	oldColorOut := color.Output
+	color.Output = w
+	t.Cleanup(func() { color.Output = oldColorOut })
+
+	oldNoColor := color.NoColor
+	color.NoColor = true
+	t.Cleanup(func() { color.NoColor = oldNoColor })
 
 	printProjectList(projects)
 
 	w.Close()
-	os.Stdout = old
-	out, _ := io.ReadAll(r)
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
 	output := string(out)
 
 	checks := []string{
@@ -198,7 +215,7 @@ func TestPrintProjectList_Formatting(t *testing.T) {
 		"/home/user/svc",
 		"pom.xml",
 		"github.com/example/go-svc",
-		"Skip",
+		"Skip — If skipped",
 	}
 	for _, c := range checks {
 		if !strings.Contains(output, c) {

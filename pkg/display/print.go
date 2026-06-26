@@ -61,6 +61,19 @@ func ClearPending() {
 	}
 }
 
+// Hyperlink returns an OSC 8 hyperlink (ESC \ terminated) when stdout is a TTY,
+// falling back to "text (url)" on non-TTY outputs to avoid stray control characters.
+func Hyperlink(text, url string) string {
+	return hyperlink(text, url, stdoutSupportsHyperlinks())
+}
+
+func hyperlink(text, url string, tty bool) string {
+	if tty {
+		return "\033]8;;" + url + "\033\\" + text + "\033]8;;\033\\"
+	}
+	return text + ": " + url
+}
+
 func PrintError(label string, err error) {
 	_, _ = fmt.Fprintf(color.Output, "  %s: %s\n", ColorDefault.Sprint(label), ColorError.Sprintf("✗ %s", err))
 }

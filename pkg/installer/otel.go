@@ -157,7 +157,8 @@ func printProjectList(projects []detectedProject) {
 		}
 		fmt.Println(line)
 	}
-	fmt.Printf("  [%d]  Skip\n", len(projects)+1)
+	fmt.Printf("  [%d]  ", len(projects)+1)
+	display.ColorMessage.Println("Skip — If skipped, you need to send application signals to the OpenTelemetry Collector yourself so they show up in Dynatrace.")
 }
 
 func selectProject(projects []detectedProject) (detectedProject, bool) {

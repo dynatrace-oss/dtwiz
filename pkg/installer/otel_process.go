@@ -14,7 +14,6 @@ const (
 	portPollInterval   = 500 * time.Millisecond
 	portPollTimeout    = 10 * time.Second
 	processSettleDelay = 3 * time.Second
-	slowHintDelay      = 5 * time.Second
 )
 
 type ManagedProcess struct {
@@ -155,14 +154,6 @@ func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) 
 		}
 
 		deadline := time.Now().Add(portPollTimeout)
-		hintDone := make(chan struct{})
-		go func() {
-			select {
-			case <-time.After(slowHintDelay):
-				fmt.Println("  Still detecting ports...")
-			case <-hintDone:
-			}
-		}()
 		for time.Now().Before(deadline) {
 			var mu sync.Mutex
 			portsFound := 0
@@ -199,7 +190,6 @@ func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) 
 			}
 			time.Sleep(portPollInterval)
 		}
-		close(hintDone)
 	}
 
 	for i, p := range procs {
