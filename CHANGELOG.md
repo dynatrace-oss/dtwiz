@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `install oneagent`: V2 installer — pre-flight OS/arch classification, existing-agent detection with update prompt, sudo availability check on Linux; dynamic endpoint resolution from the Dynatrace tenant API; streamed installer download; Linux CMS signature verification via `openssl cms -verify` (skipped on non-Linux); OS-specific command construction with sudo/UAC elevation
+- `install oneagent`: new flags `--monitoring-mode`, `--no-verify-signature`, `--skip-connectivity-check`, `--connectivity-check-only`
+- `uninstall oneagent`: V2 uninstall — checks agent is installed before proceeding, shows plan before confirmation, dry-run support; uses `display.PrintStatusLine` for output
+- Integration tests for OneAgent V2 lifecycle (install → detect → uninstall → verify cleanup); real-tenant e2e tests behind the `integration` build tag for Linux (root) and Windows
+
+### Changed
+
+- `install oneagent`: replaced legacy shell/exe wrapper with the V2 flow; `ONEAGENT_POC` feature flag removed, V2 is now unconditional
+
 ## [0.2.25] - 2026-06-17
 
 ### Added
