@@ -16,7 +16,7 @@ func ConnectionExists(envURL, platformToken string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	conns, err := dtc.findAllConnections("dtwiz-azure")
+	conns, err := dtc.findAllConnections(integrationName)
 	return len(conns) > 0, err
 }
 
@@ -82,11 +82,6 @@ func UninstallAzure(envURL, platformToken string, dryRun bool) error {
 }
 
 func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc dtclient) error {
-	const (
-		connectionName    = "dtwiz-azure"
-		configurationName = "dtwiz-azure"
-	)
-
 	// ── Lookup (parallel) ─────────────────────────────────────────────────────
 	type monitorRes struct {
 		ids []string
@@ -99,11 +94,11 @@ func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc 
 	monitorCh := make(chan monitorRes, 1)
 	connCh := make(chan connRes, 1)
 	go func() {
-		ids, err := dtc.findAllMonitoringConfigs(configurationName)
+		ids, err := dtc.findAllMonitoringConfigs(integrationName)
 		monitorCh <- monitorRes{ids: ids, err: err}
 	}()
 	go func() {
-		conns, err := dtc.findAllConnections(connectionName)
+		conns, err := dtc.findAllConnections(integrationName)
 		connCh <- connRes{conns: conns, err: err}
 	}()
 	mr := <-monitorCh
@@ -115,7 +110,7 @@ func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc 
 		return cr.err
 	}
 	monConfigIDs, conns := mr.ids, cr.conns
-	clientIDs := azureGatherClientIDs(runner, conns, connectionName, envURL)
+	clientIDs := azureGatherClientIDs(runner, conns, integrationName, envURL)
 
 	if len(monConfigIDs) == 0 && len(conns) == 0 && len(clientIDs) == 0 {
 		fmt.Println("  No Azure Monitor integration resources found — nothing to uninstall.")
@@ -123,7 +118,7 @@ func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc 
 	}
 
 	// ── Preview ────────────────────────────────────────────────────────────────
-	azureUninstallPrintPreview(envURL, monConfigIDs, conns, clientIDs, configurationName, connectionName)
+	azureUninstallPrintPreview(envURL, monConfigIDs, conns, clientIDs, integrationName, integrationName)
 
 	if dryRun {
 		fmt.Println("  [dry-run] No changes were made.")

@@ -211,8 +211,9 @@ var setupCmd = &cobra.Command{
 			}
 			return installErr
 		}
-		// AWS watch is started inside InstallAWS (runs in parallel with deploy).
-		if !setupDryRun && selected.Method != recommender.MethodAWS {
+		// AWS and Azure start their own (subscription/account-scoped) watch inside
+		// the installer, so the generic watch is only used for the other methods.
+		if !setupDryRun && selected.Method != recommender.MethodAWS && selected.Method != recommender.MethodAzure {
 			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
 		}
 		return nil

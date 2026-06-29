@@ -488,6 +488,43 @@ func TestAzureStep6AADSTS70025Retried(t *testing.T) {
 	}
 }
 
+func TestAzureStep6ConstraintsViolatedRetried(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	updateAttempts := 0
+	sleepCount := 0
+
+	dtc := &retryingDTClient{
+		fakeDTClient: happyFakeDTClient(),
+		updateFn: func(_, _, _, _ string) error {
+			updateAttempts++
+			if updateAttempts < 3 {
+				return fmt.Errorf("update settings object \"obj-abc\": API error (400): Constraints violated.")
+			}
+			return nil
+		},
+	}
+
+	fr := buildHappyPathAzRunner(t)
+	testSleeper := func(_ time.Duration) { sleepCount++ }
+
+	err := captureStdoutErr(func() error {
+		return installAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, fr.run, testSleeper, dtc)
+	})
+	if err != nil {
+		t.Fatalf("expected success after Constraints violated retries, got: %v", err)
+	}
+	if updateAttempts != 3 {
+		t.Errorf("expected 3 update attempts (2 fail + 1 success), got %d", updateAttempts)
+	}
+	if sleepCount < 2 {
+		t.Errorf("expected at least 2 sleeps between retries, got %d", sleepCount)
+	}
+}
+
 func TestAzureStep6Fails(t *testing.T) {
 	old := installer.AutoConfirm
 	installer.AutoConfirm = true
@@ -505,6 +542,80 @@ func TestAzureStep6Fails(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "step 6") {
 		t.Errorf("error %q does not mention step 6", err.Error())
+	}
+}
+
+// ── azureBuildStepCommands tests ─────────────────────────────────────────────
+
+func TestAzureBuildStepCommands_StepCount(t *testing.T) {
+	cfg := azureConfig{
+		ConnectionName:    "dtwiz-azure",
+		ConfigurationName: "dtwiz-azure",
+		EnvURL:            "https://abc.live.dynatrace.com",
+		Scope:             "/subscriptions/sub-abc123",
+	}
+	if got := len(azureBuildStepCommands(cfg)); got != 7 {
+		t.Errorf("expected 7 steps, got %d", got)
+	}
+}
+
+func TestAzureBuildStepCommands_PlaceholdersWhenEmpty(t *testing.T) {
+	cfg := azureConfig{
+		ConnectionName:    "dtwiz-azure",
+		ConfigurationName: "dtwiz-azure",
+		EnvURL:            "https://abc.live.dynatrace.com",
+		Scope:             "/subscriptions/sub-abc123",
+		// ClientID, ConnectionID, ObjectID intentionally empty
+	}
+	steps := azureBuildStepCommands(cfg)
+
+	if !strings.Contains(steps[2], "<client-id>") {
+		t.Errorf("step 3: want <client-id> placeholder; got: %s", steps[2])
+	}
+	if !strings.Contains(steps[2], "<connection-id>") {
+		t.Errorf("step 3: want <connection-id> placeholder; got: %s", steps[2])
+	}
+	if !strings.Contains(steps[3], "<client-id>") {
+		t.Errorf("step 4: want <client-id> placeholder; got: %s", steps[3])
+	}
+	if !strings.Contains(steps[4], "<object-id>") {
+		t.Errorf("step 5: want <object-id> placeholder; got: %s", steps[4])
+	}
+}
+
+func TestAzureBuildStepCommands_RealValues(t *testing.T) {
+	cfg := azureConfig{
+		ConnectionName:    "dtwiz-azure",
+		ConfigurationName: "dtwiz-azure",
+		EnvURL:            "https://abc.live.dynatrace.com",
+		TenantID:          "tenant-xyz",
+		Scope:             "/subscriptions/sub-abc123",
+		ConnectionID:      "conn-id-001",
+		ClientID:          "client-id-000",
+		ObjectID:          "object-id-111",
+	}
+	steps := azureBuildStepCommands(cfg)
+
+	checks := []struct {
+		step int
+		want string
+	}{
+		{1, "dtwiz-azure"},               // connection name
+		{2, "dtwiz-azure"},               // sp create --name
+		{3, "client-id-000"},             // fed-cred create --id
+		{3, "conn-id-001"},               // subject dt:connection-id/<connID>
+		{3, fedCredName},                 // fed cred name constant
+		{4, "client-id-000"},             // sp show --id
+		{5, "object-id-111"},             // role assignment --assignee-object-id
+		{5, "/subscriptions/sub-abc123"}, // scope
+		{6, "tenant-xyz"},                // update connection tenantId
+		{6, "client-id-000"},             // update connection applicationId
+		{7, "dtwiz-azure"},               // monitoring configuration name
+	}
+	for _, tc := range checks {
+		if !strings.Contains(steps[tc.step-1], tc.want) {
+			t.Errorf("step %d: want %q; got: %s", tc.step, tc.want, steps[tc.step-1])
+		}
 	}
 }
 

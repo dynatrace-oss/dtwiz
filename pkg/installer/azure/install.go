@@ -131,16 +131,12 @@ func InstallAzure(envURL, platformToken string, dryRun bool, startTime time.Time
 func installAzureWithRunner(
 	envURL, platformToken string,
 	dryRun bool,
-	_ time.Time,
+	startTime time.Time,
 	runner cmdRunner,
 	sleeper func(time.Duration),
 	dtc dtclient,
 ) error {
-	const (
-		connectionName    = "dtwiz-azure"
-		configurationName = "dtwiz-azure"
-		totalSteps        = 7
-	)
+	const totalSteps = 7
 
 	// ── Preflight ──────────────────────────────────────────────────────────────
 	subscriptionID, tenantID, err := azurePreflightChecks(runner, envURL, platformToken)
@@ -149,17 +145,17 @@ func installAzureWithRunner(
 	}
 
 	// ── Existence check ────────────────────────────────────────────────────────
-	existing, err := dtc.findAllConnections(connectionName)
+	existing, err := dtc.findAllConnections(integrationName)
 	if err != nil {
 		return fmt.Errorf("checking existing connection: %w", err)
 	}
 	if len(existing) > 0 {
-		return fmt.Errorf("azure connection '%s' already exists — run `dtwiz uninstall azure` to remove it first", connectionName)
+		return fmt.Errorf("azure connection '%s' already exists — run `dtwiz uninstall azure` to remove it first", integrationName)
 	}
 
 	cfg := azureConfig{
-		ConnectionName:    connectionName,
-		ConfigurationName: configurationName,
+		ConnectionName:    integrationName,
+		ConfigurationName: integrationName,
 		EnvURL:            envURL,
 		PlatformToken:     platformToken,
 		TenantID:          tenantID,
@@ -193,7 +189,20 @@ func installAzureWithRunner(
 	fmt.Println()
 	display.ColorMessage.Println("  Azure Monitor integration setup complete!")
 	fmt.Println()
+
+	azureWatchIngest(cfg, startTime)
 	return nil
+}
+
+// azureWatchIngest tails newly ingested data after a successful install. It is
+// skipped when startTime is zero (the unit-test path) so the testable core never
+// makes real HTTP calls or blocks on stdin.
+func azureWatchIngest(cfg azureConfig, startTime time.Time) {
+	if startTime.IsZero() {
+		return
+	}
+	fromClause := startTime.UTC().Format("2006-01-02T15:04:05Z")
+	installer.WatchIngest(cfg.EnvURL, cfg.PlatformToken, fromClause)
 }
 
 // runInstallSteps executes the 7-step Azure installation without a preview or confirmation.
@@ -294,18 +303,26 @@ func runInstallSteps(offset, total int, cfg azureConfig, runner cmdRunner, sleep
 	display.ColorOK.Println("  ✓ Monitoring Reader role assigned")
 
 	// ── Step 6 ────────────────────────────────────────────────────────────────
-	// Retry on AADSTS70025 ("no configured federated identity credentials"):
-	// Entra takes several seconds to propagate a newly created federated credential.
+	// Retry on transient federation propagation errors. Entra takes several
+	// seconds to propagate a newly created federated credential. This can surface
+	// as either:
+	//   - AADSTS70025 — Azure itself reports "no configured federated identity credentials"
+	//   - "Constraints violated" — DT validates the federation at PUT time and Azure
+	//     hasn't propagated the credential yet, so DT's token exchange fails
 	fmt.Printf("  Step %d/%d: Update Dynatrace Azure connection...\n", offset+6, total)
 	var updateErr error
-	for attempt := 0; attempt < 5; attempt++ {
+	for attempt := 0; attempt < 10; attempt++ {
 		if attempt > 0 {
-			logger.Debug("federated credential not yet propagated, retrying step 6", "attempt", attempt)
+			logger.Debug("federated credential not yet propagated, retrying step 6", "attempt", attempt, "error", updateErr)
 			sleeper(5 * time.Second)
 		}
 		updateErr = dtc.updateConnection(connObjectID, cfg.ConnectionName, cfg.TenantID, cfg.ClientID)
-		if updateErr == nil || !strings.Contains(updateErr.Error(), "AADSTS70025") {
+		if updateErr == nil {
 			break
+		}
+		errStr := updateErr.Error()
+		if !strings.Contains(errStr, "AADSTS70025") && !strings.Contains(errStr, "Constraints violated") {
+			break // permanent error — stop retrying
 		}
 	}
 	if updateErr != nil {

@@ -24,10 +24,10 @@ func cloudResp(rows ...struct {
 }
 
 func TestParseCloudPlatformSignals_EmptyInputs(t *testing.T) {
-	if got := parseCloudPlatformSignals(nil, nil); got != "" {
+	if got := parseCloudPlatformSignals(nil, nil, "aws.resource.type"); got != "" {
 		t.Errorf("nil inputs: got %q, want empty string", got)
 	}
-	if got := parseCloudPlatformSignals(cloudResp(), cloudResp()); got != "" {
+	if got := parseCloudPlatformSignals(cloudResp(), cloudResp(), "aws.resource.type"); got != "" {
 		t.Errorf("empty responses: got %q, want empty string", got)
 	}
 }
@@ -44,7 +44,7 @@ func TestParseCloudPlatformSignals_IgnoresMissingResourceType(t *testing.T) {
 			count int
 		}{"AWS::Lambda::Function", 0},
 	)
-	if got := parseCloudPlatformSignals(metrics, nil); got != "" {
+	if got := parseCloudPlatformSignals(metrics, nil, "aws.resource.type"); got != "" {
 		t.Errorf("expected empty output, got %q", got)
 	}
 }
@@ -60,7 +60,7 @@ func TestParseCloudPlatformSignals_StripsAWSPrefixAndCountsTypes(t *testing.T) {
 			count int
 		}{"AWS::RDS::DBInstance", 5},
 	)
-	got := parseCloudPlatformSignals(metrics, nil)
+	got := parseCloudPlatformSignals(metrics, nil, "aws.resource.type")
 	if !strings.Contains(got, "cloud signals (2 types):") {
 		t.Errorf("missing type count header in %q", got)
 	}
@@ -85,7 +85,7 @@ func TestParseCloudPlatformSignals_DedupsMetricsAndLogsByType(t *testing.T) {
 		count int
 	}{"AWS::Lambda::Function", 5})
 
-	got := parseCloudPlatformSignals(metrics, logs)
+	got := parseCloudPlatformSignals(metrics, logs, "aws.resource.type")
 	// Same type from both sources must count once.
 	if !strings.Contains(got, "cloud signals (1 type):") {
 		t.Errorf("dedup failed, got %q", got)
@@ -123,7 +123,7 @@ func TestParseCloudPlatformSignals_TopFiveWithMoreSuffix(t *testing.T) {
 			count int
 		}{"AWS::G", 40},
 	)
-	got := parseCloudPlatformSignals(metrics, nil)
+	got := parseCloudPlatformSignals(metrics, nil, "aws.resource.type")
 	if !strings.Contains(got, "cloud signals (7 types):") {
 		t.Errorf("expected 7-type header, got %q", got)
 	}
@@ -154,7 +154,7 @@ func TestParseCloudPlatformSignals_DeterministicOrderOnTies(t *testing.T) {
 				count int
 			}{"AWS::Mango", 5},
 		)
-		return parseCloudPlatformSignals(metrics, nil)
+		return parseCloudPlatformSignals(metrics, nil, "aws.resource.type")
 	}
 	first := build()
 	for i := 0; i < 20; i++ {
@@ -176,7 +176,7 @@ func TestParseCloudPlatformSignals_SingularPlural(t *testing.T) {
 		rt    string
 		count int
 	}{"AWS::Lambda::Function", 1})
-	got := parseCloudPlatformSignals(one, nil)
+	got := parseCloudPlatformSignals(one, nil, "aws.resource.type")
 	if !strings.Contains(got, "(1 type):") {
 		t.Errorf("singular form missing, got %q", got)
 	}

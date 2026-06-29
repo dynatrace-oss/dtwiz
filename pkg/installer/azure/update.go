@@ -21,16 +21,11 @@ func UpdateAzure(envURL, platformToken string, dryRun bool, startTime time.Time)
 func updateAzureWithRunner(
 	envURL, platformToken string,
 	dryRun bool,
-	_ time.Time,
+	startTime time.Time,
 	runner cmdRunner,
 	sleeper func(time.Duration),
 	dtc dtclient,
 ) error {
-	const (
-		connectionName    = "dtwiz-azure"
-		configurationName = "dtwiz-azure"
-	)
-
 	// ── Lookup existing resources + preflight (parallel) ──────────────────────
 	type monitorRes struct {
 		ids []string
@@ -49,11 +44,11 @@ func updateAzureWithRunner(
 	connCh := make(chan connRes, 1)
 	preflightCh := make(chan preflightRes, 1)
 	go func() {
-		ids, err := dtc.findAllMonitoringConfigs(configurationName)
+		ids, err := dtc.findAllMonitoringConfigs(integrationName)
 		monitorCh <- monitorRes{ids: ids, err: err}
 	}()
 	go func() {
-		conns, err := dtc.findAllConnections(connectionName)
+		conns, err := dtc.findAllConnections(integrationName)
 		connCh <- connRes{conns: conns, err: err}
 	}()
 	go func() {
@@ -78,11 +73,11 @@ func updateAzureWithRunner(
 	// Gather every App Registration to remove: those bound to the existing
 	// connections plus any orphaned app of the same name (a leftover app keeps
 	// being reused and is what causes the "Constraints violated" reinstall error).
-	clientIDs := azureGatherClientIDs(runner, conns, connectionName, envURL)
+	clientIDs := azureGatherClientIDs(runner, conns, integrationName, envURL)
 
 	installCfg := azureConfig{
-		ConnectionName:    connectionName,
-		ConfigurationName: configurationName,
+		ConnectionName:    integrationName,
+		ConfigurationName: integrationName,
 		EnvURL:            envURL,
 		PlatformToken:     platformToken,
 		TenantID:          tenantID,
@@ -91,7 +86,7 @@ func updateAzureWithRunner(
 	}
 
 	// ── Build combined step list ───────────────────────────────────────────────
-	uninstallSteps := azureUninstallBuildSteps(monConfigIDs, conns, clientIDs, configurationName, connectionName)
+	uninstallSteps := azureUninstallBuildSteps(monConfigIDs, conns, clientIDs, integrationName, integrationName)
 	installSteps := azureBuildStepCommands(installCfg)
 	nUninstall := len(uninstallSteps)
 	totalSteps := nUninstall + len(installSteps)
@@ -103,8 +98,8 @@ func updateAzureWithRunner(
 	fmt.Printf("  Environment:        %s\n", envURL)
 	fmt.Printf("  Tenant ID:          %s\n", tenantID)
 	fmt.Printf("  Subscription:       %s\n", subscriptionID)
-	fmt.Printf("  Connection name:    %s\n", connectionName)
-	fmt.Printf("  Configuration name: %s\n", configurationName)
+	fmt.Printf("  Connection name:    %s\n", integrationName)
+	fmt.Printf("  Configuration name: %s\n", integrationName)
 	fmt.Println()
 	display.PrintSectionDivider()
 	display.ColorMessage.Println("  Commands to be executed:")
@@ -160,5 +155,7 @@ func updateAzureWithRunner(
 	fmt.Println()
 	display.ColorMessage.Println("  Azure Monitor integration updated!")
 	fmt.Println()
+
+	azureWatchIngest(installCfg, startTime)
 	return nil
 }

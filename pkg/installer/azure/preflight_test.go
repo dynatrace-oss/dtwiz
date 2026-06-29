@@ -109,6 +109,62 @@ func TestAzureCheckRBACAdvisory(t *testing.T) {
 	})
 }
 
+// TestAzureCheckRBACSkipsWhenSignedInUserFails verifies that a failure to
+// resolve the signed-in user causes the RBAC check to be skipped silently
+// — no warning printed, no checkAccess call made.
+func TestAzureCheckRBACSkipsWhenSignedInUserFails(t *testing.T) {
+	checkCalled := false
+	runner := func(_ string, args []string, _ []string) (string, error) {
+		if len(args) > 1 && args[0] == "ad" && args[1] == "signed-in-user" {
+			return "", fmt.Errorf("not logged in")
+		}
+		checkCalled = true
+		return "{}", nil
+	}
+	captureColorOutput(func() {
+		azureCheckRBAC(runner, "/subscriptions/sub-abc123")
+	})
+	if checkCalled {
+		t.Error("checkAccess should not be called when signed-in-user lookup fails")
+	}
+}
+
+// TestAzureCheckRBACSkipsWhenSignedInUserHasEmptyID verifies that an empty
+// object ID in the signed-in-user response causes the RBAC check to be skipped.
+func TestAzureCheckRBACSkipsWhenSignedInUserHasEmptyID(t *testing.T) {
+	checkCalled := false
+	runner := func(_ string, args []string, _ []string) (string, error) {
+		if len(args) > 1 && args[0] == "ad" && args[1] == "signed-in-user" {
+			return `{"id":""}`, nil
+		}
+		checkCalled = true
+		return "{}", nil
+	}
+	captureColorOutput(func() {
+		azureCheckRBAC(runner, "/subscriptions/sub-abc123")
+	})
+	if checkCalled {
+		t.Error("checkAccess should not be called when signed-in-user returns empty ID")
+	}
+}
+
+// TestAzureCheckRBACNoWarningOnAllowed verifies that an Allowed decision
+// produces no warning output — the happy path must be silent.
+func TestAzureCheckRBACNoWarningOnAllowed(t *testing.T) {
+	runner := func(_ string, args []string, _ []string) (string, error) {
+		if len(args) > 1 && args[0] == "ad" && args[1] == "signed-in-user" {
+			return `{"id":"user-object-id"}`, nil
+		}
+		return `[{"actionId":"Microsoft.Authorization/roleAssignments/write","accessDecision":"Allowed"}]`, nil
+	}
+	out := captureColorOutput(func() {
+		azureCheckRBAC(runner, "/subscriptions/sub-abc123")
+	})
+	if strings.Contains(out, "Warning") {
+		t.Errorf("expected no warning for Allowed RBAC check, got: %s", out)
+	}
+}
+
 // TestAzurePreflightContinuesPastRBACDenial verifies that a denied RBAC check
 // does not abort the install — the flow proceeds to the first mutating step.
 func TestAzurePreflightContinuesPastRBACDenial(t *testing.T) {

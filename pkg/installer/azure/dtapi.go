@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -61,6 +62,9 @@ func newSDKDTClient(envURL, platformToken string) (*sdkDTClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("creating Dynatrace API client: %w", err)
 	}
+	if logger.IsDebug() {
+		c.EnableVerboseLogging(2, os.Stderr)
+	}
 	return &sdkDTClient{
 		c:         c,
 		settings:  settings.NewHandler(c),
@@ -96,7 +100,7 @@ func (d *sdkDTClient) updateConnection(objectID, name, tenantID, clientID string
 	if err != nil {
 		return fmt.Errorf("update connection: get current: %w", err)
 	}
-	logger.Debug("updating connection", "objectId", objectID, "tenantID", tenantID, "clientID", clientID)
+	logger.Debug("updating connection", "objectId", objectID, "schemaVersion", obj.SchemaVersion, "currentValue", obj.Value, "tenantID", tenantID, "clientID", clientID)
 	return d.settings.Update(context.Background(), objectID, obj.SchemaVersion, map[string]any{
 		"name": name,
 		"type": "federatedIdentityCredential",
@@ -145,6 +149,7 @@ func (d *sdkDTClient) deleteConnection(objectID string) error {
 	if err != nil {
 		return fmt.Errorf("delete connection: get current: %w", err)
 	}
+	logger.Debug("deleting connection", "objectId", objectID, "schemaVersion", obj.SchemaVersion)
 	return d.settings.Delete(context.Background(), objectID, obj.SchemaVersion)
 }
 

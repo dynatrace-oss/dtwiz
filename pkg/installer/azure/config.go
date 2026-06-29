@@ -29,8 +29,14 @@ type azureConfig struct {
 	ObjectID          string // filled after step 4
 }
 
-// fedCredName is the fixed name of the Entra federated credential.
-const fedCredName = "dtwiz-azure-Federated-Credential"
+const (
+	// integrationName is the fixed name shared by the DT connection, the DT
+	// monitoring configuration, and the Azure App Registration / Service Principal.
+	integrationName = "dtwiz-azure"
+
+	// fedCredName is the fixed name of the Entra federated credential.
+	fedCredName = "dtwiz-azure-Federated-Credential"
+)
 
 // realRunner is the production cmdRunner implementation.
 func realRunner(name string, args []string, env []string) (string, error) {

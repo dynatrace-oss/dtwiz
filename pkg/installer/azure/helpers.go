@@ -118,9 +118,11 @@ func azureAppHasDtwizFedCred(runner cmdRunner, clientID, issuer string) (bool, e
 	}
 	for _, c := range creds {
 		if c.Name == fedCredName && c.Issuer == issuer {
+			logger.Debug("federated credential ownership verified", "clientID", clientID, "credName", c.Name)
 			return true, nil
 		}
 	}
+	logger.Debug("federated credential not found on app", "clientID", clientID, "wantName", fedCredName, "wantIssuer", issuer, "credCount", len(creds))
 	return false, nil
 }
 

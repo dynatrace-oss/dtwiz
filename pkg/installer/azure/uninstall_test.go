@@ -2,6 +2,7 @@ package azure
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
@@ -315,5 +316,136 @@ func TestUninstallAzureDeleteConnectionFails(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error from deleteConnection failure, got nil")
+	}
+}
+
+// ── azureGatherClientIDs direct tests ─────────────────────────────────────────
+
+func TestAzureGatherClientIDs_ConnectionBoundID(t *testing.T) {
+	conns := []connRef{{objectID: "obj-001", clientID: "client-001"}}
+	runner := func(_ string, args []string, _ []string) (string, error) {
+		if isAppList(args) {
+			return `[]`, nil
+		}
+		return "{}", nil
+	}
+	ids := azureGatherClientIDs(runner, conns, "dtwiz-azure", "https://abc.live.dynatrace.com")
+	if len(ids) != 1 || ids[0] != "client-001" {
+		t.Errorf("expected [client-001], got %v", ids)
+	}
+}
+
+func TestAzureGatherClientIDs_OrphanedAppIncluded(t *testing.T) {
+	// No connection has a clientID; orphaned App Registration found by name
+	// and carries dtwiz's federated credential fingerprint → must be included.
+	runner := func(_ string, args []string, _ []string) (string, error) {
+		if isAppList(args) {
+			return `[{"appId":"orphan-id"}]`, nil
+		}
+		if isFedCredList(args) {
+			return `[{"name":"dtwiz-azure-Federated-Credential","issuer":"https://token.dynatrace.com"}]`, nil
+		}
+		return "{}", nil
+	}
+	ids := azureGatherClientIDs(runner, nil, "dtwiz-azure", "https://abc.live.dynatrace.com")
+	if len(ids) != 1 || ids[0] != "orphan-id" {
+		t.Errorf("expected [orphan-id], got %v", ids)
+	}
+}
+
+func TestAzureGatherClientIDs_AlreadyTrustedNotDuplicated(t *testing.T) {
+	// App found by name is the same clientID already trusted via a connection.
+	// It must appear exactly once and must not trigger a fed-cred verification.
+	conns := []connRef{{objectID: "obj-001", clientID: "trusted-id"}}
+	fedCredCalled := false
+	runner := func(_ string, args []string, _ []string) (string, error) {
+		if isAppList(args) {
+			return `[{"appId":"trusted-id"}]`, nil
+		}
+		if isFedCredList(args) {
+			fedCredCalled = true
+			return `[{"name":"dtwiz-azure-Federated-Credential","issuer":"https://token.dynatrace.com"}]`, nil
+		}
+		return "{}", nil
+	}
+	ids := azureGatherClientIDs(runner, conns, "dtwiz-azure", "https://abc.live.dynatrace.com")
+	if len(ids) != 1 || ids[0] != "trusted-id" {
+		t.Errorf("expected exactly [trusted-id] (no duplicates), got %v", ids)
+	}
+	if fedCredCalled {
+		t.Error("federated-credential list should not be called for already-trusted IDs")
+	}
+}
+
+func TestAzureGatherClientIDs_UnrelatedAppSkipped(t *testing.T) {
+	// App found by name lacks dtwiz's federated credential → must be skipped.
+	runner := func(_ string, args []string, _ []string) (string, error) {
+		if isAppList(args) {
+			return `[{"appId":"unrelated-id"}]`, nil
+		}
+		if isFedCredList(args) {
+			return `[{"name":"other-cred","issuer":"https://example.com"}]`, nil
+		}
+		return "{}", nil
+	}
+	ids := azureGatherClientIDs(runner, nil, "dtwiz-azure", "https://abc.live.dynatrace.com")
+	if len(ids) != 0 {
+		t.Errorf("expected empty (unrelated app must be skipped), got %v", ids)
+	}
+}
+
+func TestAzureGatherClientIDs_AzListFailureContinues(t *testing.T) {
+	// az ad app list fails — must not block deletion of connection-bound resources.
+	conns := []connRef{{objectID: "obj-001", clientID: "conn-client-id"}}
+	runner := func(_ string, args []string, _ []string) (string, error) {
+		if isAppList(args) {
+			return "", fmt.Errorf("az command failed")
+		}
+		return "{}", nil
+	}
+	ids := azureGatherClientIDs(runner, conns, "dtwiz-azure", "https://abc.live.dynatrace.com")
+	if len(ids) != 1 || ids[0] != "conn-client-id" {
+		t.Errorf("expected [conn-client-id] despite az list failure, got %v", ids)
+	}
+}
+
+func TestAzureGatherClientIDs_VerificationFailureSkipsWithWarning(t *testing.T) {
+	// fed-cred list fails → app is skipped with a warning, not silently.
+	runner := func(_ string, args []string, _ []string) (string, error) {
+		if isAppList(args) {
+			return `[{"appId":"unverifiable-id"}]`, nil
+		}
+		if isFedCredList(args) {
+			return "", fmt.Errorf("permission denied")
+		}
+		return "{}", nil
+	}
+	var ids []string
+	out := captureColorOutput(func() {
+		ids = azureGatherClientIDs(runner, nil, "dtwiz-azure", "https://abc.live.dynatrace.com")
+	})
+	if len(ids) != 0 {
+		t.Errorf("expected empty (unverifiable app skipped), got %v", ids)
+	}
+	if !strings.Contains(out, "Warning") {
+		t.Errorf("expected a Warning for unverifiable app, got: %s", out)
+	}
+}
+
+func TestAzureGatherClientIDs_Sorted(t *testing.T) {
+	// Output must be deterministically sorted regardless of map iteration order.
+	conns := []connRef{
+		{objectID: "obj-002", clientID: "zzz-id"},
+		{objectID: "obj-001", clientID: "aaa-id"},
+	}
+	runner := func(_ string, args []string, _ []string) (string, error) {
+		if isAppList(args) {
+			return `[]`, nil
+		}
+		return "{}", nil
+	}
+	ids := azureGatherClientIDs(runner, conns, "dtwiz-azure", "https://abc.live.dynatrace.com")
+	if len(ids) != 2 || ids[0] != "aaa-id" || ids[1] != "zzz-id" {
+		t.Errorf("expected sorted [aaa-id, zzz-id], got %v", ids)
 	}
 }
