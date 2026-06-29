@@ -1,3 +1,5 @@
+# Design
+
 ## Context
 
 `installHelm()` in `pkg/installer/kubernetes.go` unconditionally runs `bash -c "curl ... | bash"` when Helm is not found. On Windows, `bash` is not on PATH, so users running `dtwiz install kubernetes` get `exec: "bash": executable file not found in %PATH%` and cannot proceed.
@@ -7,11 +9,13 @@ Windows is a supported target (goreleaser produces `.zip` archives per OS/arch),
 ## Goals / Non-Goals
 
 **Goals:**
+
 - On Windows with winget available: silently install Helm via `winget install --id Helm.Helm -e --source winget`
 - On Windows without winget (or winget failure): return a clear, actionable error with manual install steps and a link
 - On Unix: preserve existing `bash -c curl | bash` behaviour exactly
 
 **Non-Goals:**
+
 - Supporting choco or scoop (too many package managers to maintain; winget ships with Windows 10/11 by default)
 - Installing winget itself
 - Changing the Unix flow in any way

@@ -1,3 +1,5 @@
+# Tasks
+
 ## 1. Implementation
 
 - [x] 1.1 Add `runtime.GOOS == "windows"` branch in `installHelm()` in `pkg/installer/kubernetes.go` that delegates to `installHelmWindows()`

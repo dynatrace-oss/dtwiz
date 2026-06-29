@@ -1,3 +1,5 @@
+# Proposal
+
 ## Why
 
 When `dtwiz install kubernetes` runs on Windows and Helm is not installed, the auto-install path calls `bash -c curl | bash`, which fails immediately because `bash` is not available on Windows. Users see `exec: "bash": executable file not found in %PATH%` and have no path forward.
