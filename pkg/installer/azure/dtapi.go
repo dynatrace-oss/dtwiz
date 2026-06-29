@@ -48,8 +48,6 @@ type dtclient interface {
 	deleteMonitoring(configID string) error
 }
 
-// ─── SDK implementation ───────────────────────────────────────────────────────
-
 type sdkDTClient struct {
 	c         *httpclient.Client
 	settings  *settings.Handler
@@ -72,8 +70,6 @@ func newSDKDTClient(envURL, platformToken string) (*sdkDTClient, error) {
 	}, nil
 }
 
-// ─── createConnection ─────────────────────────────────────────────────────────
-
 func (d *sdkDTClient) createConnection(name string) (string, error) {
 	resp, err := d.settings.Create(context.Background(), settings.SettingsObjectCreate{
 		SchemaID: connectionSchemaID,
@@ -93,8 +89,6 @@ func (d *sdkDTClient) createConnection(name string) (string, error) {
 	return resp.ObjectID, nil
 }
 
-// ─── updateConnection ─────────────────────────────────────────────────────────
-
 func (d *sdkDTClient) updateConnection(objectID, name, tenantID, clientID string) error {
 	obj, err := d.settings.Get(context.Background(), objectID)
 	if err != nil {
@@ -111,8 +105,6 @@ func (d *sdkDTClient) updateConnection(objectID, name, tenantID, clientID string
 		},
 	})
 }
-
-// ─── findAllConnections ───────────────────────────────────────────────────────
 
 // findAllConnections returns every Azure connection settings object whose name
 // matches. dtwiz always uses a fixed connection name, so a healthy environment
@@ -142,18 +134,25 @@ func (d *sdkDTClient) findAllConnections(name string) ([]connRef, error) {
 	return refs, nil
 }
 
-// ─── deleteConnection ─────────────────────────────────────────────────────────
-
 func (d *sdkDTClient) deleteConnection(objectID string) error {
 	obj, err := d.settings.Get(context.Background(), objectID)
 	if err != nil {
+		if strings.Contains(err.Error(), "404") {
+			logger.Debug("connection already gone", "objectId", objectID)
+			return nil
+		}
 		return fmt.Errorf("delete connection: get current: %w", err)
 	}
 	logger.Debug("deleting connection", "objectId", objectID, "schemaVersion", obj.SchemaVersion)
-	return d.settings.Delete(context.Background(), objectID, obj.SchemaVersion)
+	if err := d.settings.Delete(context.Background(), objectID, obj.SchemaVersion); err != nil {
+		if strings.Contains(err.Error(), "404") {
+			logger.Debug("connection already gone", "objectId", objectID)
+			return nil
+		}
+		return err
+	}
+	return nil
 }
-
-// ─── createMonitoring ─────────────────────────────────────────────────────────
 
 func (d *sdkDTClient) createMonitoring(configName, connectionObjectID, clientID, subscriptionID string) error {
 	version, err := d.latestExtensionVersion()
@@ -206,8 +205,6 @@ func (d *sdkDTClient) createMonitoring(configName, connectionObjectID, clientID,
 	return err
 }
 
-// ─── findAllMonitoringConfigs ─────────────────────────────────────────────────
-
 // findAllMonitoringConfigs returns the object IDs of every da-azure monitoring
 // configuration whose description matches. As with connections, cleanup removes
 // all matches so duplicates from interrupted runs don't linger.
@@ -233,13 +230,9 @@ func (d *sdkDTClient) findAllMonitoringConfigs(name string) ([]string, error) {
 	return ids, nil
 }
 
-// ─── deleteMonitoring ─────────────────────────────────────────────────────────
-
 func (d *sdkDTClient) deleteMonitoring(configID string) error {
 	return d.extension.DeleteMonitoringConfiguration(context.Background(), extensionName, configID)
 }
-
-// ─── extension schema ─────────────────────────────────────────────────────────
 
 // extensionSchema is the minimal view of the da-azure settings schema we need:
 // a top-level map of enum name → list of allowed values.

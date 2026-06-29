@@ -17,12 +17,10 @@ import (
 //
 // The integration always operates at subscription scope (/subscriptions/<id>).
 func azurePreflightChecks(runner cmdRunner, envURL, platformToken string) (subscriptionID, tenantID string, err error) {
-	// 1. az must be on PATH
 	if _, err = execLookPath("az"); err != nil {
 		return "", "", fmt.Errorf("Azure CLI (az) not found — install it from https://aka.ms/installazurecliwindows") //nolint:staticcheck // ST1005: "Azure CLI" is a product name
 	}
 
-	// 2. Check Azure login
 	accountJSON, err := runner("az", []string{"account", "show", "-o", "json"}, nil)
 	if err != nil {
 		return "", "", fmt.Errorf("Not logged in to Azure — run `az login` and retry") //nolint:staticcheck // ST1005: user-facing message
@@ -39,7 +37,6 @@ func azurePreflightChecks(runner cmdRunner, envURL, platformToken string) (subsc
 	tenantID = account.Tenant
 	logger.Debug("az account show", "subscriptionID", subscriptionID, "tenantID", tenantID)
 
-	// 3. RBAC checkAccess at subscription scope (advisory)
 	azureCheckRBAC(runner, "/subscriptions/"+subscriptionID)
 
 	return subscriptionID, tenantID, nil
@@ -52,7 +49,6 @@ func azurePreflightChecks(runner cmdRunner, envURL, platformToken string) (subsc
 // returns. It never blocks — the role-assignment step surfaces the definitive
 // error if permissions are actually missing.
 func azureCheckRBAC(runner cmdRunner, subscriptionScope string) {
-	// Resolve the caller's object ID — required by the checkAccess API as the Subject.
 	userJSON, err := runner("az", []string{"ad", "signed-in-user", "show", "-o", "json"}, nil)
 	if err != nil {
 		logger.Debug("could not resolve signed-in user for RBAC check, skipping", "err", err)

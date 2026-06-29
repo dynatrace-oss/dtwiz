@@ -1,6 +1,7 @@
 package azure
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 
@@ -158,45 +159,51 @@ func uninstallStepCount(monConfigIDs []string, conns []connRef, clientIDs []stri
 // total is the grand total of steps shown to the user.
 func runUninstallSteps(offset, total int, monConfigIDs []string, conns []connRef, clientIDs []string, runner cmdRunner, dtc dtclient) error {
 	step := offset
+	var errs []error
 
 	for _, id := range monConfigIDs {
 		step++
 		fmt.Printf("  Step %d/%d: Delete Azure monitoring configuration...\n", step, total)
 		if err := dtc.deleteMonitoring(id); err != nil {
-			return fmt.Errorf("step %d: %w", step, err)
+			display.ColorWarning.Printf("  Warning: step %d failed: %v\n", step, err)
+			errs = append(errs, fmt.Errorf("step %d: %w", step, err))
+			continue
 		}
 		display.ColorOK.Println("  ✓ Monitoring configuration deleted")
 	}
 
 	for _, clientID := range clientIDs {
 		step++
-		if _, err := azureRunStep(step, total, runner, "az",
-			[]string{"role", "assignment", "delete",
-				"--assignee", clientID,
-				"--role", "Monitoring Reader"},
-			nil, "Delete Monitoring Reader role assignment"); err != nil {
-			return err
+		fmt.Printf("  Step %d/%d: Delete Monitoring Reader role assignment...\n", step, total)
+		if err := azureDeleteRoleAssignment(runner, clientID); err != nil {
+			display.ColorWarning.Printf("  Warning: step %d failed: %v\n", step, err)
+			errs = append(errs, fmt.Errorf("step %d: %w", step, err))
+		} else {
+			display.ColorOK.Println("  ✓ Role assignment deleted")
 		}
-		display.ColorOK.Println("  ✓ Role assignment deleted")
 
 		step++
 		fmt.Printf("  Step %d/%d: Delete Azure App Registration...\n", step, total)
 		if err := azureDeleteApp(runner, clientID); err != nil {
-			return fmt.Errorf("step %d: %w", step, err)
+			display.ColorWarning.Printf("  Warning: step %d failed: %v\n", step, err)
+			errs = append(errs, fmt.Errorf("step %d: %w", step, err))
+		} else {
+			display.ColorOK.Println("  ✓ App Registration deleted (Service Principal + federated credential removed)")
 		}
-		display.ColorOK.Println("  ✓ App Registration deleted (Service Principal + federated credential removed)")
 	}
 
 	for _, c := range conns {
 		step++
 		fmt.Printf("  Step %d/%d: Delete Dynatrace Azure connection...\n", step, total)
 		if err := dtc.deleteConnection(c.objectID); err != nil {
-			return fmt.Errorf("step %d: %w", step, err)
+			display.ColorWarning.Printf("  Warning: step %d failed: %v\n", step, err)
+			errs = append(errs, fmt.Errorf("step %d: %w", step, err))
+		} else {
+			display.ColorOK.Println("  ✓ Connection deleted")
 		}
-		display.ColorOK.Println("  ✓ Connection deleted")
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 // azureUninstallBuildSteps returns the human-readable step descriptions for the uninstall phase.

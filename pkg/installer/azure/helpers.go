@@ -126,6 +126,23 @@ func azureAppHasDtwizFedCred(runner cmdRunner, clientID, issuer string) (bool, e
 	return false, nil
 }
 
+// azureDeleteRoleAssignment removes the Monitoring Reader role assignment for a
+// Service Principal. "No matched assignments" and "not found" responses are
+// treated as success — the assignment is already gone.
+func azureDeleteRoleAssignment(runner cmdRunner, clientID string) error {
+	_, err := runner("az", []string{"role", "assignment", "delete",
+		"--assignee", clientID,
+		"--role", "Monitoring Reader"}, nil)
+	if err != nil {
+		msg := strings.ToLower(err.Error())
+		if strings.Contains(msg, "no matched assignments") || strings.Contains(msg, "not found") {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
 // azureDeleteApp deletes an Azure App Registration by appId. Deleting the App
 // Registration also removes its Service Principal and any federated credentials,
 // so this is the single call that fully cleans up everything dtwiz created in

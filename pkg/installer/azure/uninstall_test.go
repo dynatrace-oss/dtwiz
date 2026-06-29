@@ -254,6 +254,50 @@ func TestUninstallAzureDeleteMonitoringFails(t *testing.T) {
 	}
 }
 
+func TestUninstallAzureBestEffortDeletesRemaining(t *testing.T) {
+	// When monitoring delete fails, role/app/connection deletions must still run.
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+
+	roleDeleted, appDeleted := false, false
+	dtc := &fakeDTClient{
+		findConnObjectID: "conn-obj-001",
+		findConnClientID: "client-id-000",
+		findMonConfigID:  "mon-config-001",
+		deleteMonErr:     fmt.Errorf("transient monitoring API error"),
+	}
+	runner := func(_ string, args []string, _ []string) (string, error) {
+		switch {
+		case isAppList(args):
+			return `[]`, nil
+		case len(args) > 2 && args[0] == "role" && args[1] == "assignment" && args[2] == "delete":
+			roleDeleted = true
+			return `{}`, nil
+		case len(args) > 2 && args[0] == "ad" && args[1] == "app" && args[2] == "delete":
+			appDeleted = true
+			return `{}`, nil
+		default:
+			return `{}`, nil
+		}
+	}
+	err := captureStdoutErr(func() error {
+		return uninstallAzureWithRunner("https://abc.live.dynatrace.com", false, runner, dtc)
+	})
+	if err == nil {
+		t.Fatal("expected accumulated error, got nil")
+	}
+	if !roleDeleted {
+		t.Error("role assignment delete must run even when monitoring delete fails")
+	}
+	if !appDeleted {
+		t.Error("app registration delete must run even when monitoring delete fails")
+	}
+	if !dtc.deleteConnCalled {
+		t.Error("connection delete must run even when monitoring delete fails")
+	}
+}
+
 func TestUninstallAzureRoleDeleteFails(t *testing.T) {
 	old := installer.AutoConfirm
 	installer.AutoConfirm = true

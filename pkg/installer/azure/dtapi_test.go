@@ -201,16 +201,57 @@ func TestSDKDeleteConnection_HappyPath(t *testing.T) {
 
 func TestSDKDeleteConnection_ServerError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
+		w.WriteHeader(http.StatusForbidden) // non-404 error must propagate
 	}))
 	defer srv.Close()
 
 	err := newTestSDKClient(t, srv.URL).deleteConnection("obj-001")
 	if err == nil {
-		t.Fatal("expected error for 404, got nil")
+		t.Fatal("expected error for 403, got nil")
 	}
-	if !strings.Contains(err.Error(), "404") {
-		t.Errorf("error %q does not mention 404", err.Error())
+	if !strings.Contains(err.Error(), "403") {
+		t.Errorf("error %q does not mention 403", err.Error())
+	}
+}
+
+func TestSDKDeleteConnection_404IsIdempotent(t *testing.T) {
+	// Simulates DT cascade-deletion: the monitoring config delete caused DT to
+	// also remove the connection, so deleteConnection gets a 404 on GET.
+	// This must be treated as "already gone" and return nil, not an error.
+	deleteCalled := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			deleteCalled = true
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	if err := newTestSDKClient(t, srv.URL).deleteConnection("obj-001"); err != nil {
+		t.Errorf("404 on GET must be treated as already deleted, got: %v", err)
+	}
+	if deleteCalled {
+		t.Error("DELETE must not be issued when GET returns 404")
+	}
+}
+
+func TestSDKDeleteConnection_404OnDeleteIsIdempotent(t *testing.T) {
+	// Race: GET succeeds but DELETE returns 404 (object deleted between the two calls).
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			_, _ = w.Write([]byte(`{"schemaVersion":"1","value":{}}`))
+		case http.MethodDelete:
+			w.WriteHeader(http.StatusNotFound)
+		default:
+			t.Errorf("unexpected method %q", r.Method)
+		}
+	}))
+	defer srv.Close()
+
+	if err := newTestSDKClient(t, srv.URL).deleteConnection("obj-001"); err != nil {
+		t.Errorf("404 on DELETE must be treated as already deleted, got: %v", err)
 	}
 }
 

@@ -545,6 +545,41 @@ func TestAzureStep6Fails(t *testing.T) {
 	}
 }
 
+func TestAzureStep6ExhaustsAllRetries(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	updateAttempts := 0
+	dtc := &retryingDTClient{
+		fakeDTClient: happyFakeDTClient(),
+		updateFn: func(_, _, _, _ string) error {
+			updateAttempts++
+			return fmt.Errorf("update settings object: API error (400): Constraints violated.")
+		},
+	}
+
+	sleepCount := 0
+	testSleeper := func(_ time.Duration) { sleepCount++ }
+
+	err := captureStdoutErr(func() error {
+		return installAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, buildHappyPathAzRunner(t).run, testSleeper, dtc)
+	})
+	if err == nil {
+		t.Fatal("expected error after exhausting all retries, got nil")
+	}
+	if !strings.Contains(err.Error(), "step 6") {
+		t.Errorf("error %q does not mention step 6", err.Error())
+	}
+	if updateAttempts != 10 {
+		t.Errorf("expected 10 update attempts (all retries exhausted), got %d", updateAttempts)
+	}
+	if sleepCount != 9 {
+		t.Errorf("expected 9 sleeps between 10 retries, got %d", sleepCount)
+	}
+}
+
 // ── azureBuildStepCommands tests ─────────────────────────────────────────────
 
 func TestAzureBuildStepCommands_StepCount(t *testing.T) {

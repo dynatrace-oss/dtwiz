@@ -92,6 +92,7 @@ type fakeDTClient struct {
 	findConnClientID string
 	findConnErr      error
 	deleteConnErr    error
+	deleteConnCalled bool
 	findMonConfigID  string
 	findMonErr       error
 	deleteMonErr     error
@@ -136,7 +137,10 @@ func (f *fakeDTClient) findAllConnections(string) ([]connRef, error) {
 	}
 	return []connRef{{objectID: f.findConnObjectID, clientID: f.findConnClientID}}, nil
 }
-func (f *fakeDTClient) deleteConnection(string) error { return f.deleteConnErr }
+func (f *fakeDTClient) deleteConnection(string) error {
+	f.deleteConnCalled = true
+	return f.deleteConnErr
+}
 func (f *fakeDTClient) findAllMonitoringConfigs(string) ([]string, error) {
 	if f.findMonErr != nil {
 		return nil, f.findMonErr
