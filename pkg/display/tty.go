@@ -23,3 +23,8 @@ func stdoutSupportsHyperlinks() bool {
 	// URL detection can make the URL itself right-clickable.
 	return os.Getenv("TERM_PROGRAM") != "Apple_Terminal"
 }
+
+// StdoutSupportsHyperlinks reports whether stdout supports OSC 8 hyperlinks.
+func StdoutSupportsHyperlinks() bool {
+	return stdoutSupportsHyperlinks()
+}
