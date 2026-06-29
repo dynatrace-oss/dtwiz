@@ -7,16 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.26] - 2026-06-29
+
 ### Added
 
 - `install oneagent`: V2 installer — pre-flight OS/arch classification, existing-agent detection with update prompt, sudo availability check on Linux; dynamic endpoint resolution from the Dynatrace tenant API; streamed installer download; Linux CMS signature verification via `openssl cms -verify` (skipped on non-Linux); OS-specific command construction with sudo/UAC elevation
 - `install oneagent`: new flags `--monitoring-mode`, `--no-verify-signature`, `--skip-connectivity-check`, `--connectivity-check-only`
 - `uninstall oneagent`: V2 uninstall — checks agent is installed before proceeding, shows plan before confirmation, dry-run support; uses `display.PrintStatusLine` for output
 - Integration tests for OneAgent V2 lifecycle (install → detect → uninstall → verify cleanup); real-tenant e2e tests behind the `integration` build tag for Linux (root) and Windows
+- `install kubernetes`: DynaKube manifest is now rendered with distribution-aware settings — disables the CSI driver on GKE Autopilot and applies other per-distro adjustments
+- `uninstall kubernetes`: prints the active kubectl context and detected K8s distribution before proceeding
+- `setup`: "Show uninstall commands" option (`[u]`) added to the interactive menu; displays available `dtwiz uninstall` subcommands without leaving the flow
+- `setup`: docs link for additional deployment options shown above the recommendation list
+- `pkg/display`: `Hyperlink()` helper renders OSC 8 clickable terminal links; falls back to `text: url` on non-TTY outputs and Apple Terminal (which doesn't support right-click navigation)
+- Install scripts (`install.sh`, `install.ps1`): show an informational banner about OTel host monitoring with a clickable link before prompting for confirmation
 
 ### Changed
 
 - `install oneagent`: replaced legacy shell/exe wrapper with the V2 flow; `ONEAGENT_POC` feature flag removed, V2 is now unconditional
+- GKE Autopilot detection now uses node name prefix (`gk3-`) instead of kube-system namespace annotation, which is the officially documented signal and more reliably available
 
 ## [0.2.25] - 2026-06-17
 
@@ -363,7 +372,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.25...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.26...HEAD
+[0.2.26]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.25...v0.2.26
 [0.2.25]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.24...v0.2.25
 [0.2.24]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.23...v0.2.24
 [0.2.23]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.22...v0.2.23
