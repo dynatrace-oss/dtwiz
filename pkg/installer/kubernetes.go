@@ -158,7 +158,33 @@ func installHelmWindows() error {
 	if err := RunCommand("winget", "install", "--id", "Helm.Helm", "-e", "--source", "winget"); err != nil {
 		return fmt.Errorf("helm installation via winget failed: %w%s", err, manualInstructions)
 	}
+
+	// winget adds Helm to the Windows registry PATH but not to the current
+	// process's PATH (which was inherited at startup). Refresh it so that
+	// subsequent exec.LookPath("helm") calls can find the new binary.
+	if err := refreshWindowsPath(); err != nil {
+		fmt.Printf("  Warning: could not refresh PATH after Helm install: %v\n", err)
+	}
 	return nil
+}
+
+// refreshWindowsPath reads the user PATH from the Windows registry via
+// PowerShell and appends any new entries to the current process's PATH.
+// No-op on non-Windows.
+func refreshWindowsPath() error {
+	if runtime.GOOS != "windows" {
+		return nil
+	}
+	out, err := exec.Command("powershell", "-NoProfile", "-Command",
+		"[Environment]::GetEnvironmentVariable('Path','User')").Output()
+	if err != nil {
+		return fmt.Errorf("reading PATH from registry: %w", err)
+	}
+	registryPath := strings.TrimSpace(string(out))
+	if registryPath == "" {
+		return fmt.Errorf("registry returned empty PATH")
+	}
+	return os.Setenv("PATH", os.Getenv("PATH")+";"+registryPath)
 }
 
 // isOperatorInstalled checks whether the dynatrace-operator Helm release
@@ -369,6 +395,10 @@ func resolveClusterName(name, envURL string) string {
 //   - distro:      detected Kubernetes distribution (e.g. "GKE", "EKS"); empty falls back to defaults
 //   - dryRun:      when true, only print what would be done
 func InstallKubernetes(envURL, token, clusterName, distro string, dryRun bool) error {
+	if err := refreshWindowsPath(); err != nil {
+		fmt.Printf("  Warning: could not refresh PATH: %v\n", err)
+	}
+
 	apiURL := APIURL(envURL)
 
 	clusterName = resolveClusterName(clusterName, envURL)

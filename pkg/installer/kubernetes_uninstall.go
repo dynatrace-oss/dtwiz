@@ -16,6 +16,10 @@ var runCmdQuietFunc = RunCommandQuiet
 //  3. Helm uninstall dynatrace-operator
 //  4. Delete the dynatrace namespace
 func UninstallKubernetes(kubeCtx, distro string) error {
+	if err := refreshWindowsPath(); err != nil {
+		fmt.Printf("  Warning: could not refresh PATH: %v\n", err)
+	}
+
 	fmt.Println()
 	display.ColorMessage.Println("  Dynatrace Kubernetes Uninstall")
 	fmt.Println()
