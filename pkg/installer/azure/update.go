@@ -33,13 +33,12 @@ func updateAzureWithRunner(
 
 	// ── Lookup existing resources + preflight (parallel) ──────────────────────
 	type monitorRes struct {
-		id  string
+		ids []string
 		err error
 	}
 	type connRes struct {
-		objectID string
-		clientID string
-		err      error
+		conns []connRef
+		err   error
 	}
 	type preflightRes struct {
 		subscriptionID string
@@ -50,12 +49,12 @@ func updateAzureWithRunner(
 	connCh := make(chan connRes, 1)
 	preflightCh := make(chan preflightRes, 1)
 	go func() {
-		id, err := dtc.findMonitoringConfig(configurationName)
-		monitorCh <- monitorRes{id: id, err: err}
+		ids, err := dtc.findAllMonitoringConfigs(configurationName)
+		monitorCh <- monitorRes{ids: ids, err: err}
 	}()
 	go func() {
-		objectID, clientID, err := dtc.findConnection(connectionName)
-		connCh <- connRes{objectID: objectID, clientID: clientID, err: err}
+		conns, err := dtc.findAllConnections(connectionName)
+		connCh <- connRes{conns: conns, err: err}
 	}()
 	go func() {
 		subID, tenID, err := azurePreflightChecks(runner, envURL, platformToken)
@@ -73,16 +72,13 @@ func updateAzureWithRunner(
 	if pr.err != nil {
 		return pr.err
 	}
-	configID, connObjectID, clientID := mr.id, cr.objectID, cr.clientID
+	monConfigIDs, conns := mr.ids, cr.conns
 	subscriptionID, tenantID := pr.subscriptionID, pr.tenantID
 
-	// If the DT connection has no stored clientID (previous install failed before step 6),
-	// look up the existing SP by display name so the uninstall phase can clean it up.
-	if clientID == "" {
-		if id, err := azureLookupSPClientIDByName(runner, connectionName); err == nil && id != "" {
-			clientID = id
-		}
-	}
+	// Gather every App Registration to remove: those bound to the existing
+	// connections plus any orphaned app of the same name (a leftover app keeps
+	// being reused and is what causes the "Constraints violated" reinstall error).
+	clientIDs := azureGatherClientIDs(runner, conns, connectionName, envURL)
 
 	installCfg := azureConfig{
 		ConnectionName:    connectionName,
@@ -95,7 +91,7 @@ func updateAzureWithRunner(
 	}
 
 	// ── Build combined step list ───────────────────────────────────────────────
-	uninstallSteps := azureUninstallBuildSteps(configID, connObjectID, clientID, configurationName, connectionName)
+	uninstallSteps := azureUninstallBuildSteps(monConfigIDs, conns, clientIDs, configurationName, connectionName)
 	installSteps := azureBuildStepCommands(installCfg)
 	nUninstall := len(uninstallSteps)
 	totalSteps := nUninstall + len(installSteps)
@@ -149,7 +145,7 @@ func updateAzureWithRunner(
 	// ── Phase 1: uninstall ─────────────────────────────────────────────────────
 	display.ColorMessage.Println("  Phase 1 — Removing existing integration...")
 	fmt.Println()
-	if err := runUninstallSteps(0, totalSteps, configID, connObjectID, clientID, runner, dtc); err != nil {
+	if err := runUninstallSteps(0, totalSteps, monConfigIDs, conns, clientIDs, runner, dtc); err != nil {
 		return fmt.Errorf("uninstall phase: %w", err)
 	}
 

@@ -28,15 +28,22 @@ const (
 	azureFeatureSetEnumKey = "FeatureSetsType"
 )
 
+// connRef identifies a Dynatrace Azure connection settings object together with
+// the Azure application (client) ID it is bound to, if any.
+type connRef struct {
+	objectID string
+	clientID string
+}
+
 // dtclient performs the Dynatrace Platform API calls needed for the Azure integration.
 type dtclient interface {
 	createConnection(name string) (objectID string, err error)
 	updateConnection(objectID, name, tenantID, clientID string) error
 	createMonitoring(configName, connectionObjectID, clientID, subscriptionID string) error
-	// uninstall
-	findConnection(name string) (objectID, clientID string, err error)
+	// cleanup — finders return every match so cleanup removes all duplicates.
+	findAllConnections(name string) ([]connRef, error)
 	deleteConnection(objectID string) error
-	findMonitoringConfig(name string) (configID string, err error)
+	findAllMonitoringConfigs(name string) (configIDs []string, err error)
 	deleteMonitoring(configID string) error
 }
 
@@ -101,13 +108,18 @@ func (d *sdkDTClient) updateConnection(objectID, name, tenantID, clientID string
 	})
 }
 
-// ─── findConnection ───────────────────────────────────────────────────────────
+// ─── findAllConnections ───────────────────────────────────────────────────────
 
-func (d *sdkDTClient) findConnection(name string) (objectID, clientID string, err error) {
+// findAllConnections returns every Azure connection settings object whose name
+// matches. dtwiz always uses a fixed connection name, so a healthy environment
+// has at most one; returning all of them lets cleanup remove duplicates left
+// behind by earlier interrupted runs.
+func (d *sdkDTClient) findAllConnections(name string) ([]connRef, error) {
 	list, err := d.settings.ListObjects(context.Background(), connectionSchemaID, "environment", 0)
 	if err != nil {
-		return "", "", fmt.Errorf("find connection: %w", err)
+		return nil, fmt.Errorf("find connections: %w", err)
 	}
+	var refs []connRef
 	for _, item := range list.Items {
 		n, _ := item.Value["name"].(string)
 		if n != name {
@@ -118,10 +130,12 @@ func (d *sdkDTClient) findConnection(name string) (objectID, clientID string, er
 			appID, _ = fc["applicationId"].(string)
 		}
 		logger.Debug("found connection", "objectId", item.ObjectID, "name", name, "appId", appID)
-		return item.ObjectID, appID, nil
+		refs = append(refs, connRef{objectID: item.ObjectID, clientID: appID})
 	}
-	logger.Debug("connection not found", "name", name)
-	return "", "", nil
+	if len(refs) == 0 {
+		logger.Debug("connection not found", "name", name)
+	}
+	return refs, nil
 }
 
 // ─── deleteConnection ─────────────────────────────────────────────────────────
@@ -187,13 +201,17 @@ func (d *sdkDTClient) createMonitoring(configName, connectionObjectID, clientID,
 	return err
 }
 
-// ─── findMonitoringConfig ─────────────────────────────────────────────────────
+// ─── findAllMonitoringConfigs ─────────────────────────────────────────────────
 
-func (d *sdkDTClient) findMonitoringConfig(name string) (string, error) {
+// findAllMonitoringConfigs returns the object IDs of every da-azure monitoring
+// configuration whose description matches. As with connections, cleanup removes
+// all matches so duplicates from interrupted runs don't linger.
+func (d *sdkDTClient) findAllMonitoringConfigs(name string) ([]string, error) {
 	list, err := d.extension.ListMonitoringConfigurations(context.Background(), extensionName, "", 0)
 	if err != nil {
-		return "", fmt.Errorf("find monitoring config: %w", err)
+		return nil, fmt.Errorf("find monitoring configs: %w", err)
 	}
+	var ids []string
 	for _, item := range list.Items {
 		var val map[string]any
 		if err := json.Unmarshal(item.Value, &val); err != nil {
@@ -201,11 +219,13 @@ func (d *sdkDTClient) findMonitoringConfig(name string) (string, error) {
 		}
 		if desc, _ := val["description"].(string); desc == name {
 			logger.Debug("found monitoring config", "objectId", item.ObjectID, "name", name)
-			return item.ObjectID, nil
+			ids = append(ids, item.ObjectID)
 		}
 	}
-	logger.Debug("monitoring config not found", "name", name)
-	return "", nil
+	if len(ids) == 0 {
+		logger.Debug("monitoring config not found", "name", name)
+	}
+	return ids, nil
 }
 
 // ─── deleteMonitoring ─────────────────────────────────────────────────────────

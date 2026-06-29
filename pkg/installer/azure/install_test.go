@@ -367,11 +367,11 @@ func TestAzureStep5FailsAllCleanupHints(t *testing.T) {
 	if !strings.Contains(out, "dtctl delete azure connection") {
 		t.Errorf("expected DT connection cleanup hint; got:\n%s", out)
 	}
-	if !strings.Contains(out, "az ad sp delete") {
-		t.Errorf("expected SP cleanup hint; got:\n%s", out)
+	if !strings.Contains(out, "az ad app delete") {
+		t.Errorf("expected App Registration cleanup hint; got:\n%s", out)
 	}
-	if !strings.Contains(out, "federated-credential delete") {
-		t.Errorf("expected fedcred cleanup hint; got:\n%s", out)
+	if !strings.Contains(out, "federated credential") {
+		t.Errorf("expected fedcred mention in App Registration hint; got:\n%s", out)
 	}
 }
 

@@ -14,11 +14,12 @@ func buildUpdateAzRunner(t *testing.T) *fakeAzureRunner {
 	return &fakeAzureRunner{
 		t: t,
 		calls: []fakeCall{
-			// preflight
+			// preflight: account show, signed-in-user (parse fails → RBAC skipped)
 			{name: "az", stdout: stockAccountJSON},
 			{name: "az", stdout: stockRBACJSON},
-			// uninstall phase: fedcred delete, role delete, sp delete
-			{name: "az", stdout: `{}`},
+			// cleanup lookup: az ad app list (no extra apps)
+			{name: "az", stdout: `[]`},
+			// uninstall phase: role delete, app delete
 			{name: "az", stdout: `{}`},
 			{name: "az", stdout: `{}`},
 			// install phase: sp create, fedcred create, sp show, role create
@@ -67,6 +68,9 @@ func TestUpdateAzureDryRun(t *testing.T) {
 			return `{"id":"user-object-id"}`, nil
 		case name == "az" && len(args) > 0 && args[0] == "rest":
 			return stockRBACJSON, nil
+		case name == "az" && isAppList(args):
+			// read-only cleanup lookup — not a mutation
+			return `[]`, nil
 		default:
 			mutating++
 			return "{}", nil
@@ -274,15 +278,16 @@ func TestUpdateAzureEmptyClientIDLookupByName(t *testing.T) {
 		t: t,
 		calls: []fakeCall{
 			{name: "az", stdout: stockAccountJSON},             // preflight: account show
-			{name: "az", stdout: stockRBACJSON},                // preflight: signed-in-user
-			{name: "az", stdout: `[{"appId":"found-app-id"}]`}, // sp list fallback lookup
-			{name: "az", stdout: `{}`},                         // fedcred delete
-			{name: "az", stdout: `{}`},                         // role delete
-			{name: "az", stdout: `{}`},                         // sp delete
-			{name: "az", stdout: stockSPJSON},                  // install: sp create
-			{name: "az", stdout: `{}`},                         // install: fedcred create
-			{name: "az", stdout: stockSPShowJSON},              // install: sp show
-			{name: "az", stdout: `{}`},                         // install: role create
+			{name: "az", stdout: stockRBACJSON},                // preflight: signed-in-user (parse fails)
+			{name: "az", stdout: `[{"appId":"found-app-id"}]`}, // cleanup: az ad app list fallback
+			// cleanup: verify ownership fingerprint of the name-only app
+			{name: "az", stdout: `[{"name":"dtwiz-azure-Federated-Credential","issuer":"https://token.dynatrace.com"}]`},
+			{name: "az", stdout: `{}`},            // uninstall: role delete
+			{name: "az", stdout: `{}`},            // uninstall: app delete
+			{name: "az", stdout: stockSPJSON},     // install: sp create
+			{name: "az", stdout: `{}`},            // install: fedcred create
+			{name: "az", stdout: stockSPShowJSON}, // install: sp show
+			{name: "az", stdout: `{}`},            // install: role create
 		},
 	}
 

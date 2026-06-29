@@ -75,10 +75,10 @@ func (noopDTClient) updateConnection(string, string, string, string) error {
 func (noopDTClient) createMonitoring(string, string, string, string) error {
 	return fmt.Errorf("unexpected createMonitoring call")
 }
-func (noopDTClient) findConnection(string) (string, string, error) { return "", "", nil }
-func (noopDTClient) deleteConnection(string) error                 { return nil }
-func (noopDTClient) findMonitoringConfig(string) (string, error)   { return "", nil }
-func (noopDTClient) deleteMonitoring(string) error                 { return nil }
+func (noopDTClient) findAllConnections(string) ([]connRef, error)      { return nil, nil }
+func (noopDTClient) deleteConnection(string) error                     { return nil }
+func (noopDTClient) findAllMonitoringConfigs(string) ([]string, error) { return nil, nil }
+func (noopDTClient) deleteMonitoring(string) error                     { return nil }
 
 // fakeDTClient records calls for assertion.
 type fakeDTClient struct {
@@ -127,12 +127,24 @@ func (f *fakeDTClient) createMonitoring(configName, connObjectID, _, _ string) e
 	f.monCalledWith.connObjectID = connObjectID
 	return f.monErr
 }
-func (f *fakeDTClient) findConnection(string) (string, string, error) {
-	return f.findConnObjectID, f.findConnClientID, f.findConnErr
+func (f *fakeDTClient) findAllConnections(string) ([]connRef, error) {
+	if f.findConnErr != nil {
+		return nil, f.findConnErr
+	}
+	if f.findConnObjectID == "" {
+		return nil, nil
+	}
+	return []connRef{{objectID: f.findConnObjectID, clientID: f.findConnClientID}}, nil
 }
 func (f *fakeDTClient) deleteConnection(string) error { return f.deleteConnErr }
-func (f *fakeDTClient) findMonitoringConfig(string) (string, error) {
-	return f.findMonConfigID, f.findMonErr
+func (f *fakeDTClient) findAllMonitoringConfigs(string) ([]string, error) {
+	if f.findMonErr != nil {
+		return nil, f.findMonErr
+	}
+	if f.findMonConfigID == "" {
+		return nil, nil
+	}
+	return []string{f.findMonConfigID}, nil
 }
 func (f *fakeDTClient) deleteMonitoring(string) error { return f.deleteMonErr }
 
@@ -268,38 +280,107 @@ func TestAzureDeleteFedCred_OtherErrorReturned(t *testing.T) {
 	}
 }
 
-// ─── azureLookupSPClientIDByName ─────────────────────────────────────────────
+// ─── azureListAppIDsByName ───────────────────────────────────────────────────
 
-func TestAzureLookupSPClientIDByName_Found(t *testing.T) {
+func TestAzureListAppIDsByName_Found(t *testing.T) {
 	runner := func(_ string, _ []string, _ []string) (string, error) {
-		return `[{"appId":"found-app-id"}]`, nil
+		return `[{"appId":"found-app-id"},{"appId":"found-app-id-2"}]`, nil
 	}
-	id, err := azureLookupSPClientIDByName(runner, "dtwiz-azure")
+	ids, err := azureListAppIDsByName(runner, "dtwiz-azure")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if id != "found-app-id" {
-		t.Errorf("appId = %q, want found-app-id", id)
+	if len(ids) != 2 || ids[0] != "found-app-id" || ids[1] != "found-app-id-2" {
+		t.Errorf("ids = %v, want [found-app-id found-app-id-2]", ids)
 	}
 }
 
-func TestAzureLookupSPClientIDByName_NotFound(t *testing.T) {
+func TestAzureListAppIDsByName_NotFound(t *testing.T) {
 	runner := func(_ string, _ []string, _ []string) (string, error) { return `[]`, nil }
-	id, err := azureLookupSPClientIDByName(runner, "dtwiz-azure")
+	ids, err := azureListAppIDsByName(runner, "dtwiz-azure")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if id != "" {
-		t.Errorf("expected empty id for not-found, got %q", id)
+	if len(ids) != 0 {
+		t.Errorf("expected no ids for not-found, got %v", ids)
 	}
 }
 
-func TestAzureLookupSPClientIDByName_RunnerError(t *testing.T) {
+func TestAzureListAppIDsByName_RunnerError(t *testing.T) {
 	runner := func(_ string, _ []string, _ []string) (string, error) {
 		return "", fmt.Errorf("az command failed")
 	}
-	if _, err := azureLookupSPClientIDByName(runner, "dtwiz-azure"); err == nil {
+	if _, err := azureListAppIDsByName(runner, "dtwiz-azure"); err == nil {
 		t.Error("expected error from runner failure, got nil")
+	}
+}
+
+func TestAzureAppHasDtwizFedCred(t *testing.T) {
+	const issuer = "https://token.dynatrace.com"
+	cases := []struct {
+		name string
+		out  string
+		want bool
+	}{
+		{
+			name: "matching name and issuer",
+			out:  `[{"name":"dtwiz-azure-Federated-Credential","issuer":"https://token.dynatrace.com"}]`,
+			want: true,
+		},
+		{
+			name: "right name wrong issuer",
+			out:  `[{"name":"dtwiz-azure-Federated-Credential","issuer":"https://attacker.example.com"}]`,
+			want: false,
+		},
+		{
+			name: "unrelated credential",
+			out:  `[{"name":"some-other-cred","issuer":"https://token.dynatrace.com"}]`,
+			want: false,
+		},
+		{
+			name: "no credentials",
+			out:  `[]`,
+			want: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := func(_ string, _ []string, _ []string) (string, error) { return tc.out, nil }
+			got, err := azureAppHasDtwizFedCred(runner, "client-id-000", issuer)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("azureAppHasDtwizFedCred = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestAzureAppHasDtwizFedCred_RunnerError(t *testing.T) {
+	runner := func(_ string, _ []string, _ []string) (string, error) {
+		return "", fmt.Errorf("az command failed")
+	}
+	if _, err := azureAppHasDtwizFedCred(runner, "client-id-000", "https://token.dynatrace.com"); err == nil {
+		t.Error("expected error from runner failure, got nil")
+	}
+}
+
+func TestAzureDeleteApp_NotFoundIsSuccess(t *testing.T) {
+	runner := func(_ string, _ []string, _ []string) (string, error) {
+		return "", fmt.Errorf("Resource 'x' does not exist or one of its queried reference-property objects are not found")
+	}
+	if err := azureDeleteApp(runner, "client-id-000"); err != nil {
+		t.Errorf("not-found should be treated as success, got: %v", err)
+	}
+}
+
+func TestAzureDeleteApp_OtherErrorReturned(t *testing.T) {
+	runner := func(_ string, _ []string, _ []string) (string, error) {
+		return "", fmt.Errorf("authorization denied")
+	}
+	if err := azureDeleteApp(runner, "client-id-000"); err == nil {
+		t.Error("expected error for non-not-found failure, got nil")
 	}
 }
 

@@ -86,25 +86,25 @@ func azureRunStep(n, total int, runner cmdRunner, name string, args []string, en
 }
 
 // azurePartialFailureHint prints cleanup hints based on how far the install got.
+// Re-running `dtwiz uninstall azure` (or `dtwiz update azure`) performs all of
+// this automatically — the explicit commands are shown for transparency.
 func azurePartialFailureHint(cfg azureConfig, completedSteps map[int]bool) {
-	if !completedSteps[1] && !completedSteps[2] && !completedSteps[3] && !completedSteps[5] {
+	if !completedSteps[1] && !completedSteps[2] && !completedSteps[5] {
 		return
 	}
 	fmt.Println()
-	display.ColorWarning.Println("  The following resources were already created and may need to be cleaned up:")
+	display.ColorWarning.Println("  The following resources were already created and may need to be cleaned up")
+	display.ColorWarning.Println("  (or just re-run `dtwiz uninstall azure`, which removes them all):")
 	if completedSteps[1] {
 		fmt.Printf("    • DT connection '%s' — delete with: dtctl delete azure connection --name %s\n",
 			cfg.ConnectionName, cfg.ConnectionName)
 	}
 	if completedSteps[2] {
-		fmt.Printf("    • Azure SP '%s' — delete with: az ad sp delete --id %s\n", cfg.ConnectionName, cfg.ClientID)
-	}
-	if completedSteps[3] {
-		fmt.Printf("    • Federated credential — delete with: az ad app federated-credential delete --id %s --federated-credential-id %s\n",
-			cfg.ClientID, fedCredName)
+		fmt.Printf("    • Azure App Registration '%s' (incl. Service Principal + federated credential) — delete with: az ad app delete --id %s\n",
+			cfg.ConnectionName, cfg.ClientID)
 	}
 	if completedSteps[5] {
-		fmt.Printf("    • Role assignment — delete with: az role assignment delete --assignee %s --role 'Monitoring Reader'\n", cfg.ObjectID)
+		fmt.Printf("    • Role assignment — delete with: az role assignment delete --assignee %s --role 'Monitoring Reader'\n", cfg.ClientID)
 	}
 }
 
@@ -149,11 +149,11 @@ func installAzureWithRunner(
 	}
 
 	// ── Existence check ────────────────────────────────────────────────────────
-	existingConnID, _, err := dtc.findConnection(connectionName)
+	existing, err := dtc.findAllConnections(connectionName)
 	if err != nil {
 		return fmt.Errorf("checking existing connection: %w", err)
 	}
-	if existingConnID != "" {
+	if len(existing) > 0 {
 		return fmt.Errorf("azure connection '%s' already exists — run `dtwiz uninstall azure` to remove it first", connectionName)
 	}
 

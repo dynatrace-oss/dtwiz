@@ -86,9 +86,9 @@ func TestSDKCreateConnection_EmptyResponse(t *testing.T) {
 	}
 }
 
-// ─── findConnection ───────────────────────────────────────────────────────────
+// ─── findAllConnections ───────────────────────────────────────────────────────
 
-func TestSDKFindConnection_Found(t *testing.T) {
+func TestSDKFindAllConnections_Found(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("schemaIds") != connectionSchemaID {
 			t.Errorf("schemaIds query param missing or wrong: %q", r.URL.Query().Get("schemaIds"))
@@ -111,35 +111,38 @@ func TestSDKFindConnection_Found(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	objID, clientID, err := newTestSDKClient(t, srv.URL).findConnection("my-conn")
+	conns, err := newTestSDKClient(t, srv.URL).findAllConnections("my-conn")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if objID != "obj-001" {
-		t.Errorf("objectId = %q, want %q", objID, "obj-001")
+	if len(conns) != 1 {
+		t.Fatalf("len(conns) = %d, want 1", len(conns))
 	}
-	if clientID != "app-client-id" {
-		t.Errorf("clientId = %q, want %q", clientID, "app-client-id")
+	if conns[0].objectID != "obj-001" {
+		t.Errorf("objectId = %q, want %q", conns[0].objectID, "obj-001")
+	}
+	if conns[0].clientID != "app-client-id" {
+		t.Errorf("clientId = %q, want %q", conns[0].clientID, "app-client-id")
 	}
 }
 
-func TestSDKFindConnection_NotFound(t *testing.T) {
+func TestSDKFindAllConnections_NotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"items":[]}`))
 	}))
 	defer srv.Close()
 
-	objID, clientID, err := newTestSDKClient(t, srv.URL).findConnection("missing-conn")
+	conns, err := newTestSDKClient(t, srv.URL).findAllConnections("missing-conn")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if objID != "" || clientID != "" {
-		t.Errorf("expected empty strings, got objID=%q clientID=%q", objID, clientID)
+	if len(conns) != 0 {
+		t.Errorf("expected no connections, got %v", conns)
 	}
 }
 
-func TestSDKFindConnection_OtherConnectionsIgnored(t *testing.T) {
+func TestSDKFindAllConnections_OtherConnectionsIgnored(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		body := map[string]interface{}{
@@ -151,22 +154,22 @@ func TestSDKFindConnection_OtherConnectionsIgnored(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	objID, _, err := newTestSDKClient(t, srv.URL).findConnection("my-conn")
+	conns, err := newTestSDKClient(t, srv.URL).findAllConnections("my-conn")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if objID != "" {
-		t.Errorf("expected empty objectId for unmatched connection, got %q", objID)
+	if len(conns) != 0 {
+		t.Errorf("expected no connections for unmatched name, got %v", conns)
 	}
 }
 
-func TestSDKFindConnection_ServerError(t *testing.T) {
+func TestSDKFindAllConnections_ServerError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 	}))
 	defer srv.Close()
 
-	_, _, err := newTestSDKClient(t, srv.URL).findConnection("my-conn")
+	_, err := newTestSDKClient(t, srv.URL).findAllConnections("my-conn")
 	if err == nil {
 		t.Fatal("expected error for 403, got nil")
 	}
@@ -602,9 +605,9 @@ func TestSDKCreateMonitoring_PostFails(t *testing.T) {
 	}
 }
 
-// ─── findMonitoringConfig ─────────────────────────────────────────────────────
+// ─── findAllMonitoringConfigs ─────────────────────────────────────────────────
 
-func TestSDKFindMonitoringConfig_Found(t *testing.T) {
+func TestSDKFindAllMonitoringConfigs_Found(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != monitoringAPI {
 			t.Errorf("path = %q, want %q", r.URL.Path, monitoringAPI)
@@ -617,38 +620,38 @@ func TestSDKFindMonitoringConfig_Found(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id, err := newTestSDKClient(t, srv.URL).findMonitoringConfig("my-config")
+	ids, err := newTestSDKClient(t, srv.URL).findAllMonitoringConfigs("my-config")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if id != "mon-001" {
-		t.Errorf("objectId = %q, want mon-001", id)
+	if len(ids) != 1 || ids[0] != "mon-001" {
+		t.Errorf("ids = %v, want [mon-001]", ids)
 	}
 }
 
-func TestSDKFindMonitoringConfig_NotFound(t *testing.T) {
+func TestSDKFindAllMonitoringConfigs_NotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"items":[]}`))
 	}))
 	defer srv.Close()
 
-	id, err := newTestSDKClient(t, srv.URL).findMonitoringConfig("missing")
+	ids, err := newTestSDKClient(t, srv.URL).findAllMonitoringConfigs("missing")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if id != "" {
-		t.Errorf("expected empty id for not-found, got %q", id)
+	if len(ids) != 0 {
+		t.Errorf("expected no ids for not-found, got %v", ids)
 	}
 }
 
-func TestSDKFindMonitoringConfig_ServerError(t *testing.T) {
+func TestSDKFindAllMonitoringConfigs_ServerError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	defer srv.Close()
 
-	_, err := newTestSDKClient(t, srv.URL).findMonitoringConfig("my-config")
+	_, err := newTestSDKClient(t, srv.URL).findAllMonitoringConfigs("my-config")
 	if err == nil {
 		t.Fatal("expected error for 401, got nil")
 	}

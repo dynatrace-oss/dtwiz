@@ -67,23 +67,73 @@ func azureDeleteFedCred(runner cmdRunner, clientID string) error {
 	return err
 }
 
-// azureLookupSPClientIDByName finds the appId of the first Service Principal
-// with the given display name. Returns ("", nil) if none is found.
-// Used as a fallback in the update flow when the DT connection has no stored clientID
-// (e.g., a previous install failed before step 6 updated the connection).
-func azureLookupSPClientIDByName(runner cmdRunner, name string) (string, error) {
-	out, err := runner("az", []string{"ad", "sp", "list", "--display-name", name, "-o", "json"}, nil)
+// azureListAppIDsByName returns the appIds of every App Registration with the
+// given display name. Returns an empty slice if none are found.
+//
+// dtwiz creates exactly one App Registration per integration, but cleanup uses
+// this to catch leftovers: an interrupted run can leave an App Registration
+// behind (e.g. a previous version deleted only the Service Principal), and
+// because `az ad sp create-for-rbac --name X` rebinds to an existing app of the
+// same name, that leftover keeps the same appId across runs — which is what
+// triggers the Dynatrace "Constraints violated" error on reinstall.
+func azureListAppIDsByName(runner cmdRunner, name string) ([]string, error) {
+	out, err := runner("az", []string{"ad", "app", "list", "--display-name", name, "-o", "json"}, nil)
 	if err != nil {
-		return "", fmt.Errorf("az ad sp list: %w", err)
+		return nil, fmt.Errorf("az ad app list: %w", err)
 	}
-	var sps []struct {
+	var apps []struct {
 		AppID string `json:"appId"`
 	}
-	if err := json.Unmarshal([]byte(out), &sps); err != nil || len(sps) == 0 {
-		return "", nil
+	if err := json.Unmarshal([]byte(out), &apps); err != nil {
+		return nil, nil
 	}
-	logger.Debug("found existing SP by display name", "name", name, "appId", sps[0].AppID)
-	return sps[0].AppID, nil
+	ids := make([]string, 0, len(apps))
+	for _, a := range apps {
+		if a.AppID != "" {
+			ids = append(ids, a.AppID)
+		}
+	}
+	logger.Debug("listed app registrations by display name", "name", name, "count", len(ids))
+	return ids, nil
+}
+
+// azureAppHasDtwizFedCred reports whether the App Registration with the given
+// appId has dtwiz's federated credential: a credential named fedCredName issued
+// by the expected Dynatrace token endpoint.
+//
+// Used as an ownership check before deleting an app found only by display name.
+// Entra display names are not unique, so a name match alone is not enough —
+// only an app that carries this credential was created by dtwiz and is safe to delete.
+func azureAppHasDtwizFedCred(runner cmdRunner, clientID, issuer string) (bool, error) {
+	out, err := runner("az", []string{"ad", "app", "federated-credential", "list", "--id", clientID, "-o", "json"}, nil)
+	if err != nil {
+		return false, fmt.Errorf("az ad app federated-credential list: %w", err)
+	}
+	var creds []struct {
+		Name   string `json:"name"`
+		Issuer string `json:"issuer"`
+	}
+	if err := json.Unmarshal([]byte(out), &creds); err != nil {
+		return false, fmt.Errorf("parsing federated-credential list: %w", err)
+	}
+	for _, c := range creds {
+		if c.Name == fedCredName && c.Issuer == issuer {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// azureDeleteApp deletes an Azure App Registration by appId. Deleting the App
+// Registration also removes its Service Principal and any federated credentials,
+// so this is the single call that fully cleans up everything dtwiz created in
+// Entra. A "not found" error is treated as success — the goal is already met.
+func azureDeleteApp(runner cmdRunner, clientID string) error {
+	_, err := runner("az", []string{"ad", "app", "delete", "--id", clientID}, nil)
+	if err != nil && strings.Contains(strings.ToLower(err.Error()), "not found") {
+		return nil
+	}
+	return err
 }
 
 // azureGetSPObjectID retrieves the Service Principal object ID for a given
