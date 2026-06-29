@@ -1,6 +1,9 @@
 package installer
 
 import (
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -330,5 +333,75 @@ func TestRenderDynakubeTemplate_AgentsDynaKubeStructure(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("DynaKube #2: expected %q in manifest", want)
 		}
+	}
+}
+
+// createFakeWinget writes a fake winget executable to a temp directory and
+// returns the directory path. exitCode controls what the fake binary exits with.
+func createFakeWinget(t *testing.T, exitCode int) string {
+	t.Helper()
+	dir := t.TempDir()
+
+	if runtime.GOOS == "windows" {
+		script := filepath.Join(dir, "winget.bat")
+		content := "@echo off\r\n"
+		if exitCode != 0 {
+			content += "exit /b 1\r\n"
+		}
+		if err := os.WriteFile(script, []byte(content), 0o755); err != nil {
+			t.Fatalf("createFakeWinget: %v", err)
+		}
+	} else {
+		script := filepath.Join(dir, "winget")
+		content := "#!/bin/sh\n"
+		if exitCode != 0 {
+			content += "exit 1\n"
+		}
+		if err := os.WriteFile(script, []byte(content), 0o755); err != nil {
+			t.Fatalf("createFakeWinget: %v", err)
+		}
+	}
+	return dir
+}
+
+func TestInstallHelmWindows_WingetNotFound(t *testing.T) {
+	// Use an empty temp dir so exec.LookPath("winget") fails.
+	empty := t.TempDir()
+	t.Setenv("PATH", empty)
+
+	err := installHelmWindows()
+	if err == nil {
+		t.Fatal("expected error when winget is not on PATH")
+	}
+	if !strings.Contains(err.Error(), "winget was not found") {
+		t.Errorf("error should mention 'winget was not found', got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "https://helm.sh/docs/intro/install/") {
+		t.Errorf("error should contain install URL, got: %v", err)
+	}
+}
+
+func TestInstallHelmWindows_WingetFails(t *testing.T) {
+	dir := createFakeWinget(t, 1)
+	t.Setenv("PATH", dir)
+
+	err := installHelmWindows()
+	if err == nil {
+		t.Fatal("expected error when winget exits non-zero")
+	}
+	if !strings.Contains(err.Error(), "winget failed") {
+		t.Errorf("error should mention 'winget failed', got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "https://helm.sh/docs/intro/install/") {
+		t.Errorf("error should contain install URL, got: %v", err)
+	}
+}
+
+func TestInstallHelmWindows_WingetSucceeds(t *testing.T) {
+	dir := createFakeWinget(t, 0)
+	t.Setenv("PATH", dir)
+
+	if err := installHelmWindows(); err != nil {
+		t.Errorf("expected no error when winget succeeds, got: %v", err)
 	}
 }

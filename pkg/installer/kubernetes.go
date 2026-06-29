@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"text/template"
@@ -127,16 +128,37 @@ func helmMajorVersion() (int, error) {
 	return major, nil
 }
 
-// installHelm attempts to install Helm via the official get-helm-3 script.
-// NOTE: This downloads and executes a script from the internet.  Users who
-// require a verified installation should install Helm manually:
+// installHelm attempts to install Helm automatically.
+// On Unix it runs the official get-helm-3 script; on Windows it tries winget.
+// Users who require a verified installation should install Helm manually:
 //
 //	https://helm.sh/docs/intro/install/
 func installHelm() error {
+	if runtime.GOOS == "windows" {
+		return installHelmWindows()
+	}
 	fmt.Println("  Helm not found — installing via get.helm.sh...")
 	fmt.Println("  NOTE: This executes a script from https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3")
 	return RunCommand("bash", "-c",
 		"curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash")
+}
+
+// installHelmWindows attempts to install Helm via winget. If winget is not
+// available or the installation fails, it returns a clear error with manual steps.
+func installHelmWindows() error {
+	const manualInstructions = "\n  Install Helm manually and re-run dtwiz:\n" +
+		"    winget install --id Helm.Helm\n" +
+		"  or download from https://helm.sh/docs/intro/install/"
+
+	if _, err := exec.LookPath("winget"); err != nil {
+		return fmt.Errorf("helm is not installed and winget was not found on PATH%s", manualInstructions)
+	}
+
+	fmt.Println("  Helm not found — installing via winget...")
+	if err := RunCommand("winget", "install", "--id", "Helm.Helm", "-e", "--source", "winget"); err != nil {
+		return fmt.Errorf("helm installation via winget failed: %w%s", err, manualInstructions)
+	}
+	return nil
 }
 
 // isOperatorInstalled checks whether the dynatrace-operator Helm release
