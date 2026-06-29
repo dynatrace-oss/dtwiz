@@ -82,6 +82,33 @@ func TestUninstallKubernetes_Success(t *testing.T) {
 	}
 }
 
+func TestUninstallKubernetes_EdgeConnectDeletedEvenWhenDynaKubeFails(t *testing.T) {
+	orig := AutoConfirm
+	AutoConfirm = true
+	t.Cleanup(func() { AutoConfirm = orig })
+
+	var calls []string
+	withFakeRunCmdQuiet(t, func(name string, args ...string) error {
+		calls = append(calls, name+" "+strings.Join(args, " "))
+		if name == "kubectl" && len(args) > 1 && args[0] == "delete" && args[1] == "dynakube" {
+			return errors.New("kubectl: not found")
+		}
+		return nil
+	})
+
+	captureStdout(t, func() { _ = UninstallKubernetes("my-ctx", "EKS") })
+
+	ranEdgeConnect := false
+	for _, c := range calls {
+		if strings.Contains(c, "delete edgeconnect") {
+			ranEdgeConnect = true
+		}
+	}
+	if !ranEdgeConnect {
+		t.Error("expected EdgeConnect deletion to run even when DynaKube delete fails")
+	}
+}
+
 func TestUninstallKubernetes_KubectlDeleteFails(t *testing.T) {
 	orig := AutoConfirm
 	AutoConfirm = true
@@ -119,8 +146,111 @@ func TestUninstallKubernetes_HelmUninstallFails(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error when helm uninstall fails")
 		}
-		if !strings.Contains(err.Error(), "helm uninstall failed") {
+		if !strings.Contains(err.Error(), "one or more steps failed") {
 			t.Errorf("unexpected error message: %v", err)
 		}
 	})
+}
+
+func TestUninstallKubernetes_HelmFailContinuesToNamespaceDeletion(t *testing.T) {
+	orig := AutoConfirm
+	AutoConfirm = true
+	t.Cleanup(func() { AutoConfirm = orig })
+
+	var calls []string
+	withFakeRunCmdQuiet(t, func(name string, args ...string) error {
+		calls = append(calls, name+" "+strings.Join(args, " "))
+		if name == "helm" {
+			return errors.New("helm: release not found")
+		}
+		return nil
+	})
+
+	out := captureStdout(t, func() {
+		err := UninstallKubernetes("my-ctx", "EKS")
+		if err == nil {
+			t.Fatal("expected error when helm uninstall fails")
+		}
+	})
+
+	deletedNamespace := false
+	for _, c := range calls {
+		if strings.Contains(c, "delete namespace dynatrace") {
+			deletedNamespace = true
+		}
+	}
+	if !deletedNamespace {
+		t.Error("expected namespace deletion to run even after helm failure")
+	}
+	if !strings.Contains(out, "Namespace deleted") {
+		t.Errorf("expected namespace deleted message in output, got: %q", out)
+	}
+}
+
+func TestUninstallKubernetes_KubectlDeleteFailContinuesToEnd(t *testing.T) {
+	orig := AutoConfirm
+	AutoConfirm = true
+	t.Cleanup(func() { AutoConfirm = orig })
+
+	var calls []string
+	withFakeRunCmdQuiet(t, func(name string, args ...string) error {
+		calls = append(calls, name+" "+strings.Join(args, " "))
+		if name == "kubectl" && len(args) > 1 && args[0] == "delete" && args[1] == "dynakube" {
+			return errors.New("kubectl: not found")
+		}
+		return nil
+	})
+
+	captureStdout(t, func() {
+		err := UninstallKubernetes("my-ctx", "EKS")
+		if err == nil {
+			t.Fatal("expected error when kubectl delete dynakube fails")
+		}
+	})
+
+	ranHelm, ranNamespace := false, false
+	for _, c := range calls {
+		if strings.Contains(c, "helm uninstall") {
+			ranHelm = true
+		}
+		if strings.Contains(c, "delete namespace dynatrace") {
+			ranNamespace = true
+		}
+	}
+	if !ranHelm {
+		t.Error("expected helm uninstall to run even after step 1 failure")
+	}
+	if !ranNamespace {
+		t.Error("expected namespace deletion to run even after step 1 failure")
+	}
+}
+
+func TestUninstallKubernetes_MultipleStepsFail(t *testing.T) {
+	orig := AutoConfirm
+	AutoConfirm = true
+	t.Cleanup(func() { AutoConfirm = orig })
+
+	withFakeRunCmdQuiet(t, func(name string, args ...string) error {
+		if name == "helm" {
+			return errors.New("helm: release not found")
+		}
+		if name == "kubectl" && len(args) > 0 && args[0] == "delete" && len(args) > 1 && args[1] == "namespace" {
+			return errors.New("kubectl: namespace not found")
+		}
+		return nil
+	})
+
+	out := captureStdout(t, func() {
+		err := UninstallKubernetes("my-ctx", "EKS")
+		if err == nil {
+			t.Fatal("expected error when multiple steps fail")
+		}
+		if !strings.Contains(err.Error(), "one or more steps failed") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "Uninstall completed with errors") {
+		t.Errorf("expected completion-with-errors message, got: %q", out)
+	}
 }
