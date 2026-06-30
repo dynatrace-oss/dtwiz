@@ -459,6 +459,50 @@ func TestAzureGetSPObjectID_JSONParseFail(t *testing.T) {
 	}
 }
 
+func TestAzureGetSPObjectID_EmptyIDRetriedThenSucceeds(t *testing.T) {
+	// The SP can return HTTP 200 with an empty "id" field while Entra is still
+	// propagating. The retry loop must treat this the same as not-found and keep
+	// polling until a non-empty ID is returned.
+	callCount := 0
+	runner := func(_ string, _ []string, _ []string) (string, error) {
+		callCount++
+		if callCount == 1 {
+			return `{"id":""}`, nil // successful response, but ID not yet populated
+		}
+		return `{"id":"object-id-111"}`, nil
+	}
+	id, err := azureGetSPObjectID(runner, "client-id-000", noSleep)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if id != "object-id-111" {
+		t.Errorf("got id %q, want object-id-111", id)
+	}
+	if callCount != 2 {
+		t.Errorf("expected 2 calls (retry after empty ID), got %d", callCount)
+	}
+}
+
+func TestAzureGetSPObjectID_EmptyIDAllAttemptsExhausted(t *testing.T) {
+	// If every attempt returns a successful 200 with an empty ID, the loop must
+	// exhaust all 5 retries and return an error rather than returning an empty string.
+	runner := func(_ string, _ []string, _ []string) (string, error) {
+		return `{"id":""}`, nil
+	}
+	sleepCount := 0
+	testSleeper := func(_ time.Duration) { sleepCount++ }
+	_, err := azureGetSPObjectID(runner, "client-id-000", testSleeper)
+	if err == nil {
+		t.Fatal("expected error after all attempts return empty ID, got nil")
+	}
+	if !strings.Contains(err.Error(), "exhausted retries") {
+		t.Errorf("error %q does not mention exhausted retries", err.Error())
+	}
+	if sleepCount != 4 {
+		t.Errorf("expected 4 sleeps for 5 attempts, got %d", sleepCount)
+	}
+}
+
 // ─── retryingDTClient ─────────────────────────────────────────────────────────
 
 // retryingDTClient wraps fakeDTClient and delegates updateConnection to a custom

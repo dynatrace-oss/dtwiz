@@ -17,6 +17,10 @@ func ConnectionExists(envURL, platformToken string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	return connectionExistsWithClient(dtc)
+}
+
+func connectionExistsWithClient(dtc dtclient) (bool, error) {
 	conns, err := dtc.findAllConnections(integrationName)
 	return len(conns) > 0, err
 }

@@ -476,6 +476,55 @@ func TestAzureGatherClientIDs_VerificationFailureSkipsWithWarning(t *testing.T) 
 	}
 }
 
+// ─── connectionExistsWithClient ──────────────────────────────────────────────
+
+func TestConnectionExists_ReturnsTrueWhenConnectionFound(t *testing.T) {
+	dtc := &fakeDTClient{findConnObjectID: "conn-obj-001", findConnClientID: "client-id-000"}
+	ok, err := connectionExistsWithClient(dtc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !ok {
+		t.Error("expected true when connection exists, got false")
+	}
+}
+
+func TestConnectionExists_ReturnsFalseWhenNoConnections(t *testing.T) {
+	dtc := &fakeDTClient{} // findAllConnections returns nil
+	ok, err := connectionExistsWithClient(dtc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ok {
+		t.Error("expected false when no connections found, got true")
+	}
+}
+
+func TestConnectionExists_PropagatesLookupError(t *testing.T) {
+	dtc := &fakeDTClient{findConnErr: fmt.Errorf("api unavailable")}
+	_, err := connectionExistsWithClient(dtc)
+	if err == nil {
+		t.Fatal("expected error from failing lookup, got nil")
+	}
+	if !strings.Contains(err.Error(), "api unavailable") {
+		t.Errorf("error %q does not contain original message", err.Error())
+	}
+}
+
+func TestConnectionExists_ReturnsTrueForMultipleConnections(t *testing.T) {
+	dtc := &fakeDTClient{findConnRefs: []connRef{
+		{objectID: "conn-obj-001", clientID: "client-id-001"},
+		{objectID: "conn-obj-002", clientID: "client-id-002"},
+	}}
+	ok, err := connectionExistsWithClient(dtc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !ok {
+		t.Error("expected true for multiple connections, got false")
+	}
+}
+
 func TestAzureGatherClientIDs_Sorted(t *testing.T) {
 	// Output must be deterministically sorted regardless of map iteration order.
 	conns := []connRef{
