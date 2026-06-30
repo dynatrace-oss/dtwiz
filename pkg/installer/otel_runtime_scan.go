@@ -290,7 +290,11 @@ func promptProjectSelection(label string, projects []ScannedProject) *ScannedPro
 		fmt.Println(line)
 	}
 	fmt.Println()
-	fmt.Printf("  Select a project to instrument [1-%d] or press Enter to skip: ", len(projects))
+	rangeHint := fmt.Sprintf("1-%d", len(projects))
+	if len(projects) == 1 {
+		rangeHint = "1"
+	}
+	fmt.Printf("  Select a project to instrument [%s] or press Enter to skip: ", rangeHint)
 	reader := bufio.NewReader(os.Stdin)
 	answer, _ := reader.ReadString('\n')
 	answer = strings.TrimSpace(answer)
