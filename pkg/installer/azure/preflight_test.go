@@ -65,14 +65,14 @@ func TestAzurePreflightNotLoggedIn(t *testing.T) {
 // TestAzureCheckRBACAdvisory verifies the RBAC check is advisory: it warns but
 // never blocks, whether the check call fails or reports insufficient access.
 func TestAzureCheckRBACAdvisory(t *testing.T) {
-	t.Run("denied — warns at subscription scope, does not block", func(t *testing.T) {
+	t.Run("denied: warns at subscription scope, does not block", func(t *testing.T) {
 		var checkAccessURL string
 		runner := func(_ string, args []string, _ []string) (string, error) {
-			// First call is az ad signed-in-user show — return a valid user.
+			// First call is az ad signed-in-user show: return a valid user.
 			if len(args) > 1 && args[0] == "ad" && args[1] == "signed-in-user" {
 				return `{"id":"user-object-id"}`, nil
 			}
-			// Second call is az rest (checkAccess) — return denied.
+			// Second call is az rest (checkAccess): return denied.
 			for i, a := range args {
 				if a == "--url" && i+1 < len(args) {
 					checkAccessURL = args[i+1]
@@ -91,13 +91,13 @@ func TestAzureCheckRBACAdvisory(t *testing.T) {
 		}
 	})
 
-	t.Run("check call fails — warns 'could not validate', does not block", func(t *testing.T) {
+	t.Run("check call fails: warns 'could not validate', does not block", func(t *testing.T) {
 		runner := func(_ string, args []string, _ []string) (string, error) {
-			// First call is az ad signed-in-user show — return a valid user.
+			// First call is az ad signed-in-user show: return a valid user.
 			if len(args) > 1 && args[0] == "ad" && args[1] == "signed-in-user" {
 				return `{"id":"user-object-id"}`, nil
 			}
-			// Second call is az rest (checkAccess) — simulate failure.
+			// Second call is az rest (checkAccess): simulate failure.
 			return "", fmt.Errorf("exit status 1: InvalidResourceType")
 		}
 		out := captureColorOutput(func() {
@@ -111,7 +111,7 @@ func TestAzureCheckRBACAdvisory(t *testing.T) {
 
 // TestAzureCheckRBACSkipsWhenSignedInUserFails verifies that a failure to
 // resolve the signed-in user causes the RBAC check to be skipped silently
-// — no warning printed, no checkAccess call made.
+// no warning printed, no checkAccess call made.
 func TestAzureCheckRBACSkipsWhenSignedInUserFails(t *testing.T) {
 	checkCalled := false
 	runner := func(_ string, args []string, _ []string) (string, error) {
@@ -149,7 +149,7 @@ func TestAzureCheckRBACSkipsWhenSignedInUserHasEmptyID(t *testing.T) {
 }
 
 // TestAzureCheckRBACNoWarningOnAllowed verifies that an Allowed decision
-// produces no warning output — the happy path must be silent.
+// produces no warning output; the happy path must be silent.
 func TestAzureCheckRBACNoWarningOnAllowed(t *testing.T) {
 	runner := func(_ string, args []string, _ []string) (string, error) {
 		if len(args) > 1 && args[0] == "ad" && args[1] == "signed-in-user" {
@@ -166,7 +166,7 @@ func TestAzureCheckRBACNoWarningOnAllowed(t *testing.T) {
 }
 
 // TestAzurePreflightContinuesPastRBACDenial verifies that a denied RBAC check
-// does not abort the install — the flow proceeds to the first mutating step.
+// does not abort the install; the flow proceeds to the first mutating step.
 func TestAzurePreflightContinuesPastRBACDenial(t *testing.T) {
 	old := installer.AutoConfirm
 	installer.AutoConfirm = true
@@ -184,7 +184,7 @@ func TestAzurePreflightContinuesPastRBACDenial(t *testing.T) {
 		}
 	}
 
-	// createConnection (step 1) errors — but only reachable if we get past preflight.
+	// createConnection (step 1) errors, but only reachable if we get past preflight.
 	dtc := &fakeDTClient{connErr: fmt.Errorf("boom from step 1")}
 
 	err := captureStdoutErr(func() error {

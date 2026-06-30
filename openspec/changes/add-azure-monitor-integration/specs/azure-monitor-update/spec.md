@@ -4,7 +4,7 @@
 
 ### Requirement: Update is an in-place monitoring-config reconcile reached through setup
 
-The system SHALL provide an `UpdateAzure` entry point that refreshes an existing integration in place by reconciling **only** the `da-azure` monitoring configuration to the latest schema-derived defaults. The authentication chain — the Dynatrace connection, the Azure Service Principal, the federated credential, and the Monitoring Reader role assignment — SHALL NOT be modified by an update. There SHALL intentionally be no `dtwiz update azure` subcommand; the update path SHALL be reached from `dtwiz setup` when an Azure connection already exists.
+The system SHALL provide an `UpdateAzure` entry point that refreshes an existing integration in place by reconciling **only** the `da-azure` monitoring configuration to the latest schema-derived defaults. The authentication chain SHALL NOT be modified by an update: the Dynatrace connection, the Azure Service Principal, the federated credential, and the Monitoring Reader role assignment. There SHALL intentionally be no `dtwiz update azure` subcommand; the update path SHALL be reached from `dtwiz setup` when an Azure connection already exists.
 
 #### Scenario: Setup routes to update when configured
 

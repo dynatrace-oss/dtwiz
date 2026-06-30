@@ -44,11 +44,11 @@ func azureGatherClientIDs(runner cmdRunner, conns []connRef, name, envURL string
 			}
 			ok, verr := azureAppHasDtwizFedCred(runner, id, issuer)
 			if verr != nil {
-				display.ColorWarning.Printf("  Warning: skipping App Registration %s named %q — could not verify it was created by dtwiz (%v)\n", id, name, verr)
+				display.ColorWarning.Printf("  Warning: skipping App Registration %s named %q: could not verify it was created by dtwiz (%v)\n", id, name, verr)
 				continue
 			}
 			if !ok {
-				display.ColorWarning.Printf("  Warning: skipping App Registration %s named %q — it lacks the dtwiz federated credential, so it was not created by dtwiz\n", id, name)
+				display.ColorWarning.Printf("  Warning: skipping App Registration %s named %q: it lacks the dtwiz federated credential, so it was not created by dtwiz\n", id, name)
 				continue
 			}
 			set[id] = true
@@ -102,7 +102,7 @@ func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc 
 	clientIDs := azureGatherClientIDs(runner, conns, integrationName, envURL)
 
 	if len(monConfigIDs) == 0 && len(conns) == 0 && len(clientIDs) == 0 {
-		fmt.Println("  No Azure Monitor integration resources found — nothing to uninstall.")
+		fmt.Println("  No Azure Monitor integration resources found; nothing to uninstall.")
 		return nil
 	}
 
@@ -207,7 +207,7 @@ func azureUninstallBuildSteps(monConfigIDs []string, conns []connRef, clientIDs 
 
 func azureUninstallPrintPreview(envURL string, monConfigIDs []string, conns []connRef, clientIDs []string, configName, connName string) {
 	fmt.Println()
-	display.ColorMessage.Println("  Dynatrace Azure Monitor Integration — Uninstall")
+	display.ColorMessage.Println("  Dynatrace Azure Monitor Integration: Uninstall")
 	fmt.Println()
 	fmt.Printf("  Environment: %s\n", envURL)
 	if len(conns) > 0 {
@@ -215,7 +215,7 @@ func azureUninstallPrintPreview(envURL string, monConfigIDs []string, conns []co
 			fmt.Printf("  Connection:  %s (id: %s)\n", connName, c.objectID)
 		}
 	} else {
-		fmt.Printf("  Connection:  %s — not found, skipping\n", connName)
+		fmt.Printf("  Connection:  %s: not found, skipping\n", connName)
 	}
 	for _, clientID := range clientIDs {
 		fmt.Printf("  App Registration: %s\n", clientID)
@@ -225,7 +225,7 @@ func azureUninstallPrintPreview(envURL string, monConfigIDs []string, conns []co
 			fmt.Printf("  Monitoring config: %s (id: %s)\n", configName, id)
 		}
 	} else {
-		fmt.Printf("  Monitoring config: %s — not found, skipping\n", configName)
+		fmt.Printf("  Monitoring config: %s: not found, skipping\n", configName)
 	}
 	fmt.Println()
 	display.PrintSectionDivider()

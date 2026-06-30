@@ -376,7 +376,7 @@ func TestAzureStep5FailsAllCleanupHints(t *testing.T) {
 }
 
 func TestAzureInstallCancelled(t *testing.T) {
-	// AutoConfirm is false (default) — ConfirmProceed reads from stdin; EOF → cancelled.
+	// AutoConfirm is false (default): ConfirmProceed reads from stdin; EOF -> cancelled.
 	defer stubExecLookPath(t)()
 
 	runner := func(name string, args []string, _ []string) (string, error) {

@@ -150,7 +150,7 @@ func (d *sdkDTClient) deleteConnection(objectID string) error {
 }
 
 // buildMonitoringConfig is shared by createMonitoring and updateMonitoring so both produce identical configs.
-// Empty enums are a hard error — a missing location or feature-set list must not silently create a partial config.
+// Empty enums are a hard error; a missing location or feature-set list must not silently create a partial config.
 func (d *sdkDTClient) buildMonitoringConfig(configName, connectionObjectID, clientID, subscriptionID string) (extension.MonitoringConfigurationCreate, error) {
 	var body extension.MonitoringConfigurationCreate
 

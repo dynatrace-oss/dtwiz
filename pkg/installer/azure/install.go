@@ -93,15 +93,15 @@ func azurePartialFailureHint(cfg azureConfig, completedSteps map[int]bool) {
 	display.ColorWarning.Println("  The following resources were already created and may need to be cleaned up")
 	display.ColorWarning.Println("  (or just re-run `dtwiz uninstall azure`, which removes them all):")
 	if completedSteps[1] {
-		fmt.Printf("    • DT connection '%s' — delete with: dtctl delete azure connection --name %s\n",
+		fmt.Printf("    • DT connection '%s': delete with: dtctl delete azure connection --name %s\n",
 			cfg.ConnectionName, cfg.ConnectionName)
 	}
 	if completedSteps[2] {
-		fmt.Printf("    • Azure App Registration '%s' (incl. Service Principal + federated credential) — delete with: az ad app delete --id %s\n",
+		fmt.Printf("    • Azure App Registration '%s' (incl. Service Principal + federated credential): delete with: az ad app delete --id %s\n",
 			cfg.ConnectionName, cfg.ClientID)
 	}
 	if completedSteps[5] {
-		fmt.Printf("    • Role assignment — delete with: az role assignment delete --assignee %s --role 'Monitoring Reader'\n", cfg.ClientID)
+		fmt.Printf("    • Role assignment: delete with: az role assignment delete --assignee %s --role 'Monitoring Reader'\n", cfg.ClientID)
 	}
 }
 
@@ -114,7 +114,7 @@ func InstallAzure(envURL, platformToken string, dryRun bool, startTime time.Time
 	return installAzureWithRunner(envURL, platformToken, dryRun, startTime, realRunner, time.Sleep, dtc)
 }
 
-// installAzureWithRunner is the testable core — runner, sleeper, and dtclient are injected.
+// installAzureWithRunner is the testable core; runner, sleeper, and dtclient are injected.
 func installAzureWithRunner(
 	envURL, platformToken string,
 	dryRun bool,
@@ -133,7 +133,7 @@ func installAzureWithRunner(
 		return fmt.Errorf("checking existing connection: %w", err)
 	}
 	if len(existing) > 0 {
-		return fmt.Errorf("azure connection '%s' already exists — run `dtwiz uninstall azure` to remove it first", integrationName)
+		return fmt.Errorf("azure connection '%s' already exists: run `dtwiz uninstall azure` to remove it first", integrationName)
 	}
 
 	cfg := azureConfig{

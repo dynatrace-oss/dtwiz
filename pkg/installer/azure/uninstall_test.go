@@ -133,7 +133,7 @@ func TestUninstallAzureOrphanedAppCleaned(t *testing.T) {
 	defer func() { installer.AutoConfirm = old }()
 
 	// DT connection has no stored clientID, but an orphaned App Registration of the
-	// same name lingers — it must still be discovered and deleted.
+	// same name lingers; it must still be discovered and deleted.
 	dtc := &fakeDTClient{
 		findConnObjectID: "conn-obj-001",
 		findConnClientID: "",
@@ -176,7 +176,7 @@ func TestUninstallAzureUnrelatedAppNotDeleted(t *testing.T) {
 	defer func() { installer.AutoConfirm = old }()
 
 	// An app of the same display name exists but was NOT created by dtwiz
-	// (lacks the dtwiz federated credential) — it must be left untouched.
+	// (lacks the dtwiz federated credential); it must be left untouched.
 	dtc := &fakeDTClient{
 		findConnObjectID: "conn-obj-001",
 		findConnClientID: "",
@@ -439,7 +439,7 @@ func TestAzureGatherClientIDs_UnrelatedAppSkipped(t *testing.T) {
 }
 
 func TestAzureGatherClientIDs_AzListFailureContinues(t *testing.T) {
-	// az ad app list fails — must not block deletion of connection-bound resources.
+	// az ad app list fails; must not block deletion of connection-bound resources.
 	conns := []connRef{{objectID: "obj-001", clientID: "conn-client-id"}}
 	runner := func(_ string, args []string, _ []string) (string, error) {
 		if isAppList(args) {

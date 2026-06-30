@@ -10,7 +10,7 @@ import (
 )
 
 // UpdateAzure reconciles only the monitoring configuration; the auth chain (connection, SP, federated credential, role) is never touched.
-// Reached from `dtwiz setup` when a connection already exists — there is no `dtwiz update azure` subcommand.
+// Reached from `dtwiz setup` when a connection already exists; there is no `dtwiz update azure` subcommand.
 func UpdateAzure(envURL, platformToken string, dryRun bool, startTime time.Time) error {
 	dtc, err := newSDKDTClient(envURL, platformToken)
 	if err != nil {
@@ -114,7 +114,7 @@ func updateAzureWithRunner(
 	return nil
 }
 
-// selectUpdatableConnection requires exactly one connection with a bound client ID — partial or duplicate connections are rejected.
+// selectUpdatableConnection requires exactly one connection with a bound client ID; partial or duplicate connections are rejected.
 func selectUpdatableConnection(conns []connRef) (connRef, error) {
 	var usable []connRef
 	for _, c := range conns {
@@ -124,15 +124,15 @@ func selectUpdatableConnection(conns []connRef) (connRef, error) {
 	}
 	switch {
 	case len(usable) == 0:
-		return connRef{}, fmt.Errorf("no complete Azure connection named %q found — run `dtwiz install azure` to set one up (or `dtwiz uninstall azure` then install to repair a partial one)", integrationName)
+		return connRef{}, fmt.Errorf("no complete Azure connection named %q found: run `dtwiz install azure` to set one up (or `dtwiz uninstall azure` then install to repair a partial one)", integrationName)
 	case len(usable) > 1:
-		return connRef{}, fmt.Errorf("found %d Azure connections named %q — run `dtwiz uninstall azure` then `dtwiz install azure` for a clean single integration", len(usable), integrationName)
+		return connRef{}, fmt.Errorf("found %d Azure connections named %q: run `dtwiz uninstall azure` then `dtwiz install azure` for a clean single integration", len(usable), integrationName)
 	default:
 		return usable[0], nil
 	}
 }
 
-// reconcileMonitoring updates or creates the monitoring configuration. Each update is a single atomic call — failure leaves the prior config intact.
+// reconcileMonitoring updates or creates the monitoring configuration. Each update is a single atomic call; failure leaves the prior config intact.
 func reconcileMonitoring(cfg azureConfig, monConfigIDs []string, dtc dtclient) error {
 	if len(monConfigIDs) == 0 {
 		fmt.Println("  Step 1/1: Create Azure monitoring configuration...")
@@ -157,7 +157,7 @@ func reconcileMonitoring(cfg azureConfig, monConfigIDs []string, dtc dtclient) e
 
 func azureUpdatePrintPreview(cfg azureConfig, monConfigIDs []string) {
 	fmt.Println()
-	display.ColorMessage.Println("  Dynatrace Azure Monitor Integration — Update")
+	display.ColorMessage.Println("  Dynatrace Azure Monitor Integration: Update")
 	fmt.Println()
 	fmt.Printf("  Environment:        %s\n", cfg.EnvURL)
 	fmt.Printf("  Tenant ID:          %s\n", cfg.TenantID)

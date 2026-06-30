@@ -66,7 +66,7 @@ The system SHALL make a best-effort check that the signed-in principal can creat
 
 ### Requirement: Abort when an integration already exists
 
-The system SHALL check for an existing Dynatrace Azure connection named `dtwiz-azure` before installing, and SHALL abort with guidance to run `dtwiz uninstall azure` first if one is found. (The `dtwiz setup` flow routes to update instead — see `azure-monitor-update`.)
+The system SHALL check for an existing Dynatrace Azure connection named `dtwiz-azure` before installing, and SHALL abort with guidance to run `dtwiz uninstall azure` first if one is found. (The `dtwiz setup` flow routes to update instead; see `azure-monitor-update`.)
 
 #### Scenario: Existing connection blocks install
 

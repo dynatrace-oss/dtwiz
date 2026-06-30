@@ -72,7 +72,7 @@ The system SHALL print a preview listing the environment, each connection, each 
 
 ### Requirement: Best-effort deletion that continues past failures
 
-The system SHALL delete resources in order — monitoring configurations, then per app the Monitoring Reader role assignment and the App Registration, then connections. Deleting the App Registration SHALL be the single call that also removes its Service Principal and federated credentials. A failed step SHALL print a warning and the run SHALL continue with remaining steps; all step errors SHALL be collected and returned together. Role-assignment and app deletions that report "not found" or "no matched assignments", and connection deletes that return a 404, SHALL be treated as success.
+The system SHALL delete resources in order: monitoring configurations, then per app the Monitoring Reader role assignment and the App Registration, then connections. Deleting the App Registration SHALL be the single call that also removes its Service Principal and federated credentials. A failed step SHALL print a warning and the run SHALL continue with remaining steps; all step errors SHALL be collected and returned together. Role-assignment and app deletions that report "not found" or "no matched assignments", and connection deletes that return a 404, SHALL be treated as success.
 
 #### Scenario: One failure does not strand the rest
 

@@ -20,12 +20,12 @@ func azurePreflightChecks(runner cmdRunner, envURL, platformToken string) (subsc
 // azureAccountInfo skips the RBAC advisory check; used by callers that never create role assignments (e.g. in-place update).
 func azureAccountInfo(runner cmdRunner) (subscriptionID, tenantID string, err error) {
 	if _, err = execLookPath("az"); err != nil {
-		return "", "", fmt.Errorf("Azure CLI (az) not found — install it from https://docs.microsoft.com/cli/azure/install-azure-cli") //nolint:staticcheck // ST1005: "Azure CLI" is a product name
+		return "", "", fmt.Errorf("Azure CLI (az) not found: install it from https://docs.microsoft.com/cli/azure/install-azure-cli") //nolint:staticcheck // ST1005: "Azure CLI" is a product name
 	}
 
 	accountJSON, err := runner("az", []string{"account", "show", "-o", "json"}, nil)
 	if err != nil {
-		return "", "", fmt.Errorf("Not logged in to Azure — run `az login` and retry") //nolint:staticcheck // ST1005: user-facing message
+		return "", "", fmt.Errorf("Not logged in to Azure: run `az login` and retry") //nolint:staticcheck // ST1005: user-facing message
 	}
 
 	var account struct {
@@ -41,7 +41,7 @@ func azureAccountInfo(runner cmdRunner) (subscriptionID, tenantID string, err er
 	return subscriptionID, tenantID, nil
 }
 
-// azureCheckRBAC is advisory only — warns on missing permissions, never blocks.
+// azureCheckRBAC is advisory only: warns on missing permissions, never blocks.
 func azureCheckRBAC(runner cmdRunner, subscriptionScope string) {
 	userJSON, err := runner("az", []string{"ad", "signed-in-user", "show", "-o", "json"}, nil)
 	if err != nil {
@@ -75,7 +75,7 @@ func azureCheckRBAC(runner cmdRunner, subscriptionScope string) {
 		AccessDecision string `json:"accessDecision"`
 	}
 	if err := json.Unmarshal([]byte(out), &decisions); err != nil || len(decisions) == 0 || decisions[0].AccessDecision != "Allowed" {
-		display.ColorWarning.Println("  Warning: your account may lack Microsoft.Authorization/roleAssignments/write at subscription scope — you may need Owner or User Access Administrator role; continuing")
+		display.ColorWarning.Println("  Warning: your account may lack Microsoft.Authorization/roleAssignments/write at subscription scope; you may need Owner or User Access Administrator role; continuing")
 		return
 	}
 	logger.Debug("RBAC check passed", "scope", subscriptionScope)
