@@ -65,5 +65,5 @@
 - [x] 9.4 `preflight_test.go` — CLI-missing, not-logged-in, RBAC advisory warn-but-continue
 - [x] 9.5 `install_test.go` — full 7-step workflow with injected runner/sleeper/dtclient, existence-check abort, dry-run, step-3 replacement, step-6 propagation retries, partial-failure hint
 - [x] 9.6 `uninstall_test.go` — discovery, ownership-verified gathering, nothing-to-do, best-effort continue-on-failure, step count
-- [x] 9.7 `update_test.go` — parallel discovery+preflight, two-phase numbering, orphan-app healing, phase-wrapped errors
+- [x] 9.7 `update_test.go` — parallel discovery+preflight, in-place reconcile of existing config(s), create-when-missing, duplicate-config reconcile, and `selectUpdatableConnection` abort cases (no complete / multiple connections)
 - [x] 9.8 `make test` and `make lint` — all pass

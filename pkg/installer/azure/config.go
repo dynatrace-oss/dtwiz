@@ -52,11 +52,3 @@ func realRunner(name string, args []string, env []string) (string, error) {
 	}
 	return string(out), err
 }
-
-// maskToken replaces all occurrences of token in s with ***.
-func maskToken(s, token string) string {
-	if token == "" {
-		return s
-	}
-	return strings.ReplaceAll(s, token, "***")
-}

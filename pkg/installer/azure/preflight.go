@@ -8,13 +8,6 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
-// azurePreflightChecks runs all pre-mutation checks and returns the subscription
-// scope used for the integration:
-//  1. az on PATH
-//  2. az account show — must succeed (user is logged in)
-//  3. RBAC checkAccess at subscription scope (advisory only — warns, never blocks)
-//
-// The integration always operates at subscription scope (/subscriptions/<id>).
 func azurePreflightChecks(runner cmdRunner, envURL, platformToken string) (subscriptionID, tenantID string, err error) {
 	subscriptionID, tenantID, err = azureAccountInfo(runner)
 	if err != nil {
@@ -24,10 +17,7 @@ func azurePreflightChecks(runner cmdRunner, envURL, platformToken string) (subsc
 	return subscriptionID, tenantID, nil
 }
 
-// azureAccountInfo verifies the Azure CLI is present and the user is logged in,
-// then returns the active subscription and tenant ID. Unlike azurePreflightChecks
-// it does not run the role-assignment RBAC advisory — callers that never create
-// role assignments (e.g. the in-place update) use this directly.
+// azureAccountInfo skips the RBAC advisory check; used by callers that never create role assignments (e.g. in-place update).
 func azureAccountInfo(runner cmdRunner) (subscriptionID, tenantID string, err error) {
 	if _, err = execLookPath("az"); err != nil {
 		return "", "", fmt.Errorf("Azure CLI (az) not found — install it from https://docs.microsoft.com/cli/azure/install-azure-cli") //nolint:staticcheck // ST1005: "Azure CLI" is a product name
@@ -51,12 +41,7 @@ func azureAccountInfo(runner cmdRunner) (subscriptionID, tenantID string, err er
 	return subscriptionID, tenantID, nil
 }
 
-// azureCheckRBAC makes a best-effort check that the current principal can create
-// role assignments at the given subscription scope. It is advisory only: if the
-// check cannot be completed (e.g. the principal lacks rights to read
-// authorization data) or reports insufficient access, it prints a warning and
-// returns. It never blocks — the role-assignment step surfaces the definitive
-// error if permissions are actually missing.
+// azureCheckRBAC is advisory only — warns on missing permissions, never blocks.
 func azureCheckRBAC(runner cmdRunner, subscriptionScope string) {
 	userJSON, err := runner("az", []string{"ad", "signed-in-user", "show", "-o", "json"}, nil)
 	if err != nil {
@@ -86,12 +71,10 @@ func azureCheckRBAC(runner cmdRunner, subscriptionScope string) {
 		display.ColorWarning.Printf("  Warning: could not validate Azure permissions (%v); continuing\n", err)
 		return
 	}
-	var result struct {
-		Value []struct {
-			AccessDecision string `json:"accessDecision"`
-		} `json:"value"`
+	var decisions []struct {
+		AccessDecision string `json:"accessDecision"`
 	}
-	if err := json.Unmarshal([]byte(out), &result); err != nil || len(result.Value) == 0 || result.Value[0].AccessDecision != "Allowed" {
+	if err := json.Unmarshal([]byte(out), &decisions); err != nil || len(decisions) == 0 || decisions[0].AccessDecision != "Allowed" {
 		display.ColorWarning.Println("  Warning: your account may lack Microsoft.Authorization/roleAssignments/write at subscription scope — you may need Owner or User Access Administrator role; continuing")
 		return
 	}

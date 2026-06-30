@@ -9,13 +9,8 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
-// UpdateAzure refreshes an existing Azure Monitor integration in place. It
-// reconciles only the da-azure monitoring configuration to the latest
-// schema-derived defaults (extension version, locations, feature sets) and
-// leaves the entire authentication chain — the Dynatrace connection, Service
-// Principal, federated credential, and Monitoring Reader role assignment —
-// untouched. This is reached from `dtwiz setup` when an Azure connection
-// already exists; there is intentionally no `dtwiz update azure` subcommand.
+// UpdateAzure reconciles only the monitoring configuration; the auth chain (connection, SP, federated credential, role) is never touched.
+// Reached from `dtwiz setup` when a connection already exists — there is no `dtwiz update azure` subcommand.
 func UpdateAzure(envURL, platformToken string, dryRun bool, startTime time.Time) error {
 	dtc, err := newSDKDTClient(envURL, platformToken)
 	if err != nil {
@@ -31,7 +26,6 @@ func updateAzureWithRunner(
 	runner cmdRunner,
 	dtc dtclient,
 ) error {
-	// ── Discover existing resources + account info (parallel) ─────────────────
 	type monitorRes struct {
 		ids []string
 		err error
@@ -75,10 +69,6 @@ func updateAzureWithRunner(
 	monConfigIDs, conns := mr.ids, cr.conns
 	subscriptionID, tenantID := ar.subscriptionID, ar.tenantID
 
-	// In-place update requires an existing connection that carries the bound
-	// application ID — the monitoring configuration references both. A missing
-	// or incomplete connection means there is nothing safe to reconcile; point
-	// the user at the clean install/uninstall path rather than guessing.
 	conn, err := selectUpdatableConnection(conns)
 	if err != nil {
 		return err
@@ -95,7 +85,6 @@ func updateAzureWithRunner(
 		ClientID:          conn.clientID,
 	}
 
-	// ── Preview ────────────────────────────────────────────────────────────────
 	azureUpdatePrintPreview(cfg, monConfigIDs)
 
 	if dryRun {
@@ -103,7 +92,6 @@ func updateAzureWithRunner(
 		return nil
 	}
 
-	// ── Confirm ────────────────────────────────────────────────────────────────
 	ok, err := installer.ConfirmProceed("  Apply?")
 	if err != nil {
 		return fmt.Errorf("reading confirmation: %w", err)
@@ -126,9 +114,7 @@ func updateAzureWithRunner(
 	return nil
 }
 
-// selectUpdatableConnection returns the connection to reconcile against. The
-// update path only refreshes the monitoring configuration, so it needs exactly
-// one connection that already carries its bound application ID.
+// selectUpdatableConnection requires exactly one connection with a bound client ID — partial or duplicate connections are rejected.
 func selectUpdatableConnection(conns []connRef) (connRef, error) {
 	var usable []connRef
 	for _, c := range conns {
@@ -146,10 +132,7 @@ func selectUpdatableConnection(conns []connRef) (connRef, error) {
 	}
 }
 
-// reconcileMonitoring updates every existing monitoring configuration in place,
-// or creates one when none exist. Each configuration is rewritten with a single
-// atomic call, so a failure leaves the prior configuration intact rather than a
-// half-built one. The authentication chain is never modified.
+// reconcileMonitoring updates or creates the monitoring configuration. Each update is a single atomic call — failure leaves the prior config intact.
 func reconcileMonitoring(cfg azureConfig, monConfigIDs []string, dtc dtclient) error {
 	if len(monConfigIDs) == 0 {
 		fmt.Println("  Step 1/1: Create Azure monitoring configuration...")

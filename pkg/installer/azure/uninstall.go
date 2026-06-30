@@ -10,8 +10,6 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
-// ConnectionExists reports whether a dtwiz-managed Azure connection already
-// exists in the given Dynatrace environment.
 func ConnectionExists(envURL, platformToken string) (bool, error) {
 	dtc, err := newSDKDTClient(envURL, platformToken)
 	if err != nil {
@@ -25,17 +23,8 @@ func connectionExistsWithClient(dtc dtclient) (bool, error) {
 	return len(conns) > 0, err
 }
 
-// azureGatherClientIDs returns the de-duplicated, sorted set of Azure application
-// (client) IDs that are safe to delete during cleanup.
-//
-// Sources (two, different trust levels):
-//   - Bound to a discovered dtwiz connection → authoritative; always included.
-//   - Found only by display name → verified first (Entra display names are not
-//     unique), included only if the app carries dtwiz's federated credential
-//     fingerprint; unverified apps are skipped with a warning.
-//
-// az lookup failures are ignored — they must not block deleting resources we
-// already know about.
+// azureGatherClientIDs collects client IDs to delete. Connection-bound IDs are trusted directly;
+// display-name matches are verified via federated credential (Entra names aren't unique).
 func azureGatherClientIDs(runner cmdRunner, conns []connRef, name, envURL string) []string {
 	set := make(map[string]bool)
 	for _, c := range conns {
@@ -74,10 +63,6 @@ func azureGatherClientIDs(runner cmdRunner, conns []connRef, name, envURL string
 	return out
 }
 
-// UninstallAzure removes the Dynatrace Azure Monitor integration created by InstallAzure.
-// It deletes every connection and monitoring configuration carrying the fixed dtwiz name,
-// along with the Azure App Registration(s) (which also removes their Service Principals
-// and federated credentials) and their role assignments.
 func UninstallAzure(envURL, platformToken string, dryRun bool) error {
 	dtc, err := newSDKDTClient(envURL, platformToken)
 	if err != nil {
@@ -87,7 +72,6 @@ func UninstallAzure(envURL, platformToken string, dryRun bool) error {
 }
 
 func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc dtclient) error {
-	// ── Lookup (parallel) ─────────────────────────────────────────────────────
 	type monitorRes struct {
 		ids []string
 		err error
@@ -122,7 +106,6 @@ func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc 
 		return nil
 	}
 
-	// ── Preview ────────────────────────────────────────────────────────────────
 	azureUninstallPrintPreview(envURL, monConfigIDs, conns, clientIDs, integrationName, integrationName)
 
 	if dryRun {
@@ -130,7 +113,6 @@ func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc 
 		return nil
 	}
 
-	// ── Confirm ────────────────────────────────────────────────────────────────
 	ok, err := installer.ConfirmProceed("  Apply?")
 	if err != nil {
 		return fmt.Errorf("reading confirmation: %w", err)
@@ -152,15 +134,12 @@ func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc 
 	return nil
 }
 
-// uninstallStepCount returns the number of deletion steps based on what resources exist.
 func uninstallStepCount(monConfigIDs []string, conns []connRef, clientIDs []string) int {
 	// 2 steps per app (role assignment delete + app registration delete).
 	return len(monConfigIDs) + len(clientIDs)*2 + len(conns)
 }
 
-// runUninstallSteps executes the deletion steps without a preview or confirmation.
-// offset shifts the displayed step numbers (0 for a standalone uninstall, N for a reinstall).
-// total is the grand total of steps shown to the user.
+// runUninstallSteps executes deletion steps; offset shifts step numbers when called mid-sequence (e.g. reinstall).
 func runUninstallSteps(offset, total int, monConfigIDs []string, conns []connRef, clientIDs []string, runner cmdRunner, dtc dtclient) error {
 	step := offset
 	var errs []error
@@ -210,8 +189,7 @@ func runUninstallSteps(offset, total int, monConfigIDs []string, conns []connRef
 	return errors.Join(errs...)
 }
 
-// azureUninstallBuildSteps returns the human-readable step descriptions for the uninstall phase.
-// Used in the combined update preview.
+// azureUninstallBuildSteps builds step descriptions; also used in the combined update preview.
 func azureUninstallBuildSteps(monConfigIDs []string, conns []connRef, clientIDs []string, configName, connName string) []string {
 	var steps []string
 	for range monConfigIDs {

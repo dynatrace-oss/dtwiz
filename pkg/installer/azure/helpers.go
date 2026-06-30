@@ -10,12 +10,8 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
-// azureIssuerURL derives the federated identity issuer URL from the Dynatrace environment URL.
-//
-// The issuer mirrors the apps URL structure:
-//   - *.apps.dynatrace.com            → https://token.dynatrace.com
-//   - *.dev.apps.dynatracelabs.com    → https://dev.token.dynatracelabs.com
-//   - *.sprint.apps.dynatracelabs.com → https://sprint.token.dynatracelabs.com
+// azureIssuerURL maps the env URL to the federated identity issuer:
+// *.apps.dynatrace.com → token.dynatrace.com; *.dev.apps.dynatracelabs.com → dev.token.dynatracelabs.com; etc.
 func azureIssuerURL(envURL string) string {
 	appsURL := installer.AppsURL(envURL)
 	host := strings.TrimPrefix(appsURL, "https://")
@@ -36,7 +32,6 @@ func azureIssuerURL(envURL string) string {
 	return "https://token." + domain
 }
 
-// azureBuildFedCredJSON builds the JSON body for the federated credential creation.
 func azureBuildFedCredJSON(connID, envURL string) (string, error) {
 	appsURL := installer.AppsURL(envURL)
 	audience := strings.TrimPrefix(appsURL, "https://") + "/svc-id/com.dynatrace.da"
@@ -56,8 +51,6 @@ func azureBuildFedCredJSON(connID, envURL string) (string, error) {
 	return string(b), nil
 }
 
-// azureDeleteFedCred deletes the dtwiz-managed federated credential from an App Registration.
-// A "not found" error is treated as success — the goal is already achieved.
 func azureDeleteFedCred(runner cmdRunner, clientID string) error {
 	_, err := runner("az", []string{"ad", "app", "federated-credential", "delete",
 		"--id", clientID, "--federated-credential-id", fedCredName}, nil)
@@ -67,15 +60,9 @@ func azureDeleteFedCred(runner cmdRunner, clientID string) error {
 	return err
 }
 
-// azureListAppIDsByName returns the appIds of every App Registration with the
-// given display name. Returns an empty slice if none are found.
-//
-// dtwiz creates exactly one App Registration per integration, but cleanup uses
-// this to catch leftovers: an interrupted run can leave an App Registration
-// behind (e.g. a previous version deleted only the Service Principal), and
-// because `az ad sp create-for-rbac --name X` rebinds to an existing app of the
-// same name, that leftover keeps the same appId across runs — which is what
-// triggers the Dynatrace "Constraints violated" error on reinstall.
+// azureListAppIDsByName finds leftover App Registrations from interrupted installs.
+// `az ad sp create-for-rbac --name X` reuses an existing app with that name, so a leftover
+// keeps the same appId across runs and triggers the DT "Constraints violated" error on reinstall.
 func azureListAppIDsByName(runner cmdRunner, name string) ([]string, error) {
 	out, err := runner("az", []string{"ad", "app", "list", "--display-name", name, "-o", "json"}, nil)
 	if err != nil {
@@ -97,13 +84,8 @@ func azureListAppIDsByName(runner cmdRunner, name string) ([]string, error) {
 	return ids, nil
 }
 
-// azureAppHasDtwizFedCred reports whether the App Registration with the given
-// appId has dtwiz's federated credential: a credential named fedCredName issued
-// by the expected Dynatrace token endpoint.
-//
-// Used as an ownership check before deleting an app found only by display name.
-// Entra display names are not unique, so a name match alone is not enough —
-// only an app that carries this credential was created by dtwiz and is safe to delete.
+// azureAppHasDtwizFedCred checks ownership before deleting an app found only by display name.
+// Entra display names are not unique, so a name match alone is not enough.
 func azureAppHasDtwizFedCred(runner cmdRunner, clientID, issuer string) (bool, error) {
 	out, err := runner("az", []string{"ad", "app", "federated-credential", "list", "--id", clientID, "-o", "json"}, nil)
 	if err != nil {
@@ -126,9 +108,6 @@ func azureAppHasDtwizFedCred(runner cmdRunner, clientID, issuer string) (bool, e
 	return false, nil
 }
 
-// azureDeleteRoleAssignment removes the Monitoring Reader role assignment for a
-// Service Principal. "No matched assignments" and "not found" responses are
-// treated as success — the assignment is already gone.
 func azureDeleteRoleAssignment(runner cmdRunner, clientID string) error {
 	_, err := runner("az", []string{"role", "assignment", "delete",
 		"--assignee", clientID,
@@ -143,10 +122,7 @@ func azureDeleteRoleAssignment(runner cmdRunner, clientID string) error {
 	return nil
 }
 
-// azureDeleteApp deletes an Azure App Registration by appId. Deleting the App
-// Registration also removes its Service Principal and any federated credentials,
-// so this is the single call that fully cleans up everything dtwiz created in
-// Entra. A "not found" error is treated as success — the goal is already met.
+// azureDeleteApp deletes an App Registration; Azure cascades this to its Service Principal and federated credentials.
 func azureDeleteApp(runner cmdRunner, clientID string) error {
 	_, err := runner("az", []string{"ad", "app", "delete", "--id", clientID}, nil)
 	if err != nil && strings.Contains(strings.ToLower(err.Error()), "not found") {
@@ -155,9 +131,7 @@ func azureDeleteApp(runner cmdRunner, clientID string) error {
 	return err
 }
 
-// azureGetSPObjectID retrieves the Service Principal object ID for a given
-// application client ID. It retries up to 5 times with a 3-second sleep
-// between attempts to handle Entra eventual consistency after SP creation.
+// azureGetSPObjectID retries up to 5 times (3s apart) because a newly created SP is not immediately visible in Entra.
 func azureGetSPObjectID(runner cmdRunner, clientID string, sleeper func(time.Duration)) (string, error) {
 	var lastErr error
 	for attempt := 0; attempt < 5; attempt++ {

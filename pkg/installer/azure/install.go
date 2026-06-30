@@ -11,8 +11,8 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
-// azureBuildStepCommands returns a human-readable one-liner per step.
-// ConnectionID / ClientID / ObjectID may be placeholders at preview time.
+// azureBuildStepCommands returns human-readable step descriptions for the install preview.
+// ConnectionID / ClientID / ObjectID may be placeholders before the install runs.
 func azureBuildStepCommands(cfg azureConfig) []string {
 	connID := cfg.ConnectionID
 	if connID == "" {
@@ -48,7 +48,6 @@ func azureBuildStepCommands(cfg azureConfig) []string {
 	}
 }
 
-// azurePrintPreview prints the installation summary and command list.
 func azurePrintPreview(cfg azureConfig) {
 	fmt.Println()
 	display.ColorMessage.Println("  Dynatrace Azure Monitor Integration")
@@ -65,7 +64,7 @@ func azurePrintPreview(cfg azureConfig) {
 
 	steps := azureBuildStepCommands(cfg)
 	for i, s := range steps {
-		masked := maskToken(s, cfg.PlatformToken)
+		masked := installer.MaskSecret(s, cfg.PlatformToken)
 		fmt.Printf("  Step %d: %s\n", i+1, masked)
 	}
 
@@ -73,7 +72,6 @@ func azurePrintPreview(cfg azureConfig) {
 	fmt.Println()
 }
 
-// azureRunStep executes one numbered step, prints progress, and returns stdout.
 func azureRunStep(n, total int, runner cmdRunner, name string, args []string, env []string, desc string) (string, error) {
 	fmt.Printf("  Step %d/%d: %s...\n", n, total, desc)
 	logger.Debug("running step", "step", n, "cmd", name, "args", args)
@@ -85,9 +83,8 @@ func azureRunStep(n, total int, runner cmdRunner, name string, args []string, en
 	return out, nil
 }
 
-// azurePartialFailureHint prints cleanup hints based on how far the install got.
-// Re-running `dtwiz uninstall azure` performs all of this automatically — the
-// explicit commands are shown for transparency.
+// azurePartialFailureHint lists created resources after a mid-install failure.
+// `dtwiz uninstall azure` removes them all; the explicit commands are shown for transparency.
 func azurePartialFailureHint(cfg azureConfig, completedSteps map[int]bool) {
 	if !completedSteps[1] && !completedSteps[2] && !completedSteps[5] {
 		return
@@ -108,16 +105,7 @@ func azurePartialFailureHint(cfg azureConfig, completedSteps map[int]bool) {
 	}
 }
 
-// InstallAzure sets up the Dynatrace Azure Monitor integration using the DT Platform API and az.
-//
-// The 7-step workflow:
-//  1. DT Settings API: create Azure connection (federatedIdentityCredential)
-//  2. az ad sp create-for-rbac
-//  3. az ad app federated-credential create
-//  4. az ad sp show (with retry for Entra propagation delay)
-//  5. az role assignment create
-//  6. DT Settings API: update Azure connection (set tenantId + applicationId)
-//  7. DT Extensions API: create Azure monitoring configuration
+// InstallAzure sets up the Dynatrace Azure Monitor integration using the DT Platform API and az CLI.
 func InstallAzure(envURL, platformToken string, dryRun bool, startTime time.Time) error {
 	dtc, err := newSDKDTClient(envURL, platformToken)
 	if err != nil {
@@ -126,8 +114,7 @@ func InstallAzure(envURL, platformToken string, dryRun bool, startTime time.Time
 	return installAzureWithRunner(envURL, platformToken, dryRun, startTime, realRunner, time.Sleep, dtc)
 }
 
-// installAzureWithRunner is the testable core of InstallAzure. It accepts
-// injected runner, sleeper, and dtclient to allow unit-testing without real az/API calls.
+// installAzureWithRunner is the testable core — runner, sleeper, and dtclient are injected.
 func installAzureWithRunner(
 	envURL, platformToken string,
 	dryRun bool,
@@ -136,15 +123,11 @@ func installAzureWithRunner(
 	sleeper func(time.Duration),
 	dtc dtclient,
 ) error {
-	const totalSteps = 7
-
-	// ── Preflight ──────────────────────────────────────────────────────────────
 	subscriptionID, tenantID, err := azurePreflightChecks(runner, envURL, platformToken)
 	if err != nil {
 		return err
 	}
 
-	// ── Existence check ────────────────────────────────────────────────────────
 	existing, err := dtc.findAllConnections(integrationName)
 	if err != nil {
 		return fmt.Errorf("checking existing connection: %w", err)
@@ -163,7 +146,6 @@ func installAzureWithRunner(
 		Scope:             "/subscriptions/" + subscriptionID,
 	}
 
-	// ── Preview ────────────────────────────────────────────────────────────────
 	azurePrintPreview(cfg)
 
 	if dryRun {
@@ -171,7 +153,6 @@ func installAzureWithRunner(
 		return nil
 	}
 
-	// ── Confirm ────────────────────────────────────────────────────────────────
 	ok, err := installer.ConfirmProceed("  Apply?")
 	if err != nil {
 		return fmt.Errorf("reading confirmation: %w", err)
@@ -182,8 +163,7 @@ func installAzureWithRunner(
 	}
 	fmt.Println()
 
-	_, err = runInstallSteps(0, totalSteps, cfg, runner, sleeper, dtc)
-	if err != nil {
+	if err := runInstallSteps(cfg, runner, sleeper, dtc); err != nil {
 		return err
 	}
 	fmt.Println()
@@ -194,9 +174,7 @@ func installAzureWithRunner(
 	return nil
 }
 
-// azureWatchIngest tails newly ingested data after a successful install. It is
-// skipped when startTime is zero (the unit-test path) so the testable core never
-// makes real HTTP calls or blocks on stdin.
+// azureWatchIngest is skipped when startTime is zero (the unit-test path).
 func azureWatchIngest(cfg azureConfig, startTime time.Time) {
 	if startTime.IsZero() {
 		return
@@ -205,87 +183,62 @@ func azureWatchIngest(cfg azureConfig, startTime time.Time) {
 	installer.WatchIngest(cfg.EnvURL, cfg.PlatformToken, fromClause)
 }
 
-// runInstallSteps executes the 7-step Azure installation without a preview or confirmation.
-// offset shifts the displayed step numbers (0 for a standalone install, N for a reinstall).
-// total is the grand total of steps shown to the user.
-// Semantic completed keys 1/2/3/5 are used by azurePartialFailureHint regardless of offset.
-func runInstallSteps(offset, total int, cfg azureConfig, runner cmdRunner, sleeper func(time.Duration), dtc dtclient) (azureConfig, error) {
+func runInstallSteps(cfg azureConfig, runner cmdRunner, sleeper func(time.Duration), dtc dtclient) error {
+	const total = 7
 	completed := make(map[int]bool)
 
-	// ── Step 1 ────────────────────────────────────────────────────────────────
-	fmt.Printf("  Step %d/%d: Create Dynatrace Azure connection...\n", offset+1, total)
+	fmt.Printf("  Step 1/%d: Create Dynatrace Azure connection...\n", total)
 	connObjectID, err := dtc.createConnection(cfg.ConnectionName)
 	if err != nil {
 		azurePartialFailureHint(cfg, completed)
-		return cfg, fmt.Errorf("step %d: %w", offset+1, err)
+		return fmt.Errorf("step 1: %w", err)
 	}
 	completed[1] = true
 	cfg.ConnectionID = connObjectID
 	display.ColorOK.Printf("  ✓ Connection created: %s\n", connObjectID)
 
-	// ── Step 2 ────────────────────────────────────────────────────────────────
-	out2, err := azureRunStep(offset+2, total, runner, "az",
+	out2, err := azureRunStep(2, total, runner, "az",
 		[]string{"ad", "sp", "create-for-rbac", "--name", cfg.ConnectionName, "--create-password", "false", "-o", "json"},
 		nil, "Register Azure Service Principal")
 	if err != nil {
 		azurePartialFailureHint(cfg, completed)
-		return cfg, err
+		return err
 	}
 	completed[2] = true
-
-	var sp struct {
-		AppID  string `json:"appId"`
-		Tenant string `json:"tenant"`
-	}
-	if err = json.Unmarshal([]byte(out2), &sp); err != nil {
+	clientID, tenantID, err := parseCreateSPOutput(out2)
+	if err != nil {
 		azurePartialFailureHint(cfg, completed)
-		return cfg, fmt.Errorf("step %d: parsing SP output: %w", offset+2, err)
+		return fmt.Errorf("step 2: parsing SP output: %w", err)
 	}
-	cfg.ClientID = sp.AppID
-	if sp.Tenant != "" {
-		cfg.TenantID = sp.Tenant
+	cfg.ClientID = clientID
+	if tenantID != "" {
+		cfg.TenantID = tenantID
 	}
 	display.ColorOK.Printf("  ✓ Service Principal created: %s\n", cfg.ClientID)
 
-	// ── Step 3 ────────────────────────────────────────────────────────────────
 	fedJSON, err := azureBuildFedCredJSON(connObjectID, cfg.EnvURL)
 	if err != nil {
 		azurePartialFailureHint(cfg, completed)
-		return cfg, err
+		return err
 	}
-	_, err = azureRunStep(offset+3, total, runner, "az",
-		[]string{"ad", "app", "federated-credential", "create", "--id", cfg.ClientID, "--parameters", fedJSON},
-		nil, "Create federated credential")
-	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "already exists") {
-			// Stale credential left from a previous partial install — replace it.
-			if delErr := azureDeleteFedCred(runner, cfg.ClientID); delErr != nil {
-				azurePartialFailureHint(cfg, completed)
-				return cfg, fmt.Errorf("step %d: removing stale federated credential: %w", offset+3, delErr)
-			}
-			_, err = runner("az", []string{"ad", "app", "federated-credential", "create",
-				"--id", cfg.ClientID, "--parameters", fedJSON}, nil)
-		}
-		if err != nil {
-			azurePartialFailureHint(cfg, completed)
-			return cfg, fmt.Errorf("step %d: %w", offset+3, err)
-		}
+	fmt.Printf("  Step 3/%d: Create federated credential...\n", total)
+	if err := createOrReplaceFedCred(runner, cfg.ClientID, fedJSON); err != nil {
+		azurePartialFailureHint(cfg, completed)
+		return fmt.Errorf("step 3: %w", err)
 	}
 	completed[3] = true
 	display.ColorOK.Println("  ✓ Federated credential created")
 
-	// ── Step 4 ────────────────────────────────────────────────────────────────
-	fmt.Printf("  Step %d/%d: Retrieve SP object ID...\n", offset+4, total)
+	fmt.Printf("  Step 4/%d: Retrieve SP object ID...\n", total)
 	objectID, err := azureGetSPObjectID(runner, cfg.ClientID, sleeper)
 	if err != nil {
 		azurePartialFailureHint(cfg, completed)
-		return cfg, fmt.Errorf("step %d: %w", offset+4, err)
+		return fmt.Errorf("step 4: %w", err)
 	}
 	cfg.ObjectID = objectID
 	display.ColorOK.Printf("  ✓ SP object ID: %s\n", objectID)
 
-	// ── Step 5 ────────────────────────────────────────────────────────────────
-	_, err = azureRunStep(offset+5, total, runner, "az",
+	_, err = azureRunStep(5, total, runner, "az",
 		[]string{
 			"role", "assignment", "create",
 			"--assignee-object-id", cfg.ObjectID,
@@ -297,47 +250,74 @@ func runInstallSteps(offset, total int, cfg azureConfig, runner cmdRunner, sleep
 		nil, "Assign Monitoring Reader role")
 	if err != nil {
 		azurePartialFailureHint(cfg, completed)
-		return cfg, err
+		return err
 	}
 	completed[5] = true
 	display.ColorOK.Println("  ✓ Monitoring Reader role assigned")
 
-	// ── Step 6 ────────────────────────────────────────────────────────────────
-	// Retry on transient federation propagation errors. Entra takes several
-	// seconds to propagate a newly created federated credential. This can surface
-	// as either:
-	//   - AADSTS70025 — Azure itself reports "no configured federated identity credentials"
-	//   - "Constraints violated" — DT validates the federation at PUT time and Azure
-	//     hasn't propagated the credential yet, so DT's token exchange fails
-	fmt.Printf("  Step %d/%d: Update Dynatrace Azure connection...\n", offset+6, total)
-	var updateErr error
-	for attempt := 0; attempt < 10; attempt++ {
-		if attempt > 0 {
-			logger.Debug("federated credential not yet propagated, retrying step 6", "attempt", attempt, "error", updateErr)
-			sleeper(5 * time.Second)
-		}
-		updateErr = dtc.updateConnection(connObjectID, cfg.ConnectionName, cfg.TenantID, cfg.ClientID)
-		if updateErr == nil {
-			break
-		}
-		errStr := updateErr.Error()
-		if !strings.Contains(errStr, "AADSTS70025") && !strings.Contains(errStr, "Constraints violated") {
-			break // permanent error — stop retrying
-		}
-	}
-	if updateErr != nil {
+	fmt.Printf("  Step 6/%d: Update Dynatrace Azure connection...\n", total)
+	if err := updateConnectionWithRetry(dtc, connObjectID, cfg.ConnectionName, cfg.TenantID, cfg.ClientID, sleeper); err != nil {
 		azurePartialFailureHint(cfg, completed)
-		return cfg, fmt.Errorf("step %d: %w", offset+6, updateErr)
+		return fmt.Errorf("step 6: %w", err)
 	}
 	display.ColorOK.Println("  ✓ Connection updated")
 
-	// ── Step 7 ────────────────────────────────────────────────────────────────
-	fmt.Printf("  Step %d/%d: Create Azure monitoring configuration...\n", offset+7, total)
-	if err = dtc.createMonitoring(cfg.ConfigurationName, connObjectID, cfg.ClientID, cfg.SubscriptionID); err != nil {
+	fmt.Printf("  Step 7/%d: Create Azure monitoring configuration...\n", total)
+	if err := dtc.createMonitoring(cfg.ConfigurationName, connObjectID, cfg.ClientID, cfg.SubscriptionID); err != nil {
 		azurePartialFailureHint(cfg, completed)
-		return cfg, fmt.Errorf("step %d: %w", offset+7, err)
+		return fmt.Errorf("step 7: %w", err)
 	}
 	display.ColorOK.Println("  ✓ Monitoring configuration created")
 
-	return cfg, nil
+	return nil
+}
+
+// parseCreateSPOutput extracts appId and tenant from `az ad sp create-for-rbac` output.
+func parseCreateSPOutput(out string) (appID, tenantID string, err error) {
+	var sp struct {
+		AppID  string `json:"appId"`
+		Tenant string `json:"tenant"`
+	}
+	if err = json.Unmarshal([]byte(out), &sp); err != nil {
+		return "", "", err
+	}
+	return sp.AppID, sp.Tenant, nil
+}
+
+// createOrReplaceFedCred creates the federated credential, replacing a stale one from a previous partial install if present.
+func createOrReplaceFedCred(runner cmdRunner, clientID, fedJSON string) error {
+	_, err := runner("az", []string{"ad", "app", "federated-credential", "create",
+		"--id", clientID, "--parameters", fedJSON}, nil)
+	if err == nil {
+		return nil
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "already exists") {
+		return err
+	}
+	if delErr := azureDeleteFedCred(runner, clientID); delErr != nil {
+		return fmt.Errorf("removing stale federated credential: %w", delErr)
+	}
+	_, err = runner("az", []string{"ad", "app", "federated-credential", "create",
+		"--id", clientID, "--parameters", fedJSON}, nil)
+	return err
+}
+
+// updateConnectionWithRetry retries DT connection finalization because Entra can take several seconds
+// to propagate a new federated credential; AADSTS70025 and "Constraints violated" signal this.
+func updateConnectionWithRetry(dtc dtclient, connObjectID, connName, tenantID, clientID string, sleeper func(time.Duration)) error {
+	var lastErr error
+	for attempt := 0; attempt < 10; attempt++ {
+		if attempt > 0 {
+			logger.Debug("federated credential not yet propagated, retrying", "attempt", attempt, "error", lastErr)
+			sleeper(5 * time.Second)
+		}
+		lastErr = dtc.updateConnection(connObjectID, connName, tenantID, clientID)
+		if lastErr == nil {
+			return nil
+		}
+		if !strings.Contains(lastErr.Error(), "AADSTS70025") && !strings.Contains(lastErr.Error(), "Constraints violated") {
+			return lastErr
+		}
+	}
+	return lastErr
 }

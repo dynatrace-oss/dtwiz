@@ -30,22 +30,17 @@ const (
 	azureFeatureSetEnumKey = "FeatureSetsType"
 )
 
-// connRef identifies a Dynatrace Azure connection settings object together with
-// the Azure application (client) ID it is bound to, if any.
 type connRef struct {
 	objectID string
 	clientID string
 }
 
-// dtclient performs the Dynatrace Platform API calls needed for the Azure integration.
 type dtclient interface {
 	createConnection(name string) (objectID string, err error)
 	updateConnection(objectID, name, tenantID, clientID string) error
 	createMonitoring(configName, connectionObjectID, clientID, subscriptionID string) error
-	// updateMonitoring reconciles an existing monitoring configuration in place
-	// (used by the update flow) with the latest schema-derived defaults.
 	updateMonitoring(configID, configName, connectionObjectID, clientID, subscriptionID string) error
-	// cleanup — finders return every match so cleanup removes all duplicates.
+	// findAll variants return every name-matching object so cleanup removes duplicates from interrupted runs.
 	findAllConnections(name string) ([]connRef, error)
 	deleteConnection(objectID string) error
 	findAllMonitoringConfigs(name string) (configIDs []string, err error)
@@ -110,10 +105,6 @@ func (d *sdkDTClient) updateConnection(objectID, name, tenantID, clientID string
 	})
 }
 
-// findAllConnections returns every Azure connection settings object whose name
-// matches. dtwiz always uses a fixed connection name, so a healthy environment
-// has at most one; returning all of them lets cleanup remove duplicates left
-// behind by earlier interrupted runs.
 func (d *sdkDTClient) findAllConnections(name string) ([]connRef, error) {
 	list, err := d.settings.ListObjects(context.Background(), connectionSchemaID, "environment", 0)
 	if err != nil {
@@ -158,11 +149,8 @@ func (d *sdkDTClient) deleteConnection(objectID string) error {
 	return nil
 }
 
-// buildMonitoringConfig assembles the da-azure monitoring-configuration body with
-// defaults derived from the live extension schema (highest version, all schema
-// locations, all *_essential feature sets). Shared by create and in-place update
-// so both paths produce an identical, current configuration. Empty enums are a
-// hard error rather than a silently partial configuration.
+// buildMonitoringConfig is shared by createMonitoring and updateMonitoring so both produce identical configs.
+// Empty enums are a hard error — a missing location or feature-set list must not silently create a partial config.
 func (d *sdkDTClient) buildMonitoringConfig(configName, connectionObjectID, clientID, subscriptionID string) (extension.MonitoringConfigurationCreate, error) {
 	var body extension.MonitoringConfigurationCreate
 
@@ -224,10 +212,7 @@ func (d *sdkDTClient) createMonitoring(configName, connectionObjectID, clientID,
 	return err
 }
 
-// updateMonitoring reconciles an existing monitoring configuration in place,
-// rewriting it with the latest schema-derived defaults. Only the monitoring
-// configuration is touched — the connection, Service Principal, federated
-// credential, and role assignment are left intact.
+// updateMonitoring rewrites the monitoring config in place; the auth chain (connection, SP, fed cred, role) is never touched.
 func (d *sdkDTClient) updateMonitoring(configID, configName, connectionObjectID, clientID, subscriptionID string) error {
 	body, err := d.buildMonitoringConfig(configName, connectionObjectID, clientID, subscriptionID)
 	if err != nil {
@@ -237,9 +222,6 @@ func (d *sdkDTClient) updateMonitoring(configID, configName, connectionObjectID,
 	return err
 }
 
-// findAllMonitoringConfigs returns the object IDs of every da-azure monitoring
-// configuration whose description matches. As with connections, cleanup removes
-// all matches so duplicates from interrupted runs don't linger.
 func (d *sdkDTClient) findAllMonitoringConfigs(name string) ([]string, error) {
 	list, err := d.extension.ListMonitoringConfigurations(context.Background(), extensionName, "", 0)
 	if err != nil {
@@ -271,8 +253,6 @@ func (d *sdkDTClient) deleteMonitoring(configID string) error {
 	return err
 }
 
-// extensionSchema is the minimal view of the da-azure settings schema we need:
-// a top-level map of enum name → list of allowed values.
 type extensionSchema struct {
 	Enums map[string]struct {
 		Items []struct {
@@ -326,6 +306,9 @@ func (d *sdkDTClient) latestExtensionVersion() (string, error) {
 		if item.Version != "" {
 			versions = append(versions, item.Version)
 		}
+	}
+	if len(versions) == 0 {
+		return "", fmt.Errorf("no non-empty versions found for extension %s", extensionName)
 	}
 	sort.Slice(versions, func(i, j int) bool {
 		return cmpSemver(versions[i], versions[j]) > 0

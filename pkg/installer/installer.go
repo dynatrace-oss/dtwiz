@@ -82,6 +82,17 @@ func killAndWaitProcess(proc *os.Process) error {
 	return nil
 }
 
+// MaskSecret replaces every occurrence of secret in s with "***" so a sensitive
+// value (e.g. a token) is never printed in a command preview. An empty secret is
+// returned unchanged — replacing the empty string would otherwise splice "***"
+// between every character.
+func MaskSecret(s, secret string) string {
+	if secret == "" {
+		return s
+	}
+	return strings.ReplaceAll(s, secret, "***")
+}
+
 // AuthHeader returns the correct Authorization header value for a given token.
 // API tokens (dt0c01.*) use the "Api-Token" scheme; all others use "Bearer".
 func AuthHeader(token string) string {

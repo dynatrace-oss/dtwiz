@@ -397,6 +397,22 @@ func TestSDKLatestExtensionVersion_Empty(t *testing.T) {
 	}
 }
 
+// TestSDKLatestExtensionVersion_AllBlankVersions guards against a regression
+// where items are present but every version string is empty: the filtered slice
+// is empty and indexing versions[0] would panic. It must return an error instead.
+func TestSDKLatestExtensionVersion_AllBlankVersions(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[{"version":""},{"version":""}]}`))
+	}))
+	defer srv.Close()
+
+	_, err := newTestSDKClient(t, srv.URL).latestExtensionVersion()
+	if err == nil {
+		t.Fatal("expected error for all-blank versions, got nil")
+	}
+}
+
 func TestSDKLatestExtensionVersion_ServerError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

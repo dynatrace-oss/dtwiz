@@ -30,5 +30,6 @@ This change adds a single-command Azure Monitor integration that automates the f
 - `cmd/uninstall.go` — adds `dtwiz uninstall azure`.
 - `cmd/setup.go` — badges the Azure entry when already configured and routes to update vs install; suppresses the generic post-install watch for Azure (the installer runs it itself).
 - New dependency: `github.com/dynatrace-oss/dtctl/sdk` (`httpclient`, `api/settings`, `api/extension`).
-- No changes to existing installers; Azure detection (`pkg/analyzer/detect_azure.go`) and `recommender.MethodAzure` already existed and are unchanged.
+- No changes to existing installers; Azure detection (`pkg/analyzer/detect_azure.go`) and the `recommender.MethodAzure` constant already existed.
+- `pkg/recommender/recommender.go` — drops the `coming soon` framing for the Azure recommendation (removes `ComingSoon: true` and the "(coming soon)" title suffix) so Azure becomes an actionable recommendation (+ `recommender_test.go` update).
 - No new top-level flags; reuses `--environment` / `--platform-token` and the shared `--dry-run`.
