@@ -472,7 +472,9 @@ type monitoringServerOpts struct {
 	emptyLocations bool
 	noEssential    bool
 	postErr        bool
+	putErr         bool
 	captureBody    interface{}
+	capturePutPath *string
 }
 
 func newMonitoringTestServer(t *testing.T, opts monitoringServerOpts) *httptest.Server {
@@ -508,6 +510,19 @@ func newMonitoringTestServer(t *testing.T, opts monitoringServerOpts) *httptest.
 			if opts.postErr {
 				w.WriteHeader(http.StatusBadRequest)
 				return
+			}
+			if opts.captureBody != nil {
+				_ = json.NewDecoder(r.Body).Decode(opts.captureBody)
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"objectId":"mon-001"}`))
+		case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, monitoringAPI+"/"):
+			if opts.putErr {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if opts.capturePutPath != nil {
+				*opts.capturePutPath = r.URL.Path
 			}
 			if opts.captureBody != nil {
 				_ = json.NewDecoder(r.Body).Decode(opts.captureBody)
@@ -643,6 +658,53 @@ func TestSDKCreateMonitoring_PostFails(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "400") {
 		t.Errorf("error %q does not mention 400", err.Error())
+	}
+}
+
+// ─── updateMonitoring ─────────────────────────────────────────────────────────
+
+func TestSDKUpdateMonitoring_HappyPath(t *testing.T) {
+	var body map[string]interface{}
+	var putPath string
+	srv := newMonitoringTestServer(t, monitoringServerOpts{captureBody: &body, capturePutPath: &putPath})
+	defer srv.Close()
+
+	if err := newTestSDKClient(t, srv.URL).updateMonitoring("mon-existing-1", "cfg-name", "conn-obj-001", "client-app-001", "sub-abc123"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// PUT must target the existing config ID, not a bare POST collection URL.
+	if !strings.HasSuffix(putPath, "/mon-existing-1") {
+		t.Errorf("PUT path = %q, want suffix /mon-existing-1", putPath)
+	}
+	// Shares the create body builder: same schema-derived defaults.
+	val, _ := body["value"].(map[string]interface{})
+	if val == nil {
+		t.Fatal("body.value missing")
+	}
+	if fs, _ := val["featureSets"].([]interface{}); len(fs) != 2 {
+		t.Errorf("expected 2 essential featureSets, got %v", val["featureSets"])
+	}
+}
+
+func TestSDKUpdateMonitoring_PutFails(t *testing.T) {
+	srv := newMonitoringTestServer(t, monitoringServerOpts{putErr: true})
+	defer srv.Close()
+	err := newTestSDKClient(t, srv.URL).updateMonitoring("mon-1", "cfg", "conn", "client", "sub")
+	if err == nil {
+		t.Fatal("expected error when PUT fails, got nil")
+	}
+}
+
+func TestSDKUpdateMonitoring_EmptyEnumsFailFast(t *testing.T) {
+	srv := newMonitoringTestServer(t, monitoringServerOpts{noEssential: true})
+	defer srv.Close()
+	err := newTestSDKClient(t, srv.URL).updateMonitoring("mon-1", "cfg", "conn", "client", "sub")
+	if err == nil {
+		t.Fatal("expected error for no essential feature sets, got nil")
+	}
+	if !strings.Contains(err.Error(), "_essential") {
+		t.Errorf("error %q does not mention _essential feature sets", err.Error())
 	}
 }
 

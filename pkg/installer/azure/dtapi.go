@@ -3,6 +3,7 @@ package azure
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -41,6 +42,9 @@ type dtclient interface {
 	createConnection(name string) (objectID string, err error)
 	updateConnection(objectID, name, tenantID, clientID string) error
 	createMonitoring(configName, connectionObjectID, clientID, subscriptionID string) error
+	// updateMonitoring reconciles an existing monitoring configuration in place
+	// (used by the update flow) with the latest schema-derived defaults.
+	updateMonitoring(configID, configName, connectionObjectID, clientID, subscriptionID string) error
 	// cleanup — finders return every match so cleanup removes all duplicates.
 	findAllConnections(name string) ([]connRef, error)
 	deleteConnection(objectID string) error
@@ -137,7 +141,7 @@ func (d *sdkDTClient) findAllConnections(name string) ([]connRef, error) {
 func (d *sdkDTClient) deleteConnection(objectID string) error {
 	obj, err := d.settings.Get(context.Background(), objectID)
 	if err != nil {
-		if strings.Contains(err.Error(), "404") {
+		if errors.Is(err, httpclient.ErrNotFound) {
 			logger.Debug("connection already gone", "objectId", objectID)
 			return nil
 		}
@@ -145,7 +149,7 @@ func (d *sdkDTClient) deleteConnection(objectID string) error {
 	}
 	logger.Debug("deleting connection", "objectId", objectID, "schemaVersion", obj.SchemaVersion)
 	if err := d.settings.Delete(context.Background(), objectID, obj.SchemaVersion); err != nil {
-		if strings.Contains(err.Error(), "404") {
+		if errors.Is(err, httpclient.ErrNotFound) {
 			logger.Debug("connection already gone", "objectId", objectID)
 			return nil
 		}
@@ -154,21 +158,28 @@ func (d *sdkDTClient) deleteConnection(objectID string) error {
 	return nil
 }
 
-func (d *sdkDTClient) createMonitoring(configName, connectionObjectID, clientID, subscriptionID string) error {
+// buildMonitoringConfig assembles the da-azure monitoring-configuration body with
+// defaults derived from the live extension schema (highest version, all schema
+// locations, all *_essential feature sets). Shared by create and in-place update
+// so both paths produce an identical, current configuration. Empty enums are a
+// hard error rather than a silently partial configuration.
+func (d *sdkDTClient) buildMonitoringConfig(configName, connectionObjectID, clientID, subscriptionID string) (extension.MonitoringConfigurationCreate, error) {
+	var body extension.MonitoringConfigurationCreate
+
 	version, err := d.latestExtensionVersion()
 	if err != nil {
-		return fmt.Errorf("create monitoring: %w", err)
+		return body, err
 	}
 	logger.Debug("using extension version", "version", version)
 
 	schema, err := d.fetchExtensionSchema(version)
 	if err != nil {
-		return fmt.Errorf("create monitoring: %w", err)
+		return body, err
 	}
 
 	locations := schema.enumValues(azureLocationEnumKey)
 	if len(locations) == 0 {
-		return fmt.Errorf("create monitoring: no locations found under enum %q in extension schema", azureLocationEnumKey)
+		return body, fmt.Errorf("no locations found under enum %q in extension schema", azureLocationEnumKey)
 	}
 	featureSets := make([]string, 0)
 	for _, fs := range schema.enumValues(azureFeatureSetEnumKey) {
@@ -177,11 +188,11 @@ func (d *sdkDTClient) createMonitoring(configName, connectionObjectID, clientID,
 		}
 	}
 	if len(featureSets) == 0 {
-		return fmt.Errorf("create monitoring: no \"_essential\" feature sets found under enum %q in extension schema", azureFeatureSetEnumKey)
+		return body, fmt.Errorf("no \"_essential\" feature sets found under enum %q in extension schema", azureFeatureSetEnumKey)
 	}
 	logger.Debug("monitoring defaults from schema", "locations", len(locations), "featureSets", len(featureSets))
 
-	_, err = d.extension.CreateMonitoringConfiguration(context.Background(), extensionName, extension.MonitoringConfigurationCreate{
+	return extension.MonitoringConfigurationCreate{
 		Scope: "integration-azure",
 		Value: map[string]any{
 			"enabled":     true,
@@ -201,7 +212,28 @@ func (d *sdkDTClient) createMonitoring(configName, connectionObjectID, clientID,
 				}},
 			},
 		},
-	})
+	}, nil
+}
+
+func (d *sdkDTClient) createMonitoring(configName, connectionObjectID, clientID, subscriptionID string) error {
+	body, err := d.buildMonitoringConfig(configName, connectionObjectID, clientID, subscriptionID)
+	if err != nil {
+		return fmt.Errorf("create monitoring: %w", err)
+	}
+	_, err = d.extension.CreateMonitoringConfiguration(context.Background(), extensionName, body)
+	return err
+}
+
+// updateMonitoring reconciles an existing monitoring configuration in place,
+// rewriting it with the latest schema-derived defaults. Only the monitoring
+// configuration is touched — the connection, Service Principal, federated
+// credential, and role assignment are left intact.
+func (d *sdkDTClient) updateMonitoring(configID, configName, connectionObjectID, clientID, subscriptionID string) error {
+	body, err := d.buildMonitoringConfig(configName, connectionObjectID, clientID, subscriptionID)
+	if err != nil {
+		return fmt.Errorf("update monitoring: %w", err)
+	}
+	_, err = d.extension.UpdateMonitoringConfiguration(context.Background(), extensionName, configID, body)
 	return err
 }
 

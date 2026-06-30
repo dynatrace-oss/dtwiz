@@ -211,8 +211,9 @@ var setupCmd = &cobra.Command{
 			}
 			return installErr
 		}
-		// AWS and Azure start their own (subscription/account-scoped) watch inside
-		// the installer, so the generic watch is only used for the other methods.
+		// AWS scopes its watch to the account (WatchIngestAWS) and Azure runs the
+		// generic watch from inside the installer; both start their own watch, so
+		// the generic post-install watch here is only used for the other methods.
 		if !setupDryRun && selected.Method != recommender.MethodAWS && selected.Method != recommender.MethodAzure {
 			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
 		}

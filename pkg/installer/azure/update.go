@@ -6,16 +6,22 @@ import (
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
-// UpdateAzure performs a clean reinstall of the Azure Monitor integration:
-// it removes the existing connection/SP/config and installs a fresh one.
+// UpdateAzure refreshes an existing Azure Monitor integration in place. It
+// reconciles only the da-azure monitoring configuration to the latest
+// schema-derived defaults (extension version, locations, feature sets) and
+// leaves the entire authentication chain — the Dynatrace connection, Service
+// Principal, federated credential, and Monitoring Reader role assignment —
+// untouched. This is reached from `dtwiz setup` when an Azure connection
+// already exists; there is intentionally no `dtwiz update azure` subcommand.
 func UpdateAzure(envURL, platformToken string, dryRun bool, startTime time.Time) error {
 	dtc, err := newSDKDTClient(envURL, platformToken)
 	if err != nil {
 		return err
 	}
-	return updateAzureWithRunner(envURL, platformToken, dryRun, startTime, realRunner, time.Sleep, dtc)
+	return updateAzureWithRunner(envURL, platformToken, dryRun, startTime, realRunner, dtc)
 }
 
 func updateAzureWithRunner(
@@ -23,10 +29,9 @@ func updateAzureWithRunner(
 	dryRun bool,
 	startTime time.Time,
 	runner cmdRunner,
-	sleeper func(time.Duration),
 	dtc dtclient,
 ) error {
-	// ── Lookup existing resources + preflight (parallel) ──────────────────────
+	// ── Discover existing resources + account info (parallel) ─────────────────
 	type monitorRes struct {
 		ids []string
 		err error
@@ -35,14 +40,14 @@ func updateAzureWithRunner(
 		conns []connRef
 		err   error
 	}
-	type preflightRes struct {
+	type accountRes struct {
 		subscriptionID string
 		tenantID       string
 		err            error
 	}
 	monitorCh := make(chan monitorRes, 1)
 	connCh := make(chan connRes, 1)
-	preflightCh := make(chan preflightRes, 1)
+	accountCh := make(chan accountRes, 1)
 	go func() {
 		ids, err := dtc.findAllMonitoringConfigs(integrationName)
 		monitorCh <- monitorRes{ids: ids, err: err}
@@ -52,74 +57,46 @@ func updateAzureWithRunner(
 		connCh <- connRes{conns: conns, err: err}
 	}()
 	go func() {
-		subID, tenID, err := azurePreflightChecks(runner, envURL, platformToken)
-		preflightCh <- preflightRes{subscriptionID: subID, tenantID: tenID, err: err}
+		subID, tenID, err := azureAccountInfo(runner)
+		accountCh <- accountRes{subscriptionID: subID, tenantID: tenID, err: err}
 	}()
 	mr := <-monitorCh
 	cr := <-connCh
-	pr := <-preflightCh
+	ar := <-accountCh
 	if mr.err != nil {
 		return mr.err
 	}
 	if cr.err != nil {
 		return cr.err
 	}
-	if pr.err != nil {
-		return pr.err
+	if ar.err != nil {
+		return ar.err
 	}
 	monConfigIDs, conns := mr.ids, cr.conns
-	subscriptionID, tenantID := pr.subscriptionID, pr.tenantID
+	subscriptionID, tenantID := ar.subscriptionID, ar.tenantID
 
-	// Gather every App Registration to remove: those bound to the existing
-	// connections plus any orphaned app of the same name (a leftover app keeps
-	// being reused and is what causes the "Constraints violated" reinstall error).
-	clientIDs := azureGatherClientIDs(runner, conns, integrationName, envURL)
+	// In-place update requires an existing connection that carries the bound
+	// application ID — the monitoring configuration references both. A missing
+	// or incomplete connection means there is nothing safe to reconcile; point
+	// the user at the clean install/uninstall path rather than guessing.
+	conn, err := selectUpdatableConnection(conns)
+	if err != nil {
+		return err
+	}
 
-	installCfg := azureConfig{
+	cfg := azureConfig{
 		ConnectionName:    integrationName,
 		ConfigurationName: integrationName,
 		EnvURL:            envURL,
 		PlatformToken:     platformToken,
 		TenantID:          tenantID,
 		SubscriptionID:    subscriptionID,
-		Scope:             "/subscriptions/" + subscriptionID,
+		ConnectionID:      conn.objectID,
+		ClientID:          conn.clientID,
 	}
-
-	// ── Build combined step list ───────────────────────────────────────────────
-	uninstallSteps := azureUninstallBuildSteps(monConfigIDs, conns, clientIDs, integrationName, integrationName)
-	installSteps := azureBuildStepCommands(installCfg)
-	nUninstall := len(uninstallSteps)
-	totalSteps := nUninstall + len(installSteps)
 
 	// ── Preview ────────────────────────────────────────────────────────────────
-	fmt.Println()
-	display.ColorMessage.Println("  Dynatrace Azure Monitor Integration — Update")
-	fmt.Println()
-	fmt.Printf("  Environment:        %s\n", envURL)
-	fmt.Printf("  Tenant ID:          %s\n", tenantID)
-	fmt.Printf("  Subscription:       %s\n", subscriptionID)
-	fmt.Printf("  Connection name:    %s\n", integrationName)
-	fmt.Printf("  Configuration name: %s\n", integrationName)
-	fmt.Println()
-	display.PrintSectionDivider()
-	display.ColorMessage.Println("  Commands to be executed:")
-	display.PrintSectionDivider()
-
-	fmt.Println()
-	display.ColorMessage.Println("  Phase 1 — Remove existing integration:")
-	for i, s := range uninstallSteps {
-		fmt.Printf("  Step %d: %s\n", i+1, s)
-	}
-
-	fmt.Println()
-	display.ColorMessage.Println("  Phase 2 — Install new integration:")
-	for i, s := range installSteps {
-		masked := maskToken(s, platformToken)
-		fmt.Printf("  Step %d: %s\n", nUninstall+i+1, masked)
-	}
-
-	display.PrintSectionDivider()
-	fmt.Println()
+	azureUpdatePrintPreview(cfg, monConfigIDs)
 
 	if dryRun {
 		fmt.Println("  [dry-run] No changes were made.")
@@ -137,25 +114,88 @@ func updateAzureWithRunner(
 	}
 	fmt.Println()
 
-	// ── Phase 1: uninstall ─────────────────────────────────────────────────────
-	display.ColorMessage.Println("  Phase 1 — Removing existing integration...")
-	fmt.Println()
-	if err := runUninstallSteps(0, totalSteps, monConfigIDs, conns, clientIDs, runner, dtc); err != nil {
-		return fmt.Errorf("uninstall phase: %w", err)
-	}
-
-	// ── Phase 2: install ───────────────────────────────────────────────────────
-	fmt.Println()
-	display.ColorMessage.Println("  Phase 2 — Installing new integration...")
-	fmt.Println()
-	if _, err := runInstallSteps(nUninstall, totalSteps, installCfg, runner, sleeper, dtc); err != nil {
-		return fmt.Errorf("install phase: %w", err)
+	if err := reconcileMonitoring(cfg, monConfigIDs, dtc); err != nil {
+		return err
 	}
 
 	fmt.Println()
 	display.ColorMessage.Println("  Azure Monitor integration updated!")
 	fmt.Println()
 
-	azureWatchIngest(installCfg, startTime)
+	azureWatchIngest(cfg, startTime)
 	return nil
+}
+
+// selectUpdatableConnection returns the connection to reconcile against. The
+// update path only refreshes the monitoring configuration, so it needs exactly
+// one connection that already carries its bound application ID.
+func selectUpdatableConnection(conns []connRef) (connRef, error) {
+	var usable []connRef
+	for _, c := range conns {
+		if c.clientID != "" {
+			usable = append(usable, c)
+		}
+	}
+	switch {
+	case len(usable) == 0:
+		return connRef{}, fmt.Errorf("no complete Azure connection named %q found — run `dtwiz install azure` to set one up (or `dtwiz uninstall azure` then install to repair a partial one)", integrationName)
+	case len(usable) > 1:
+		return connRef{}, fmt.Errorf("found %d Azure connections named %q — run `dtwiz uninstall azure` then `dtwiz install azure` for a clean single integration", len(usable), integrationName)
+	default:
+		return usable[0], nil
+	}
+}
+
+// reconcileMonitoring updates every existing monitoring configuration in place,
+// or creates one when none exist. Each configuration is rewritten with a single
+// atomic call, so a failure leaves the prior configuration intact rather than a
+// half-built one. The authentication chain is never modified.
+func reconcileMonitoring(cfg azureConfig, monConfigIDs []string, dtc dtclient) error {
+	if len(monConfigIDs) == 0 {
+		fmt.Println("  Step 1/1: Create Azure monitoring configuration...")
+		if err := dtc.createMonitoring(cfg.ConfigurationName, cfg.ConnectionID, cfg.ClientID, cfg.SubscriptionID); err != nil {
+			return fmt.Errorf("create monitoring configuration: %w", err)
+		}
+		display.ColorOK.Println("  ✓ Monitoring configuration created")
+		return nil
+	}
+
+	total := len(monConfigIDs)
+	for i, id := range monConfigIDs {
+		fmt.Printf("  Step %d/%d: Update Azure monitoring configuration...\n", i+1, total)
+		logger.Debug("reconciling monitoring config", "configID", id)
+		if err := dtc.updateMonitoring(id, cfg.ConfigurationName, cfg.ConnectionID, cfg.ClientID, cfg.SubscriptionID); err != nil {
+			return fmt.Errorf("update monitoring configuration %s: %w", id, err)
+		}
+		display.ColorOK.Println("  ✓ Monitoring configuration updated")
+	}
+	return nil
+}
+
+func azureUpdatePrintPreview(cfg azureConfig, monConfigIDs []string) {
+	fmt.Println()
+	display.ColorMessage.Println("  Dynatrace Azure Monitor Integration — Update")
+	fmt.Println()
+	fmt.Printf("  Environment:        %s\n", cfg.EnvURL)
+	fmt.Printf("  Tenant ID:          %s\n", cfg.TenantID)
+	fmt.Printf("  Subscription:       %s\n", cfg.SubscriptionID)
+	fmt.Printf("  Connection name:    %s (unchanged)\n", cfg.ConnectionName)
+	fmt.Printf("  Configuration name: %s\n", cfg.ConfigurationName)
+	fmt.Println()
+	display.ColorMessage.Println("  Authentication (connection, Service Principal, federated credential, role) is left unchanged.")
+	fmt.Println()
+	display.PrintSectionDivider()
+	display.ColorMessage.Println("  Steps to be executed:")
+	display.PrintSectionDivider()
+
+	if len(monConfigIDs) == 0 {
+		fmt.Printf("  Step 1: DT Extensions API: create Azure monitoring configuration '%s'\n", cfg.ConfigurationName)
+	} else {
+		for i, id := range monConfigIDs {
+			fmt.Printf("  Step %d: DT Extensions API: update Azure monitoring configuration '%s' (id: %s)\n", i+1, cfg.ConfigurationName, id)
+		}
+	}
+
+	display.PrintSectionDivider()
+	fmt.Println()
 }

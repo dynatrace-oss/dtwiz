@@ -86,8 +86,8 @@ func azureRunStep(n, total int, runner cmdRunner, name string, args []string, en
 }
 
 // azurePartialFailureHint prints cleanup hints based on how far the install got.
-// Re-running `dtwiz uninstall azure` (or `dtwiz update azure`) performs all of
-// this automatically — the explicit commands are shown for transparency.
+// Re-running `dtwiz uninstall azure` performs all of this automatically — the
+// explicit commands are shown for transparency.
 func azurePartialFailureHint(cfg azureConfig, completedSteps map[int]bool) {
 	if !completedSteps[1] && !completedSteps[2] && !completedSteps[5] {
 		return

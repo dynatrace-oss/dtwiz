@@ -17,6 +17,19 @@ import (
 //
 // The integration always operates at subscription scope (/subscriptions/<id>).
 func azurePreflightChecks(runner cmdRunner, envURL, platformToken string) (subscriptionID, tenantID string, err error) {
+	subscriptionID, tenantID, err = azureAccountInfo(runner)
+	if err != nil {
+		return "", "", err
+	}
+	azureCheckRBAC(runner, "/subscriptions/"+subscriptionID)
+	return subscriptionID, tenantID, nil
+}
+
+// azureAccountInfo verifies the Azure CLI is present and the user is logged in,
+// then returns the active subscription and tenant ID. Unlike azurePreflightChecks
+// it does not run the role-assignment RBAC advisory — callers that never create
+// role assignments (e.g. the in-place update) use this directly.
+func azureAccountInfo(runner cmdRunner) (subscriptionID, tenantID string, err error) {
 	if _, err = execLookPath("az"); err != nil {
 		return "", "", fmt.Errorf("Azure CLI (az) not found — install it from https://aka.ms/installazurecliwindows") //nolint:staticcheck // ST1005: "Azure CLI" is a product name
 	}
@@ -36,9 +49,6 @@ func azurePreflightChecks(runner cmdRunner, envURL, platformToken string) (subsc
 	subscriptionID = account.ID
 	tenantID = account.Tenant
 	logger.Debug("az account show", "subscriptionID", subscriptionID, "tenantID", tenantID)
-
-	azureCheckRBAC(runner, "/subscriptions/"+subscriptionID)
-
 	return subscriptionID, tenantID, nil
 }
 

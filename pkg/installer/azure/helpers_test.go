@@ -75,6 +75,9 @@ func (noopDTClient) updateConnection(string, string, string, string) error {
 func (noopDTClient) createMonitoring(string, string, string, string) error {
 	return fmt.Errorf("unexpected createMonitoring call")
 }
+func (noopDTClient) updateMonitoring(string, string, string, string, string) error {
+	return fmt.Errorf("unexpected updateMonitoring call")
+}
 func (noopDTClient) findAllConnections(string) ([]connRef, error)      { return nil, nil }
 func (noopDTClient) deleteConnection(string) error                     { return nil }
 func (noopDTClient) findAllMonitoringConfigs(string) ([]string, error) { return nil, nil }
@@ -90,15 +93,22 @@ type fakeDTClient struct {
 	// uninstall
 	findConnObjectID string
 	findConnClientID string
+	findConnRefs     []connRef // when set, overrides findConnObjectID/findConnClientID
 	findConnErr      error
 	deleteConnErr    error
 	deleteConnCalled bool
 	findMonConfigID  string
+	findMonConfigIDs []string // when set, overrides findMonConfigID for multi-config cases
 	findMonErr       error
 	deleteMonErr     error
 
+	// in-place update
+	updateMonErr       error
+	createMonCalled    bool
+	updateMonConfigIDs []string
+
 	updateCalledWith struct{ objectID, name, tenantID, clientID string }
-	monCalledWith    struct{ configName, connObjectID string }
+	monCalledWith    struct{ configName, connObjectID, clientID, subscriptionID string }
 }
 
 func happyFakeDTClient() *fakeDTClient {
@@ -123,14 +133,28 @@ func (f *fakeDTClient) updateConnection(objectID, name, tenantID, clientID strin
 	f.updateCalledWith.clientID = clientID
 	return f.updateErr
 }
-func (f *fakeDTClient) createMonitoring(configName, connObjectID, _, _ string) error {
+func (f *fakeDTClient) createMonitoring(configName, connObjectID, clientID, subscriptionID string) error {
+	f.createMonCalled = true
 	f.monCalledWith.configName = configName
 	f.monCalledWith.connObjectID = connObjectID
+	f.monCalledWith.clientID = clientID
+	f.monCalledWith.subscriptionID = subscriptionID
 	return f.monErr
+}
+func (f *fakeDTClient) updateMonitoring(configID, configName, connObjectID, clientID, subscriptionID string) error {
+	f.updateMonConfigIDs = append(f.updateMonConfigIDs, configID)
+	f.monCalledWith.configName = configName
+	f.monCalledWith.connObjectID = connObjectID
+	f.monCalledWith.clientID = clientID
+	f.monCalledWith.subscriptionID = subscriptionID
+	return f.updateMonErr
 }
 func (f *fakeDTClient) findAllConnections(string) ([]connRef, error) {
 	if f.findConnErr != nil {
 		return nil, f.findConnErr
+	}
+	if f.findConnRefs != nil {
+		return f.findConnRefs, nil
 	}
 	if f.findConnObjectID == "" {
 		return nil, nil
@@ -144,6 +168,9 @@ func (f *fakeDTClient) deleteConnection(string) error {
 func (f *fakeDTClient) findAllMonitoringConfigs(string) ([]string, error) {
 	if f.findMonErr != nil {
 		return nil, f.findMonErr
+	}
+	if len(f.findMonConfigIDs) > 0 {
+		return f.findMonConfigIDs, nil
 	}
 	if f.findMonConfigID == "" {
 		return nil, nil
