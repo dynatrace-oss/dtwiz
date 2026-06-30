@@ -16,7 +16,12 @@ The scanner SHALL search only the working directory and its subdirectories for O
 - **WHEN** the user runs a dtwiz OTel install command from a parent directory that contains subdirectories with project markers
 - **THEN** all matching subdirectory projects are detected
 
-#### Scenario: Parent directory is not scanned
+#### Scenario: Parent directory is not scanned during install
 
 - **WHEN** the user runs a dtwiz OTel install command from a subdirectory of their project root (e.g. `my-project/src/`)
 - **THEN** the parent directory (`my-project/`) is NOT scanned and projects there are NOT detected
+
+#### Scenario: Parent directory is not scanned during uninstall
+
+- **WHEN** the user runs a dtwiz OTel uninstall command from a subdirectory
+- **THEN** `.otel/` directories in parent directories are NOT found and NOT removed; only `.otel/` directories within the working directory tree are considered
