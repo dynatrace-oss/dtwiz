@@ -3,7 +3,6 @@ package azure
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
@@ -31,7 +30,7 @@ func azurePreflightChecks(runner cmdRunner, envURL, platformToken string) (subsc
 // role assignments (e.g. the in-place update) use this directly.
 func azureAccountInfo(runner cmdRunner) (subscriptionID, tenantID string, err error) {
 	if _, err = execLookPath("az"); err != nil {
-		return "", "", fmt.Errorf("Azure CLI (az) not found — install it from https://aka.ms/installazurecliwindows") //nolint:staticcheck // ST1005: "Azure CLI" is a product name
+		return "", "", fmt.Errorf("Azure CLI (az) not found — install it from https://docs.microsoft.com/cli/azure/install-azure-cli") //nolint:staticcheck // ST1005: "Azure CLI" is a product name
 	}
 
 	accountJSON, err := runner("az", []string{"account", "show", "-o", "json"}, nil)
@@ -87,7 +86,12 @@ func azureCheckRBAC(runner cmdRunner, subscriptionScope string) {
 		display.ColorWarning.Printf("  Warning: could not validate Azure permissions (%v); continuing\n", err)
 		return
 	}
-	if !strings.Contains(out, `"accessDecision":"Allowed"`) {
+	var result struct {
+		Value []struct {
+			AccessDecision string `json:"accessDecision"`
+		} `json:"value"`
+	}
+	if err := json.Unmarshal([]byte(out), &result); err != nil || len(result.Value) == 0 || result.Value[0].AccessDecision != "Allowed" {
 		display.ColorWarning.Println("  Warning: your account may lack Microsoft.Authorization/roleAssignments/write at subscription scope — you may need Owner or User Access Administrator role; continuing")
 		return
 	}

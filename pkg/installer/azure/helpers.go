@@ -85,7 +85,7 @@ func azureListAppIDsByName(runner cmdRunner, name string) ([]string, error) {
 		AppID string `json:"appId"`
 	}
 	if err := json.Unmarshal([]byte(out), &apps); err != nil {
-		return nil, nil
+		return nil, fmt.Errorf("parsing az ad app list output: %w", err)
 	}
 	ids := make([]string, 0, len(apps))
 	for _, a := range apps {

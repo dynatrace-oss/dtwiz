@@ -263,7 +263,12 @@ func (d *sdkDTClient) findAllMonitoringConfigs(name string) ([]string, error) {
 }
 
 func (d *sdkDTClient) deleteMonitoring(configID string) error {
-	return d.extension.DeleteMonitoringConfiguration(context.Background(), extensionName, configID)
+	err := d.extension.DeleteMonitoringConfiguration(context.Background(), extensionName, configID)
+	if errors.Is(err, httpclient.ErrNotFound) {
+		logger.Debug("monitoring config already gone", "configId", configID)
+		return nil
+	}
+	return err
 }
 
 // extensionSchema is the minimal view of the da-azure settings schema we need:
