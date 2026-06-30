@@ -1,6 +1,7 @@
 package installer
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -603,6 +604,25 @@ func TestQueryBootstrapRequirements_SkipsAlreadyInstalled_WithVersionSpecifier(t
 	if len(pkgs) != 0 {
 		t.Fatalf("queryBootstrapRequirements() = %v, want empty — packages are installed but specifier version suffix caused false positive", pkgs)
 	}
+}
+
+func TestInstallOtelPython_SkipReturnsInstallCancelled(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell stubs only work on Unix")
+	}
+	pythonDir := requireFakePython3(t)
+	t.Setenv("PATH", pythonDir)
+
+	dir := t.TempDir() // no Python project markers
+	setTestWorkingDir(t, dir)
+	setTestStdin(t, "\n") // skip project selection
+
+	captureStdout(t, func() {
+		err := InstallOtelPython("https://tenant.live.dynatrace.com", "tok", "ptok", "", "", false)
+		if !errors.Is(err, ErrInstallCancelled) {
+			t.Errorf("expected ErrInstallCancelled when skipping, got %v", err)
+		}
+	})
 }
 
 // --- Shared test helpers (used across otel_python_*_test.go files) ---

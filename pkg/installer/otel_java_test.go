@@ -2,6 +2,7 @@ package installer
 
 import (
 	"bytes"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -509,6 +510,24 @@ func TestInstallOtelJava_DryRun(t *testing.T) {
 			t.Errorf("expected dry-run output to contain %q, got:\n%s", check, output)
 		}
 	}
+}
+
+func TestInstallOtelJava_SkipReturnsInstallCancelled(t *testing.T) {
+	skipIfNoJava(t)
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte("<project/>"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	setTestWorkingDir(t, dir)
+	setTestStdin(t, "\n") // skip project selection
+
+	captureStdout(t, func() {
+		err := InstallOtelJava("https://tenant.live.dynatrace.com", "tok", "", "", false)
+		if !errors.Is(err, ErrInstallCancelled) {
+			t.Errorf("expected ErrInstallCancelled when skipping, got %v", err)
+		}
+	})
 }
 
 func TestInstallOtelJava_NoBuildArtifact_NoRunningProcess(t *testing.T) {

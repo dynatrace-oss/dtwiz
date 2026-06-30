@@ -546,6 +546,20 @@ func TestParseWinProcessOutput_SingleLine(t *testing.T) {
 	}
 }
 
+func TestPromptProjectSelection_SingleProjectRangeHint(t *testing.T) {
+	projects := []ScannedProject{{Path: "/home/user/myapp", Markers: []string{"package.json"}}}
+	setTestStdin(t, "\n") // skip selection
+	output := captureStdout(t, func() {
+		promptProjectSelection("Node.js", projects)
+	})
+	if !strings.Contains(output, "[1]") {
+		t.Errorf("expected [1] in prompt output, got: %s", output)
+	}
+	if strings.Contains(output, "[1-1]") {
+		t.Errorf("expected no [1-1] in prompt output for single project, got: %s", output)
+	}
+}
+
 func TestParseWinProcessOutput_PipeDelimitedFields(t *testing.T) {
 	// Verify pipe-delimited lines round-trip correctly through SplitN.
 	raw := "100|C:\\Python312\\python.exe -m flask run|C:\\app\r\n"
