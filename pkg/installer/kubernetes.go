@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -99,102 +98,6 @@ func sanitizeK8sName(name string) string {
 		name = strings.TrimRight(name, "-")
 	}
 	return name
-}
-
-// isHelmInstalled returns true when the `helm` binary is on PATH.
-func isHelmInstalled() bool {
-	_, err := exec.LookPath("helm")
-	return err == nil
-}
-
-// helmMajorVersion returns the major version number of the installed Helm CLI.
-func helmMajorVersion() (int, error) {
-	out, err := exec.Command("helm", "version", "--short").Output()
-	if err != nil {
-		return 0, fmt.Errorf("getting helm version: %w", err)
-	}
-	// Output looks like: v3.14.0+g... or v4.0.0+g...
-	ver := strings.TrimSpace(string(out))
-	ver = strings.TrimPrefix(ver, "v")
-	parts := strings.SplitN(ver, ".", 2)
-	if len(parts) == 0 {
-		return 0, fmt.Errorf("unexpected helm version output: %q", ver)
-	}
-	major, err := strconv.Atoi(parts[0])
-	if err != nil {
-		return 0, fmt.Errorf("parsing helm major version from %q: %w", ver, err)
-	}
-	return major, nil
-}
-
-// installHelm attempts to install Helm via the official get-helm-3 script.
-// NOTE: This downloads and executes a script from the internet.  Users who
-// require a verified installation should install Helm manually:
-//
-//	https://helm.sh/docs/intro/install/
-func installHelm() error {
-	fmt.Println("  Helm not found — installing via get.helm.sh...")
-	fmt.Println("  NOTE: This executes a script from https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3")
-	return RunCommand("bash", "-c",
-		"curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash")
-}
-
-// isOperatorInstalled checks whether the dynatrace-operator Helm release
-// exists in the dynatrace namespace.
-func isOperatorInstalled() bool {
-	out, err := exec.Command("helm", "list",
-		"--namespace", "dynatrace",
-		"--filter", "dynatrace-operator",
-		"--short").Output()
-	if err != nil {
-		return false
-	}
-	return strings.Contains(string(out), "dynatrace-operator")
-}
-
-// helmOperatorArgs builds the `helm install` argument slice.
-// Helm v3 uses --atomic; Helm v4+ uses --rollback-on-failure.
-// disableCSI adds --set csidriver.enabled=false, required on GKE Autopilot.
-func helmOperatorArgs(helmMajor int, disableCSI bool) []string {
-	rollbackFlag := "--atomic"
-	if helmMajor >= 4 {
-		rollbackFlag = "--rollback-on-failure"
-	}
-	args := []string{
-		"install", "dynatrace-operator",
-		dynatraceOperatorOCI,
-		"--version", dynatraceOperatorVersion,
-		"--create-namespace",
-		"--namespace", "dynatrace",
-		rollbackFlag,
-		"--timeout", "10m",
-	}
-	if disableCSI {
-		args = append(args, "--set", "csidriver.enabled=false")
-	}
-	return args
-}
-
-// helmOperatorUpgradeArgs builds the `helm upgrade` argument slice used when
-// the dynatrace-operator release already exists.
-// disableCSI adds --set csidriver.enabled=false, required on GKE Autopilot.
-func helmOperatorUpgradeArgs(helmMajor int, disableCSI bool) []string {
-	rollbackFlag := "--atomic"
-	if helmMajor >= 4 {
-		rollbackFlag = "--rollback-on-failure"
-	}
-	args := []string{
-		"upgrade", "dynatrace-operator",
-		dynatraceOperatorOCI,
-		"--version", dynatraceOperatorVersion,
-		"--namespace", "dynatrace",
-		rollbackFlag,
-		"--timeout", "10m",
-	}
-	if disableCSI {
-		args = append(args, "--set", "csidriver.enabled=false")
-	}
-	return args
 }
 
 // applyDynakube writes the DynaKube CR YAML to a temp file and runs
@@ -347,6 +250,10 @@ func resolveClusterName(name, envURL string) string {
 //   - distro:      detected Kubernetes distribution (e.g. "GKE", "EKS"); empty falls back to defaults
 //   - dryRun:      when true, only print what would be done
 func InstallKubernetes(envURL, token, clusterName, distro string, dryRun bool) error {
+	if err := refreshWindowsPath(); err != nil {
+		fmt.Printf("  Warning: could not refresh PATH: %v\n", err)
+	}
+
 	apiURL := APIURL(envURL)
 
 	clusterName = resolveClusterName(clusterName, envURL)
