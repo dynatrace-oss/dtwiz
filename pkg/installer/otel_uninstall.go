@@ -159,10 +159,10 @@ func removeWithRetry(path string) error {
 	return err
 }
 
-// findNodeOtelDirs scans CWD (recursively) and parent directories for .otel/
-// directories that contain a package.json with @opentelemetry in its content —
-// these are directories created by dtwiz's Node.js auto-instrumentation
-// installer. The scan mirrors scanProjectDirs: CWD + children only.
+// findNodeOtelDirs scans CWD (recursively) for .otel/ directories that contain
+// a package.json with @opentelemetry in its content — these are directories
+// created by dtwiz's Node.js auto-instrumentation installer. Parent directories
+// are not scanned, mirroring scanProjectDirs behaviour.
 func findNodeOtelDirs() []string {
 	var dirs []string
 	seen := map[string]bool{}
@@ -215,7 +215,7 @@ func findNodeOtelDirs() []string {
 
 	// walkCandidateDirs recursively checks dir and its children (skipping the
 	// same ignored directories as scanProjectDirs).
-	walkCandidateDirs(cwd, 2, func(dir string, entries []os.DirEntry) bool {
+	walkCandidateDirs(cwd, 0, func(dir string, entries []os.DirEntry) bool {
 		checkDir(dir, entries)
 		return false
 	}, isIgnoredDir)

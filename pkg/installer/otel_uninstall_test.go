@@ -118,6 +118,36 @@ func TestFindNodeOtelDirs_NoDirs(t *testing.T) {
 	}
 }
 
+func TestFindNodeOtelDirs_ParentNotScanned(t *testing.T) {
+	grandparent := t.TempDir()
+
+	// Place a valid .otel/ dir in the grandparent (sibling of cwd).
+	otelDir := filepath.Join(grandparent, ".otel")
+	if err := os.MkdirAll(otelDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	pkgJSON := `{"dependencies":{"@opentelemetry/auto-instrumentations-node":"latest"}}`
+	if err := os.WriteFile(filepath.Join(otelDir, "package.json"), []byte(pkgJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cwd := filepath.Join(grandparent, "cwd")
+	if err := os.Mkdir(cwd, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	setTestWorkingDir(t, cwd)
+	dirs := findNodeOtelDirs()
+
+	realOtelDir, _ := filepath.EvalSymlinks(otelDir)
+	for _, d := range dirs {
+		realD, _ := filepath.EvalSymlinks(d)
+		if realD == realOtelDir {
+			t.Errorf("parent directory must not be scanned; found .otel/ outside cwd: %s", d)
+		}
+	}
+}
+
 func TestFindNodeOtelDirs_NoPackageJSON(t *testing.T) {
 	dir := t.TempDir()
 

@@ -406,6 +406,9 @@ func TestScanProjectDirs_ParentNotScanned(t *testing.T) {
 	setTestWorkingDir(t, cwd)
 	projects := scanProjectDirs([]string{"go.mod"}, nil)
 
+	if len(projects) != 0 {
+		t.Errorf("expected no projects from cwd with no markers, got %v", projects)
+	}
 	for _, p := range projects {
 		if strings.HasSuffix(p.Path, "sibling") {
 			t.Errorf("parent directory must not be scanned; found sibling project outside cwd: %s", p.Path)
@@ -552,8 +555,8 @@ func TestPromptProjectSelection_SingleProjectRangeHint(t *testing.T) {
 	output := captureStdout(t, func() {
 		promptProjectSelection("Node.js", projects)
 	})
-	if !strings.Contains(output, "[1]") {
-		t.Errorf("expected [1] in prompt output, got: %s", output)
+	if !strings.Contains(output, "instrument [1] or press") {
+		t.Errorf("expected range hint [1] in prompt text, got: %s", output)
 	}
 	if strings.Contains(output, "[1-1]") {
 		t.Errorf("expected no [1-1] in prompt output for single project, got: %s", output)
