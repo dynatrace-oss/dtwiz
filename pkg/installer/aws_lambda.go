@@ -657,6 +657,24 @@ func InstallAWSLambda(envURL, token string, dryRun, confirm bool) error {
 	display.ColorMessage.Println("  Dynatrace AWS Lambda Instrumentation")
 	fmt.Println()
 
+	// ── Info box ─────────────────────────────────────────────────────────────
+
+	const discoveryURL = "https://fxz0998d.dev.apps.dynatracelabs.com/ui/apps/dynatrace.discovery.coverage/"
+	appLabel := "Discovery & Coverage App"
+	supportsLinks := display.StdoutSupportsHyperlinks()
+	if supportsLinks {
+		appLabel = display.Hyperlink(appLabel, discoveryURL)
+	}
+	display.PrintInfoBox(
+		"(i) dtwiz supports AWS Lambda onboarding for Node.js and Python.",
+		"",
+		"For other technologies please use the "+appLabel+" -> + Install -> AWS Lambda Layer",
+	)
+	if !supportsLinks {
+		fmt.Printf("    Discovery & Coverage App: %s\n", discoveryURL)
+	}
+	fmt.Println()
+
 	// ── Validate ─────────────────────────────────────────────────────────────
 
 	if envURL == "" {
