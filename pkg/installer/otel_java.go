@@ -332,7 +332,7 @@ func InstallOtelJava(envURL, token, serviceName, projectPath string, dryRun bool
 		sel := promptProjectSelection("Java", projects)
 		if sel == nil {
 			logger.Debug("user skipped project selection")
-			return nil
+			return ErrInstallCancelled
 		}
 		proj = *sel
 	}
