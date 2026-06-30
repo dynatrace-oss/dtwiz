@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.27] - 2026-06-30
+
+### Added
+
+- `install kubernetes`: Helm installation on Windows now resolves the Helm binary path after installation via a PATH refresh, so the install no longer fails when Helm was just installed in the same session; Helm-related logic extracted into dedicated files (`helm_install.go`)
+
+### Changed
+
+- `install kubernetes` / `uninstall kubernetes`: DynaKube and EdgeConnect CRs are now uninstalled separately for more resilient cleanup
+- Error handling: command usage is no longer printed to the user when an external (non-usage) error occurs; usage output is now suppressed on `install`, `update`, and `uninstall` commands
+
+### Fixed
+
+- `install otel`: OTel host monitoring informational banner moved from the install scripts (`install.sh`, `install.ps1`) into the OTel installer itself, so it is shown at the correct point in the flow regardless of how the tool is invoked
+
 ## [0.2.26] - 2026-06-29
 
 ### Added
@@ -372,7 +387,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.26...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.27...HEAD
+[0.2.27]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.26...v0.2.27
 [0.2.26]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.25...v0.2.26
 [0.2.25]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.24...v0.2.25
 [0.2.24]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.23...v0.2.24
