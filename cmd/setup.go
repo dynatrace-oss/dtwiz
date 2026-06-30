@@ -15,6 +15,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/azure"
 	k8s "github.com/dynatrace-oss/dtwiz/pkg/installer/kubernetes"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/gcp"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
@@ -72,13 +73,17 @@ var setupCmd = &cobra.Command{
 			return nil
 		}
 
-		// Pre-check Azure status so we can badge the Azure entry in the list.
+		// Pre-check Azure/GCP status so we can badge those entries in the list.
 		azureConfigured := false
+		gcpConfigured := false
 		if envURL, _, platformTok, credErr := getDtEnvironment(); credErr == nil {
 			if exists, err := azure.ConnectionExists(envURL, platformTok); err != nil {
 				logger.Debug("azure connection check failed, badging as not configured", "err", err)
 			} else if exists {
 				azureConfigured = true
+			}
+			if exists, _ := gcp.ConnectionExists(envURL, platformTok); exists {
+				gcpConfigured = true
 			}
 		}
 
@@ -86,6 +91,13 @@ var setupCmd = &cobra.Command{
 			title := r.Title
 			if r.Method == recommender.MethodAzure {
 				if azureConfigured {
+					title += "  [update]"
+				} else {
+					title += "  [install]"
+				}
+			}
+			if r.Method == recommender.MethodGCP {
+				if gcpConfigured {
 					title += "  [update]"
 				} else {
 					title += "  [install]"
@@ -168,7 +180,8 @@ var setupCmd = &cobra.Command{
 		}
 
 		headerVerb := "Installing"
-		if selected.Method == recommender.MethodAzure && azureConfigured {
+		if (selected.Method == recommender.MethodAzure && azureConfigured) ||
+			(selected.Method == recommender.MethodGCP && gcpConfigured) {
 			headerVerb = "Updating"
 		}
 		display.Header(fmt.Sprintf("%s: %s", headerVerb, selected.Title))
@@ -207,6 +220,12 @@ var setupCmd = &cobra.Command{
 			} else {
 				installErr = azure.InstallAzure(envURL, platformTok, setupDryRun, StartTime)
 			}
+		case recommender.MethodGCP:
+			if gcpConfigured {
+				installErr = gcp.UpdateGCP(envURL, platformTok, setupDryRun, StartTime)
+			} else {
+				installErr = gcp.InstallGCP(envURL, platformTok, setupDryRun, StartTime)
+			}
 		default:
 			return fmt.Errorf("unsupported method: %s", selected.Method)
 		}
@@ -216,10 +235,11 @@ var setupCmd = &cobra.Command{
 			}
 			return installErr
 		}
-		// AWS scopes its watch to the account (WatchIngestAWS) and Azure runs the
-		// generic watch from inside the installer; both start their own watch, so
+		// AWS scopes its watch to the account (WatchIngestAWS); Azure and GCP run their
+		// own generic watch from inside the installer; both start their own watch, so
 		// the generic post-install watch here is only used for the other methods.
-		if !setupDryRun && selected.Method != recommender.MethodAWS && selected.Method != recommender.MethodAzure {
+		if !setupDryRun && selected.Method != recommender.MethodAWS &&
+			selected.Method != recommender.MethodAzure && selected.Method != recommender.MethodGCP {
 			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
 		}
 		return nil

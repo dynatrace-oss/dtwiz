@@ -10,6 +10,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/azure"
 	k8s "github.com/dynatrace-oss/dtwiz/pkg/installer/kubernetes"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/gcp"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
@@ -126,6 +127,25 @@ var uninstallAzureCmd = &cobra.Command{
 	},
 }
 
+var uninstallGCPCmd = &cobra.Command{
+	Use:   "gcp",
+	Short: "Remove the Dynatrace Google Cloud integration",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		envURL, _, platformTok, err := getDtEnvironment()
+		if err != nil {
+			return err
+		}
+		if err := gcp.UninstallGCP(envURL, platformTok, uninstallDryRun); err != nil {
+			if errors.Is(err, installer.ErrInstallCancelled) {
+				return nil
+			}
+			return err
+		}
+		return nil
+	},
+}
+
 var uninstallSelfCmd = &cobra.Command{
 	Use:   "self",
 	Short: "Remove the dtwiz binary and its PATH entry",
@@ -147,6 +167,7 @@ func init() {
 	uninstallCmd.AddCommand(uninstallAWSCmd)
 	uninstallCmd.AddCommand(uninstallAWSLambdaCmd)
 	uninstallCmd.AddCommand(uninstallAzureCmd)
+	uninstallCmd.AddCommand(uninstallGCPCmd)
 	uninstallCmd.AddCommand(uninstallOtelCmd)
 	uninstallCmd.AddCommand(uninstallSelfCmd)
 }

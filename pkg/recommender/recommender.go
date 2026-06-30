@@ -169,14 +169,13 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 		})
 	}
 
-	// 9. GCP detected — coming soon.
+	// 9. GCP detected.
 	if system.GCP != nil && system.GCP.Available {
 		recs = append(recs, Recommendation{
 			Method:      MethodGCP,
 			Priority:    50,
-			Title:       "GCP cloud services (coming soon)",
+			Title:       "GCP cloud services",
 			Description: fmt.Sprintf("GCP project detected (%s).", system.GCP.ProjectID),
-			ComingSoon:  true,
 		})
 	}
 

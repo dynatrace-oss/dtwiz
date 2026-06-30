@@ -11,6 +11,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/azure"
 	k8s "github.com/dynatrace-oss/dtwiz/pkg/installer/kubernetes"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/gcp"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
@@ -354,7 +355,17 @@ var installGCPCmd = &cobra.Command{
 	Short: "Set up Dynatrace Google Cloud Platform integration",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return installer.InstallGCP()
+		envURL, _, platformTok, err := getDtEnvironment()
+		if err != nil {
+			return err
+		}
+		if err := gcp.InstallGCP(envURL, platformTok, installDryRun, StartTime); err != nil {
+			if errors.Is(err, installer.ErrInstallCancelled) {
+				return nil
+			}
+			return err
+		}
+		return nil
 	},
 }
 
