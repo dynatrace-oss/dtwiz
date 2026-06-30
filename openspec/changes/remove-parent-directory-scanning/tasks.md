@@ -1,3 +1,5 @@
+# Tasks: Remove Parent Directory Scanning
+
 ## 1. Implementation
 
 - [x] 1.1 In `pkg/installer/otel_runtime_scan.go:247`, change `walkCandidateDirs(workingDir, 2, ...)` to `walkCandidateDirs(workingDir, 0, ...)`

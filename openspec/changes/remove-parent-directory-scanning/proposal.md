@@ -1,6 +1,8 @@
+# Proposal: Remove Parent Directory Scanning
+
 ## Why
 
-When scanning for OTel project instrumentation, the CLI tells the user "Scanning `<dir>`" but silently also scans up to 2 parent directories — behaviour that is inconsistent with the message and unexpected to the user. Removing parent-directory scanning makes the tool do exactly what it says.
+When scanning for OTel project instrumentation, the CLI tells the user "Scanning `/home/user/myapp`" but silently also scans up to 2 parent directories — behaviour that is inconsistent with the message and unexpected to the user. Removing parent-directory scanning makes the tool do exactly what it says.
 
 ## What Changes
 
