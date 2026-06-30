@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -251,6 +252,30 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 
 	fmt.Println()
 	display.ColorMessage.Println("  Dynatrace OpenTelemetry Installation")
+	fmt.Println()
+	const hmURL = "https://docs.dynatrace.com/docs/observe/infrastructure-observability/extensions/opentelemetry-host-monitoring"
+	supportsLinks := display.StdoutSupportsHyperlinks()
+	// ℹ️ (U+2139 + U+FE0F) width is reliable on macOS and Windows (always 2 cols)
+	// but inconsistent across Linux terminals — some render it as 1-wide.
+	// Fall back to ASCII (i) on Linux and non-hyperlink terminals to guarantee
+	// box alignment. Both options pad to 4 visual columns.
+	icon := "(i) " // 3-wide ASCII + 1 space
+	if supportsLinks && runtime.GOOS != "linux" {
+		icon = "ℹ️  " // 2-wide emoji + 2 spaces (macOS/Windows only)
+	}
+	fmt.Println("  ┌────────────────────────────────────────────────────────────────┐")
+	fmt.Printf("  │ %sThis will enable OpenTelemetry service monitoring.         │\n", icon)
+	fmt.Println("  │                                                                │")
+	fmt.Println("  │ If you also want to activate host monitoring, follow the       │")
+	if supportsLinks {
+		fmt.Printf("  │ %s instructions.                    │\n", display.Hyperlink("OpenTelemetry Host Monitoring", hmURL))
+	} else {
+		fmt.Println("  │ OpenTelemetry Host Monitoring instructions.                    │")
+	}
+	fmt.Println("  └────────────────────────────────────────────────────────────────┘")
+	if !supportsLinks {
+		fmt.Printf("    OpenTelemetry Host Monitoring: %s\n", hmURL)
+	}
 	fmt.Println()
 
 	runtimes := detectAvailableRuntimes()
