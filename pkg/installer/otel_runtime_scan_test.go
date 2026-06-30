@@ -387,7 +387,7 @@ func TestScanProjectDirs_SubtreePruning(t *testing.T) {
 	}
 }
 
-func TestScanProjectDirs_AncestorWalk(t *testing.T) {
+func TestScanProjectDirs_ParentNotScanned(t *testing.T) {
 	grandparent := t.TempDir()
 
 	sibling := filepath.Join(grandparent, "sibling")
@@ -406,14 +406,10 @@ func TestScanProjectDirs_AncestorWalk(t *testing.T) {
 	setTestWorkingDir(t, cwd)
 	projects := scanProjectDirs([]string{"go.mod"}, nil)
 
-	found := false
 	for _, p := range projects {
 		if strings.HasSuffix(p.Path, "sibling") {
-			found = true
+			t.Errorf("parent directory must not be scanned; found sibling project outside cwd: %s", p.Path)
 		}
-	}
-	if !found {
-		t.Errorf("expected sibling project to be found via ancestor walk, got %v", projects)
 	}
 }
 

@@ -244,7 +244,7 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 		return true
 	}
 
-	walkCandidateDirs(workingDir, 2, dirMatches, shouldSkipDir)
+	walkCandidateDirs(workingDir, 0, dirMatches, shouldSkipDir)
 
 	subtreeCounts.Range(func(key, value any) bool {
 		logger.Debug("scan summary", "subdir", key.(string), "dirs_checked", value.(*atomic.Int64).Load())
