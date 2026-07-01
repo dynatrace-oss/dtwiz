@@ -132,7 +132,7 @@ func TestGCPDTPrincipalUnresolvedFailsBeforeMutations(t *testing.T) {
 	}
 }
 
-func TestGCPStep1FailsNoGcloudMutations(t *testing.T) {
+func TestGCPStep2ConnectionFailsAfterAPIEnable(t *testing.T) {
 	old := installer.AutoConfirm
 	installer.AutoConfirm = true
 	defer func() { installer.AutoConfirm = old }()
@@ -146,14 +146,17 @@ func TestGCPStep1FailsNoGcloudMutations(t *testing.T) {
 		return installGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, happyGcloudRunner(&mutating), noSleep, failDTC)
 	})
 	if err == nil {
-		t.Fatal("expected error from step 1, got nil")
+		t.Fatal("expected error from step 2, got nil")
 	}
-	if mutating != 0 {
-		t.Errorf("expected 0 mutating gcloud calls after step 1 failure, got %d", mutating)
+	if !strings.Contains(err.Error(), "step 2") {
+		t.Errorf("error %q does not mention step 2", err.Error())
+	}
+	if mutating != 1 {
+		t.Errorf("expected only API enable before connection failure, got %d mutating gcloud calls", mutating)
 	}
 }
 
-func TestGCPStep2PermissionDeniedIncludesRoleHint(t *testing.T) {
+func TestGCPStep1PermissionDeniedIncludesRoleHint(t *testing.T) {
 	old := installer.AutoConfirm
 	installer.AutoConfirm = true
 	defer func() { installer.AutoConfirm = old }()
@@ -176,7 +179,10 @@ func TestGCPStep2PermissionDeniedIncludesRoleHint(t *testing.T) {
 		return installGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep, happyFakeDTClient())
 	})
 	if err == nil {
-		t.Fatal("expected error from step 2, got nil")
+		t.Fatal("expected error from step 1, got nil")
+	}
+	if !strings.Contains(err.Error(), "step 1") {
+		t.Errorf("error %q does not mention step 1", err.Error())
 	}
 	if !strings.Contains(err.Error(), "roles/serviceusage.serviceUsageAdmin") {
 		t.Errorf("expected service usage role hint, got: %v", err)
@@ -343,8 +349,8 @@ func TestGCPBuildStepCommands_RealValues(t *testing.T) {
 		step int
 		want string
 	}{
-		{1, integrationName},
-		{2, "compute.googleapis.com"},
+		{1, "compute.googleapis.com"},
+		{2, integrationName},
 		{3, serviceAccountName},
 		{4, "roles/viewer"},
 		{5, "dt-monitor@dynatrace-prod.iam.gserviceaccount.com"},

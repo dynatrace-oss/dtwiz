@@ -3,8 +3,8 @@
 // The flow mirrors pkg/installer/azure but uses Google Cloud service-account
 // impersonation instead of Entra federated credentials:
 //
-//  1. Create the Dynatrace GCP connection (DT Settings API).
-//  2. Enable the required Google Cloud APIs (gcloud).
+//  1. Enable the required Google Cloud APIs (gcloud).
+//  2. Create the Dynatrace GCP connection (DT Settings API).
 //  3. Create a Google Cloud service account for Dynatrace monitoring (gcloud).
 //  4. Grant that service account roles/viewer on the active project (gcloud).
 //  5. Grant the Dynatrace principal roles/iam.serviceAccountTokenCreator on the

@@ -11,17 +11,30 @@ func detectGCP() *GCPInfo {
 	info := &GCPInfo{}
 
 	ok, out := runCmd("gcloud", "config", "get-value", "project")
-	if !ok || strings.TrimSpace(out) == "" || strings.Contains(out, "(unset)") {
+	projectID := cleanGCloudConfigValue(out)
+	if !ok || projectID == "" || strings.Contains(projectID, "(unset)") {
 		return info
 	}
 	info.Available = true
-	info.ProjectID = strings.TrimSpace(out)
+	info.ProjectID = projectID
 
 	_, acct := runCmd("gcloud", "config", "get-value", "account")
-	info.Account = strings.TrimSpace(acct)
+	info.Account = cleanGCloudConfigValue(acct)
 
 	info.Services, info.ServicesAuthError = detectGCPServices()
 	return info
+}
+
+func cleanGCloudConfigValue(out string) string {
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" || strings.HasPrefix(line, "Your active configuration is:") {
+			continue
+		}
+		return line
+	}
+	return ""
 }
 
 type gcpServiceProbe struct {

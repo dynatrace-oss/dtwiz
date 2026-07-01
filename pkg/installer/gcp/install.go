@@ -23,10 +23,10 @@ func gcpBuildStepCommands(cfg gcpConfig) []string {
 	}
 
 	return []string{
-		fmt.Sprintf("DT Settings API: create GCP connection '%s'  [env=%s token=***]",
-			cfg.ConnectionName, cfg.EnvURL),
 		fmt.Sprintf("gcloud services enable %s --project=%s",
 			strings.Join(requiredAPIs, " "), cfg.ProjectID),
+		fmt.Sprintf("DT Settings API: create GCP connection '%s'  [env=%s token=***]",
+			cfg.ConnectionName, cfg.EnvURL),
 		fmt.Sprintf("gcloud iam service-accounts create %s --display-name=%q --project=%s",
 			cfg.ServiceAccountName, serviceAccountDisplayName, cfg.ProjectID),
 		fmt.Sprintf("gcloud projects add-iam-policy-binding %s --member=%s --role=%s",
@@ -84,7 +84,7 @@ func gcpPermissionHint(step int, err error) string {
 	}
 
 	switch step {
-	case 2:
+	case 1:
 		return "\nHint: the active gcloud account needs permission to enable services on the project, for example roles/serviceusage.serviceUsageAdmin. Later steps also need IAM permissions to create a service account and grant bindings."
 	case 3:
 		return "\nHint: the active gcloud account needs permission to create service accounts, for example roles/iam.serviceAccountAdmin."
@@ -100,7 +100,7 @@ func gcpPermissionHint(step int, err error) string {
 // gcpPartialFailureHint lists created resources after a mid-install failure.
 // `dtwiz uninstall gcp` removes them all; the explicit commands are shown for transparency.
 func gcpPartialFailureHint(cfg gcpConfig, completedSteps map[int]bool) {
-	if !completedSteps[1] && !completedSteps[3] && !completedSteps[4] {
+	if !completedSteps[2] && !completedSteps[3] && !completedSteps[4] {
 		return
 	}
 	saEmail := cfg.ServiceAccountEmail
@@ -110,7 +110,7 @@ func gcpPartialFailureHint(cfg gcpConfig, completedSteps map[int]bool) {
 	fmt.Println()
 	display.ColorWarning.Println("  The following resources were already created and may need to be cleaned up")
 	display.ColorWarning.Println("  (or just re-run `dtwiz uninstall gcp`, which removes them all):")
-	if completedSteps[1] {
+	if completedSteps[2] {
 		fmt.Printf("    • DT connection '%s': delete with: dtctl delete gcp connection --name %s\n",
 			cfg.ConnectionName, cfg.ConnectionName)
 	}
@@ -212,25 +212,25 @@ func runInstallSteps(cfg gcpConfig, runner cmdRunner, sleeper func(time.Duration
 	const total = 7
 	completed := make(map[int]bool)
 
-	fmt.Printf("  Step 1/%d: Create Dynatrace GCP connection...\n", total)
-	connObjectID, err := dtc.createConnection(cfg.ConnectionName)
-	if err != nil {
-		gcpPartialFailureHint(cfg, completed)
-		return fmt.Errorf("step 1: %w", err)
-	}
-	completed[1] = true
-	cfg.ConnectionID = connObjectID
-	display.ColorOK.Printf("  ✓ Connection created: %s\n", connObjectID)
-
-	_, err = gcpRunStep(2, total, runner, "gcloud",
+	_, err := gcpRunStep(1, total, runner, "gcloud",
 		append([]string{"services", "enable"}, append(append([]string{}, requiredAPIs...), "--project", cfg.ProjectID)...),
 		nil, "Enable required Google Cloud APIs")
 	if err != nil {
 		gcpPartialFailureHint(cfg, completed)
 		return err
 	}
-	completed[2] = true
+	completed[1] = true
 	display.ColorOK.Println("  ✓ APIs enabled")
+
+	fmt.Printf("  Step 2/%d: Create Dynatrace GCP connection...\n", total)
+	connObjectID, err := dtc.createConnection(cfg.ConnectionName)
+	if err != nil {
+		gcpPartialFailureHint(cfg, completed)
+		return fmt.Errorf("step 2: %w", err)
+	}
+	completed[2] = true
+	cfg.ConnectionID = connObjectID
+	display.ColorOK.Printf("  ✓ Connection created: %s\n", connObjectID)
 
 	fmt.Printf("  Step 3/%d: Create Google Cloud service account...\n", total)
 	saEmail, err := gcpCreateServiceAccount(runner, cfg.ServiceAccountName, cfg.ProjectID)
