@@ -9,6 +9,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/azure"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
@@ -329,7 +330,20 @@ var installAzureCmd = &cobra.Command{
 	Short: "Set up Dynatrace Azure Monitor integration",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return installer.InstallAzure()
+		envURL, _, platformTok, err := getDtEnvironment()
+		if err != nil {
+			return err
+		}
+		if _, err := validateCredentials(envURL, "", platformTok); err != nil {
+			return err
+		}
+		if err := azure.InstallAzure(envURL, platformTok, installDryRun, StartTime); err != nil {
+			if errors.Is(err, installer.ErrInstallCancelled) {
+				return nil
+			}
+			return err
+		}
+		return nil
 	},
 }
 

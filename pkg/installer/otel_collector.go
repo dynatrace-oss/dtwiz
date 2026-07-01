@@ -765,7 +765,7 @@ func prepareCollectorPlan(envURL, token string) (*collectorPlan, error) {
 		configPath:     filepath.Join(installDir, "config.yaml"),
 		binaryPath:     filepath.Join(installDir, otelCollectorBinaryName()),
 		configContent:  configContent,
-		configPreview:  strings.ReplaceAll(configContent, collectorToken, "<redacted>"),
+		configPreview:  MaskSecret(configContent, collectorToken),
 		runningPIDs:    findRunningOtelCollectors(),
 	}, nil
 }

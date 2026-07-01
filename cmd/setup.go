@@ -13,6 +13,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/azure"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
 	"github.com/dynatrace-oss/dtwiz/pkg/recommender"
 )
@@ -68,8 +69,24 @@ var setupCmd = &cobra.Command{
 			return nil
 		}
 
+		// Pre-check Azure status so we can badge the Azure entry in the list.
+		azureConfigured := false
+		if envURL, _, platformTok, credErr := getDtEnvironment(); credErr == nil {
+			if exists, _ := azure.ConnectionExists(envURL, platformTok); exists {
+				azureConfigured = true
+			}
+		}
+
 		for i, r := range actionable {
-			fmt.Printf("  %s  %s\n", display.ColorHeader.Sprintf("[%d]", i+1), r.Title)
+			title := r.Title
+			if r.Method == recommender.MethodAzure {
+				if azureConfigured {
+					title += "  [update]"
+				} else {
+					title += "  [install]"
+				}
+			}
+			fmt.Printf("  %s  %s\n", display.ColorHeader.Sprintf("[%d]", i+1), title)
 		}
 		// Show coming-soon items (informational only, not selectable).
 		for _, r := range recs {
@@ -135,7 +152,6 @@ var setupCmd = &cobra.Command{
 
 		selected := actionable[choice-1]
 		fmt.Println()
-		display.Header(fmt.Sprintf("Installing: %s", selected.Title))
 
 		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
@@ -145,6 +161,12 @@ var setupCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+
+		headerVerb := "Installing"
+		if selected.Method == recommender.MethodAzure && azureConfigured {
+			headerVerb = "Updating"
+		}
+		display.Header(fmt.Sprintf("%s: %s", headerVerb, selected.Title))
 
 		c, err := setupClientFromCreds(envURL, classicTok, platformTok)
 		if err != nil {
@@ -174,6 +196,12 @@ var setupCmd = &cobra.Command{
 			installErr = installer.UpdateOtelConfigInteractive(envURL, classicTok, platformTok, setupDryRun)
 		case recommender.MethodAWS:
 			installErr = installer.InstallAWS(c.Platform, envURL, platformTok, setupDryRun, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
+		case recommender.MethodAzure:
+			if azureConfigured {
+				installErr = azure.UpdateAzure(envURL, platformTok, setupDryRun, StartTime)
+			} else {
+				installErr = azure.InstallAzure(envURL, platformTok, setupDryRun, StartTime)
+			}
 		default:
 			return fmt.Errorf("unsupported method: %s", selected.Method)
 		}
@@ -183,8 +211,10 @@ var setupCmd = &cobra.Command{
 			}
 			return installErr
 		}
-		// AWS watch is started inside InstallAWS (runs in parallel with deploy).
-		if !setupDryRun && selected.Method != recommender.MethodAWS {
+		// AWS scopes its watch to the account (WatchIngestAWS) and Azure runs the
+		// generic watch from inside the installer; both start their own watch, so
+		// the generic post-install watch here is only used for the other methods.
+		if !setupDryRun && selected.Method != recommender.MethodAWS && selected.Method != recommender.MethodAzure {
 			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
 		}
 		return nil

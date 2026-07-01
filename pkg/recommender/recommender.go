@@ -159,14 +159,13 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 		})
 	}
 
-	// 8. Azure detected — coming soon.
+	// 8. Azure detected.
 	if system.Azure != nil && system.Azure.Available {
 		recs = append(recs, Recommendation{
 			Method:      MethodAzure,
 			Priority:    50,
-			Title:       "Azure cloud services (coming soon)",
+			Title:       "Azure cloud services",
 			Description: fmt.Sprintf("Azure subscription detected (%s).", system.Azure.SubscriptionID),
-			ComingSoon:  true,
 		})
 	}
 
