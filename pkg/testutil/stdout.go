@@ -1,10 +1,13 @@
 package testutil
 
 import (
+	"bytes"
 	"io"
 	"os"
 	"sync"
 	"testing"
+
+	"github.com/fatih/color"
 )
 
 // stdoutMu serializes tests that temporarily replace os.Stdout.
@@ -36,4 +39,41 @@ func CaptureStdout(t *testing.T, fn func()) string {
 	}
 	r.Close()
 	return string(out)
+}
+
+// CaptureOutput redirects color.Output (used by fatih/color) to a buffer for
+// the duration of fn, with colors disabled so assertions aren't fragile against
+// terminal capability detection.
+func CaptureOutput(t *testing.T, fn func()) string {
+	t.Helper()
+
+	var buf bytes.Buffer
+	origOutput := color.Output
+	color.Output = &buf
+	t.Cleanup(func() { color.Output = origOutput })
+
+	origNoColor := color.NoColor
+	color.NoColor = true
+	t.Cleanup(func() { color.NoColor = origNoColor })
+
+	fn()
+	return buf.String()
+}
+
+// CaptureErrorOutput redirects color.Error (used by fatih/color for stderr) to
+// a buffer for the duration of fn, with colors disabled.
+func CaptureErrorOutput(t *testing.T, fn func()) string {
+	t.Helper()
+
+	var buf bytes.Buffer
+	origError := color.Error
+	color.Error = &buf
+	t.Cleanup(func() { color.Error = origError })
+
+	origNoColor := color.NoColor
+	color.NoColor = true
+	t.Cleanup(func() { color.NoColor = origNoColor })
+
+	fn()
+	return buf.String()
 }

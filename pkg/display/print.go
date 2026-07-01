@@ -36,6 +36,32 @@ func PrintStatusLine(label, message string, colorFunc *color.Color) {
 	}
 }
 
+// PrintAlignedStatusLine is like PrintStatusLine but pads label: to labelWidth
+// characters so values align across a group of lines with different label lengths.
+func PrintAlignedStatusLine(label, message string, labelWidth int, colorFunc *color.Color) {
+	padded := fmt.Sprintf("%-*s", labelWidth, label+":")
+	_, err := fmt.Fprintf(color.Output, "  %s  %s\n", padded, colorFunc.Sprint(message))
+	if err != nil {
+		PrintError(label, err)
+	}
+}
+
+// PrintAlignedStatusLines prints label/value pairs with auto-computed alignment:
+// the label column width is derived from the longest label so all values line up.
+// pairs must be an even-length sequence of label, value, label, value, ...
+func PrintAlignedStatusLines(colorFunc *color.Color, pairs ...string) {
+	labelWidth := 0
+	numOfPairs := len(pairs)
+	for i := 0; i < numOfPairs-1; i += 2 {
+		if w := len(pairs[i]) + 1; w > labelWidth { // +1 for colon
+			labelWidth = w
+		}
+	}
+	for i := 0; i < numOfPairs-1; i += 2 {
+		PrintAlignedStatusLine(pairs[i], pairs[i+1], labelWidth, colorFunc)
+	}
+}
+
 // PrintFlagLine prints a feature flag line without a colon after the label,
 // producing output like:  DTWIZ_ALL_RUNTIMES  ✓ enabled (env)
 func PrintFlagLine(label, message string, colorFunc *color.Color) {
@@ -94,6 +120,33 @@ func PrintInfoBox(lines ...string) {
 		fmt.Println("  │ " + line + strings.Repeat(" ", spaces) + " │")
 	}
 	fmt.Println("  " + bot)
+}
+
+// Println prints a formatted message with a two-space indent.
+func Println(format string, args ...any) {
+	fmt.Println("  " + fmt.Sprintf(format, args...))
+}
+
+// PrintlnColored prints a formatted message with a two-space indent in the given color.
+func PrintlnColored(colorFunc *color.Color, format string, args ...any) {
+	colorFunc.Println("  " + fmt.Sprintf(format, args...))
+}
+
+// PrintSteps prints a "Steps:" header followed by auto-numbered steps,
+// each indented by four spaces.
+func PrintSteps(steps ...string) {
+	fmt.Println("  Steps:")
+	for i, step := range steps {
+		fmt.Printf("    %d. %s\n", i+1, step)
+	}
+}
+
+// PrintStepsColored is like PrintSteps but renders in the given color.
+func PrintStepsColored(colorFunc *color.Color, steps ...string) {
+	colorFunc.Println("  Steps:")
+	for i, step := range steps {
+		colorFunc.Printf("    %d. %s\n", i+1, step)
+	}
 }
 
 func PrintError(label string, err error) {

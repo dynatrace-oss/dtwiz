@@ -18,8 +18,8 @@ func fetchKubeContext() string {
 	return ctx
 }
 
-// fetchKubeCluster returns the cluster name from the active kubeconfig context.
-func fetchKubeCluster() string {
+// FetchKubeCluster returns the cluster name from the active kubeconfig context.
+func FetchKubeCluster() string {
 	_, cluster := runCmd("kubectl", "config", "view", "--minify", "-o", "jsonpath={.clusters[0].name}")
 	return cluster
 }
@@ -53,7 +53,7 @@ func DetectKubernetes() *KubernetesInfo {
 	)
 	wg.Add(5)
 	go func() { defer wg.Done(); ctx = fetchKubeContext() }()
-	go func() { defer wg.Done(); cluster = fetchKubeCluster() }()
+	go func() { defer wg.Done(); cluster = FetchKubeCluster() }()
 	go func() { defer wg.Done(); serverURL = fetchKubeServerURL() }()
 	go func() { defer wg.Done(); _, ver = runCmd("kubectl", "version", "-o", "json") }()
 	go func() { defer wg.Done(); _, nodesOut = runCmd("kubectl", "get", "nodes", "--no-headers", "-o", "name") }()
@@ -80,7 +80,7 @@ func DetectKubernetesIdentity() *KubernetesInfo {
 	var wg sync.WaitGroup
 	wg.Add(3)
 	go func() { defer wg.Done(); info.Context = fetchKubeContext() }()
-	go func() { defer wg.Done(); cluster = fetchKubeCluster() }()
+	go func() { defer wg.Done(); cluster = FetchKubeCluster() }()
 	go func() { defer wg.Done(); serverURL = fetchKubeServerURL() }()
 	wg.Wait()
 
