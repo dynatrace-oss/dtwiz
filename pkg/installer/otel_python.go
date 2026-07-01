@@ -326,7 +326,7 @@ func InstallOtelPython(envURL, token, platformToken, serviceName, projectPath st
 	plan := detectPythonPlanWithConfirmedRuntime(projectPath, apiURL, token)
 	if plan == nil {
 		printManualInstructions(envVars)
-		return nil
+		return ErrInstallCancelled
 	}
 
 	fmt.Println()
