@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/testutil"
 )
 
 // TestOtelContainerImagePattern verifies the regex that identifies OTel Collector
@@ -111,7 +113,7 @@ func TestSelectCollector_ContainerDisplay(t *testing.T) {
 		r.Close()
 	}()
 
-	output := captureStdout(t, func() {
+	output := testutil.CaptureStdout(t, func() {
 		_, _ = selectCollector(instances)
 	})
 
@@ -148,7 +150,7 @@ func TestSelectCollector_HostMountedConfigDisplay(t *testing.T) {
 		r.Close()
 	}()
 
-	output := captureStdout(t, func() {
+	output := testutil.CaptureStdout(t, func() {
 		_, _ = selectCollector(instances)
 	})
 
@@ -184,7 +186,7 @@ func TestSelectCollector_NativeProcessStatus(t *testing.T) {
 		r.Close()
 	}()
 
-	output := captureStdout(t, func() {
+	output := testutil.CaptureStdout(t, func() {
 		_, _ = selectCollector(instances)
 	})
 

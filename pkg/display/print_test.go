@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/testutil"
+
 	"github.com/fatih/color"
 )
 
@@ -173,6 +175,46 @@ func TestHyperlink_NonTTYEnvironment_NoEscapeCodes(t *testing.T) {
 	got := Hyperlink("Visit docs", "https://example.com")
 	if strings.Contains(got, "\033") {
 		t.Errorf("Hyperlink() in non-TTY = %q, want no escape codes", got)
+	}
+}
+
+func TestPrintInfoBox_RendersContentRow(t *testing.T) {
+	const boxWidth = 97
+	got := testutil.CaptureStdout(t, func() {
+		PrintInfoBox("hello world")
+	})
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("PrintInfoBox(1 line) produced %d lines, want 3 (top, content, bottom)", len(lines))
+	}
+	content := lines[1]
+	if !strings.HasPrefix(content, "  │ hello world") {
+		t.Errorf("content row = %q, want prefix \"  │ hello world\"", content)
+	}
+	if !strings.HasSuffix(content, " │") {
+		t.Errorf("content row = %q, want suffix \" │\"", content)
+	}
+	if len([]rune(content)) != len([]rune(lines[0])) {
+		t.Errorf("content row width %d differs from border width %d", len([]rune(content)), len([]rune(lines[0])))
+	}
+	_ = boxWidth
+}
+
+func TestPrintInfoBox_BlankLineRendersEmptyRow(t *testing.T) {
+	got := testutil.CaptureStdout(t, func() {
+		PrintInfoBox("line one", "", "line two")
+	})
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	if len(lines) != 5 {
+		t.Fatalf("PrintInfoBox with blank separator produced %d lines, want 5", len(lines))
+	}
+	blank := lines[2]
+	if !strings.HasPrefix(blank, "  │") || !strings.HasSuffix(blank, "│") {
+		t.Errorf("blank row = %q, want bordered row of spaces", blank)
+	}
+	inner := strings.TrimSuffix(strings.TrimPrefix(blank, "  │"), "│")
+	if strings.TrimSpace(inner) != "" {
+		t.Errorf("blank row inner = %q, want only spaces", inner)
 	}
 }
 

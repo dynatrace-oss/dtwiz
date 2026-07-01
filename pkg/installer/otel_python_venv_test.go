@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/testutil"
 )
 
 func TestValidatePythonPrerequisites_PythonNotFound(t *testing.T) {
@@ -170,7 +172,7 @@ func TestRemoveStaleVirtualenv_UserDeclines(t *testing.T) {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
 
-	output := captureStdout(t, func() {
+	output := testutil.CaptureStdout(t, func() {
 		withStdinText(t, "n\n", func() {
 			removed, err := removeStaleVirtualenv(venvDir)
 			if err != nil {

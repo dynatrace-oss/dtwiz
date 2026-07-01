@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/testutil"
 )
 
 func TestCheckDemoExists(t *testing.T) {
@@ -44,10 +46,10 @@ func TestConfirmProceedAutoConfirm(t *testing.T) {
 // the full interactive flow (project detection) but makes no changes on disk.
 func TestInstallOtelCollectorWithProject_DryRun(t *testing.T) {
 	dir := t.TempDir()
-	setTestWorkingDir(t, dir)
+	testutil.SetTestWorkingDir(t, dir)
 	setTestStdin(t, "y\n")
 
-	output := captureStdout(t, func() {
+	output := testutil.CaptureStdout(t, func() {
 		err := InstallOtelCollectorWithProject(
 			"https://fake.live.dynatrace.com", "tok", "tok", "", true,
 		)

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/testutil"
 )
 
 func TestManagedProcessHelper(t *testing.T) {
@@ -70,7 +72,7 @@ func TestWaitResult_StillRunning(t *testing.T) {
 }
 
 func TestPrintProcessSummary_AllCrashed_NoAliveNames(t *testing.T) {
-	out := captureStdout(t, func() {
+	out := testutil.CaptureStdout(t, func() {
 		aliveNames, _ := PrintProcessSummary([]*ManagedProcess{
 			crashedManagedProcess("svc-a", errors.New("exit status 1")),
 			crashedManagedProcess("svc-b", errors.New("exit status 2")),
@@ -96,7 +98,7 @@ func TestPrintProcessSummary_SomeCrashed_OnlyAliveReturned(t *testing.T) {
 }
 
 func TestPrintProcessSummary_CrashedNonZeroExit_SummaryLabel(t *testing.T) {
-	out := captureStdout(t, func() {
+	out := testutil.CaptureStdout(t, func() {
 		PrintProcessSummary([]*ManagedProcess{
 			crashedManagedProcess("svc", errors.New("exit status 1")),
 		}, 0)
@@ -107,7 +109,7 @@ func TestPrintProcessSummary_CrashedNonZeroExit_SummaryLabel(t *testing.T) {
 }
 
 func TestPrintProcessSummary_CleanExit_SummaryLabel(t *testing.T) {
-	out := captureStdout(t, func() {
+	out := testutil.CaptureStdout(t, func() {
 		PrintProcessSummary([]*ManagedProcess{
 			cleanExitedManagedProcess("svc"),
 		}, 0)
@@ -182,7 +184,7 @@ func TestStartManagedProcess_CleanExit(t *testing.T) {
 
 func TestPrintSummaryLine_Crashed_IncludesLabel(t *testing.T) {
 	p := crashedManagedProcess("my-svc", errors.New("exit status 1"))
-	out := captureStdout(t, func() { p.PrintSummaryLine() })
+	out := testutil.CaptureStdout(t, func() { p.PrintSummaryLine() })
 	if !strings.Contains(out, "[crashed:") {
 		t.Fatalf("expected [crashed: in output, got %q", out)
 	}
@@ -193,7 +195,7 @@ func TestPrintSummaryLine_Crashed_IncludesLabel(t *testing.T) {
 
 func TestPrintSummaryLine_CleanExit_IncludesLabel(t *testing.T) {
 	p := cleanExitedManagedProcess("my-svc")
-	out := captureStdout(t, func() { p.PrintSummaryLine() })
+	out := testutil.CaptureStdout(t, func() { p.PrintSummaryLine() })
 	if !strings.Contains(out, "[exited cleanly]") {
 		t.Fatalf("expected [exited cleanly] in output, got %q", out)
 	}
@@ -204,7 +206,7 @@ func TestPrintSummaryLine_CleanExit_IncludesLabel(t *testing.T) {
 // a localhost URL if lsof happens to find one — both are valid "running" states.
 func TestPrintSummaryLine_Running_IncludesRunningStatus(t *testing.T) {
 	p := runningManagedProcess("my-svc")
-	out := captureStdout(t, func() { p.PrintSummaryLine() })
+	out := testutil.CaptureStdout(t, func() { p.PrintSummaryLine() })
 	if !strings.Contains(out, "running") && !strings.Contains(out, "localhost") {
 		t.Fatalf("expected running status in output, got %q", out)
 	}
@@ -212,7 +214,7 @@ func TestPrintSummaryLine_Running_IncludesRunningStatus(t *testing.T) {
 
 func TestPrintSummaryLine_LogNameIncluded(t *testing.T) {
 	p := cleanExitedManagedProcess("my-svc") // LogName is "my-svc.log"
-	out := captureStdout(t, func() { p.PrintSummaryLine() })
+	out := testutil.CaptureStdout(t, func() { p.PrintSummaryLine() })
 	if !strings.Contains(out, "my-svc.log") {
 		t.Fatalf("expected log name in output, got %q", out)
 	}

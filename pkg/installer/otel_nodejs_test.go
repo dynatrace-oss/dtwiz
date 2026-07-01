@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/testutil"
 )
 
 func TestBuildNodeInstrumentationPlan(t *testing.T) {
@@ -67,7 +69,7 @@ func TestDetectNodePlan_FindsProject(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	setTestWorkingDir(t, dir)
+	testutil.SetTestWorkingDir(t, dir)
 	setTestStdin(t, "1\n")
 
 	plan, _ := DetectNodePlan("https://tenant.live.dynatrace.com", "token")
@@ -94,7 +96,7 @@ func TestNodeInstrumentationPlan_PrintPlanSteps_Regular(t *testing.T) {
 		OtelDir:        "/tmp/node-svc/.otel",
 	}
 
-	output := captureStdout(t, func() {
+	output := testutil.CaptureStdout(t, func() {
 		plan.PrintPlanSteps()
 	})
 
@@ -126,7 +128,7 @@ func TestNodeInstrumentationPlan_PrintPlanSteps_NextJS(t *testing.T) {
 		Framework:      "next",
 	}
 
-	output := captureStdout(t, func() {
+	output := testutil.CaptureStdout(t, func() {
 		plan.PrintPlanSteps()
 	})
 
@@ -159,7 +161,7 @@ func TestNodeInstrumentationPlan_PrintPlanSteps_NextJS_BuildOutputExists(t *test
 		Framework:      "next",
 	}
 
-	output := captureStdout(t, func() {
+	output := testutil.CaptureStdout(t, func() {
 		plan.PrintPlanSteps()
 	})
 
@@ -181,7 +183,7 @@ func TestNodeInstrumentationPlan_PrintPlanSteps_Nuxt(t *testing.T) {
 		Framework:      "nuxt",
 	}
 
-	output := captureStdout(t, func() {
+	output := testutil.CaptureStdout(t, func() {
 		plan.PrintPlanSteps()
 	})
 
@@ -223,7 +225,7 @@ func TestNodeInstrumentationPlan_PrintPlanSteps_Nuxt_BuildOutputExists(t *testin
 		Framework:      "nuxt",
 	}
 
-	output := captureStdout(t, func() {
+	output := testutil.CaptureStdout(t, func() {
 		plan.PrintPlanSteps()
 	})
 
@@ -270,7 +272,7 @@ func TestNodeInstrumentationPlan_PrintPlanSteps_PackageManager(t *testing.T) {
 				PackageManager: pm,
 				OtelDir:        "/tmp/svc/.otel",
 			}
-			output := captureStdout(t, func() {
+			output := testutil.CaptureStdout(t, func() {
 				plan.PrintPlanSteps()
 			})
 			if !strings.Contains(output, "Package manager: "+pm) {
@@ -479,7 +481,7 @@ func TestNodeInstrumentationPlan_PrintPlanSteps_ShowsRunningPIDs(t *testing.T) {
 		OtelDir:        "/tmp/node-svc/.otel",
 	}
 
-	output := captureStdout(t, func() {
+	output := testutil.CaptureStdout(t, func() {
 		plan.PrintPlanSteps()
 	})
 

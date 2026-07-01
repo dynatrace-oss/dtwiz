@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/testutil"
 )
 
 // testRuntimeCleaner is a mock RuntimeCleaner used for deterministic testing.
@@ -60,7 +62,7 @@ func TestUninstallOtelCollector_PythonSectionAlwaysPresent(t *testing.T) {
 	testCleaner := &testRuntimeCleaner{label: "Python", processes: []DetectedProcess{}}
 	runtimeCleaners = []RuntimeCleaner{testCleaner}
 
-	output := stripANSI(captureStdout(t, func() {
+	output := stripANSI(testutil.CaptureStdout(t, func() {
 		_ = UninstallOtelCollector(true)
 	}))
 
@@ -72,7 +74,7 @@ func TestUninstallOtelCollector_PythonSectionAlwaysPresent(t *testing.T) {
 		{PID: 1234, Command: "python app.py"},
 	}
 
-	output = stripANSI(captureStdout(t, func() {
+	output = stripANSI(testutil.CaptureStdout(t, func() {
 		_ = UninstallOtelCollector(true)
 	}))
 
@@ -92,7 +94,7 @@ func TestUninstallOtelCollector_PythonPIDsInOutput(t *testing.T) {
 		processes: []DetectedProcess{{PID: 5555, Command: "python app.py"}},
 	}}
 
-	output := stripANSI(captureStdout(t, func() {
+	output := stripANSI(testutil.CaptureStdout(t, func() {
 		_ = UninstallOtelCollector(true)
 	}))
 
@@ -109,7 +111,7 @@ func TestUninstallOtelCollector_ScanErrorHandling(t *testing.T) {
 
 	runtimeCleaners = []RuntimeCleaner{&testRuntimeCleaner{label: "Python", processes: nil}}
 
-	output := stripANSI(captureStdout(t, func() {
+	output := stripANSI(testutil.CaptureStdout(t, func() {
 		_ = UninstallOtelCollector(true)
 	}))
 
