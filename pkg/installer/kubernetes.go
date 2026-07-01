@@ -180,7 +180,8 @@ func waitForPods(timeout time.Duration) error {
 	for {
 		pods, err := queryPodStatuses()
 		if err != nil {
-			logger.Debug("querying pod statuses", "error", err)
+			fmt.Print(clearLine)
+			return fmt.Errorf("querying pod statuses: %w", err)
 		}
 
 		readyCount := 0
