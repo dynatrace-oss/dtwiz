@@ -222,11 +222,24 @@ func TestAzureIssuerURL(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := azureIssuerURL(tc.envURL)
+			got, err := azureIssuerURL(tc.envURL)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 			if got != tc.want {
 				t.Errorf("azureIssuerURL(%q) = %q, want %q", tc.envURL, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestAzureIssuerURL_UnsupportedDomain(t *testing.T) {
+	_, err := azureIssuerURL("https://managed.example.com/e/abc123")
+	if err == nil {
+		t.Fatal("expected error for unsupported domain, got nil")
+	}
+	if !strings.Contains(err.Error(), "unsupported Dynatrace environment URL") {
+		t.Fatalf("expected unsupported URL error, got: %v", err)
 	}
 }
 
@@ -281,6 +294,13 @@ func TestAzureBuildFederatedCredJSON(t *testing.T) {
 				t.Errorf("issuer: want %q in output, got: %s", tc.wantIssuer, got)
 			}
 		})
+	}
+}
+
+func TestAzureBuildFederatedCredJSON_UnsupportedDomain(t *testing.T) {
+	_, err := azureBuildFedCredJSON("conn-123", "https://managed.example.com/e/abc123")
+	if err == nil {
+		t.Fatal("expected error for unsupported domain, got nil")
 	}
 }
 

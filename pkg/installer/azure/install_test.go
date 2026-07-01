@@ -323,6 +323,41 @@ func TestAzureStep2FailsMentionsDTConnection(t *testing.T) {
 	}
 }
 
+func TestAzureStep2EmptyAppIDStopsBeforeStep3(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	step3Called := false
+	runner := func(name string, args []string, _ []string) (string, error) {
+		switch {
+		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "show":
+			return stockAccountJSON, nil
+		case name == "az" && len(args) > 0 && args[0] == "rest":
+			return stockRBACJSON, nil
+		case name == "az" && len(args) > 2 && args[0] == "ad" && args[1] == "sp" && args[2] == "create-for-rbac":
+			return `{"appId":"","tenant":"tenant-xyz","displayName":"dtwiz-azure"}`, nil
+		case name == "az" && len(args) > 2 && args[0] == "ad" && args[1] == "app" && args[2] == "federated-credential":
+			step3Called = true
+		}
+		return `{}`, nil
+	}
+
+	err := captureStdoutErr(func() error {
+		return installAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep, happyFakeDTClient())
+	})
+	if err == nil {
+		t.Fatal("expected error from empty appId, got nil")
+	}
+	if !strings.Contains(err.Error(), "step 2: az returned empty appId") {
+		t.Errorf("expected empty appId error, got: %v", err)
+	}
+	if step3Called {
+		t.Fatal("expected install to stop before federated credential creation")
+	}
+}
+
 func TestAzureStep5FailsAllCleanupHints(t *testing.T) {
 	old := installer.AutoConfirm
 	installer.AutoConfirm = true
@@ -589,7 +624,11 @@ func TestAzureBuildStepCommands_StepCount(t *testing.T) {
 		EnvURL:            "https://abc.live.dynatrace.com",
 		Scope:             "/subscriptions/sub-abc123",
 	}
-	if got := len(azureBuildStepCommands(cfg)); got != 7 {
+	steps, err := azureBuildStepCommands(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := len(steps); got != 7 {
 		t.Errorf("expected 7 steps, got %d", got)
 	}
 }
@@ -602,7 +641,10 @@ func TestAzureBuildStepCommands_PlaceholdersWhenEmpty(t *testing.T) {
 		Scope:             "/subscriptions/sub-abc123",
 		// ClientID, ConnectionID, ObjectID intentionally empty
 	}
-	steps := azureBuildStepCommands(cfg)
+	steps, err := azureBuildStepCommands(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if !strings.Contains(steps[2], "<client-id>") {
 		t.Errorf("step 3: want <client-id> placeholder; got: %s", steps[2])
@@ -629,7 +671,10 @@ func TestAzureBuildStepCommands_RealValues(t *testing.T) {
 		ClientID:          "client-id-000",
 		ObjectID:          "object-id-111",
 	}
-	steps := azureBuildStepCommands(cfg)
+	steps, err := azureBuildStepCommands(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	checks := []struct {
 		step int

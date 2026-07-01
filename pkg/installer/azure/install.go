@@ -13,7 +13,7 @@ import (
 
 // azureBuildStepCommands returns human-readable step descriptions for the install preview.
 // ConnectionID / ClientID / ObjectID may be placeholders before the install runs.
-func azureBuildStepCommands(cfg azureConfig) []string {
+func azureBuildStepCommands(cfg azureConfig) ([]string, error) {
 	connID := cfg.ConnectionID
 	if connID == "" {
 		connID = "<connection-id>"
@@ -29,7 +29,10 @@ func azureBuildStepCommands(cfg azureConfig) []string {
 
 	appsURL := installer.AppsURL(cfg.EnvURL)
 	audience := strings.TrimPrefix(appsURL, "https://") + "/svc-id/com.dynatrace.da"
-	issuer := azureIssuerURL(cfg.EnvURL)
+	issuer, err := azureIssuerURL(cfg.EnvURL)
+	if err != nil {
+		return nil, err
+	}
 
 	return []string{
 		fmt.Sprintf("DT Settings API: create Azure connection '%s' (federatedIdentityCredential)  [env=%s token=***]",
@@ -45,10 +48,10 @@ func azureBuildStepCommands(cfg azureConfig) []string {
 			cfg.ConnectionName, cfg.TenantID, clientID, cfg.EnvURL),
 		fmt.Sprintf("DT Extensions API: create Azure monitoring configuration '%s'  [env=%s token=***]",
 			cfg.ConfigurationName, cfg.EnvURL),
-	}
+	}, nil
 }
 
-func azurePrintPreview(cfg azureConfig) {
+func azurePrintPreview(cfg azureConfig) error {
 	fmt.Println()
 	display.ColorMessage.Println("  Dynatrace Azure Monitor Integration")
 	fmt.Println()
@@ -62,7 +65,10 @@ func azurePrintPreview(cfg azureConfig) {
 	display.ColorMessage.Println("  Commands to be executed:")
 	display.PrintSectionDivider()
 
-	steps := azureBuildStepCommands(cfg)
+	steps, err := azureBuildStepCommands(cfg)
+	if err != nil {
+		return err
+	}
 	for i, s := range steps {
 		masked := installer.MaskSecret(s, cfg.PlatformToken)
 		fmt.Printf("  Step %d: %s\n", i+1, masked)
@@ -70,6 +76,7 @@ func azurePrintPreview(cfg azureConfig) {
 
 	display.PrintSectionDivider()
 	fmt.Println()
+	return nil
 }
 
 func azureRunStep(n, total int, runner cmdRunner, name string, args []string, env []string, desc string) (string, error) {
@@ -146,7 +153,9 @@ func installAzureWithRunner(
 		Scope:             "/subscriptions/" + subscriptionID,
 	}
 
-	azurePrintPreview(cfg)
+	if err := azurePrintPreview(cfg); err != nil {
+		return err
+	}
 
 	if dryRun {
 		fmt.Println("  [dry-run] No changes were made.")
@@ -209,6 +218,10 @@ func runInstallSteps(cfg azureConfig, runner cmdRunner, sleeper func(time.Durati
 	if err != nil {
 		azurePartialFailureHint(cfg, completed)
 		return fmt.Errorf("step 2: parsing SP output: %w", err)
+	}
+	if clientID == "" {
+		azurePartialFailureHint(cfg, completed)
+		return fmt.Errorf("step 2: az returned empty appId")
 	}
 	cfg.ClientID = clientID
 	if tenantID != "" {

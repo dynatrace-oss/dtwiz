@@ -334,6 +334,9 @@ var installAzureCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if _, err := validateCredentials(envURL, "", platformTok); err != nil {
+			return err
+		}
 		if err := azure.InstallAzure(envURL, platformTok, installDryRun, StartTime); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
 				return nil

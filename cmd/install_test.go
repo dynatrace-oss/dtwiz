@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
@@ -63,5 +65,44 @@ func TestInstallDockerCmd_RunE_BlockedWithoutExperimental(t *testing.T) {
 	want := "docker installation is an experimental feature; enable it with --experimental or DTWIZ_EXPERIMENTAL=true"
 	if err.Error() != want {
 		t.Errorf("unexpected error message:\n got:  %s\n want: %s", err.Error(), want)
+	}
+}
+
+func TestInstallAzureCmd_RunE_ValidatesPlatformToken(t *testing.T) {
+	origCredentialHTTPClient := credentialHTTPClient
+	origEnvironmentFlag := environmentFlag
+	origPlatformTokenFlag := platformTokenFlag
+	origAccessTokenFlag := accessTokenFlag
+	t.Cleanup(func() {
+		credentialHTTPClient = origCredentialHTTPClient
+		environmentFlag = origEnvironmentFlag
+		platformTokenFlag = origPlatformTokenFlag
+		accessTokenFlag = origAccessTokenFlag
+	})
+
+	validationCalled := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		validationCalled = true
+		if r.URL.Path != "/platform/storage/query/v1/query:execute" {
+			t.Fatalf("unexpected request path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer dt0s16.platform" {
+			t.Fatalf("Authorization header = %q, want platform bearer token", got)
+		}
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	credentialHTTPClient = srv.Client()
+	environmentFlag = srv.URL
+	platformTokenFlag = "dt0s16.platform"
+	accessTokenFlag = "dt0c01.access"
+
+	err := installAzureCmd.RunE(installAzureCmd, nil)
+	if err == nil {
+		t.Fatal("expected platform token validation error, got nil")
+	}
+	if !validationCalled {
+		t.Fatal("expected Azure install command to validate the platform token")
 	}
 }

@@ -37,6 +37,9 @@ func azureAccountInfo(runner cmdRunner) (subscriptionID, tenantID string, err er
 	}
 	subscriptionID = account.ID
 	tenantID = account.Tenant
+	if subscriptionID == "" || tenantID == "" {
+		return "", "", fmt.Errorf("az account show returned empty subscription or tenant ID")
+	}
 	logger.Debug("az account show", "subscriptionID", subscriptionID, "tenantID", tenantID)
 	return subscriptionID, tenantID, nil
 }

@@ -12,14 +12,18 @@ import (
 
 // azureIssuerURL maps the env URL to the federated identity issuer:
 // *.apps.dynatrace.com → token.dynatrace.com; *.dev.apps.dynatracelabs.com → dev.token.dynatracelabs.com; etc.
-func azureIssuerURL(envURL string) string {
+func azureIssuerURL(envURL string) (string, error) {
 	appsURL := installer.AppsURL(envURL)
 	host := strings.TrimPrefix(appsURL, "https://")
+	host = strings.TrimPrefix(host, "http://")
+	if slash := strings.Index(host, "/"); slash >= 0 {
+		host = host[:slash]
+	}
 	host = strings.TrimRight(host, "/")
 
 	appsIdx := strings.Index(host, ".apps.")
 	if appsIdx < 0 {
-		return "https://token.dynatrace.com"
+		return "", fmt.Errorf("unsupported Dynatrace environment URL for Azure federated credential issuer: %s", envURL)
 	}
 	domain := host[appsIdx+6:]   // e.g. "dynatrace.com" or "dynatracelabs.com"
 	beforeApps := host[:appsIdx] // e.g. "rrx28105" or "rrx28105.dev"
@@ -27,15 +31,18 @@ func azureIssuerURL(envURL string) string {
 	parts := strings.Split(beforeApps, ".")
 	if len(parts) >= 2 {
 		qualifier := parts[len(parts)-1]
-		return "https://" + qualifier + ".token." + domain
+		return "https://" + qualifier + ".token." + domain, nil
 	}
-	return "https://token." + domain
+	return "https://token." + domain, nil
 }
 
 func azureBuildFedCredJSON(connID, envURL string) (string, error) {
 	appsURL := installer.AppsURL(envURL)
 	audience := strings.TrimPrefix(appsURL, "https://") + "/svc-id/com.dynatrace.da"
-	issuer := azureIssuerURL(envURL)
+	issuer, err := azureIssuerURL(envURL)
+	if err != nil {
+		return "", err
+	}
 	logger.Debug("federated credential", "connID", connID, "audience", audience, "issuer", issuer)
 
 	payload := map[string]interface{}{

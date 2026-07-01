@@ -62,6 +62,32 @@ func TestAzurePreflightNotLoggedIn(t *testing.T) {
 	}
 }
 
+func TestAzurePreflightEmptyAccountIDs(t *testing.T) {
+	defer stubExecLookPath(t)()
+
+	rbacCalled := false
+	runner := func(name string, args []string, _ []string) (string, error) {
+		if name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "show" {
+			return `{"id":"","tenantId":""}`, nil
+		}
+		if name == "az" && len(args) > 1 && args[0] == "ad" && args[1] == "signed-in-user" {
+			rbacCalled = true
+		}
+		return "", nil
+	}
+
+	err := installAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep, &noopDTClient{})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "empty subscription or tenant ID") {
+		t.Errorf("expected empty account IDs error, got: %v", err)
+	}
+	if rbacCalled {
+		t.Fatal("expected preflight to stop before RBAC check")
+	}
+}
+
 // TestAzureCheckRBACAdvisory verifies the RBAC check is advisory: it warns but
 // never blocks, whether the check call fails or reports insufficient access.
 func TestAzureCheckRBACAdvisory(t *testing.T) {

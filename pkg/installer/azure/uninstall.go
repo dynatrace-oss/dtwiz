@@ -37,7 +37,11 @@ func azureGatherClientIDs(runner cmdRunner, conns []connRef, name, envURL string
 	if err != nil {
 		logger.Debug("az app list failed during cleanup, continuing", "err", err)
 	} else {
-		issuer := azureIssuerURL(envURL)
+		issuer, err := azureIssuerURL(envURL)
+		if err != nil {
+			display.ColorWarning.Printf("  Warning: skipping App Registration display-name cleanup: %v\n", err)
+			ids = nil
+		}
 		for _, id := range ids {
 			if set[id] {
 				continue // already trusted via a connection
