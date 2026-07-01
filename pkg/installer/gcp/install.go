@@ -226,7 +226,7 @@ func runInstallSteps(cfg gcpConfig, runner cmdRunner, sleeper func(time.Duration
 	connObjectID, err := dtc.createConnection(cfg.ConnectionName)
 	if err != nil {
 		gcpPartialFailureHint(cfg, completed)
-		return fmt.Errorf("step 2: %w", err)
+		return fmt.Errorf("step 2: %w%s", err, gcpConnectionConflictHint(err, cfg.ConnectionName))
 	}
 	completed[2] = true
 	cfg.ConnectionID = connObjectID
@@ -279,6 +279,22 @@ func runInstallSteps(cfg gcpConfig, runner cmdRunner, sleeper func(time.Duration
 	display.ColorOK.Println("  ✓ Monitoring configuration created")
 
 	return nil
+}
+
+// gcpConnectionConflictHint explains a name-uniqueness conflict on connection creation.
+// dtwiz already checked findAllConnections (and `dtwiz uninstall gcp` would report the same
+// empty result) before reaching this step, so a "name already taken" response here means a
+// connection object exists that this token cannot see — most likely it carries read
+// permissions restricted to a different app/user context (e.g. created via the Dynatrace UI).
+// Retrying will not help: it's not an eventual-consistency lag, the object is durably hidden.
+func gcpConnectionConflictHint(err error, connName string) string {
+	if !strings.Contains(err.Error(), "another connection defined under this name") {
+		return ""
+	}
+	return fmt.Sprintf("\nHint: dtwiz found no connection named %q via the API, but Dynatrace reports"+
+		" the name is already taken. It is likely owned by a different app/user context and hidden from"+
+		" this token's view. Open Settings > Cloud and Virtualization > Google Cloud in the Dynatrace UI"+
+		" to find and delete the existing connection, then re-run this install.", connName)
 }
 
 // updateConnectionWithRetry retries DT connection finalization because the impersonation

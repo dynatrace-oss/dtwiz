@@ -283,6 +283,33 @@ func TestGCPStep6Retried(t *testing.T) {
 	}
 }
 
+func TestGCPStep2ConnectionConflictHint(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	dtc := &retryingDTClient{
+		fakeDTClient: happyFakeDTClient(),
+		createFn: func(_ string) (string, error) {
+			return "", fmt.Errorf(`create connection: create settings object for schema "builtin:hyperscaler-authentication.connections.gcp": API error (400): 400 Bad Request - [{"code":400,"error":{"code":400,"message":"Constraints violated.","constraintViolations":[{"path":"builtin:hyperscaler-authentication.connections.gcp/5/name","message":"There is another connection defined under this name."}]}}]`)
+		},
+	}
+
+	err := captureStdoutErr(func() error {
+		return installGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, happyGcloudRunner(nil), noSleep, dtc)
+	})
+	if err == nil {
+		t.Fatal("expected error from step 2, got nil")
+	}
+	if !strings.Contains(err.Error(), "step 2") {
+		t.Errorf("error %q does not mention step 2", err.Error())
+	}
+	if !strings.Contains(err.Error(), "hidden from this token's view") {
+		t.Errorf("expected connection-conflict hint in error; got: %v", err)
+	}
+}
+
 func TestGCPStep7Fails(t *testing.T) {
 	old := installer.AutoConfirm
 	installer.AutoConfirm = true
@@ -390,10 +417,18 @@ func TestGCPMaskToken(t *testing.T) {
 
 // ── retryingDTClient ──────────────────────────────────────────────────────────
 
-// retryingDTClient wraps fakeDTClient and delegates updateConnection to a custom function.
+// retryingDTClient wraps fakeDTClient and delegates createConnection/updateConnection to custom functions.
 type retryingDTClient struct {
 	*fakeDTClient
+	createFn func(name string) (string, error)
 	updateFn func(objectID, name, serviceAccountEmail string) error
+}
+
+func (r *retryingDTClient) createConnection(name string) (string, error) {
+	if r.createFn != nil {
+		return r.createFn(name)
+	}
+	return r.fakeDTClient.createConnection(name)
 }
 
 func (r *retryingDTClient) updateConnection(objectID, name, serviceAccountEmail string) error {
