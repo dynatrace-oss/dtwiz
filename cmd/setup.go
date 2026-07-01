@@ -221,6 +221,7 @@ var setupCmd = &cobra.Command{
 				installErr = azure.InstallAzure(envURL, platformTok, setupDryRun, StartTime)
 			}
 		case recommender.MethodGCP:
+			logger.Debug("setup selected GCP", "configured", gcpConfigured)
 			if gcpConfigured {
 				installErr = gcp.UpdateGCP(envURL, platformTok, setupDryRun, StartTime)
 			} else {

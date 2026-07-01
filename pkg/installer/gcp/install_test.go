@@ -153,6 +153,36 @@ func TestGCPStep1FailsNoGcloudMutations(t *testing.T) {
 	}
 }
 
+func TestGCPStep2PermissionDeniedIncludesRoleHint(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	runner := func(name string, args []string, _ []string) (string, error) {
+		switch {
+		case gcloudArgs(args, "config", "get-value", "project"):
+			return "my-project\n", nil
+		case gcloudArgs(args, "config", "get-value", "account"):
+			return "user@example.com\n", nil
+		case gcloudArgs(args, "services", "enable"):
+			return "", fmt.Errorf("AUTH_PERMISSION_DENIED: Permission denied to enable service")
+		default:
+			return "{}", nil
+		}
+	}
+
+	err := captureStdoutErr(func() error {
+		return installGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep, happyFakeDTClient())
+	})
+	if err == nil {
+		t.Fatal("expected error from step 2, got nil")
+	}
+	if !strings.Contains(err.Error(), "roles/serviceusage.serviceUsageAdmin") {
+		t.Errorf("expected service usage role hint, got: %v", err)
+	}
+}
+
 func TestGCPStep5FailsAllCleanupHints(t *testing.T) {
 	old := installer.AutoConfirm
 	installer.AutoConfirm = true

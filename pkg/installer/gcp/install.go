@@ -70,10 +70,31 @@ func gcpRunStep(n, total int, runner cmdRunner, name string, args []string, env 
 	logger.Debug("running step", "step", n, "cmd", name, "args", args)
 	out, err := runner(name, args, env)
 	if err != nil {
-		return out, fmt.Errorf("step %d: %w", n, err)
+		logger.Debug("step failed", "step", n, "cmd", name, "args", args, "error", err)
+		return out, fmt.Errorf("step %d: %w%s", n, err, gcpPermissionHint(n, err))
 	}
 	logger.Debug("step output", "step", n, "stdout", out)
 	return out, nil
+}
+
+func gcpPermissionHint(step int, err error) string {
+	msg := strings.ToLower(err.Error())
+	if !strings.Contains(msg, "permission") && !strings.Contains(msg, "forbidden") && !strings.Contains(msg, "auth_permission_denied") {
+		return ""
+	}
+
+	switch step {
+	case 2:
+		return "\nHint: the active gcloud account needs permission to enable services on the project, for example roles/serviceusage.serviceUsageAdmin. Later steps also need IAM permissions to create a service account and grant bindings."
+	case 3:
+		return "\nHint: the active gcloud account needs permission to create service accounts, for example roles/iam.serviceAccountAdmin."
+	case 4:
+		return "\nHint: the active gcloud account needs permission to update project IAM policy, for example roles/resourcemanager.projectIamAdmin or a project Owner."
+	case 5:
+		return "\nHint: the active gcloud account needs permission to update the service account IAM policy, for example roles/iam.serviceAccountAdmin on the service account or project."
+	default:
+		return ""
+	}
 }
 
 // gcpPartialFailureHint lists created resources after a mid-install failure.
