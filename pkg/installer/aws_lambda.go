@@ -660,11 +660,29 @@ func InstallAWSLambda(envURL, token string, dryRun, confirm bool) error {
 	// ── Validate ─────────────────────────────────────────────────────────────
 
 	if envURL == "" {
-		return fmt.Errorf("Dynatrace environment URL is required (--environment or DT_ENVIRONMENT)") //nolint:staticcheck // ST1005: keep brand capitalization
+		return fmt.Errorf("dynatrace environment URL is required (--environment or DT_ENVIRONMENT)")
 	}
 	if token == "" {
 		return fmt.Errorf("platform token is required (--platform-token or DT_PLATFORM_TOKEN)")
 	}
+
+	// ── Info box ─────────────────────────────────────────────────────────────
+
+	discoveryURL := AppsURL(envURL) + "/ui/apps/dynatrace.discovery.coverage/"
+	appLabel := "Discovery & Coverage App"
+	supportsLinks := display.StdoutSupportsHyperlinks()
+	if supportsLinks {
+		appLabel = display.Hyperlink(appLabel, discoveryURL)
+	}
+	display.PrintInfoBox(
+		"(i) dtwiz supports AWS Lambda onboarding for Node.js and Python.",
+		"",
+		"For other technologies please use the "+appLabel+" -> + Install -> AWS Lambda Layer",
+	)
+	if !supportsLinks {
+		fmt.Printf("    Discovery & Coverage App: %s\n", discoveryURL)
+	}
+	fmt.Println()
 
 	if !isAWSCLIInstalled() {
 		return fmt.Errorf("AWS CLI not found — install it from https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html")

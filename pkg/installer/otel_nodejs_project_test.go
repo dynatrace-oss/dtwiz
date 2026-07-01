@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/testutil"
 )
 
 func TestDetectNodeProjects_Found(t *testing.T) {
@@ -13,7 +15,7 @@ func TestDetectNodeProjects_Found(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	setTestWorkingDir(t, dir)
+	testutil.SetTestWorkingDir(t, dir)
 	projects := detectNodeProjects()
 	found := false
 	for _, p := range projects {
@@ -41,7 +43,7 @@ func TestDetectNodeProjects_ExcludesNodeModules(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	setTestWorkingDir(t, dir)
+	testutil.SetTestWorkingDir(t, dir)
 	projects := detectNodeProjects()
 	for _, p := range projects {
 		if filepath.Base(filepath.Dir(p.Path)) == "node_modules" {
@@ -210,7 +212,7 @@ func TestDetectNodeProjects_Monorepo(t *testing.T) {
 		}
 	}
 
-	setTestWorkingDir(t, dir)
+	testutil.SetTestWorkingDir(t, dir)
 	projects := detectNodeProjects()
 
 	// Should include the root and both workspace packages.

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/testutil"
 )
 
 func withFakeRunCmdQuiet(t *testing.T, fn func(name string, args ...string) error) {
@@ -15,7 +17,7 @@ func withFakeRunCmdQuiet(t *testing.T, fn func(name string, args ...string) erro
 
 func TestUninstallKubernetes_Cancelled(t *testing.T) {
 	withStdin(t, "n\n", func() {
-		out := captureStdout(t, func() {
+		out := testutil.CaptureStdout(t, func() {
 			err := UninstallKubernetes("my-ctx", "AKS")
 			if err != nil {
 				t.Fatalf("expected nil on cancel, got: %v", err)
@@ -34,7 +36,7 @@ func TestUninstallKubernetes_ShowsClusterInfo(t *testing.T) {
 
 	withFakeRunCmdQuiet(t, func(_ string, _ ...string) error { return nil })
 
-	out := captureStdout(t, func() {
+	out := testutil.CaptureStdout(t, func() {
 		_ = UninstallKubernetes("FreeTrialKubernetesTest", "AKS")
 	})
 	if !strings.Contains(out, "The affected cluster is: AKS context=FreeTrialKubernetesTest") {
@@ -49,7 +51,7 @@ func TestUninstallKubernetes_NoClusterInfoWhenContextEmpty(t *testing.T) {
 
 	withFakeRunCmdQuiet(t, func(_ string, _ ...string) error { return nil })
 
-	out := captureStdout(t, func() {
+	out := testutil.CaptureStdout(t, func() {
 		_ = UninstallKubernetes("", "")
 	})
 	if strings.Contains(out, "The affected cluster is") {
@@ -68,7 +70,7 @@ func TestUninstallKubernetes_Success(t *testing.T) {
 		return nil
 	})
 
-	out := captureStdout(t, func() {
+	out := testutil.CaptureStdout(t, func() {
 		if err := UninstallKubernetes("my-ctx", "GKE"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -96,7 +98,7 @@ func TestUninstallKubernetes_EdgeConnectDeletedEvenWhenDynaKubeFails(t *testing.
 		return nil
 	})
 
-	captureStdout(t, func() { _ = UninstallKubernetes("my-ctx", "EKS") })
+	testutil.CaptureStdout(t, func() { _ = UninstallKubernetes("my-ctx", "EKS") })
 
 	ranEdgeConnect := false
 	for _, c := range calls {
@@ -121,7 +123,7 @@ func TestUninstallKubernetes_KubectlDeleteFails(t *testing.T) {
 		return nil
 	})
 
-	captureStdout(t, func() {
+	testutil.CaptureStdout(t, func() {
 		err := UninstallKubernetes("my-ctx", "EKS")
 		if err == nil {
 			t.Fatal("expected error when kubectl delete dynakube fails")
@@ -141,7 +143,7 @@ func TestUninstallKubernetes_HelmUninstallFails(t *testing.T) {
 		return nil
 	})
 
-	captureStdout(t, func() {
+	testutil.CaptureStdout(t, func() {
 		err := UninstallKubernetes("my-ctx", "EKS")
 		if err == nil {
 			t.Fatal("expected error when helm uninstall fails")
@@ -166,7 +168,7 @@ func TestUninstallKubernetes_HelmFailContinuesToNamespaceDeletion(t *testing.T) 
 		return nil
 	})
 
-	out := captureStdout(t, func() {
+	out := testutil.CaptureStdout(t, func() {
 		err := UninstallKubernetes("my-ctx", "EKS")
 		if err == nil {
 			t.Fatal("expected error when helm uninstall fails")
@@ -201,7 +203,7 @@ func TestUninstallKubernetes_KubectlDeleteFailContinuesToEnd(t *testing.T) {
 		return nil
 	})
 
-	captureStdout(t, func() {
+	testutil.CaptureStdout(t, func() {
 		err := UninstallKubernetes("my-ctx", "EKS")
 		if err == nil {
 			t.Fatal("expected error when kubectl delete dynakube fails")
@@ -240,7 +242,7 @@ func TestUninstallKubernetes_MultipleStepsFail(t *testing.T) {
 		return nil
 	})
 
-	out := captureStdout(t, func() {
+	out := testutil.CaptureStdout(t, func() {
 		err := UninstallKubernetes("my-ctx", "EKS")
 		if err == nil {
 			t.Fatal("expected error when multiple steps fail")

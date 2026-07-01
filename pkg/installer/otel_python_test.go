@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/testutil"
 )
 
 // ── generateOtelPythonEnvVars ─────────────────────────────────────────────────
@@ -158,7 +160,7 @@ func TestDetectPythonProjects_Found(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	setTestWorkingDir(t, dir)
+	testutil.SetTestWorkingDir(t, dir)
 	projects := detectPythonProjects()
 	found := false
 	for _, p := range projects {
@@ -181,7 +183,7 @@ func TestDetectPythonProjects_AllMarkers(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			setTestWorkingDir(t, dir)
+			testutil.SetTestWorkingDir(t, dir)
 			projects := detectPythonProjects()
 			found := false
 			for _, p := range projects {
@@ -309,7 +311,7 @@ func TestDetectPythonPlan_FindsProject(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	setTestWorkingDir(t, dir)
+	testutil.SetTestWorkingDir(t, dir)
 	setTestStdin(t, "1\n")
 
 	plan := DetectPythonPlan("https://tenant.live.dynatrace.com", "token")
@@ -322,7 +324,7 @@ func TestDetectPythonPlan_FindsProject(t *testing.T) {
 }
 
 func TestPrintManualInstructions(t *testing.T) {
-	output := captureStdout(t, func() {
+	output := testutil.CaptureStdout(t, func() {
 		printManualInstructions(map[string]string{"OTEL_SERVICE_NAME": "py-svc"})
 	})
 
@@ -348,7 +350,7 @@ func TestPythonInstrumentationPlan_PrintPlanSteps(t *testing.T) {
 		NeedsVenv:   true,
 	}
 
-	output := captureStdout(t, func() {
+	output := testutil.CaptureStdout(t, func() {
 		plan.PrintPlanSteps()
 	})
 
@@ -368,7 +370,7 @@ func TestPythonInstrumentationPlan_ExecuteFailsWithoutPythonForVenvCreation(t *t
 		EnvVars:   map[string]string{"OTEL_SERVICE_NAME": "py-svc"},
 	}
 
-	output := captureStdout(t, func() {
+	output := testutil.CaptureStdout(t, func() {
 		plan.Execute()
 	})
 
@@ -614,10 +616,10 @@ func TestInstallOtelPython_SkipReturnsInstallCancelled(t *testing.T) {
 	t.Setenv("PATH", pythonDir)
 
 	dir := t.TempDir() // no Python project markers
-	setTestWorkingDir(t, dir)
+	testutil.SetTestWorkingDir(t, dir)
 	setTestStdin(t, "\n") // skip project selection
 
-	captureStdout(t, func() {
+	testutil.CaptureStdout(t, func() {
 		err := InstallOtelPython("https://tenant.live.dynatrace.com", "tok", "ptok", "", "", false)
 		if !errors.Is(err, ErrInstallCancelled) {
 			t.Errorf("expected ErrInstallCancelled when skipping, got %v", err)

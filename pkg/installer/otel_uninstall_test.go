@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/testutil"
 )
 
 func TestFindNodeOtelDirs_Found(t *testing.T) {
@@ -29,7 +31,7 @@ func TestFindNodeOtelDirs_Found(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	setTestWorkingDir(t, dir)
+	testutil.SetTestWorkingDir(t, dir)
 	dirs := findNodeOtelDirs()
 
 	// Resolve symlinks for comparison (macOS /tmp → /private/tmp).
@@ -66,7 +68,7 @@ func TestFindNodeOtelDirs_ChildProjects(t *testing.T) {
 		expectedDirs = append(expectedDirs, realDir)
 	}
 
-	setTestWorkingDir(t, dir)
+	testutil.SetTestWorkingDir(t, dir)
 	dirs := findNodeOtelDirs()
 
 	// Resolve all found dirs for comparison.
@@ -96,7 +98,7 @@ func TestFindNodeOtelDirs_IgnoresNonOtelDirs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	setTestWorkingDir(t, dir)
+	testutil.SetTestWorkingDir(t, dir)
 	dirs := findNodeOtelDirs()
 
 	realOtelDir, _ := filepath.EvalSymlinks(otelDir)
@@ -110,7 +112,7 @@ func TestFindNodeOtelDirs_IgnoresNonOtelDirs(t *testing.T) {
 
 func TestFindNodeOtelDirs_NoDirs(t *testing.T) {
 	dir := t.TempDir()
-	setTestWorkingDir(t, dir)
+	testutil.SetTestWorkingDir(t, dir)
 
 	dirs := findNodeOtelDirs()
 	if len(dirs) != 0 {
@@ -136,7 +138,7 @@ func TestFindNodeOtelDirs_ParentNotScanned(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	setTestWorkingDir(t, cwd)
+	testutil.SetTestWorkingDir(t, cwd)
 	dirs := findNodeOtelDirs()
 
 	realOtelDir, _ := filepath.EvalSymlinks(otelDir)
@@ -157,7 +159,7 @@ func TestFindNodeOtelDirs_NoPackageJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	setTestWorkingDir(t, dir)
+	testutil.SetTestWorkingDir(t, dir)
 	dirs := findNodeOtelDirs()
 
 	realOtelDir, _ := filepath.EvalSymlinks(otelDir)
@@ -231,9 +233,9 @@ func TestUninstallOtelCollector_IncludesNodeDirs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	setTestWorkingDir(t, dir)
+	testutil.SetTestWorkingDir(t, dir)
 
-	output := captureStdout(t, func() {
+	output := testutil.CaptureStdout(t, func() {
 		_ = UninstallOtelCollector(true) // dry-run
 	})
 
@@ -341,7 +343,7 @@ func TestUninstallOtelCollector_JavaDryRun_NothingPresent(t *testing.T) {
 	t.Cleanup(func() { runtimeCleaners = origCleaners })
 	runtimeCleaners = []RuntimeCleaner{}
 
-	output := stripANSI(captureStdout(t, func() {
+	output := stripANSI(testutil.CaptureStdout(t, func() {
 		_ = UninstallOtelCollector(true)
 	}))
 
@@ -377,7 +379,7 @@ func TestUninstallOtelCollector_JavaDryRun_AgentDirExists(t *testing.T) {
 	t.Cleanup(func() { runtimeCleaners = origCleaners })
 	runtimeCleaners = []RuntimeCleaner{}
 
-	output := stripANSI(captureStdout(t, func() {
+	output := stripANSI(testutil.CaptureStdout(t, func() {
 		_ = UninstallOtelCollector(true)
 	}))
 

@@ -74,6 +74,28 @@ func hyperlink(text, url string, tty bool) string {
 	return text + ": " + url
 }
 
+// PrintInfoBox renders a bordered info box. Pass an empty string to insert a
+// blank separator row. Lines must not contain ANSI escape sequences — callers
+// are responsible for stripping or avoiding them so padding is correct.
+func PrintInfoBox(lines ...string) {
+	const boxWidth = 97
+	top := "┌" + strings.Repeat("─", boxWidth) + "┐"
+	bot := "└" + strings.Repeat("─", boxWidth) + "┘"
+	fmt.Println("  " + top)
+	for _, line := range lines {
+		if line == "" {
+			fmt.Println("  │" + strings.Repeat(" ", boxWidth) + "│")
+			continue
+		}
+		spaces := boxWidth - 2 - len([]rune(line))
+		if spaces < 0 {
+			spaces = 0
+		}
+		fmt.Println("  │ " + line + strings.Repeat(" ", spaces) + " │")
+	}
+	fmt.Println("  " + bot)
+}
+
 func PrintError(label string, err error) {
 	_, _ = fmt.Fprintf(color.Output, "  %s: %s\n", ColorDefault.Sprint(label), ColorError.Sprintf("✗ %s", err))
 }
