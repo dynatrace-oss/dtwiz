@@ -41,20 +41,27 @@ func CaptureStdout(t *testing.T, fn func()) string {
 	return string(out)
 }
 
+// colorMu serializes tests that temporarily replace fatih/color global output.
+// These globals are process-wide; tests using these helpers must not call t.Parallel().
+var colorMu sync.Mutex
+
 // CaptureOutput redirects color.Output (used by fatih/color) to a buffer for
 // the duration of fn, with colors disabled so assertions aren't fragile against
 // terminal capability detection.
 func CaptureOutput(t *testing.T, fn func()) string {
 	t.Helper()
+	colorMu.Lock()
+	defer colorMu.Unlock()
 
 	var buf bytes.Buffer
 	origOutput := color.Output
-	color.Output = &buf
-	t.Cleanup(func() { color.Output = origOutput })
-
 	origNoColor := color.NoColor
+	color.Output = &buf
 	color.NoColor = true
-	t.Cleanup(func() { color.NoColor = origNoColor })
+	defer func() {
+		color.Output = origOutput
+		color.NoColor = origNoColor
+	}()
 
 	fn()
 	return buf.String()
@@ -64,15 +71,18 @@ func CaptureOutput(t *testing.T, fn func()) string {
 // a buffer for the duration of fn, with colors disabled.
 func CaptureErrorOutput(t *testing.T, fn func()) string {
 	t.Helper()
+	colorMu.Lock()
+	defer colorMu.Unlock()
 
 	var buf bytes.Buffer
 	origError := color.Error
-	color.Error = &buf
-	t.Cleanup(func() { color.Error = origError })
-
 	origNoColor := color.NoColor
+	color.Error = &buf
 	color.NoColor = true
-	t.Cleanup(func() { color.NoColor = origNoColor })
+	defer func() {
+		color.Error = origError
+		color.NoColor = origNoColor
+	}()
 
 	fn()
 	return buf.String()
