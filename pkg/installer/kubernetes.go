@@ -13,7 +13,6 @@ import (
 
 	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
-	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 //go:embed dynakube.tmpl
