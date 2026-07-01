@@ -38,7 +38,7 @@ The existing `UninstallOtelCollector()` function SHALL be extended to also detec
 
 ### Requirement: Detect .otel/ directories
 
-The system SHALL scan CWD and parent directories for `.otel/` directories that contain a `package.json` with `@opentelemetry` in its content.
+The system SHALL scan CWD and its subdirectories for `.otel/` directories that contain a `package.json` with `@opentelemetry` in its content. Parent directories SHALL NOT be traversed. See [`otel-project-scan`](../otel-project-scan/spec.md) for the canonical scan scope rules.
 
 #### Scenario: .otel/ directory found
 
