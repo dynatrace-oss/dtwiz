@@ -26,48 +26,17 @@ func updateAzureWithRunner(
 	runner cmdRunner,
 	dtc dtclient,
 ) error {
-	type monitorRes struct {
-		ids []string
-		err error
+	var monConfigIDs []string
+	var conns []connRef
+	var subscriptionID, tenantID string
+	err := installer.RunConcurrently(
+		func() (err error) { monConfigIDs, err = dtc.findAllMonitoringConfigs(integrationName); return },
+		func() (err error) { conns, err = dtc.findAllConnections(integrationName); return },
+		func() (err error) { subscriptionID, tenantID, err = azureAccountInfo(runner); return },
+	)
+	if err != nil {
+		return err
 	}
-	type connRes struct {
-		conns []connRef
-		err   error
-	}
-	type accountRes struct {
-		subscriptionID string
-		tenantID       string
-		err            error
-	}
-	monitorCh := make(chan monitorRes, 1)
-	connCh := make(chan connRes, 1)
-	accountCh := make(chan accountRes, 1)
-	go func() {
-		ids, err := dtc.findAllMonitoringConfigs(integrationName)
-		monitorCh <- monitorRes{ids: ids, err: err}
-	}()
-	go func() {
-		conns, err := dtc.findAllConnections(integrationName)
-		connCh <- connRes{conns: conns, err: err}
-	}()
-	go func() {
-		subID, tenID, err := azureAccountInfo(runner)
-		accountCh <- accountRes{subscriptionID: subID, tenantID: tenID, err: err}
-	}()
-	mr := <-monitorCh
-	cr := <-connCh
-	ar := <-accountCh
-	if mr.err != nil {
-		return mr.err
-	}
-	if cr.err != nil {
-		return cr.err
-	}
-	if ar.err != nil {
-		return ar.err
-	}
-	monConfigIDs, conns := mr.ids, cr.conns
-	subscriptionID, tenantID := ar.subscriptionID, ar.tenantID
 
 	conn, err := selectUpdatableConnection(conns)
 	if err != nil {

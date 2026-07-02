@@ -323,22 +323,26 @@ func createOrReplaceFedCred(runner cmdRunner, clientID, fedJSON string) error {
 	return err
 }
 
+// updateConnectionMaxAttempts x updateConnectionRetryDelay bounds how long dtwiz waits for Entra
+// to propagate a new federated credential before giving up on DT connection finalization.
+const (
+	updateConnectionMaxAttempts = 10
+	updateConnectionRetryDelay  = 5 * time.Second
+)
+
 // updateConnectionWithRetry retries DT connection finalization because Entra can take several seconds
 // to propagate a new federated credential; AADSTS70025 and "Constraints violated" signal this.
 func updateConnectionWithRetry(dtc dtclient, connObjectID, connName, tenantID, clientID string, sleeper func(time.Duration)) error {
-	var lastErr error
-	for attempt := 0; attempt < 10; attempt++ {
-		if attempt > 0 {
-			logger.Debug("federated credential not yet propagated, retrying", "attempt", attempt, "error", lastErr)
-			sleeper(5 * time.Second)
-		}
-		lastErr = dtc.updateConnection(connObjectID, connName, tenantID, clientID)
-		if lastErr == nil {
-			return nil
-		}
-		if !strings.Contains(lastErr.Error(), "AADSTS70025") && !strings.Contains(lastErr.Error(), "Constraints violated") {
-			return lastErr
-		}
-	}
-	return lastErr
+	return installer.Retry(sleeper, installer.RetryConfig{
+		MaxAttempts: updateConnectionMaxAttempts,
+		Delay:       func(int) time.Duration { return updateConnectionRetryDelay },
+		Retryable: func(err error) bool {
+			return strings.Contains(err.Error(), "AADSTS70025") || strings.Contains(err.Error(), "Constraints violated")
+		},
+		OnRetry: func(attempt int, _ time.Duration, err error) {
+			logger.Debug("federated credential not yet propagated, retrying", "attempt", attempt, "error", err)
+		},
+	}, func() error {
+		return dtc.updateConnection(connObjectID, connName, tenantID, clientID)
+	})
 }

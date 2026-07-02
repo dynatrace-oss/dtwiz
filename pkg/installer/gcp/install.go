@@ -65,37 +65,40 @@ func gcpPrintPreview(cfg gcpConfig) {
 	fmt.Println()
 }
 
-// serviceAccountMaxAttempts x serviceAccountRetryDelay bounds how long a gcloud step waits for
-// a just-created service account to become usable. SA creation is eventually consistent: for a
-// few seconds after `iam service-accounts create` returns, `add-iam-policy-binding` can still
-// fail with "Service account ... does not exist". Retrying on a not-found error covers that gap;
-// any other failure is returned immediately.
+// gcpStepMaxAttempts x gcpStepRetryDelay bounds how long a gcloud step waits for a
+// just-created resource (e.g. a service account) to become usable elsewhere. Resource
+// creation is eventually consistent: for a few seconds after `iam service-accounts
+// create` returns, `add-iam-policy-binding` can still fail with "... does not exist".
+// Retrying on a not-found error covers that gap; any other failure is returned immediately.
 const (
-	serviceAccountMaxAttempts = 12
-	serviceAccountRetryDelay  = 5 * time.Second
+	gcpStepMaxAttempts = 12
+	gcpStepRetryDelay  = 5 * time.Second
 )
 
 func gcpRunStep(n, total int, runner cmdRunner, sleeper func(time.Duration), name string, args []string, env []string, desc string) (string, error) {
 	fmt.Printf("  Step %d/%d: %s...\n", n, total, desc)
 	var out string
-	var err error
-	for attempt := 0; attempt < serviceAccountMaxAttempts; attempt++ {
-		if attempt > 0 {
+	err := installer.Retry(sleeper, installer.RetryConfig{
+		MaxAttempts: gcpStepMaxAttempts,
+		Delay:       func(int) time.Duration { return gcpStepRetryDelay },
+		Retryable:   installer.IsNotFoundErr,
+		OnRetry: func(attempt int, _ time.Duration, err error) {
 			logger.Debug("gcloud resource not yet propagated, retrying", "step", n, "attempt", attempt, "error", err)
-			sleeper(serviceAccountRetryDelay)
-		}
+		},
+	}, func() error {
 		logger.Debug("running step", "step", n, "cmd", name, "args", args)
-		out, err = runner(name, args, env)
-		if err == nil {
+		var runErr error
+		out, runErr = runner(name, args, env)
+		if runErr == nil {
 			logger.Debug("step output", "step", n, "stdout", out)
-			return out, nil
 		}
-		if !isNotFound(err) {
-			break
-		}
+		return runErr
+	})
+	if err != nil {
+		logger.Debug("step failed", "step", n, "cmd", name, "args", args, "error", err)
+		return out, fmt.Errorf("step %d: %w%s", n, err, gcpPermissionHint(n, err))
 	}
-	logger.Debug("step failed", "step", n, "cmd", name, "args", args, "error", err)
-	return out, fmt.Errorf("step %d: %w%s", n, err, gcpPermissionHint(n, err))
+	return out, nil
 }
 
 func gcpPermissionHint(step int, err error) string {
@@ -332,39 +335,44 @@ const (
 	updateConnectionRetryDelay   = 5 * time.Second
 )
 
+// updateConnectionRetryable reports whether err is worth retrying: "Unknown property" means the
+// request shape itself is wrong (e.g. a field name mismatch against the live schema) — that never
+// resolves by waiting, unlike an impersonation binding that just hasn't propagated yet.
+func updateConnectionRetryable(err error) bool {
+	if strings.Contains(err.Error(), "Unknown property") {
+		return false
+	}
+	return strings.Contains(err.Error(), "Constraints violated") || strings.Contains(strings.ToLower(err.Error()), "permission")
+}
+
 // updateConnectionWithRetry retries DT connection finalization because the impersonation
 // IAM binding can take a couple of minutes to propagate before Dynatrace's live impersonation
 // check succeeds. See updateConnectionInitialDelay for the sizing rationale.
 func updateConnectionWithRetry(dtc dtclient, connObjectID, connName, serviceAccountEmail string, sleeper func(time.Duration)) error {
-	var lastErr error
-	for attempt := 0; attempt < updateConnectionMaxAttempts; attempt++ {
-		if attempt > 0 {
-			// The first probe is the readiness check; only once it confirms propagation is
-			// still in flight do we pay the longer initial wait (dtctl's "~1 minute"), then
-			// fall back to the shorter poll interval. This fails fast on non-propagation
-			// errors and wastes no time when the binding is already usable.
-			delay := updateConnectionRetryDelay
+	lastErr := installer.Retry(sleeper, installer.RetryConfig{
+		MaxAttempts: updateConnectionMaxAttempts,
+		// The first probe is the readiness check; only once it confirms propagation is
+		// still in flight do we pay the longer initial wait (dtctl's "~1 minute"), then
+		// fall back to the shorter poll interval. This fails fast on non-propagation
+		// errors and wastes no time when the binding is already usable.
+		Delay: func(attempt int) time.Duration {
 			if attempt == 1 {
-				delay = updateConnectionInitialDelay
+				return updateConnectionInitialDelay
+			}
+			return updateConnectionRetryDelay
+		},
+		Retryable: updateConnectionRetryable,
+		OnRetry: func(attempt int, delay time.Duration, err error) {
+			if attempt == 1 {
 				fmt.Println("  Waiting for GCP IAM changes to propagate before linking (this can take a minute)...")
 			}
-			logger.Debug("connection update failed, retrying", "attempt", attempt, "delay", delay, "error", lastErr)
-			sleeper(delay)
-		}
-		lastErr = dtc.updateConnection(connObjectID, connName, serviceAccountEmail)
-		if lastErr == nil {
-			return nil
-		}
-		// "Unknown property" means the request shape itself is wrong (e.g. a field name
-		// mismatch against the live schema) — that never resolves by waiting, unlike an
-		// impersonation binding that just hasn't propagated yet. Fail fast instead of
-		// burning through every attempt on a guaranteed-repeat rejection.
-		if strings.Contains(lastErr.Error(), "Unknown property") {
-			return lastErr
-		}
-		if !strings.Contains(lastErr.Error(), "Constraints violated") && !strings.Contains(strings.ToLower(lastErr.Error()), "permission") {
-			return lastErr
-		}
+			logger.Debug("connection update failed, retrying", "attempt", attempt, "delay", delay, "error", err)
+		},
+	}, func() error {
+		return dtc.updateConnection(connObjectID, connName, serviceAccountEmail)
+	})
+	if lastErr == nil {
+		return nil
 	}
 	// Mirror dtctl's guidance: this specific failure is usually IAM propagation still in flight.
 	if strings.Contains(lastErr.Error(), "GCP authentication failed") {

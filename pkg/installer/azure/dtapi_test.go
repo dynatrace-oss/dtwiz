@@ -14,7 +14,7 @@ func newTestSDKClient(t *testing.T, serverURL string) *sdkDTClient {
 	if err != nil {
 		t.Fatalf("create test SDK client: %v", err)
 	}
-	c.c.HTTP().SetRetryCount(0)
+	c.C.HTTP().SetRetryCount(0)
 	return c
 }
 
@@ -339,138 +339,9 @@ func TestSDKUpdateConnection_PutFails(t *testing.T) {
 	}
 }
 
-// ─── cmpSemver ───────────────────────────────────────────────────────────────
-
-func TestCmpSemver(t *testing.T) {
-	cases := []struct {
-		a, b string
-		want int
-	}{
-		{"1.2.3", "1.2.3", 0},
-		{"1.2.4", "1.2.3", 1},
-		{"1.2.3", "1.2.4", -1},
-		{"2.0.0", "1.9.9", 1},
-		{"1.10.0", "1.9.0", 1}, // numeric, not lexicographic
-		{"1.0.11", "1.0.9", 1}, // numeric: 11 > 9
-		{"1.0", "1.0.0", 0},
-		{"1", "1.0.0", 0},
-		{"", "", 0},
-	}
-	for _, tc := range cases {
-		if got := cmpSemver(tc.a, tc.b); got != tc.want {
-			t.Errorf("cmpSemver(%q, %q) = %d, want %d", tc.a, tc.b, got, tc.want)
-		}
-	}
-}
-
-// ─── latestExtensionVersion ───────────────────────────────────────────────────
-
-func TestSDKLatestExtensionVersion_HappyPath(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != extensionAPI {
-			t.Errorf("unexpected path: %q", r.URL.Path)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[{"version":"1.2.0"},{"version":"1.0.0"},{"version":"1.1.3"}]}`))
-	}))
-	defer srv.Close()
-
-	v, err := newTestSDKClient(t, srv.URL).latestExtensionVersion()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if v != "1.2.0" {
-		t.Errorf("version = %q, want %q", v, "1.2.0")
-	}
-}
-
-func TestSDKLatestExtensionVersion_Empty(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[]}`))
-	}))
-	defer srv.Close()
-
-	_, err := newTestSDKClient(t, srv.URL).latestExtensionVersion()
-	if err == nil {
-		t.Fatal("expected error for empty versions, got nil")
-	}
-}
-
-// TestSDKLatestExtensionVersion_AllBlankVersions guards against a regression
-// where items are present but every version string is empty: the filtered slice
-// is empty and indexing versions[0] would panic. It must return an error instead.
-func TestSDKLatestExtensionVersion_AllBlankVersions(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[{"version":""},{"version":""}]}`))
-	}))
-	defer srv.Close()
-
-	_, err := newTestSDKClient(t, srv.URL).latestExtensionVersion()
-	if err == nil {
-		t.Fatal("expected error for all-blank versions, got nil")
-	}
-}
-
-func TestSDKLatestExtensionVersion_ServerError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer srv.Close()
-
-	_, err := newTestSDKClient(t, srv.URL).latestExtensionVersion()
-	if err == nil {
-		t.Fatal("expected error for 500, got nil")
-	}
-}
-
-// ─── fetchExtensionSchema / enumValues ────────────────────────────────────────
-
-func TestSDKFetchExtensionSchema_HappyPath(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		want := extensionAPI + "/1.2.0/schema"
-		if r.URL.Path != want {
-			t.Errorf("path = %q, want %q", r.URL.Path, want)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"enums":{
-			"dynatrace.datasource.azure:location":{"items":[{"value":"eastus"},{"value":"westeurope"}]},
-			"FeatureSetsType":{"items":[{"value":"essential_one"},{"value":""}]}
-		}}`))
-	}))
-	defer srv.Close()
-
-	schema, err := newTestSDKClient(t, srv.URL).fetchExtensionSchema("1.2.0")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	locs := schema.enumValues(azureLocationEnumKey)
-	if len(locs) != 2 {
-		t.Errorf("expected 2 locations, got %d: %v", len(locs), locs)
-	}
-	// blank value must be filtered out
-	fs := schema.enumValues(azureFeatureSetEnumKey)
-	if len(fs) != 1 || fs[0] != "essential_one" {
-		t.Errorf("expected [essential_one], got: %v", fs)
-	}
-	// missing key returns nil
-	if schema.enumValues("nonexistent-key") != nil {
-		t.Error("expected nil for missing enum key")
-	}
-}
-
-func TestSDKFetchExtensionSchema_ServerError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer srv.Close()
-
-	_, err := newTestSDKClient(t, srv.URL).fetchExtensionSchema("1.2.0")
-	if err == nil {
-		t.Fatal("expected error for 404, got nil")
-	}
-}
+// cmpSemver, latestExtensionVersion, and fetchExtensionSchema/enumValues are
+// shared logic covered by pkg/installer's own test suite; createMonitoring
+// below still exercises them end-to-end through buildMonitoringConfig.
 
 // ─── createMonitoring ─────────────────────────────────────────────────────────
 

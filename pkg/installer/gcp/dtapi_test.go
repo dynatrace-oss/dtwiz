@@ -14,7 +14,7 @@ func newTestSDKClient(t *testing.T, serverURL string) *sdkDTClient {
 	if err != nil {
 		t.Fatalf("create test SDK client: %v", err)
 	}
-	c.c.HTTP().SetRetryCount(0)
+	c.C.HTTP().SetRetryCount(0)
 	return c
 }
 
@@ -256,60 +256,9 @@ func TestSDKUpdateConnection_SurfacesConstraintViolationDetail(t *testing.T) {
 	}
 }
 
-// ─── cmpSemver ───────────────────────────────────────────────────────────────
-
-func TestCmpSemver(t *testing.T) {
-	cases := []struct {
-		a, b string
-		want int
-	}{
-		{"1.2.3", "1.2.3", 0},
-		{"1.2.4", "1.2.3", 1},
-		{"1.2.3", "1.2.4", -1},
-		{"1.10.0", "1.9.0", 1},
-		{"1.0", "1.0.0", 0},
-		{"", "", 0},
-	}
-	for _, tc := range cases {
-		if got := cmpSemver(tc.a, tc.b); got != tc.want {
-			t.Errorf("cmpSemver(%q, %q) = %d, want %d", tc.a, tc.b, got, tc.want)
-		}
-	}
-}
-
-// ─── latestExtensionVersion ───────────────────────────────────────────────────
-
-func TestSDKLatestExtensionVersion_HappyPath(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != extensionAPI {
-			t.Errorf("unexpected path: %q", r.URL.Path)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[{"version":"1.2.0"},{"version":"1.0.0"},{"version":"1.1.3"}]}`))
-	}))
-	defer srv.Close()
-
-	v, err := newTestSDKClient(t, srv.URL).latestExtensionVersion()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if v != "1.2.0" {
-		t.Errorf("version = %q, want %q", v, "1.2.0")
-	}
-}
-
-func TestSDKLatestExtensionVersion_AllBlankVersions(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[{"version":""},{"version":""}]}`))
-	}))
-	defer srv.Close()
-
-	_, err := newTestSDKClient(t, srv.URL).latestExtensionVersion()
-	if err == nil {
-		t.Fatal("expected error for all-blank versions, got nil")
-	}
-}
+// cmpSemver and latestExtensionVersion are shared logic covered by
+// pkg/installer's own test suite; createMonitoring below still exercises them
+// end-to-end through buildMonitoringConfig.
 
 // ─── createMonitoring ─────────────────────────────────────────────────────────
 

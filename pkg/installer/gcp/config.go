@@ -18,17 +18,15 @@
 package gcp
 
 import (
-	"fmt"
-	"os/exec"
-	"strings"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 )
 
 // execLookPath is a variable alias for exec.LookPath, allowing tests to stub it.
-var execLookPath = exec.LookPath
+var execLookPath = installer.ExecLookPath
 
 // cmdRunner runs a command and captures its stdout. It receives the executable
 // name, argument slice, and optional environment variables (nil = inherit).
-type cmdRunner func(name string, args []string, env []string) (stdout string, err error)
+type cmdRunner = installer.CmdRunner
 
 // gcpConfig holds all configuration needed for the GCP integration.
 type gcpConfig struct {
@@ -76,16 +74,4 @@ var requiredAPIs = []string{
 }
 
 // realRunner is the production cmdRunner implementation.
-func realRunner(name string, args []string, env []string) (string, error) {
-	cmd := exec.Command(name, args...)
-	if env != nil {
-		cmd.Env = env
-	}
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok && len(exitErr.Stderr) > 0 {
-			return string(out), fmt.Errorf("%w: %s", err, strings.TrimSpace(string(exitErr.Stderr)))
-		}
-	}
-	return string(out), err
-}
+var realRunner = installer.RealRunner

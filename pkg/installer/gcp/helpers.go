@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -85,7 +86,7 @@ func gcpDeleteServiceAccount(runner cmdRunner, email, projectID string) error {
 		"--project", projectID,
 		"--quiet",
 	}, nil)
-	if err != nil && isNotFound(err) {
+	if err != nil && installer.IsNotFoundErr(err) {
 		return nil
 	}
 	return err
@@ -100,16 +101,10 @@ func gcpRemoveProjectBinding(runner cmdRunner, projectID, member, role string) e
 		"--condition=None",
 		"--quiet",
 	}, nil)
-	if err != nil && isNotFound(err) {
+	if err != nil && installer.IsNotFoundErr(err) {
 		return nil
 	}
 	return err
-}
-
-func isNotFound(err error) bool {
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "not found") || strings.Contains(msg, "does not exist") ||
-		strings.Contains(msg, "not_found")
 }
 
 // serviceAccountMember formats a service-account email as a gcloud IAM member.

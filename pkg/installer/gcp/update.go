@@ -26,48 +26,17 @@ func updateGCPWithRunner(
 	runner cmdRunner,
 	dtc dtclient,
 ) error {
-	type monitorRes struct {
-		ids []string
-		err error
+	var monConfigIDs []string
+	var conns []connRef
+	var projectID, account string
+	err := installer.RunConcurrently(
+		func() (err error) { monConfigIDs, err = dtc.findAllMonitoringConfigs(integrationName); return },
+		func() (err error) { conns, err = dtc.findAllConnections(integrationName); return },
+		func() (err error) { projectID, account, err = gcpAccountInfo(runner); return },
+	)
+	if err != nil {
+		return err
 	}
-	type connRes struct {
-		conns []connRef
-		err   error
-	}
-	type accountRes struct {
-		projectID string
-		account   string
-		err       error
-	}
-	monitorCh := make(chan monitorRes, 1)
-	connCh := make(chan connRes, 1)
-	accountCh := make(chan accountRes, 1)
-	go func() {
-		ids, err := dtc.findAllMonitoringConfigs(integrationName)
-		monitorCh <- monitorRes{ids: ids, err: err}
-	}()
-	go func() {
-		conns, err := dtc.findAllConnections(integrationName)
-		connCh <- connRes{conns: conns, err: err}
-	}()
-	go func() {
-		projectID, account, err := gcpAccountInfo(runner)
-		accountCh <- accountRes{projectID: projectID, account: account, err: err}
-	}()
-	mr := <-monitorCh
-	cr := <-connCh
-	ar := <-accountCh
-	if mr.err != nil {
-		return mr.err
-	}
-	if cr.err != nil {
-		return cr.err
-	}
-	if ar.err != nil {
-		return ar.err
-	}
-	monConfigIDs, conns := mr.ids, cr.conns
-	projectID := ar.projectID
 
 	conn, err := selectUpdatableConnection(conns)
 	if err != nil {
@@ -80,7 +49,7 @@ func updateGCPWithRunner(
 		EnvURL:              envURL,
 		PlatformToken:       platformToken,
 		ProjectID:           projectID,
-		Account:             ar.account,
+		Account:             account,
 		ServiceAccountName:  serviceAccountName,
 		ServiceAccountEmail: conn.serviceAccountEmail,
 		ConnectionID:        conn.objectID,

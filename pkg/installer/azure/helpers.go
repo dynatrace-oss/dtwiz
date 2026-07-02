@@ -61,7 +61,7 @@ func azureBuildFedCredJSON(connID, envURL string) (string, error) {
 func azureDeleteFedCred(runner cmdRunner, clientID string) error {
 	_, err := runner("az", []string{"ad", "app", "federated-credential", "delete",
 		"--id", clientID, "--federated-credential-id", fedCredName}, nil)
-	if err != nil && strings.Contains(strings.ToLower(err.Error()), "not found") {
+	if err != nil && installer.IsNotFoundErr(err) {
 		return nil
 	}
 	return err
@@ -121,7 +121,7 @@ func azureDeleteRoleAssignment(runner cmdRunner, clientID string) error {
 		"--role", "Monitoring Reader"}, nil)
 	if err != nil {
 		msg := strings.ToLower(err.Error())
-		if strings.Contains(msg, "no matched assignments") || strings.Contains(msg, "not found") {
+		if strings.Contains(msg, "no matched assignments") || installer.IsNotFoundErr(err) {
 			return nil
 		}
 		return err
@@ -132,47 +132,60 @@ func azureDeleteRoleAssignment(runner cmdRunner, clientID string) error {
 // azureDeleteApp deletes an App Registration; Azure cascades this to its Service Principal and federated credentials.
 func azureDeleteApp(runner cmdRunner, clientID string) error {
 	_, err := runner("az", []string{"ad", "app", "delete", "--id", clientID}, nil)
-	if err != nil && strings.Contains(strings.ToLower(err.Error()), "not found") {
+	if err != nil && installer.IsNotFoundErr(err) {
 		return nil
 	}
 	return err
 }
 
+// azureSPObjectIDRetryable reports whether err signals that a just-created SP is not yet
+// visible in Entra (worth retrying), as opposed to a permanent failure (403, bad JSON, ...).
+func azureSPObjectIDRetryable(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "not found") || strings.Contains(msg, "does not exist") ||
+		strings.Contains(msg, "resource was not found") || strings.Contains(msg, "empty object id")
+}
+
 // azureGetSPObjectID retries up to 5 times (3s apart) because a newly created SP is not immediately visible in Entra.
 func azureGetSPObjectID(runner cmdRunner, clientID string, sleeper func(time.Duration)) (string, error) {
-	var lastErr error
-	for attempt := 0; attempt < 5; attempt++ {
-		if attempt > 0 {
-			sleeper(3 * time.Second)
-		}
+	var id string
+	err := installer.Retry(sleeper, installer.RetryConfig{
+		MaxAttempts: 5,
+		Delay:       func(int) time.Duration { return 3 * time.Second },
+		Retryable:   azureSPObjectIDRetryable,
+		OnRetry: func(attempt int, _ time.Duration, _ error) {
+			logger.Debug("SP not yet propagated, retrying", "attempt", attempt, "clientID", clientID)
+		},
+	}, func() error {
 		out, err := runner("az", []string{"ad", "sp", "show", "--id", clientID, "-o", "json"}, nil)
 		if err != nil {
 			msg := strings.ToLower(err.Error() + out)
 			if strings.Contains(msg, "403") || strings.Contains(msg, "forbidden") {
-				return "", fmt.Errorf("az ad sp show: %w", err)
+				return fmt.Errorf("az ad sp show: %w", err)
 			}
 			if strings.Contains(msg, "not found") || strings.Contains(msg, "does not exist") ||
 				strings.Contains(msg, "resource was not found") {
-				lastErr = err
-				logger.Debug("SP not yet propagated, retrying", "attempt", attempt+1, "clientID", clientID)
-				continue
+				return err
 			}
-			return "", fmt.Errorf("az ad sp show: %w", err)
+			return fmt.Errorf("az ad sp show: %w", err)
 		}
 		var sp struct {
 			ID string `json:"id"`
 		}
-		if err = json.Unmarshal([]byte(out), &sp); err != nil {
-			return "", fmt.Errorf("parsing az ad sp show output: %w", err)
+		if err := json.Unmarshal([]byte(out), &sp); err != nil {
+			return fmt.Errorf("parsing az ad sp show output: %w", err)
 		}
 		if sp.ID == "" {
-			lastErr = fmt.Errorf("empty object ID in az ad sp show response")
-			continue
+			return fmt.Errorf("empty object ID in az ad sp show response")
 		}
-		return sp.ID, nil
+		id = sp.ID
+		return nil
+	})
+	if err == nil {
+		return id, nil
 	}
-	if lastErr != nil {
-		return "", fmt.Errorf("az ad sp show (exhausted retries): %w", lastErr)
+	if azureSPObjectIDRetryable(err) {
+		return "", fmt.Errorf("az ad sp show (exhausted retries): %w", err)
 	}
-	return "", fmt.Errorf("az ad sp show: failed to get object ID after 5 attempts")
+	return "", err
 }
