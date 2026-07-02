@@ -132,18 +132,24 @@ func PrintlnColored(colorFunc *color.Color, format string, args ...any) {
 	colorFunc.Println("  " + fmt.Sprintf(format, args...))
 }
 
-// PrintSteps prints a "Steps:" header followed by auto-numbered steps,
-// each indented by four spaces.
-func PrintSteps(steps ...string) {
-	fmt.Println("  Steps:")
+// PrintSteps prints a title header followed by auto-numbered steps,
+// each indented by four spaces. If title is empty, "Steps:" is used.
+func PrintSteps(title string, steps ...string) {
+	if title == "" {
+		title = "Steps:"
+	}
+	fmt.Println("  " + title)
 	for i, step := range steps {
 		fmt.Printf("    %d. %s\n", i+1, step)
 	}
 }
 
 // PrintStepsColored is like PrintSteps but renders in the given color.
-func PrintStepsColored(colorFunc *color.Color, steps ...string) {
-	colorFunc.Println("  Steps:")
+func PrintStepsColored(colorFunc *color.Color, title string, steps ...string) {
+	if title == "" {
+		title = "Steps:"
+	}
+	colorFunc.Println("  " + title)
 	for i, step := range steps {
 		colorFunc.Printf("    %d. %s\n", i+1, step)
 	}
