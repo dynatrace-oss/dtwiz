@@ -32,22 +32,21 @@ func handleK8sUninstallDryRun() {
 //  3. Helm uninstall dynatrace-operator
 //  4. Delete the dynatrace namespace
 func UninstallKubernetes(kubeCtx, distro string, dryRun bool) error {
-	if err := refreshWindowsPath(); err != nil {
-		display.Println("Warning: could not refresh PATH: %v", err)
-	}
-
 	fmt.Println()
 	display.PrintlnColored(display.ColorMessage, "Dynatrace Kubernetes Uninstall")
 	fmt.Println()
 
 	if kubeCtx != "" {
-		display.Println("The affected cluster is: %s context=%s", distro, kubeCtx)
-		fmt.Println()
+		display.Println("The affected cluster is: %s context=%s\n", distro, kubeCtx)
 	}
 
 	if dryRun {
 		handleK8sUninstallDryRun()
 		return nil
+	}
+
+	if err := refreshWindowsPath(); err != nil {
+		display.Println("Warning: could not refresh PATH: %v", err)
 	}
 
 	printK8sUninstallSteps()
