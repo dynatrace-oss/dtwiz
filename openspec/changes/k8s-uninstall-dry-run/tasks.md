@@ -13,4 +13,4 @@
 ## 3. Tests
 
 - [x] 3.1 Update all existing `UninstallKubernetes` call sites in `pkg/installer/kubernetes_uninstall_test.go` to pass `false`
-- [ ] 3.2 Add `TestUninstallKubernetes_DryRun` — verify no kubectl/helm commands run, output contains step descriptions, function returns nil
+- [x] 3.2 Add `TestUninstallKubernetes_DryRun` — verify no kubectl/helm commands run, output contains step descriptions, function returns nil
