@@ -158,12 +158,16 @@ func (d *sdkDTClient) updateConnection(objectID, name, serviceAccountEmail strin
 	}
 	logger.Debug("updating connection", "objectId", objectID, "schemaVersion", obj.SchemaVersion, "serviceAccount", serviceAccountEmail)
 
+	// Confirmed against the live schema (GET .../settings/schemas/builtin:hyperscaler-
+	// authentication.connections.gcp?schemaVersion=0.0.5): the property under
+	// serviceAccountImpersonation is "serviceAccountId", not "serviceAccount" — the
+	// latter produced a permanent "Unknown property" 400 on every attempt.
 	value := map[string]any{
 		"name": name,
 		"type": connectionType,
 		connectionType: map[string]any{
-			"serviceAccount": serviceAccountEmail,
-			"consumers":      []string{"SVC:com.dynatrace.da"},
+			"serviceAccountId": serviceAccountEmail,
+			"consumers":        []string{"SVC:com.dynatrace.da"},
 		},
 	}
 

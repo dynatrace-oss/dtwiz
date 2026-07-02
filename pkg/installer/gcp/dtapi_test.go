@@ -109,8 +109,8 @@ func TestSDKFindAllConnections_Found(t *testing.T) {
 					"name": "my-conn",
 					"type": connectionType,
 					connectionType: map[string]any{
-						"serviceAccount": "dtwiz-gcp@my-project.iam.gserviceaccount.com",
-						"consumers":      []string{"SVC:com.dynatrace.da"},
+						"serviceAccountId": "dtwiz-gcp@my-project.iam.gserviceaccount.com",
+						"consumers":        []string{"SVC:com.dynatrace.da"},
 					},
 				},
 			}},
@@ -227,8 +227,8 @@ func TestSDKUpdateConnection_HappyPath(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s block missing: %+v", connectionType, val)
 	}
-	if impersonation["serviceAccount"] != "dtwiz-gcp@my-project.iam.gserviceaccount.com" {
-		t.Errorf("serviceAccount = %v", impersonation["serviceAccount"])
+	if impersonation["serviceAccountId"] != "dtwiz-gcp@my-project.iam.gserviceaccount.com" {
+		t.Errorf("serviceAccountId = %v", impersonation["serviceAccountId"])
 	}
 }
 
