@@ -65,16 +65,37 @@ func gcpPrintPreview(cfg gcpConfig) {
 	fmt.Println()
 }
 
-func gcpRunStep(n, total int, runner cmdRunner, name string, args []string, env []string, desc string) (string, error) {
+// serviceAccountMaxAttempts x serviceAccountRetryDelay bounds how long a gcloud step waits for
+// a just-created service account to become usable. SA creation is eventually consistent: for a
+// few seconds after `iam service-accounts create` returns, `add-iam-policy-binding` can still
+// fail with "Service account ... does not exist". Retrying on a not-found error covers that gap;
+// any other failure is returned immediately.
+const (
+	serviceAccountMaxAttempts = 12
+	serviceAccountRetryDelay  = 5 * time.Second
+)
+
+func gcpRunStep(n, total int, runner cmdRunner, sleeper func(time.Duration), name string, args []string, env []string, desc string) (string, error) {
 	fmt.Printf("  Step %d/%d: %s...\n", n, total, desc)
-	logger.Debug("running step", "step", n, "cmd", name, "args", args)
-	out, err := runner(name, args, env)
-	if err != nil {
-		logger.Debug("step failed", "step", n, "cmd", name, "args", args, "error", err)
-		return out, fmt.Errorf("step %d: %w%s", n, err, gcpPermissionHint(n, err))
+	var out string
+	var err error
+	for attempt := 0; attempt < serviceAccountMaxAttempts; attempt++ {
+		if attempt > 0 {
+			logger.Debug("gcloud resource not yet propagated, retrying", "step", n, "attempt", attempt, "error", err)
+			sleeper(serviceAccountRetryDelay)
+		}
+		logger.Debug("running step", "step", n, "cmd", name, "args", args)
+		out, err = runner(name, args, env)
+		if err == nil {
+			logger.Debug("step output", "step", n, "stdout", out)
+			return out, nil
+		}
+		if !isNotFound(err) {
+			break
+		}
 	}
-	logger.Debug("step output", "step", n, "stdout", out)
-	return out, nil
+	logger.Debug("step failed", "step", n, "cmd", name, "args", args, "error", err)
+	return out, fmt.Errorf("step %d: %w%s", n, err, gcpPermissionHint(n, err))
 }
 
 func gcpPermissionHint(step int, err error) string {
@@ -212,7 +233,7 @@ func runInstallSteps(cfg gcpConfig, runner cmdRunner, sleeper func(time.Duration
 	const total = 7
 	completed := make(map[int]bool)
 
-	_, err := gcpRunStep(1, total, runner, "gcloud",
+	_, err := gcpRunStep(1, total, runner, sleeper, "gcloud",
 		append([]string{"services", "enable"}, append(append([]string{}, requiredAPIs...), "--project", cfg.ProjectID)...),
 		nil, "Enable required Google Cloud APIs")
 	if err != nil {
@@ -242,7 +263,7 @@ func runInstallSteps(cfg gcpConfig, runner cmdRunner, sleeper func(time.Duration
 	cfg.ServiceAccountEmail = saEmail
 	display.ColorOK.Printf("  ✓ Service account created: %s\n", saEmail)
 
-	_, err = gcpRunStep(4, total, runner, "gcloud",
+	_, err = gcpRunStep(4, total, runner, sleeper, "gcloud",
 		[]string{"projects", "add-iam-policy-binding", cfg.ProjectID,
 			"--member", serviceAccountMember(saEmail), "--role", viewerRole, "--condition=None"},
 		nil, "Grant Viewer role to service account")
@@ -253,7 +274,7 @@ func runInstallSteps(cfg gcpConfig, runner cmdRunner, sleeper func(time.Duration
 	completed[4] = true
 	display.ColorOK.Println("  ✓ Viewer role granted")
 
-	_, err = gcpRunStep(5, total, runner, "gcloud",
+	_, err = gcpRunStep(5, total, runner, sleeper, "gcloud",
 		[]string{"iam", "service-accounts", "add-iam-policy-binding", saEmail,
 			"--member", serviceAccountMember(cfg.DTServiceAccount), "--role", tokenCreatorRole},
 		nil, "Grant impersonation to Dynatrace principal")
@@ -297,26 +318,38 @@ func gcpConnectionConflictHint(err error, connName string) string {
 		" to find and delete the existing connection, then re-run this install.", connName)
 }
 
-// updateConnectionMaxAttempts x updateConnectionRetryDelay bounds how long we wait for the
-// step-5 IAM binding to propagate. The connection update triggers a live, synchronous GCP
-// impersonation check server-side; until the roles/iam.serviceAccountTokenCreator grant has
-// propagated, that check fails and Dynatrace returns 400 "GCP authentication failed". The
-// vendor's own dtctl surfaces exactly this string with the guidance that it "can take a couple
-// of minutes before it becomes active" — so the budget here (~3 min) is sized to cover that.
+// The connection update triggers a live, synchronous GCP impersonation check server-side;
+// until the step-5 roles/iam.serviceAccountTokenCreator grant has propagated, that check fails
+// with 400 "GCP authentication failed". dtwiz can't probe that readiness locally — the check
+// can only be made by Dynatrace's own principal — so the step-6 call itself is the probe.
+//
+// dtctl and the docs both say to wait "~1 minute" / "a couple of minutes" before this call, so
+// updateConnectionInitialDelay skips the near-certain early failures before the first probe,
+// and the attempt budget (initial + 30 x 5s ≈ 3 min) covers the rest.
 const (
-	updateConnectionMaxAttempts = 37
-	updateConnectionRetryDelay  = 5 * time.Second
+	updateConnectionInitialDelay = 30 * time.Second
+	updateConnectionMaxAttempts  = 30
+	updateConnectionRetryDelay   = 5 * time.Second
 )
 
 // updateConnectionWithRetry retries DT connection finalization because the impersonation
 // IAM binding can take a couple of minutes to propagate before Dynatrace's live impersonation
-// check succeeds. See updateConnectionMaxAttempts for the sizing rationale.
+// check succeeds. See updateConnectionInitialDelay for the sizing rationale.
 func updateConnectionWithRetry(dtc dtclient, connObjectID, connName, serviceAccountEmail string, sleeper func(time.Duration)) error {
 	var lastErr error
 	for attempt := 0; attempt < updateConnectionMaxAttempts; attempt++ {
 		if attempt > 0 {
-			logger.Debug("connection update failed, retrying", "attempt", attempt, "error", lastErr)
-			sleeper(updateConnectionRetryDelay)
+			// The first probe is the readiness check; only once it confirms propagation is
+			// still in flight do we pay the longer initial wait (dtctl's "~1 minute"), then
+			// fall back to the shorter poll interval. This fails fast on non-propagation
+			// errors and wastes no time when the binding is already usable.
+			delay := updateConnectionRetryDelay
+			if attempt == 1 {
+				delay = updateConnectionInitialDelay
+				fmt.Println("  Waiting for GCP IAM changes to propagate before linking (this can take a minute)...")
+			}
+			logger.Debug("connection update failed, retrying", "attempt", attempt, "delay", delay, "error", lastErr)
+			sleeper(delay)
 		}
 		lastErr = dtc.updateConnection(connObjectID, connName, serviceAccountEmail)
 		if lastErr == nil {

@@ -266,6 +266,10 @@ func (d *sdkDTClient) buildMonitoringConfig(configName, connectionObjectID, serv
 	}
 	logger.Debug("monitoring defaults from schema", "featureSets", len(featureSets))
 
+	// Field names/shape mirror the da-gcp extension schema and dtctl's reference
+	// gcpmonitoringconfig types exactly: the block is "googleCloud" (not "gcp"), the
+	// credential key is "serviceAccount" (not "serviceAccountId"), and neither a
+	// credential "type" nor a "projectFilteringMode" field exists in the schema.
 	return extension.MonitoringConfigurationCreate{
 		Scope: monitoringScope,
 		Value: map[string]any{
@@ -273,15 +277,13 @@ func (d *sdkDTClient) buildMonitoringConfig(configName, connectionObjectID, serv
 			"description": configName,
 			"version":     version,
 			"featureSets": featureSets,
-			"gcp": map[string]any{
-				"projectFilteringMode": "INCLUDE",
-				"projectFiltering":     []string{projectID},
+			"googleCloud": map[string]any{
+				"projectFiltering": []string{projectID},
 				"credentials": []map[string]any{{
-					"enabled":          true,
-					"description":      configName,
-					"connectionId":     connectionObjectID,
-					"serviceAccountId": serviceAccountEmail,
-					"type":             "SERVICE_ACCOUNT_IMPERSONATION",
+					"enabled":        true,
+					"description":    configName,
+					"connectionId":   connectionObjectID,
+					"serviceAccount": serviceAccountEmail,
 				}},
 			},
 		},

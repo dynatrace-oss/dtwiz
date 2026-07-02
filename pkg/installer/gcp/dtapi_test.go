@@ -411,12 +411,13 @@ func TestSDKCreateMonitoring_HappyPath(t *testing.T) {
 		}
 	}
 
-	gcpBlock, _ := val["gcp"].(map[string]any)
+	// Block key is "googleCloud" (not "gcp") to match the da-gcp schema and dtctl.
+	gcpBlock, _ := val["googleCloud"].(map[string]any)
 	if gcpBlock == nil {
-		t.Fatal("gcp block missing")
+		t.Fatal("googleCloud block missing")
 	}
-	if gcpBlock["projectFilteringMode"] != "INCLUDE" {
-		t.Errorf("projectFilteringMode = %v, want INCLUDE", gcpBlock["projectFilteringMode"])
+	if _, present := gcpBlock["projectFilteringMode"]; present {
+		t.Errorf("projectFilteringMode must not be sent (not in schema), got: %v", gcpBlock["projectFilteringMode"])
 	}
 	projects, _ := gcpBlock["projectFiltering"].([]any)
 	if len(projects) != 1 || projects[0] != "my-project" {
@@ -430,8 +431,12 @@ func TestSDKCreateMonitoring_HappyPath(t *testing.T) {
 	if cred["connectionId"] != "conn-obj-001" {
 		t.Errorf("connectionId = %v", cred["connectionId"])
 	}
-	if cred["serviceAccountId"] != "dtwiz-gcp@my-project.iam.gserviceaccount.com" {
-		t.Errorf("serviceAccountId = %v", cred["serviceAccountId"])
+	// Credential key is "serviceAccount" (not "serviceAccountId"), and no "type" field exists.
+	if cred["serviceAccount"] != "dtwiz-gcp@my-project.iam.gserviceaccount.com" {
+		t.Errorf("serviceAccount = %v", cred["serviceAccount"])
+	}
+	if _, present := cred["type"]; present {
+		t.Errorf("credential type must not be sent (not in schema), got: %v", cred["type"])
 	}
 }
 

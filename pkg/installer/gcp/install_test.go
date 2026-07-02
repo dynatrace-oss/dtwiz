@@ -189,6 +189,49 @@ func TestGCPStep1PermissionDeniedIncludesRoleHint(t *testing.T) {
 	}
 }
 
+func TestGCPStep4RetriesServiceAccountPropagation(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	step4Attempts := 0
+	sleepCount := 0
+	runner := func(name string, args []string, _ []string) (string, error) {
+		switch {
+		case gcloudArgs(args, "config", "get-value", "project"):
+			return "my-project\n", nil
+		case gcloudArgs(args, "config", "get-value", "account"):
+			return "user@example.com\n", nil
+		case gcloudArgs(args, "iam", "service-accounts", "create"):
+			return stockSACreateJSON, nil
+		case gcloudArgs(args, "projects", "add-iam-policy-binding"):
+			step4Attempts++
+			// Freshly created SA not yet visible to IAM on the first two tries.
+			if step4Attempts < 3 {
+				return "", fmt.Errorf("INVALID_ARGUMENT: Service account dtwiz-gcp@my-project.iam.gserviceaccount.com does not exist.")
+			}
+			return "{}", nil
+		default:
+			return "{}", nil
+		}
+	}
+	testSleeper := func(_ time.Duration) { sleepCount++ }
+
+	err := captureStdoutErr(func() error {
+		return installGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, testSleeper, happyFakeDTClient())
+	})
+	if err != nil {
+		t.Fatalf("expected success after SA propagation retries, got: %v", err)
+	}
+	if step4Attempts != 3 {
+		t.Errorf("expected 3 step-4 attempts, got %d", step4Attempts)
+	}
+	if sleepCount < 2 {
+		t.Errorf("expected at least 2 sleeps between step-4 retries, got %d", sleepCount)
+	}
+}
+
 func TestGCPStep5FailsAllCleanupHints(t *testing.T) {
 	old := installer.AutoConfirm
 	installer.AutoConfirm = true
