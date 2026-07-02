@@ -297,16 +297,26 @@ func gcpConnectionConflictHint(err error, connName string) string {
 		" to find and delete the existing connection, then re-run this install.", connName)
 }
 
+// updateConnectionMaxAttempts x updateConnectionRetryDelay bounds how long we wait for the
+// step-5 IAM binding to propagate. The connection update triggers a live, synchronous GCP
+// impersonation check server-side; until the roles/iam.serviceAccountTokenCreator grant has
+// propagated, that check fails and Dynatrace returns 400 "GCP authentication failed". The
+// vendor's own dtctl surfaces exactly this string with the guidance that it "can take a couple
+// of minutes before it becomes active" — so the budget here (~3 min) is sized to cover that.
+const (
+	updateConnectionMaxAttempts = 37
+	updateConnectionRetryDelay  = 5 * time.Second
+)
+
 // updateConnectionWithRetry retries DT connection finalization because the impersonation
-// IAM binding can take time to propagate before Dynatrace can validate it — Dynatrace's own
-// manual onboarding reference tells operators to wait "~1 minute" before this exact call, so
-// the retry budget here (14 x 5s = 70s of sleep) is sized to comfortably clear that with margin.
+// IAM binding can take a couple of minutes to propagate before Dynatrace's live impersonation
+// check succeeds. See updateConnectionMaxAttempts for the sizing rationale.
 func updateConnectionWithRetry(dtc dtclient, connObjectID, connName, serviceAccountEmail string, sleeper func(time.Duration)) error {
 	var lastErr error
-	for attempt := 0; attempt < 15; attempt++ {
+	for attempt := 0; attempt < updateConnectionMaxAttempts; attempt++ {
 		if attempt > 0 {
 			logger.Debug("connection update failed, retrying", "attempt", attempt, "error", lastErr)
-			sleeper(5 * time.Second)
+			sleeper(updateConnectionRetryDelay)
 		}
 		lastErr = dtc.updateConnection(connObjectID, connName, serviceAccountEmail)
 		if lastErr == nil {
@@ -315,13 +325,18 @@ func updateConnectionWithRetry(dtc dtclient, connObjectID, connName, serviceAcco
 		// "Unknown property" means the request shape itself is wrong (e.g. a field name
 		// mismatch against the live schema) — that never resolves by waiting, unlike an
 		// impersonation binding that just hasn't propagated yet. Fail fast instead of
-		// burning through all 10 attempts on a guaranteed-repeat rejection.
+		// burning through every attempt on a guaranteed-repeat rejection.
 		if strings.Contains(lastErr.Error(), "Unknown property") {
 			return lastErr
 		}
 		if !strings.Contains(lastErr.Error(), "Constraints violated") && !strings.Contains(strings.ToLower(lastErr.Error()), "permission") {
 			return lastErr
 		}
+	}
+	// Mirror dtctl's guidance: this specific failure is usually IAM propagation still in flight.
+	if strings.Contains(lastErr.Error(), "GCP authentication failed") {
+		return fmt.Errorf("%w\nIAM policy changes can take a couple of minutes to become active; "+
+			"the GCP resources and connection were already created — wait a moment and re-run to finish linking", lastErr)
 	}
 	return lastErr
 }
