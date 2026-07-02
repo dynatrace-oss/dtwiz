@@ -298,10 +298,12 @@ func gcpConnectionConflictHint(err error, connName string) string {
 }
 
 // updateConnectionWithRetry retries DT connection finalization because the impersonation
-// IAM binding can take several seconds to propagate before Dynatrace can validate it.
+// IAM binding can take time to propagate before Dynatrace can validate it — Dynatrace's own
+// manual onboarding reference tells operators to wait "~1 minute" before this exact call, so
+// the retry budget here (14 x 5s = 70s of sleep) is sized to comfortably clear that with margin.
 func updateConnectionWithRetry(dtc dtclient, connObjectID, connName, serviceAccountEmail string, sleeper func(time.Duration)) error {
 	var lastErr error
-	for attempt := 0; attempt < 10; attempt++ {
+	for attempt := 0; attempt < 15; attempt++ {
 		if attempt > 0 {
 			logger.Debug("connection update failed, retrying", "attempt", attempt, "error", lastErr)
 			sleeper(5 * time.Second)

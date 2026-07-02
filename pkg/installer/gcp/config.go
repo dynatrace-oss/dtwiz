@@ -65,6 +65,9 @@ const (
 )
 
 // requiredAPIs are enabled on the active project before monitoring can collect data.
+// This list matches Dynatrace's own manual onboarding reference exactly — IAM-related
+// APIs (iam.googleapis.com, iamcredentials.googleapis.com) are explicitly documented as
+// not requiring enablement, so don't add them back in without a documented reason.
 var requiredAPIs = []string{
 	"compute.googleapis.com",
 	"cloudresourcemanager.googleapis.com",
