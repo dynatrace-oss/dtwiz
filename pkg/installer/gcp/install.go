@@ -310,6 +310,13 @@ func updateConnectionWithRetry(dtc dtclient, connObjectID, connName, serviceAcco
 		if lastErr == nil {
 			return nil
 		}
+		// "Unknown property" means the request shape itself is wrong (e.g. a field name
+		// mismatch against the live schema) — that never resolves by waiting, unlike an
+		// impersonation binding that just hasn't propagated yet. Fail fast instead of
+		// burning through all 10 attempts on a guaranteed-repeat rejection.
+		if strings.Contains(lastErr.Error(), "Unknown property") {
+			return lastErr
+		}
 		if !strings.Contains(lastErr.Error(), "Constraints violated") && !strings.Contains(strings.ToLower(lastErr.Error()), "permission") {
 			return lastErr
 		}

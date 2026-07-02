@@ -283,6 +283,37 @@ func TestGCPStep6Retried(t *testing.T) {
 	}
 }
 
+func TestGCPStep6FailsFastOnUnknownProperty(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	updateAttempts := 0
+	sleepCount := 0
+	dtc := &retryingDTClient{
+		fakeDTClient: happyFakeDTClient(),
+		updateFn: func(_, _, _ string) error {
+			updateAttempts++
+			return fmt.Errorf(`update settings object "obj-001": API error (400): Constraints violated. (builtin:hyperscaler-authentication.connections.gcp/0/serviceAccountImpersonation/serviceAccount: Unknown property)`)
+		},
+	}
+	testSleeper := func(_ time.Duration) { sleepCount++ }
+
+	err := captureStdoutErr(func() error {
+		return installGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, happyGcloudRunner(nil), testSleeper, dtc)
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if updateAttempts != 1 {
+		t.Errorf("expected exactly 1 attempt (no retry on a permanent schema mismatch), got %d", updateAttempts)
+	}
+	if sleepCount != 0 {
+		t.Errorf("expected no sleeps, got %d", sleepCount)
+	}
+}
+
 func TestGCPStep2ConnectionConflictHint(t *testing.T) {
 	old := installer.AutoConfirm
 	installer.AutoConfirm = true

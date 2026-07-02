@@ -226,6 +226,30 @@ func TestSDKUpdateConnection_HappyPath(t *testing.T) {
 	}
 }
 
+func TestSDKUpdateConnection_SurfacesConstraintViolationDetail(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			_, _ = w.Write([]byte(`{"schemaVersion":"42","value":{"name":"my-conn","type":"serviceAccountImpersonation"}}`))
+		case http.MethodPut:
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"code":400,"message":"Constraints violated.","constraintViolations":[{"path":"builtin:hyperscaler-authentication.connections.gcp/0/serviceAccountImpersonation/serviceAccount","message":"Unknown property"}]}}`))
+		default:
+			t.Errorf("unexpected method %q", r.Method)
+		}
+	}))
+	defer srv.Close()
+
+	err := newTestSDKClient(t, srv.URL).updateConnection("obj-001", "my-conn", "dtwiz-gcp@my-project.iam.gserviceaccount.com")
+	if err == nil {
+		t.Fatal("expected error for 400, got nil")
+	}
+	if !strings.Contains(err.Error(), "Unknown property") {
+		t.Errorf("error %q does not surface the constraint violation detail the SDK's generic message discards", err.Error())
+	}
+}
+
 // ─── cmpSemver ───────────────────────────────────────────────────────────────
 
 func TestCmpSemver(t *testing.T) {
