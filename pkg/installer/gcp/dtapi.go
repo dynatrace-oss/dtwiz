@@ -189,7 +189,13 @@ func (d *sdkDTClient) updateConnection(objectID, name, serviceAccountEmail strin
 }
 
 func (d *sdkDTClient) findAllConnections(name string) ([]connRef, error) {
-	list, err := d.settings.ListObjects(context.Background(), connectionSchemaID, "environment", 0)
+	// Confirmed live: filtering by scopes=environment returns zero results for this
+	// schema even for objects whose own "scope" field is literally "environment" —
+	// dropping the scopes filter (empty string omits the query param entirely, see
+	// PaginationParams.QueryParams) is what actually surfaces them. Do not "fix" this
+	// back to "environment"; that reintroduces the bug that made dtwiz think every
+	// existing connection was invisible.
+	list, err := d.settings.ListObjects(context.Background(), connectionSchemaID, "", 0)
 	if err != nil {
 		return nil, fmt.Errorf("find connections: %w", err)
 	}

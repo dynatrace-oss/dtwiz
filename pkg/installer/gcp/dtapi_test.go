@@ -95,6 +95,12 @@ func TestSDKFindAllConnections_Found(t *testing.T) {
 		if r.URL.Query().Get("schemaIds") != connectionSchemaID {
 			t.Errorf("schemaIds query param missing or wrong: %q", r.URL.Query().Get("schemaIds"))
 		}
+		// Regression guard: filtering by scopes=environment was confirmed live to
+		// return zero results for this schema even for objects scoped to "environment" —
+		// the request must not send a scopes filter at all.
+		if _, present := r.URL.Query()["scopes"]; present {
+			t.Errorf("scopes query param must be omitted, got %q", r.URL.Query().Get("scopes"))
+		}
 		w.Header().Set("Content-Type", "application/json")
 		body := map[string]any{
 			"items": []map[string]any{{

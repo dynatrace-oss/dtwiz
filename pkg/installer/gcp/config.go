@@ -47,9 +47,7 @@ type gcpConfig struct {
 const (
 	// integrationName is the fixed name shared by the DT connection, the DT
 	// monitoring configuration, and the Google Cloud service account.
-	// TEMPORARY: bumped to dtwiz-gcp-2 to work around a name conflict on the
-	// dtwiz-gcp DT connection that neither dtwiz nor the tenant UI can locate.
-	integrationName = "dtwiz-gcp-2"
+	integrationName = "dtwiz-gcp"
 
 	// serviceAccountName is the fixed Google Cloud service-account ID (6-30 chars,
 	// lowercase letters, digits and hyphens). Its email is
