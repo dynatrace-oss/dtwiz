@@ -1,3 +1,5 @@
+# Proposal: K8s Uninstall Dry-Run
+
 ## Why
 
 `dtwiz uninstall kubernetes` was the only uninstall subcommand missing `--dry-run` support, making it inconsistent with `oneagent`, `otel`, `aws`, `aws-lambda`, and `azure`. Users had no safe way to preview what the command would do before running it against a live cluster.
@@ -15,7 +17,7 @@
 
 ### Modified Capabilities
 
-*(none — no existing spec-level behavior changes)*
+none — no existing spec-level behavior changes
 
 ## Impact
 

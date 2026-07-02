@@ -227,6 +227,34 @@ func TestUninstallKubernetes_KubectlDeleteFailContinuesToEnd(t *testing.T) {
 	}
 }
 
+func TestUninstallKubernetes_DryRun(t *testing.T) {
+	var calls []string
+	withFakeRunCmdQuiet(t, func(name string, args ...string) error {
+		calls = append(calls, name)
+		return nil
+	})
+
+	out := testutil.CaptureStdout(t, func() {
+		if err := UninstallKubernetes("my-ctx", "GKE", true); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	if len(calls) > 0 {
+		t.Errorf("expected no commands to run in dry-run mode, got: %v", calls)
+	}
+	for _, step := range []string{
+		"Delete all DynaKube and EdgeConnect custom resources",
+		"Wait for managed pods to terminate",
+		"Helm uninstall dynatrace-operator",
+		"Delete the dynatrace namespace",
+	} {
+		if !strings.Contains(out, step) {
+			t.Errorf("expected step %q in dry-run output, got: %q", step, out)
+		}
+	}
+}
+
 func TestUninstallKubernetes_MultipleStepsFail(t *testing.T) {
 	orig := AutoConfirm
 	AutoConfirm = true

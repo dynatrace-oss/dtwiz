@@ -1,3 +1,5 @@
+# Tasks: K8s Uninstall Dry-Run
+
 ## 1. Installer
 
 - [x] 1.1 Extract `printK8sUninstallSteps()` helper in `pkg/installer/kubernetes_uninstall.go`
