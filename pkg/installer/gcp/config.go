@@ -35,11 +35,19 @@ type gcpConfig struct {
 	EnvURL              string
 	PlatformToken       string
 	ProjectID           string
-	Account             string
 	ServiceAccountName  string // GCP service-account ID (local part of the email)
 	ServiceAccountEmail string // filled after step 3 (or derived)
 	DTServiceAccount    string // Dynatrace principal granted impersonation; resolved before steps
 	ConnectionID        string // filled after step 1
+}
+
+// serviceAccountEmail returns the bound service-account email, or the deterministic
+// email dtwiz would create/reuse if the install hasn't reached that step yet.
+func (cfg gcpConfig) serviceAccountEmail() string {
+	if cfg.ServiceAccountEmail != "" {
+		return cfg.ServiceAccountEmail
+	}
+	return gcpServiceAccountEmail(cfg.ServiceAccountName, cfg.ProjectID)
 }
 
 const (

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -18,13 +19,13 @@ func gcpAccountInfo(runner cmdRunner) (projectID, account string, err error) {
 	if err != nil {
 		return "", "", fmt.Errorf("Not logged in to Google Cloud: run `gcloud auth login` and `gcloud config set project <id>`, then retry") //nolint:staticcheck // ST1005: user-facing message
 	}
-	projectID = strings.TrimSpace(projOut)
+	projectID = analyzer.CleanGCloudConfigValue(projOut)
 	if projectID == "" || strings.Contains(projectID, "(unset)") {
 		return "", "", fmt.Errorf("no active Google Cloud project: run `gcloud config set project <id>` and retry") //nolint:staticcheck // ST1005: user-facing message
 	}
 
 	acctOut, _ := runner("gcloud", []string{"config", "get-value", "account"}, nil)
-	account = strings.TrimSpace(acctOut)
+	account = analyzer.CleanGCloudConfigValue(acctOut)
 
 	logger.Debug("gcloud config", "project", projectID, "account", account)
 	return projectID, account, nil

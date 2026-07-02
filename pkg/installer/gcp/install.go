@@ -13,10 +13,7 @@ import (
 // gcpBuildStepCommands returns human-readable step descriptions for the install preview.
 // ConnectionID / ServiceAccountEmail / DTServiceAccount may be placeholders before the install runs.
 func gcpBuildStepCommands(cfg gcpConfig) []string {
-	saEmail := cfg.ServiceAccountEmail
-	if saEmail == "" {
-		saEmail = gcpServiceAccountEmail(cfg.ServiceAccountName, cfg.ProjectID)
-	}
+	saEmail := cfg.serviceAccountEmail()
 	dtPrincipal := cfg.DTServiceAccount
 	if dtPrincipal == "" {
 		dtPrincipal = "<dynatrace-principal>"
@@ -46,7 +43,7 @@ func gcpPrintPreview(cfg gcpConfig) {
 	fmt.Println()
 	fmt.Printf("  Environment:         %s\n", cfg.EnvURL)
 	fmt.Printf("  Project:             %s\n", cfg.ProjectID)
-	fmt.Printf("  Service account:     %s\n", gcpServiceAccountEmail(cfg.ServiceAccountName, cfg.ProjectID))
+	fmt.Printf("  Service account:     %s\n", cfg.serviceAccountEmail())
 	fmt.Printf("  Dynatrace principal: %s\n", cfg.DTServiceAccount)
 	fmt.Printf("  Connection name:     %s\n", cfg.ConnectionName)
 	fmt.Printf("  Configuration name:  %s\n", cfg.ConfigurationName)
@@ -80,7 +77,7 @@ func gcpRunStep(n, total int, runner cmdRunner, sleeper func(time.Duration), nam
 	var out string
 	err := installer.Retry(sleeper, installer.RetryConfig{
 		MaxAttempts: gcpStepMaxAttempts,
-		Delay:       func(int) time.Duration { return gcpStepRetryDelay },
+		Delay:       func(int) time.Duration { return installer.Jitter(gcpStepRetryDelay) },
 		Retryable:   installer.IsNotFoundErr,
 		OnRetry: func(attempt int, _ time.Duration, err error) {
 			logger.Debug("gcloud resource not yet propagated, retrying", "step", n, "attempt", attempt, "error", err)
@@ -127,10 +124,7 @@ func gcpPartialFailureHint(cfg gcpConfig, completedSteps map[int]bool) {
 	if !completedSteps[2] && !completedSteps[3] && !completedSteps[4] {
 		return
 	}
-	saEmail := cfg.ServiceAccountEmail
-	if saEmail == "" {
-		saEmail = gcpServiceAccountEmail(cfg.ServiceAccountName, cfg.ProjectID)
-	}
+	saEmail := cfg.serviceAccountEmail()
 	fmt.Println()
 	display.ColorWarning.Println("  The following resources were already created and may need to be cleaned up")
 	display.ColorWarning.Println("  (or just re-run `dtwiz uninstall gcp`, which removes them all):")
@@ -157,6 +151,27 @@ func InstallGCP(envURL, platformToken string, dryRun bool, startTime time.Time) 
 	return installGCPWithRunner(envURL, platformToken, dryRun, startTime, realRunner, time.Sleep, dtc)
 }
 
+// gcpResumableConnection inspects connections already found under the integration name and
+// decides how install should proceed. A complete connection (bound service account) means
+// there is nothing to do — the caller must uninstall first. Exactly one incomplete connection
+// is a resumable partial install (from a run that failed between step 2 and step 6): its
+// object ID is returned so step 2 reuses it instead of creating a duplicate. More than one
+// incomplete connection is ambiguous and asks for a clean slate, same as a complete one.
+func gcpResumableConnection(conns []connRef) (string, error) {
+	complete, incomplete := splitConnectionsByCompleteness(conns)
+	if len(complete) > 0 {
+		return "", fmt.Errorf("gcp connection '%s' already exists: run `dtwiz uninstall gcp` to remove it first", integrationName)
+	}
+	switch len(incomplete) {
+	case 0:
+		return "", nil
+	case 1:
+		return incomplete[0].objectID, nil
+	default:
+		return "", fmt.Errorf("found %d incomplete GCP connections named %q: run `dtwiz uninstall gcp` then `dtwiz install gcp` for a clean single integration", len(incomplete), integrationName)
+	}
+}
+
 // installGCPWithRunner is the testable core; runner, sleeper, and dtclient are injected.
 func installGCPWithRunner(
 	envURL, platformToken string,
@@ -166,7 +181,7 @@ func installGCPWithRunner(
 	sleeper func(time.Duration),
 	dtc dtclient,
 ) error {
-	projectID, account, err := gcpAccountInfo(runner)
+	projectID, _, err := gcpAccountInfo(runner)
 	if err != nil {
 		return err
 	}
@@ -175,8 +190,9 @@ func installGCPWithRunner(
 	if err != nil {
 		return fmt.Errorf("checking existing connection: %w", err)
 	}
-	if len(existing) > 0 {
-		return fmt.Errorf("gcp connection '%s' already exists: run `dtwiz uninstall gcp` to remove it first", integrationName)
+	resumeConnID, err := gcpResumableConnection(existing)
+	if err != nil {
+		return err
 	}
 
 	dtPrincipal, err := dtc.dtServiceAccount()
@@ -190,9 +206,9 @@ func installGCPWithRunner(
 		EnvURL:             envURL,
 		PlatformToken:      platformToken,
 		ProjectID:          projectID,
-		Account:            account,
 		ServiceAccountName: serviceAccountName,
 		DTServiceAccount:   dtPrincipal,
+		ConnectionID:       resumeConnID,
 	}
 
 	gcpPrintPreview(cfg)
@@ -247,20 +263,26 @@ func runInstallSteps(cfg gcpConfig, runner cmdRunner, sleeper func(time.Duration
 	display.ColorOK.Println("  ✓ APIs enabled")
 
 	fmt.Printf("  Step 2/%d: Create Dynatrace GCP connection...\n", total)
-	connObjectID, err := dtc.createConnection(cfg.ConnectionName)
-	if err != nil {
-		gcpPartialFailureHint(cfg, completed)
-		return fmt.Errorf("step 2: %w%s", err, gcpConnectionConflictHint(err, cfg.ConnectionName))
+	connObjectID := cfg.ConnectionID
+	if connObjectID != "" {
+		logger.Debug("resuming partial install, reusing existing connection", "objectId", connObjectID)
+		display.ColorOK.Printf("  ✓ Connection already exists, resuming: %s\n", connObjectID)
+	} else {
+		connObjectID, err = dtc.createConnection(cfg.ConnectionName)
+		if err != nil {
+			gcpPartialFailureHint(cfg, completed)
+			return fmt.Errorf("step 2: %w%s", err, gcpConnectionConflictHint(err, cfg.ConnectionName))
+		}
+		display.ColorOK.Printf("  ✓ Connection created: %s\n", connObjectID)
 	}
 	completed[2] = true
 	cfg.ConnectionID = connObjectID
-	display.ColorOK.Printf("  ✓ Connection created: %s\n", connObjectID)
 
 	fmt.Printf("  Step 3/%d: Create Google Cloud service account...\n", total)
 	saEmail, err := gcpCreateServiceAccount(runner, cfg.ServiceAccountName, cfg.ProjectID)
 	if err != nil {
 		gcpPartialFailureHint(cfg, completed)
-		return fmt.Errorf("step 3: %w", err)
+		return fmt.Errorf("step 3: %w%s", err, gcpPermissionHint(3, err))
 	}
 	completed[3] = true
 	cfg.ServiceAccountEmail = saEmail
@@ -335,14 +357,20 @@ const (
 	updateConnectionRetryDelay   = 5 * time.Second
 )
 
-// updateConnectionRetryable reports whether err is worth retrying: "Unknown property" means the
-// request shape itself is wrong (e.g. a field name mismatch against the live schema) — that never
-// resolves by waiting, unlike an impersonation binding that just hasn't propagated yet.
+// updateConnectionRetryable reports whether err is worth retrying. The live impersonation
+// check surfaces a not-yet-propagated binding as a constraint violation ("Constraints
+// violated."), which is exactly the condition this retry exists for. "Unknown property"
+// means the request shape itself is wrong (e.g. a field name mismatch against the live
+// schema) — that never resolves by waiting, so it's excluded even though it also shows up
+// as a constraint violation. Anything else (including a permanent Dynatrace-side 403 for
+// a token lacking write scope) is not retried: those don't resolve by waiting either, and
+// blindly matching "permission" would burn the full ~3 minute budget on an error that can
+// never succeed.
 func updateConnectionRetryable(err error) bool {
 	if strings.Contains(err.Error(), "Unknown property") {
 		return false
 	}
-	return strings.Contains(err.Error(), "Constraints violated") || strings.Contains(strings.ToLower(err.Error()), "permission")
+	return strings.Contains(err.Error(), "Constraints violated")
 }
 
 // updateConnectionWithRetry retries DT connection finalization because the impersonation
@@ -357,9 +385,9 @@ func updateConnectionWithRetry(dtc dtclient, connObjectID, connName, serviceAcco
 		// errors and wastes no time when the binding is already usable.
 		Delay: func(attempt int) time.Duration {
 			if attempt == 1 {
-				return updateConnectionInitialDelay
+				return installer.Jitter(updateConnectionInitialDelay)
 			}
-			return updateConnectionRetryDelay
+			return installer.Jitter(updateConnectionRetryDelay)
 		},
 		Retryable: updateConnectionRetryable,
 		OnRetry: func(attempt int, delay time.Duration, err error) {

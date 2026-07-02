@@ -18,9 +18,17 @@ func ConnectionExists(envURL, platformToken string) (bool, error) {
 	return connectionExistsWithClient(dtc)
 }
 
+// connectionExistsWithClient reports whether a fully-configured connection exists — an
+// incomplete one (left by an interrupted install) is not considered "configured" so
+// `dtwiz setup` routes back to install, which resumes it, rather than to update, which
+// would reject it.
 func connectionExistsWithClient(dtc dtclient) (bool, error) {
 	conns, err := dtc.findAllConnections(integrationName)
-	return len(conns) > 0, err
+	if err != nil {
+		return false, err
+	}
+	complete, _ := splitConnectionsByCompleteness(conns)
+	return len(complete) > 0, nil
 }
 
 // gcpGatherServiceAccounts collects the SA emails to clean up: those bound to a
@@ -92,7 +100,7 @@ func uninstallGCPWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc dt
 	fmt.Println()
 
 	totalSteps := uninstallStepCount(monConfigIDs, conns, saEmails, projectID)
-	if err := runUninstallSteps(0, totalSteps, projectID, monConfigIDs, conns, saEmails, runner, dtc); err != nil {
+	if err := runUninstallSteps(totalSteps, projectID, monConfigIDs, conns, saEmails, runner, dtc); err != nil {
 		return err
 	}
 
@@ -111,9 +119,9 @@ func uninstallStepCount(monConfigIDs []string, conns []connRef, saEmails []strin
 	return len(monConfigIDs) + saSteps + len(conns)
 }
 
-// runUninstallSteps executes deletion steps; offset shifts step numbers when called mid-sequence.
-func runUninstallSteps(offset, total int, projectID string, monConfigIDs []string, conns []connRef, saEmails []string, runner cmdRunner, dtc dtclient) error {
-	step := offset
+// runUninstallSteps executes deletion steps in order, printing progress as "Step N/total".
+func runUninstallSteps(total int, projectID string, monConfigIDs []string, conns []connRef, saEmails []string, runner cmdRunner, dtc dtclient) error {
+	step := 0
 	var errs []error
 
 	for _, id := range monConfigIDs {

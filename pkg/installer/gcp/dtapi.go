@@ -75,6 +75,20 @@ type connRef struct {
 	serviceAccountEmail string
 }
 
+// splitConnectionsByCompleteness separates connections that have a bound service account
+// (complete — the DT connection is fully usable) from those that don't (incomplete — left
+// behind by an install that failed between step 2 and step 6).
+func splitConnectionsByCompleteness(conns []connRef) (complete, incomplete []connRef) {
+	for _, c := range conns {
+		if c.serviceAccountEmail != "" {
+			complete = append(complete, c)
+		} else {
+			incomplete = append(incomplete, c)
+		}
+	}
+	return complete, incomplete
+}
+
 type dtclient interface {
 	createConnection(name string) (objectID string, err error)
 	// dtServiceAccount returns the Dynatrace principal granted impersonation rights.

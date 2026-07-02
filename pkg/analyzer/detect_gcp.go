@@ -11,7 +11,7 @@ func detectGCP() *GCPInfo {
 	info := &GCPInfo{}
 
 	ok, out := runCmd("gcloud", "config", "get-value", "project")
-	projectID := cleanGCloudConfigValue(out)
+	projectID := CleanGCloudConfigValue(out)
 	if !ok || projectID == "" || strings.Contains(projectID, "(unset)") {
 		return info
 	}
@@ -19,13 +19,20 @@ func detectGCP() *GCPInfo {
 	info.ProjectID = projectID
 
 	_, acct := runCmd("gcloud", "config", "get-value", "account")
-	info.Account = cleanGCloudConfigValue(acct)
+	info.Account = CleanGCloudConfigValue(acct)
 
 	info.Services, info.ServicesAuthError = detectGCPServices()
 	return info
 }
 
-func cleanGCloudConfigValue(out string) string {
+// CleanGCloudConfigValue extracts the value from `gcloud config get-value ...` output.
+// In some environments (e.g. Cloud Shell with multiple named configurations) gcloud
+// prefixes the value with a "Your active configuration is: [...]" notice line; this
+// returns the last non-empty, non-notice line instead of the raw multi-line output.
+// Exported so pkg/installer/gcp (which already depends on pkg/analyzer, same direction
+// as pkg/installer/kubernetes.go) can parse the identical `gcloud config get-value`
+// output without pkg/analyzer importing pkg/installer, which would create an import cycle.
+func CleanGCloudConfigValue(out string) string {
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	for i := len(lines) - 1; i >= 0; i-- {
 		line := strings.TrimSpace(lines[i])

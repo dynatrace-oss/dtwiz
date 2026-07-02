@@ -21,6 +21,33 @@ func uninstallGcloudRunner(project string) cmdRunner {
 	}
 }
 
+func TestConnectionExistsWithClient(t *testing.T) {
+	tests := []struct {
+		name string
+		dtc  *fakeDTClient
+		want bool
+	}{
+		{"no connection", &fakeDTClient{}, false},
+		{"incomplete connection", &fakeDTClient{findConnObjectID: "partial-conn-id"}, false},
+		{
+			"complete connection",
+			&fakeDTClient{findConnObjectID: "conn-id", findConnSAEmail: "dtwiz-gcp@my-project.iam.gserviceaccount.com"},
+			true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := connectionExistsWithClient(tt.dtc)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("connectionExistsWithClient() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestGCPUninstallHappyPath(t *testing.T) {
 	old := installer.AutoConfirm
 	installer.AutoConfirm = true

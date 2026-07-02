@@ -151,20 +151,27 @@ func azureGetSPObjectID(runner cmdRunner, clientID string, sleeper func(time.Dur
 	var id string
 	err := installer.Retry(sleeper, installer.RetryConfig{
 		MaxAttempts: 5,
-		Delay:       func(int) time.Duration { return 3 * time.Second },
+		Delay:       func(int) time.Duration { return installer.Jitter(3 * time.Second) },
 		Retryable:   azureSPObjectIDRetryable,
 		OnRetry: func(attempt int, _ time.Duration, _ error) {
 			logger.Debug("SP not yet propagated, retrying", "attempt", attempt, "clientID", clientID)
 		},
 	}, func() error {
-		out, err := runner("az", []string{"ad", "sp", "show", "--id", clientID, "-o", "json"}, nil)
-		if err != nil {
-			msg := strings.ToLower(err.Error() + out)
-			if strings.Contains(msg, "403") || strings.Contains(msg, "forbidden") {
+		out, cmdErr := runner("az", []string{"ad", "sp", "show", "--id", clientID, "-o", "json"}, nil)
+		if cmdErr != nil {
+			// Fold stdout into the error text up front so every downstream classification
+			// (the 403 check below, and azureSPObjectIDRetryable via Retry's Retryable
+			// callback and the final check after retries are exhausted) sees the same
+			// combined signal — some az CLI error shapes put the useful detail in stdout
+			// rather than in the Go/stderr-derived error.
+			err := cmdErr
+			if out != "" {
+				err = fmt.Errorf("%w: %s", cmdErr, out)
+			}
+			if msg := strings.ToLower(err.Error()); strings.Contains(msg, "403") || strings.Contains(msg, "forbidden") {
 				return fmt.Errorf("az ad sp show: %w", err)
 			}
-			if strings.Contains(msg, "not found") || strings.Contains(msg, "does not exist") ||
-				strings.Contains(msg, "resource was not found") {
+			if azureSPObjectIDRetryable(err) {
 				return err
 			}
 			return fmt.Errorf("az ad sp show: %w", err)

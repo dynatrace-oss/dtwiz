@@ -1,9 +1,12 @@
 package installer
 
-import "sync"
+import (
+	"errors"
+	"sync"
+)
 
 // RunConcurrently runs every fn in its own goroutine, waits for all of them to
-// finish, and returns the first non-nil error in argument order (if any).
+// finish, and returns every non-nil error joined together (nil if all succeeded).
 // Each fn is expected to capture its result into a variable owned by the
 // caller before returning.
 func RunConcurrently(fns ...func() error) error {
@@ -17,10 +20,5 @@ func RunConcurrently(fns ...func() error) error {
 		}(i, fn)
 	}
 	wg.Wait()
-	for _, err := range errs {
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return errors.Join(errs...)
 }

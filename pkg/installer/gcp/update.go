@@ -28,11 +28,11 @@ func updateGCPWithRunner(
 ) error {
 	var monConfigIDs []string
 	var conns []connRef
-	var projectID, account string
+	var projectID string
 	err := installer.RunConcurrently(
 		func() (err error) { monConfigIDs, err = dtc.findAllMonitoringConfigs(integrationName); return },
 		func() (err error) { conns, err = dtc.findAllConnections(integrationName); return },
-		func() (err error) { projectID, account, err = gcpAccountInfo(runner); return },
+		func() (err error) { projectID, _, err = gcpAccountInfo(runner); return },
 	)
 	if err != nil {
 		return err
@@ -49,7 +49,6 @@ func updateGCPWithRunner(
 		EnvURL:              envURL,
 		PlatformToken:       platformToken,
 		ProjectID:           projectID,
-		Account:             account,
 		ServiceAccountName:  serviceAccountName,
 		ServiceAccountEmail: conn.serviceAccountEmail,
 		ConnectionID:        conn.objectID,
@@ -86,12 +85,7 @@ func updateGCPWithRunner(
 
 // selectUpdatableConnection requires exactly one connection with a bound service account; partial or duplicate connections are rejected.
 func selectUpdatableConnection(conns []connRef) (connRef, error) {
-	var usable []connRef
-	for _, c := range conns {
-		if c.serviceAccountEmail != "" {
-			usable = append(usable, c)
-		}
-	}
+	usable, _ := splitConnectionsByCompleteness(conns)
 	switch {
 	case len(usable) == 0:
 		return connRef{}, fmt.Errorf("no complete GCP connection named %q found: run `dtwiz install gcp` to set one up (or `dtwiz uninstall gcp` then install to repair a partial one)", integrationName)

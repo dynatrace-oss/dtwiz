@@ -112,6 +112,7 @@ type fakeDTClient struct {
 
 	updateCalledWith struct{ objectID, name, serviceAccountEmail string }
 	monCalledWith    struct{ configName, connObjectID, serviceAccountEmail, projectID string }
+	createConnCalled bool
 }
 
 func happyFakeDTClient() *fakeDTClient {
@@ -130,6 +131,7 @@ func happyUninstallFakeDTClient() *fakeDTClient {
 }
 
 func (f *fakeDTClient) createConnection(string) (string, error) {
+	f.createConnCalled = true
 	return f.connObjectID, f.connErr
 }
 func (f *fakeDTClient) dtServiceAccount() (string, error) {

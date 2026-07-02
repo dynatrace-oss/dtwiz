@@ -99,6 +99,7 @@ func TestGCPConnectionAlreadyExistsIsRejected(t *testing.T) {
 		connObjectID:     "a1b2c3d4-0000-0000-0000-000000000001",
 		dtSAEmail:        "dt-monitor@dynatrace-prod.iam.gserviceaccount.com",
 		findConnObjectID: "existing-conn-id",
+		findConnSAEmail:  "dtwiz-gcp@my-project.iam.gserviceaccount.com",
 	}
 	err := captureStdoutErr(func() error {
 		return installGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, happyGcloudRunner(&mutating), noSleep, dtc)
@@ -111,6 +112,59 @@ func TestGCPConnectionAlreadyExistsIsRejected(t *testing.T) {
 	}
 	if mutating != 0 {
 		t.Errorf("expected 0 mutating gcloud calls, got %d", mutating)
+	}
+}
+
+func TestGCPMultipleIncompleteConnectionsAreRejected(t *testing.T) {
+	defer stubExecLookPath(t)()
+
+	mutating := 0
+	dtc := &fakeDTClient{
+		connObjectID: "a1b2c3d4-0000-0000-0000-000000000001",
+		dtSAEmail:    "dt-monitor@dynatrace-prod.iam.gserviceaccount.com",
+		findConnRefs: []connRef{{objectID: "partial-1"}, {objectID: "partial-2"}},
+	}
+	err := captureStdoutErr(func() error {
+		return installGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, happyGcloudRunner(&mutating), noSleep, dtc)
+	})
+	if err == nil {
+		t.Fatal("expected error for ambiguous incomplete connections, got nil")
+	}
+	if !strings.Contains(err.Error(), "2 incomplete GCP connections") {
+		t.Errorf("expected 'incomplete GCP connections' in error, got: %v", err)
+	}
+	if mutating != 0 {
+		t.Errorf("expected 0 mutating gcloud calls, got %d", mutating)
+	}
+}
+
+// TestGCPPartialInstallResumesExistingConnection covers a connection left behind by an
+// install that failed between step 2 (create connection) and step 6 (bind service account):
+// re-running install must reuse that connection object instead of creating a duplicate.
+func TestGCPPartialInstallResumesExistingConnection(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	dtc := happyFakeDTClient()
+	dtc.findConnObjectID = "partial-conn-id"
+	dtc.findConnSAEmail = ""
+
+	err := captureStdoutErr(func() error {
+		return installGCPWithRunner("https://abc.live.dynatrace.com", "dt0s16.fake.token", false, time.Time{}, happyGcloudRunner(nil), noSleep, dtc)
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if dtc.createConnCalled {
+		t.Error("expected createConnection not to be called when resuming a partial connection")
+	}
+	if dtc.updateCalledWith.objectID != "partial-conn-id" {
+		t.Errorf("expected updateConnection to reuse existing connection id, got %q", dtc.updateCalledWith.objectID)
+	}
+	if dtc.monCalledWith.connObjectID != "partial-conn-id" {
+		t.Errorf("expected createMonitoring to reuse existing connection id, got %q", dtc.monCalledWith.connObjectID)
 	}
 }
 
@@ -186,6 +240,39 @@ func TestGCPStep1PermissionDeniedIncludesRoleHint(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "roles/serviceusage.serviceUsageAdmin") {
 		t.Errorf("expected service usage role hint, got: %v", err)
+	}
+}
+
+func TestGCPStep3PermissionDeniedIncludesRoleHint(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	runner := func(name string, args []string, _ []string) (string, error) {
+		switch {
+		case gcloudArgs(args, "config", "get-value", "project"):
+			return "my-project\n", nil
+		case gcloudArgs(args, "config", "get-value", "account"):
+			return "user@example.com\n", nil
+		case gcloudArgs(args, "iam", "service-accounts", "create"):
+			return "", fmt.Errorf("AUTH_PERMISSION_DENIED: Permission denied to create service account")
+		default:
+			return "{}", nil
+		}
+	}
+
+	err := captureStdoutErr(func() error {
+		return installGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep, happyFakeDTClient())
+	})
+	if err == nil {
+		t.Fatal("expected error from step 3, got nil")
+	}
+	if !strings.Contains(err.Error(), "step 3") {
+		t.Errorf("error %q does not mention step 3", err.Error())
+	}
+	if !strings.Contains(err.Error(), "roles/iam.serviceAccountAdmin") {
+		t.Errorf("expected service-account-admin role hint, got: %v", err)
 	}
 }
 
@@ -351,6 +438,37 @@ func TestGCPStep6FailsFastOnUnknownProperty(t *testing.T) {
 	}
 	if updateAttempts != 1 {
 		t.Errorf("expected exactly 1 attempt (no retry on a permanent schema mismatch), got %d", updateAttempts)
+	}
+	if sleepCount != 0 {
+		t.Errorf("expected no sleeps, got %d", sleepCount)
+	}
+}
+
+func TestGCPStep6FailsFastOnPermanentPermissionError(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	updateAttempts := 0
+	sleepCount := 0
+	dtc := &retryingDTClient{
+		fakeDTClient: happyFakeDTClient(),
+		updateFn: func(_, _, _ string) error {
+			updateAttempts++
+			return fmt.Errorf(`update settings object "obj-001": API error (403): insufficient permission to write settings`)
+		},
+	}
+	testSleeper := func(_ time.Duration) { sleepCount++ }
+
+	err := captureStdoutErr(func() error {
+		return installGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, happyGcloudRunner(nil), testSleeper, dtc)
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if updateAttempts != 1 {
+		t.Errorf("expected exactly 1 attempt (no retry on a permanent Dynatrace-side permission error), got %d", updateAttempts)
 	}
 	if sleepCount != 0 {
 		t.Errorf("expected no sleeps, got %d", sleepCount)
