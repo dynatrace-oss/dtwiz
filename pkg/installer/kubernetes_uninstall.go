@@ -9,15 +9,31 @@ import (
 
 var runCmdQuietFunc = RunCommandQuiet
 
+func printK8sUninstallSteps() {
+	display.PrintSteps("This will perform the following steps:",
+		"Delete all DynaKube and EdgeConnect custom resources",
+		"Wait for managed pods to terminate (up to 5 min)",
+		"Helm uninstall dynatrace-operator",
+		"Delete the dynatrace namespace",
+	)
+}
+
+// handleK8sUninstallDryRun prints what the uninstallation would do without executing anything.
+func handleK8sUninstallDryRun() {
+	display.Println("[dry-run] Would remove Dynatrace Operator from Kubernetes")
+	fmt.Println()
+	printK8sUninstallSteps()
+}
+
 // UninstallKubernetes removes the Dynatrace Operator and all managed resources
 // from the cluster following the official uninstallation sequence:
 //  1. Delete all DynaKube and EdgeConnect CRs
 //  2. Wait for managed pods to terminate (up to 5 min)
 //  3. Helm uninstall dynatrace-operator
 //  4. Delete the dynatrace namespace
-func UninstallKubernetes(kubeCtx, distro string) error {
+func UninstallKubernetes(kubeCtx, distro string, dryRun bool) error {
 	if err := refreshWindowsPath(); err != nil {
-		fmt.Printf("  Warning: could not refresh PATH: %v\n", err)
+		display.Println("Warning: could not refresh PATH: %v", err)
 	}
 
 	fmt.Println()
@@ -29,12 +45,12 @@ func UninstallKubernetes(kubeCtx, distro string) error {
 		fmt.Println()
 	}
 
-	display.PrintSteps("This will perform the following steps:",
-		"Delete all DynaKube and EdgeConnect custom resources",
-		"Wait for managed pods to terminate (up to 5 min)",
-		"Helm uninstall dynatrace-operator",
-		"Delete the dynatrace namespace",
-	)
+	if dryRun {
+		handleK8sUninstallDryRun()
+		return nil
+	}
+
+	printK8sUninstallSteps()
 	fmt.Println()
 
 	ok, err := confirmProceed("  Proceed with uninstall?")
@@ -53,7 +69,7 @@ func UninstallKubernetes(kubeCtx, distro string) error {
 	// 1. Delete DynaKube and EdgeConnect CRs.
 	display.Println("Step 1: Deleting DynaKube and EdgeConnect custom resources...")
 	if err := runCmdQuietFunc("kubectl", "delete", "dynakube", "-n", dtNamespace, "--all"); err != nil {
-		fmt.Printf("  Error: %v\n", err)
+		display.Println("Error: %v", err)
 		errs = append(errs, fmt.Errorf("deleting DynaKube resources: %w", err))
 	}
 	// EdgeConnect may not exist — ignore failure. Always attempt regardless of DynaKube result.
@@ -72,7 +88,7 @@ func UninstallKubernetes(kubeCtx, distro string) error {
 	)
 	if waitErr != nil {
 		// Non-fatal: pods may already be gone or label may not match.
-		fmt.Printf("  Warning: %v\n", waitErr)
+		display.Println("Warning: %v", waitErr)
 	} else {
 		display.Println("Managed pods terminated.")
 	}
@@ -80,7 +96,7 @@ func UninstallKubernetes(kubeCtx, distro string) error {
 	// 3. Helm uninstall.
 	display.Println("Step 3: Helm uninstall dynatrace-operator...")
 	if err := runCmdQuietFunc("helm", "uninstall", "dynatrace-operator", "-n", dtNamespace); err != nil {
-		fmt.Printf("  Error: %v\n", err)
+		display.Println("Error: %v", err)
 		errs = append(errs, fmt.Errorf("helm uninstall failed: %w", err))
 	} else {
 		display.Println("Dynatrace Operator uninstalled.")
@@ -89,7 +105,7 @@ func UninstallKubernetes(kubeCtx, distro string) error {
 	// 4. Delete namespace.
 	display.Println("Step 4: Deleting dynatrace namespace...")
 	if err := runCmdQuietFunc("kubectl", "delete", "namespace", dtNamespace); err != nil {
-		fmt.Printf("  Error: %v\n", err)
+		display.Println("Error: %v", err)
 		errs = append(errs, fmt.Errorf("deleting namespace: %w", err))
 	} else {
 		display.Println("Namespace deleted.")
