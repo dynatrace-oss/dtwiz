@@ -52,13 +52,13 @@ type dynakubeTemplateData struct {
 // kubeletPath override (GKE, GKE-Autopilot, RKE).
 func distroTemplateData(base dynakubeTemplateData, distro string) dynakubeTemplateData {
 	switch distro {
-	case "EKS", "AKS", "kubernetes", "minikube", "kind", "k3s", "":
+	case analyzer.DistroEKS, analyzer.DistroAKS, analyzer.DistroKubernetes, analyzer.DistroMinikube, analyzer.DistroKind, analyzer.DistroK3s, "":
 		base.EnableKSPM = true
-	case "OpenShift":
+	case analyzer.DistroOpenShift:
 		base.PrivilegedAnnotation = true
-	case "IKS":
+	case analyzer.DistroIKS:
 		base.KubeletPath = "/var/data/kubelet"
-	case "TKGI":
+	case analyzer.DistroTKGI:
 		base.KubeletPath = "/var/vcap/data/kubelet"
 	}
 	return base
@@ -370,7 +370,7 @@ func InstallKubernetes(envURL, token, clusterName, distro string, dryRun bool) e
 		return err
 	}
 
-	disableCSI := distro == "GKE-Autopilot"
+	disableCSI := distro == analyzer.DistroGKEAutopilot
 	_, helmArgs := helmInstallArgs(disableCSI)
 	helmArgsStr := strings.Join(helmArgs, " ")
 	helmCmd := "helm " + helmArgsStr

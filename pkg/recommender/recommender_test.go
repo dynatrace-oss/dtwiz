@@ -56,7 +56,7 @@ func TestGenerateRecommendations_Kubernetes(t *testing.T) {
 		Orchestrator: analyzer.OrchestratorKubernetes,
 		Kubernetes: &analyzer.KubernetesInfo{
 			Available:    true,
-			Distribution: "GKE",
+			Distribution: analyzer.DistroGKE,
 		},
 	}
 	recs := recommender.GenerateRecommendations(system)
