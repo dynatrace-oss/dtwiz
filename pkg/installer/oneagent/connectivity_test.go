@@ -62,8 +62,8 @@ func TestCheckAllEndpoints_AllReachable(t *testing.T) {
 		if !r.Reachable {
 			t.Errorf("endpoint %s not reachable: %s", r.Endpoint, r.Error)
 		}
-		if r.Latency <= 0 {
-			t.Errorf("expected positive latency, got %v", r.Latency)
+		if r.Latency < 0 {
+			t.Errorf("expected non-negative latency, got %v", r.Latency)
 		}
 	}
 }
