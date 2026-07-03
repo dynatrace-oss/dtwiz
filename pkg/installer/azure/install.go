@@ -140,9 +140,7 @@ func installAzureWithRunner(
 		return fmt.Errorf("checking existing connection: %w", err)
 	}
 	if len(existing) > 0 {
-		// A complete connection already exists: reconcile the monitoring config in place
-		// instead of recreating the SP/federated credential/role, which risks the Entra
-		// "Constraints violated" SP-reuse hazard.
+		// Complete connection found: reconcile monitoring config in place; don't recreate the SP (Entra "Constraints violated" hazard).
 		if _, err := selectUpdatableConnection(existing); err == nil {
 			return updateAzureWithRunner(envURL, platformToken, dryRun, startTime, runner, dtc)
 		}
