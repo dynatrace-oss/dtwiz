@@ -311,7 +311,7 @@ func handleK8sDryRun(apiURL, clusterName, distroDisplay, helmArgsStr string) {
 		"DynaKube", clusterName,
 		"Distribution", distroDisplay,
 	)
-	display.PrintSteps(
+	display.PrintSteps("",
 		"Ensure Helm is installed",
 		"helm "+helmArgsStr,
 		fmt.Sprintf("kubectl apply Secret + DynaKube CRs (cluster: %s)", clusterName),
@@ -342,7 +342,7 @@ func printK8sPreview(clusterName, distroDisplay, apiURL, manifest, helmCmd strin
 	display.PrintSectionDivider()
 	display.PrintlnColored(display.ColorMessage, "Commands to be executed:")
 	display.PrintSectionDivider()
-	display.PrintStepsColored(display.ColorMessage,
+	display.PrintStepsColored(display.ColorMessage, "",
 		helmCmd,
 		"kubectl apply -f dynakube.yaml  # manifest shown above",
 	)

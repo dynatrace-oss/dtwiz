@@ -207,7 +207,7 @@ func TestPrintlnColored_IndentsMessage(t *testing.T) {
 
 func TestPrintSteps_NumbersAndIndents(t *testing.T) {
 	got := testutil.CaptureStdout(t, func() {
-		PrintSteps("Ensure Helm is installed", "kubectl apply -f dynakube.yaml")
+		PrintSteps("", "Ensure Helm is installed", "kubectl apply -f dynakube.yaml")
 	})
 	want := "  Steps:\n    1. Ensure Helm is installed\n    2. kubectl apply -f dynakube.yaml\n"
 	if got != want {
@@ -217,7 +217,7 @@ func TestPrintSteps_NumbersAndIndents(t *testing.T) {
 
 func TestPrintStepsColored_NumbersAndIndents(t *testing.T) {
 	got := testutil.CaptureOutput(t, func() {
-		PrintStepsColored(ColorDefault, "step one", "step two")
+		PrintStepsColored(ColorDefault, "", "step one", "step two")
 	})
 	want := "  Steps:\n    1. step one\n    2. step two\n"
 	if got != want {

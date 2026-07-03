@@ -37,7 +37,7 @@ var uninstallKubernetesCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		k8sInfo := analyzer.DetectKubernetesIdentity()
-		return installer.UninstallKubernetes(k8sInfo.Context, k8sInfo.Distribution)
+		return installer.UninstallKubernetes(k8sInfo.Context, k8sInfo.Distribution, uninstallDryRun)
 	},
 }
 
