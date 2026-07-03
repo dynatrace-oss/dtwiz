@@ -270,6 +270,61 @@ func TestUpdateAzureMonitoringUpdateFails(t *testing.T) {
 	}
 }
 
+func TestUpdateAzureMonitoringCreateFails(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	// Connection exists but no monitoring config; createMonitoring will fail.
+	dtc := &fakeDTClient{
+		findConnObjectID: "conn-obj-001",
+		findConnClientID: "client-id-000",
+		monErr:           fmt.Errorf("extensions API: 403 Forbidden"),
+	}
+
+	err := captureStdoutErr(func() error {
+		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, updateAzRunner(t), dtc)
+	})
+	if err == nil {
+		t.Fatal("expected error from createMonitoring failure, got nil")
+	}
+	if !strings.Contains(err.Error(), "create monitoring configuration") {
+		t.Errorf("expected wrapped create error, got: %v", err)
+	}
+	if len(dtc.updateMonConfigIDs) != 0 {
+		t.Error("updateMonitoring must not be called when there is nothing to update")
+	}
+}
+
+func TestUpdateAzurePreviewShowsCreateStep(t *testing.T) {
+	defer stubExecLookPath(t)()
+
+	// No monitoring config → preview must describe a create, not an update.
+	dtc := &fakeDTClient{
+		findConnObjectID: "conn-obj-001",
+		findConnClientID: "client-id-000",
+	}
+	out := captureStdout(t, func() {
+		_ = updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", true, time.Time{}, updateAzRunner(t), dtc)
+	})
+
+	if !strings.Contains(out, "create Azure monitoring configuration") {
+		t.Errorf("expected create step in preview; got:\n%s", out)
+	}
+	if strings.Contains(out, "update Azure monitoring configuration") {
+		t.Errorf("preview must not show an update step when no config exists; got:\n%s", out)
+	}
+}
+
+func TestUpdateAzureEntryPoint_ClientInitError(t *testing.T) {
+	// An empty envURL causes httpclient.New to return "base URL is required".
+	err := UpdateAzure("", "dt0s16.fake.token", false, time.Time{})
+	if err == nil {
+		t.Fatal("expected error for empty envURL, got nil")
+	}
+}
+
 func isErrInstallCancelled(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "install cancelled") ||
 		err == installer.ErrInstallCancelled
