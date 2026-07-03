@@ -104,7 +104,6 @@ func validateCredentials(envURL, accessTok, platformTok string) (classicTok stri
 		logger.Debug("classic API auth: using explicit access token")
 		return accessTok, nil
 	}
-	fmt.Println("  Using platform token")
 	if err := checkPlatformTokenClassicAccess(envURL, platformTok); err == nil {
 		logger.Debug("classic API auth: platform token accepted")
 		return platformTok, nil
