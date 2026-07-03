@@ -1,13 +1,31 @@
-package installer
+package kubernetes
 
 import (
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/testutil"
 )
+
+func withStdin(t *testing.T, input string, fn func()) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("withStdin: %v", err)
+	}
+	if _, err := w.WriteString(input); err != nil {
+		t.Fatalf("withStdin write: %v", err)
+	}
+	w.Close()
+	orig := os.Stdin
+	os.Stdin = r
+	t.Cleanup(func() { os.Stdin = orig; r.Close() })
+	fn()
+}
 
 func withFakeRunCmdQuiet(t *testing.T, fn func(name string, args ...string) error) {
 	t.Helper()
@@ -31,9 +49,9 @@ func TestUninstallKubernetes_Cancelled(t *testing.T) {
 }
 
 func TestUninstallKubernetes_ShowsClusterInfo(t *testing.T) {
-	orig := AutoConfirm
-	AutoConfirm = true
-	t.Cleanup(func() { AutoConfirm = orig })
+	orig := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = orig })
 
 	withFakeRunCmdQuiet(t, func(_ string, _ ...string) error { return nil })
 
@@ -46,9 +64,9 @@ func TestUninstallKubernetes_ShowsClusterInfo(t *testing.T) {
 }
 
 func TestUninstallKubernetes_NoClusterInfoWhenContextEmpty(t *testing.T) {
-	orig := AutoConfirm
-	AutoConfirm = true
-	t.Cleanup(func() { AutoConfirm = orig })
+	orig := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = orig })
 
 	withFakeRunCmdQuiet(t, func(_ string, _ ...string) error { return nil })
 
@@ -61,9 +79,9 @@ func TestUninstallKubernetes_NoClusterInfoWhenContextEmpty(t *testing.T) {
 }
 
 func TestUninstallKubernetes_Success(t *testing.T) {
-	orig := AutoConfirm
-	AutoConfirm = true
-	t.Cleanup(func() { AutoConfirm = orig })
+	orig := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = orig })
 
 	var calls []string
 	withFakeRunCmdQuiet(t, func(name string, args ...string) error {
@@ -86,9 +104,9 @@ func TestUninstallKubernetes_Success(t *testing.T) {
 }
 
 func TestUninstallKubernetes_EdgeConnectDeletedEvenWhenDynaKubeFails(t *testing.T) {
-	orig := AutoConfirm
-	AutoConfirm = true
-	t.Cleanup(func() { AutoConfirm = orig })
+	orig := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = orig })
 
 	var calls []string
 	withFakeRunCmdQuiet(t, func(name string, args ...string) error {
@@ -113,9 +131,9 @@ func TestUninstallKubernetes_EdgeConnectDeletedEvenWhenDynaKubeFails(t *testing.
 }
 
 func TestUninstallKubernetes_KubectlDeleteFails(t *testing.T) {
-	orig := AutoConfirm
-	AutoConfirm = true
-	t.Cleanup(func() { AutoConfirm = orig })
+	orig := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = orig })
 
 	withFakeRunCmdQuiet(t, func(_ string, args ...string) error {
 		if len(args) > 0 && args[0] == "delete" && args[1] == "dynakube" {
@@ -133,9 +151,9 @@ func TestUninstallKubernetes_KubectlDeleteFails(t *testing.T) {
 }
 
 func TestUninstallKubernetes_HelmUninstallFails(t *testing.T) {
-	orig := AutoConfirm
-	AutoConfirm = true
-	t.Cleanup(func() { AutoConfirm = orig })
+	orig := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = orig })
 
 	withFakeRunCmdQuiet(t, func(name string, _ ...string) error {
 		if name == "helm" {
@@ -156,9 +174,9 @@ func TestUninstallKubernetes_HelmUninstallFails(t *testing.T) {
 }
 
 func TestUninstallKubernetes_HelmFailContinuesToNamespaceDeletion(t *testing.T) {
-	orig := AutoConfirm
-	AutoConfirm = true
-	t.Cleanup(func() { AutoConfirm = orig })
+	orig := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = orig })
 
 	var calls []string
 	withFakeRunCmdQuiet(t, func(name string, args ...string) error {
@@ -191,9 +209,9 @@ func TestUninstallKubernetes_HelmFailContinuesToNamespaceDeletion(t *testing.T) 
 }
 
 func TestUninstallKubernetes_KubectlDeleteFailContinuesToEnd(t *testing.T) {
-	orig := AutoConfirm
-	AutoConfirm = true
-	t.Cleanup(func() { AutoConfirm = orig })
+	orig := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = orig })
 
 	var calls []string
 	withFakeRunCmdQuiet(t, func(name string, args ...string) error {
@@ -288,9 +306,9 @@ func TestUninstallKubernetes_DryRun_NoClusterInfoWhenContextEmpty(t *testing.T) 
 }
 
 func TestUninstallKubernetes_MultipleStepsFail(t *testing.T) {
-	orig := AutoConfirm
-	AutoConfirm = true
-	t.Cleanup(func() { AutoConfirm = orig })
+	orig := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = orig })
 
 	withFakeRunCmdQuiet(t, func(name string, args ...string) error {
 		if name == "helm" {

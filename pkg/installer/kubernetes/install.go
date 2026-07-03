@@ -1,4 +1,4 @@
-package installer
+package kubernetes
 
 import (
 	"bytes"
@@ -13,6 +13,7 @@ import (
 
 	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 )
 
 //go:embed dynakube.tmpl
@@ -118,7 +119,7 @@ func applyDynakube(yaml string) error {
 		return fmt.Errorf("closing DynaKube CR temp file: %w", err)
 	}
 
-	return RunCommandQuiet("kubectl", "apply", "-f", tmpFile.Name())
+	return installer.RunCommandQuiet("kubectl", "apply", "-f", tmpFile.Name())
 }
 
 // podStatus holds the ready state of a single pod.
@@ -240,7 +241,7 @@ func resolveClusterName(name, envURL string) string {
 	if name != "" {
 		return sanitizeK8sName(name)
 	}
-	if resolved := fetchClusterName(sanitizeK8sName(ExtractTenantID(envURL))); resolved != "" {
+	if resolved := fetchClusterName(sanitizeK8sName(installer.ExtractTenantID(envURL))); resolved != "" {
 		return resolved
 	}
 	return "dynakube"
@@ -296,7 +297,7 @@ func ensureHelmOperator(disableCSI bool) error {
 	} else {
 		display.Println("Installing Dynatrace Operator via Helm (helm v%d)...", helmMajor)
 	}
-	if err := RunCommandQuiet("helm", helmArgs...); err != nil {
+	if err := installer.RunCommandQuiet("helm", helmArgs...); err != nil {
 		return fmt.Errorf("Helm operator install failed: %w", err) //nolint:staticcheck // ST1005: keep brand capitalization
 	}
 	display.Println("Helm chart deployed.")
@@ -362,7 +363,7 @@ func InstallKubernetes(envURL, token, clusterName, distro string, dryRun bool) e
 		display.PrintWarning("kubernetes", err)
 	}
 
-	apiURL := APIURL(envURL)
+	apiURL := installer.APIURL(envURL)
 	clusterName = resolveClusterName(clusterName, envURL)
 
 	manifest, err := buildDynakubeManifest(apiURL, token, clusterName, distro)
@@ -382,13 +383,13 @@ func InstallKubernetes(envURL, token, clusterName, distro string, dryRun bool) e
 
 	printK8sPreview(clusterName, distro, apiURL, manifest, helmCmd)
 
-	ok, err := confirmProceed("  Proceed with installation?")
+	ok, err := installer.ConfirmProceed("  Proceed with installation?")
 	if err != nil {
 		return fmt.Errorf("reading confirmation: %w", err)
 	}
 	if !ok {
 		display.Println("Installation cancelled.")
-		return ErrInstallCancelled
+		return installer.ErrInstallCancelled
 	}
 	fmt.Println()
 

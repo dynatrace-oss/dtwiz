@@ -10,6 +10,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/azure"
+	k8s "github.com/dynatrace-oss/dtwiz/pkg/installer/kubernetes"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
@@ -101,7 +102,7 @@ var installKubernetesCmd = &cobra.Command{
 		if k8sInfo.Available {
 			clusterName = k8sInfo.Cluster
 		}
-		if err := installer.InstallKubernetes(envURL, classicTok, clusterName, distro, installDryRun); err != nil {
+		if err := k8s.InstallKubernetes(envURL, classicTok, clusterName, distro, installDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
 				return nil
 			}

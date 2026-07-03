@@ -1,13 +1,14 @@
-package installer
+package kubernetes
 
 import (
 	"errors"
 	"fmt"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 )
 
-var runCmdQuietFunc = RunCommandQuiet
+var runCmdQuietFunc = installer.RunCommandQuiet
 
 func printK8sUninstallSteps() {
 	display.PrintSteps("This will perform the following steps:",
@@ -52,7 +53,7 @@ func UninstallKubernetes(kubeCtx, distro string, dryRun bool) error {
 	printK8sUninstallSteps()
 	fmt.Println()
 
-	ok, err := confirmProceed("  Proceed with uninstall?")
+	ok, err := installer.ConfirmProceed("  Proceed with uninstall?")
 	if err != nil {
 		return fmt.Errorf("reading confirmation: %w", err)
 	}

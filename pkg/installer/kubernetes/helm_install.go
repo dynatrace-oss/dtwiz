@@ -1,4 +1,4 @@
-package installer
+package kubernetes
 
 import (
 	"fmt"
@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 )
 
 // isHelmInstalled returns true when the `helm` binary is on PATH.
@@ -46,7 +48,7 @@ func installHelm() error {
 	}
 	fmt.Println("  Helm not found — installing via get.helm.sh...")
 	fmt.Println("  NOTE: This executes a script from https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3")
-	return RunCommand("bash", "-c",
+	return installer.RunCommand("bash", "-c",
 		"curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash")
 }
 
@@ -62,7 +64,7 @@ func installHelmWindows() error {
 	}
 
 	fmt.Println("  Helm not found — installing via winget...")
-	if err := RunCommand("winget", "install", "--id", "Helm.Helm", "-e", "--source", "winget"); err != nil {
+	if err := installer.RunCommand("winget", "install", "--id", "Helm.Helm", "-e", "--source", "winget"); err != nil {
 		return fmt.Errorf("helm installation via winget failed: %w%s", err, manualInstructions)
 	}
 
