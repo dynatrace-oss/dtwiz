@@ -178,7 +178,7 @@ var setupCmd = &cobra.Command{
 		case recommender.MethodOneAgent:
 			installErr = oneagent.InstallOneAgentV2(c, oneagent.InstallOptions{
 				DryRun:         setupDryRun,
-				MonitoringMode: string(installer.InstallModeFullStack),
+				MonitoringMode: string(oneagent.InstallModeFullStack),
 			})
 		case recommender.MethodKubernetes:
 			k8sClusterName := ""
