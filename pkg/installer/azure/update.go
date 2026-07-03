@@ -10,7 +10,7 @@ import (
 )
 
 // UpdateAzure reconciles only the monitoring configuration; the auth chain (connection, SP, federated credential, role) is never touched.
-// Reached from `dtwiz setup` when a connection already exists; there is no `dtwiz update azure` subcommand.
+// Reached from `dtwiz update azure` directly, or from `dtwiz setup` when a connection already exists.
 func UpdateAzure(envURL, platformToken string, dryRun bool, startTime time.Time) error {
 	dtc, err := newSDKDTClient(envURL, platformToken)
 	if err != nil {

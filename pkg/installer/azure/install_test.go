@@ -248,6 +248,90 @@ func TestAzureConnectionAlreadyExistsIsRejected(t *testing.T) {
 	}
 }
 
+func TestAzureInstallWithMultipleConnectionsIsRejected(t *testing.T) {
+	defer stubExecLookPath(t)()
+
+	azMutatingCalls := 0
+	runner := func(name string, args []string, _ []string) (string, error) {
+		switch {
+		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "show":
+			return stockAccountJSON, nil
+		case name == "az" && len(args) > 1 && args[0] == "ad" && args[1] == "signed-in-user":
+			return `{"id":"user-object-id"}`, nil
+		case name == "az" && len(args) > 0 && args[0] == "rest":
+			return stockRBACJSON, nil
+		default:
+			azMutatingCalls++
+			return "{}", nil
+		}
+	}
+
+	dtc := &fakeDTClient{
+		connObjectID: "a1b2c3d4-0000-0000-0000-000000000001",
+		findConnRefs: []connRef{
+			{objectID: "conn-1", clientID: "client-1"},
+			{objectID: "conn-2", clientID: "client-2"},
+		},
+	}
+	err := captureStdoutErr(func() error {
+		return installAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep, dtc)
+	})
+	if err == nil {
+		t.Fatal("expected error for ambiguous multiple connections, got nil")
+	}
+	if !strings.Contains(err.Error(), "uninstall azure") {
+		t.Errorf("expected guidance to uninstall+install, got: %v", err)
+	}
+	if dtc.createConnCalled {
+		t.Error("install must not create a connection when duplicates already exist")
+	}
+	if azMutatingCalls != 0 {
+		t.Errorf("expected 0 az mutating calls, got %d", azMutatingCalls)
+	}
+}
+
+func TestAzureInstallWithCompleteConnectionDelegatesToUpdate(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	azMutatingCalls := 0
+	runner := func(name string, args []string, _ []string) (string, error) {
+		switch {
+		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "show":
+			return stockAccountJSON, nil
+		case name == "az" && len(args) > 1 && args[0] == "ad" && args[1] == "signed-in-user":
+			return `{"id":"user-object-id"}`, nil
+		case name == "az" && len(args) > 0 && args[0] == "rest":
+			return stockRBACJSON, nil
+		default:
+			azMutatingCalls++
+			return "{}", nil
+		}
+	}
+
+	dtc := happyUninstallFakeDTClient() // complete connection + one monitoring config
+	err := captureStdoutErr(func() error {
+		return installAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep, dtc)
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if dtc.createConnCalled {
+		t.Error("install must not recreate the connection when a complete one already exists")
+	}
+	if azMutatingCalls != 0 {
+		t.Errorf("expected 0 az mutating calls (no SP/federated-credential/role recreation), got %d", azMutatingCalls)
+	}
+	if got := dtc.updateMonConfigIDs; len(got) != 1 || got[0] != "mon-config-001" {
+		t.Errorf("expected the existing monitoring config to be reconciled in place, got %v", got)
+	}
+	if dtc.createMonCalled {
+		t.Error("createMonitoring must not be called when a config already exists")
+	}
+}
+
 // ── failure injection tests ───────────────────────────────────────────────────
 
 func TestAzureStep1FailsNoAzMutations(t *testing.T) {

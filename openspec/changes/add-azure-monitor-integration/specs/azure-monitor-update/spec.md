@@ -2,9 +2,15 @@
 
 ## ADDED Requirements
 
-### Requirement: Update is an in-place monitoring-config reconcile reached through setup
+### Requirement: Update is an in-place monitoring-config reconcile
 
-The system SHALL provide an `UpdateAzure` entry point that refreshes an existing integration in place by reconciling **only** the `da-azure` monitoring configuration to the latest schema-derived defaults. The authentication chain SHALL NOT be modified by an update: the Dynatrace connection, the Azure Service Principal, the federated credential, and the Monitoring Reader role assignment. There SHALL intentionally be no `dtwiz update azure` subcommand; the update path SHALL be reached from `dtwiz setup` when an Azure connection already exists.
+The system SHALL provide an `UpdateAzure` entry point that refreshes an existing integration in place by reconciling **only** the `da-azure` monitoring configuration to the latest schema-derived defaults. The authentication chain SHALL NOT be modified by an update: the Dynatrace connection, the Azure Service Principal, the federated credential, and the Monitoring Reader role assignment. The update path SHALL be reachable as its own `dtwiz update azure` subcommand, from `dtwiz setup` when an Azure connection already exists, and from `dtwiz install azure` when it finds a complete existing connection.
+
+#### Scenario: Direct subcommand invocation
+
+- **GIVEN** an Azure connection named `dtwiz-azure` already exists
+- **WHEN** the user runs `dtwiz update azure`
+- **THEN** it runs the same in-place reconcile as the other entry points
 
 #### Scenario: Setup routes to update when configured
 
@@ -18,6 +24,12 @@ The system SHALL provide an `UpdateAzure` entry point that refreshes an existing
 - **GIVEN** no Azure connection exists
 - **WHEN** the user selects Azure in `dtwiz setup`
 - **THEN** the setup flow calls the full installer
+
+#### Scenario: Install delegates to update when configured
+
+- **GIVEN** a complete Azure connection named `dtwiz-azure` already exists
+- **WHEN** the user runs `dtwiz install azure`
+- **THEN** it runs the same in-place reconcile instead of aborting
 
 #### Scenario: Authentication chain is never touched
 

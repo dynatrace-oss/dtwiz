@@ -16,6 +16,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/azure"
 	k8s "github.com/dynatrace-oss/dtwiz/pkg/installer/kubernetes"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/dynatrace-oss/dtwiz/pkg/recommender"
 )
 
@@ -73,7 +74,9 @@ var setupCmd = &cobra.Command{
 		// Pre-check Azure status so we can badge the Azure entry in the list.
 		azureConfigured := false
 		if envURL, _, platformTok, credErr := getDtEnvironment(); credErr == nil {
-			if exists, _ := azure.ConnectionExists(envURL, platformTok); exists {
+			if exists, err := azure.ConnectionExists(envURL, platformTok); err != nil {
+				logger.Debug("azure connection check failed, badging as not configured", "err", err)
+			} else if exists {
 				azureConfigured = true
 			}
 		}

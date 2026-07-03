@@ -64,13 +64,20 @@ The system SHALL make a best-effort check that the signed-in principal can creat
 - **WHEN** the check runs
 - **THEN** it prints a warning that Owner or User Access Administrator may be required and continues
 
-### Requirement: Abort when an integration already exists
+### Requirement: Delegate to update when a complete integration already exists
 
-The system SHALL check for an existing Dynatrace Azure connection named `dtwiz-azure` before installing, and SHALL abort with guidance to run `dtwiz uninstall azure` first if one is found. (The `dtwiz setup` flow routes to update instead; see `azure-monitor-update`.)
+The system SHALL check for an existing Dynatrace Azure connection named `dtwiz-azure` before installing. When exactly one such connection is found and it already carries its bound application ID, the system SHALL delegate to the in-place reconcile flow (see `azure-monitor-update`) instead of installing, leaving the authentication chain untouched. When the only matches are incomplete (missing their application ID) or there is more than one, the system SHALL abort with guidance to run `dtwiz uninstall azure` first, since that state cannot be safely auto-repaired.
 
-#### Scenario: Existing connection blocks install
+#### Scenario: Existing complete connection delegates to update
 
-- **GIVEN** a connection named `dtwiz-azure` already exists in the environment
+- **GIVEN** a complete connection named `dtwiz-azure` already exists in the environment
+- **WHEN** `dtwiz install azure` runs
+- **THEN** it reconciles the `da-azure` monitoring configuration in place instead of installing
+- **AND** it does not recreate the connection, Service Principal, federated credential, or role assignment
+
+#### Scenario: Existing incomplete or duplicated connection blocks install
+
+- **GIVEN** a connection named `dtwiz-azure` already exists but is missing its bound application ID, or more than one such connection exists
 - **WHEN** `dtwiz install azure` runs
 - **THEN** it aborts without mutating anything and tells the user to uninstall first
 

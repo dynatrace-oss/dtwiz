@@ -85,10 +85,11 @@ func (noopDTClient) deleteMonitoring(string) error                     { return 
 
 // fakeDTClient records calls for assertion.
 type fakeDTClient struct {
-	connObjectID string
-	connErr      error
-	updateErr    error
-	monErr       error
+	connObjectID     string
+	connErr          error
+	createConnCalled bool
+	updateErr        error
+	monErr           error
 
 	// uninstall
 	findConnObjectID string
@@ -124,6 +125,7 @@ func happyUninstallFakeDTClient() *fakeDTClient {
 }
 
 func (f *fakeDTClient) createConnection(string) (string, error) {
+	f.createConnCalled = true
 	return f.connObjectID, f.connErr
 }
 func (f *fakeDTClient) updateConnection(objectID, name, tenantID, clientID string) error {

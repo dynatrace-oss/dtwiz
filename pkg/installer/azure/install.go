@@ -140,7 +140,13 @@ func installAzureWithRunner(
 		return fmt.Errorf("checking existing connection: %w", err)
 	}
 	if len(existing) > 0 {
-		return fmt.Errorf("azure connection '%s' already exists: run `dtwiz uninstall azure` to remove it first", integrationName)
+		// A complete connection already exists: reconcile the monitoring config in place
+		// instead of recreating the SP/federated credential/role, which risks the Entra
+		// "Constraints violated" SP-reuse hazard.
+		if _, err := selectUpdatableConnection(existing); err == nil {
+			return updateAzureWithRunner(envURL, platformToken, dryRun, startTime, runner, dtc)
+		}
+		return fmt.Errorf("azure connection '%s' already exists but is incomplete or duplicated: run `dtwiz uninstall azure` then `dtwiz install azure` for a clean setup", integrationName)
 	}
 
 	cfg := azureConfig{

@@ -8,6 +8,7 @@ import (
 
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/azure"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -63,11 +64,34 @@ var updateOtelCmd = &cobra.Command{
 	},
 }
 
+var updateAzureCmd = &cobra.Command{
+	Use:   "azure",
+	Short: "Reconcile the Dynatrace Azure Monitor integration's monitoring configuration",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		envURL, _, platformTok, err := getDtEnvironment()
+		if err != nil {
+			return err
+		}
+		if _, err := validateCredentials(envURL, "", platformTok); err != nil {
+			return err
+		}
+		if err := azure.UpdateAzure(envURL, platformTok, updateDryRun, StartTime); err != nil {
+			if errors.Is(err, installer.ErrInstallCancelled) {
+				return nil
+			}
+			return err
+		}
+		return nil
+	},
+}
+
 func init() {
 	updateCmd.PersistentFlags().BoolVar(&updateDryRun, "dry-run", false, "show what would be done without executing")
 	updateCmd.PersistentFlags().BoolVarP(&updateAutoConfirm, "yes", "y", false, "skip confirmation prompts")
 	updateOtelCmd.Flags().StringVar(&updateOtelConfigPath, "config", "", "path to the existing OTel Collector config file to patch (prompts with running collector list when omitted)")
 	updateCmd.AddCommand(updateOtelCmd)
+	updateCmd.AddCommand(updateAzureCmd)
 
 	// PersistentPreRun doesn't run for --help, so resolve the experimental flag here
 	// to conditionally show the otel subcommand in help output.
