@@ -366,7 +366,7 @@ func InstallAWS(c *client.PlatformClient, envURL, token string, dryRun bool, sta
 	// Monitoring config ID is resolved after confirmation; show placeholder in preview.
 	cfg := awsStackConfig{
 		StackName:          stackName,
-		DynatraceURL:       strings.TrimRight(toAppsURL(dynatraceURL), "/"),
+		DynatraceURL:       strings.TrimRight(AppsURL(dynatraceURL), "/"),
 		SettingsToken:      settingsToken,
 		IngestToken:        ingestToken,
 		MonitoringConfigID: "(auto-assigned)",

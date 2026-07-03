@@ -11,6 +11,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/azure"
 	k8s "github.com/dynatrace-oss/dtwiz/pkg/installer/kubernetes"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -96,7 +97,7 @@ var uninstallOtelCmd = &cobra.Command{
 	Short: "Kill running OTel Collector processes and remove installation files",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := installer.UninstallOtelCollector(uninstallDryRun); err != nil {
+		if err := otel.UninstallOtelCollector(uninstallDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
 				return nil
 			}

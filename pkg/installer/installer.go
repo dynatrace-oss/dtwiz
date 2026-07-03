@@ -24,7 +24,7 @@ var ErrInstallCancelled = errors.New("installation cancelled by user")
 var AutoConfirm bool
 
 // ConfirmProceed is the exported variant of confirmProceed for use by
-// sub-packages (e.g. pkg/installer/oneagent).
+// sub-packages (e.g. pkg/installer/oneagent, pkg/installer/otel).
 func ConfirmProceed(prompt string) (bool, error) { return confirmProceed(prompt) }
 
 // confirmProceed prints the prompt and returns true if the user confirms.
@@ -42,10 +42,10 @@ func confirmProceed(prompt string) (bool, error) {
 	return answer == "" || answer == "y" || answer == "yes", nil
 }
 
-// killAndWaitProcess kills a process and waits for it to fully exit.
+// KillAndWaitProcess kills a process and waits for it to fully exit.
 // proc.Wait() only works for child processes; for external processes on Windows
 // we poll with tasklist until the PID is gone so file locks are released.
-func killAndWaitProcess(proc *os.Process) error {
+func KillAndWaitProcess(proc *os.Process) error {
 	if err := proc.Kill(); err != nil {
 		if runtime.GOOS == "windows" {
 			// Fallback: taskkill handles console/orphaned processes
