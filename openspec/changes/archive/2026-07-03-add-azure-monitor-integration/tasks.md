@@ -50,12 +50,14 @@
 - [x] 7.2 Parallel discovery (monitoring configs + connections) + `azureAccountInfo` (no role-assignment RBAC advisory); `selectUpdatableConnection` requires exactly one complete connection, else abort with install/uninstall guidance
 - [x] 7.3 `azureUpdatePrintPreview`: env/tenant/subscription/connection (unchanged)/configuration + per-config update (or single create) steps; `--dry-run` stop; `ConfirmProceed`
 - [x] 7.4 `reconcileMonitoring`: `updateMonitoring` each existing config in place via shared `buildMonitoringConfig`, or `createMonitoring` when none exists; auth chain untouched; ingest watch on success
+- [x] 7.5 `installAzureWithRunner`: when `findAllConnections` returns a complete connection (bound application ID), delegate straight to `updateAzureWithRunner` instead of aborting; incomplete/duplicated connections still abort with uninstall/reinstall guidance
 
 ## 8. CLI Wiring
 
 - [x] 8.1 Add `installAzureCmd` (`dtwiz install azure`, `cobra.NoArgs`) in `cmd/install.go` → `azure.InstallAzure`
 - [x] 8.2 Add `uninstallAzureCmd` (`dtwiz uninstall azure`, `cobra.NoArgs`) in `cmd/uninstall.go` → `azure.UninstallAzure`
 - [x] 8.3 In `cmd/setup.go`: pre-check `azure.ConnectionExists`, badge the Azure entry when configured, route to `UpdateAzure` vs `InstallAzure`, and suppress the generic post-install watch for Azure (it runs its own)
+- [x] 8.4 Add `updateAzureCmd` (`dtwiz update azure`, `cobra.NoArgs`) in `cmd/update.go` → `azure.UpdateAzure`, matching the `install`/`update`/`uninstall` trio otel already has (not hidden/experimental, unlike `update otel`)
 
 ## 9. Tests
 
@@ -63,7 +65,7 @@
 - [x] 9.2 `dtapi_test.go`: schema enum extraction, `*_essential` filtering, `cmpSemver`, create/update/find/delete via fake SDK responses
 - [x] 9.3 `helpers_test.go`: `azureIssuerURL` variants, fed-cred JSON, SP-object-ID retries/403, ownership fingerprint, idempotent deletes
 - [x] 9.4 `preflight_test.go`: CLI-missing, not-logged-in, RBAC advisory warn-but-continue
-- [x] 9.5 `install_test.go`: full 7-step workflow with injected runner/sleeper/dtclient, existence-check abort, dry-run, step-3 replacement, step-6 propagation retries, partial-failure hint
+- [x] 9.5 `install_test.go`: full 7-step workflow with injected runner/sleeper/dtclient, existence-check delegates to update (complete connection) or aborts (incomplete/duplicated), dry-run, step-3 replacement, step-6 propagation retries, partial-failure hint
 - [x] 9.6 `uninstall_test.go`: discovery, ownership-verified gathering, nothing-to-do, best-effort continue-on-failure, step count
 - [x] 9.7 `update_test.go`: parallel discovery+preflight, in-place reconcile of existing config(s), create-when-missing, duplicate-config reconcile, and `selectUpdatableConnection` abort cases (no complete / multiple connections)
 - [x] 9.8 `make test` and `make lint`: all pass

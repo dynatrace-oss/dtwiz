@@ -14,7 +14,7 @@ dtwiz analyze [--json]       # detect platform, containers, K8s, agents, cloud, 
 dtwiz recommend [--json]     # ranked ingestion recommendations
 dtwiz status                 # connection status + system analysis
 dtwiz install <method>       # oneagent | kubernetes | docker | otel | otel-python | aws | azure | gcp
-dtwiz update <method>        # otel (patch existing OTel Collector config)
+dtwiz update <method>        # otel (patch existing OTel Collector config) | azure (reconcile monitoring config)
 dtwiz uninstall <method>     # oneagent | kubernetes | otel | aws | self
 ```
 

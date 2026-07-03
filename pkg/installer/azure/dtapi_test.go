@@ -798,17 +798,25 @@ func TestSDKDeleteMonitoring_HappyPath(t *testing.T) {
 	}
 }
 
-func TestSDKDeleteMonitoring_ServerError(t *testing.T) {
+func TestSDKDeleteMonitoring_NotFound(t *testing.T) {
+	// 404 means the config is already gone — deleteMonitoring must treat it as success.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer srv.Close()
 
-	err := newTestSDKClient(t, srv.URL).deleteMonitoring("mon-001")
-	if err == nil {
-		t.Fatal("expected error for 404, got nil")
+	if err := newTestSDKClient(t, srv.URL).deleteMonitoring("mon-001"); err != nil {
+		t.Errorf("404 must be treated as already-deleted (success), got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "not found") {
-		t.Errorf("error %q does not mention not found", err.Error())
+}
+
+func TestSDKDeleteMonitoring_ServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	if err := newTestSDKClient(t, srv.URL).deleteMonitoring("mon-001"); err == nil {
+		t.Fatal("expected error for 500, got nil")
 	}
 }

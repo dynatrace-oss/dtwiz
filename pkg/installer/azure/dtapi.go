@@ -28,6 +28,8 @@ const (
 
 	azureLocationEnumKey   = "dynatrace.datasource.azure:location"
 	azureFeatureSetEnumKey = "FeatureSetsType"
+
+	listPageSize = 50
 )
 
 type connRef struct {
@@ -106,7 +108,7 @@ func (d *sdkDTClient) updateConnection(objectID, name, tenantID, clientID string
 }
 
 func (d *sdkDTClient) findAllConnections(name string) ([]connRef, error) {
-	list, err := d.settings.ListObjects(context.Background(), connectionSchemaID, "environment", 0)
+	list, err := d.settings.ListObjects(context.Background(), connectionSchemaID, "environment", listPageSize)
 	if err != nil {
 		return nil, fmt.Errorf("find connections: %w", err)
 	}
@@ -223,7 +225,7 @@ func (d *sdkDTClient) updateMonitoring(configID, configName, connectionObjectID,
 }
 
 func (d *sdkDTClient) findAllMonitoringConfigs(name string) ([]string, error) {
-	list, err := d.extension.ListMonitoringConfigurations(context.Background(), extensionName, "", 0)
+	list, err := d.extension.ListMonitoringConfigurations(context.Background(), extensionName, "", listPageSize)
 	if err != nil {
 		return nil, fmt.Errorf("find monitoring configs: %w", err)
 	}
@@ -246,11 +248,16 @@ func (d *sdkDTClient) findAllMonitoringConfigs(name string) ([]string, error) {
 
 func (d *sdkDTClient) deleteMonitoring(configID string) error {
 	err := d.extension.DeleteMonitoringConfiguration(context.Background(), extensionName, configID)
-	if errors.Is(err, httpclient.ErrNotFound) {
-		logger.Debug("monitoring config already gone", "configId", configID)
-		return nil
+	if err != nil {
+		// SDK drops *APIError for 404 (no %w), so errors.Is/As won't work.
+		msg := strings.ToLower(err.Error())
+		if strings.Contains(msg, "not found") || strings.Contains(msg, "404") {
+			logger.Debug("monitoring config already gone", "configId", configID)
+			return nil
+		}
+		return err
 	}
-	return err
+	return nil
 }
 
 type extensionSchema struct {

@@ -8,16 +8,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
-func azurePreflightChecks(runner cmdRunner, envURL, platformToken string) (subscriptionID, tenantID string, err error) {
-	subscriptionID, tenantID, err = azureAccountInfo(runner)
-	if err != nil {
-		return "", "", err
-	}
-	azureCheckRBAC(runner, "/subscriptions/"+subscriptionID)
-	return subscriptionID, tenantID, nil
-}
-
-// azureAccountInfo skips the RBAC advisory check; used by callers that never create role assignments (e.g. in-place update).
+// azureAccountInfo returns the active Azure subscription and tenant IDs from `az account show`.
 func azureAccountInfo(runner cmdRunner) (subscriptionID, tenantID string, err error) {
 	if _, err = execLookPath("az"); err != nil {
 		return "", "", fmt.Errorf("Azure CLI (az) not found: install it from https://docs.microsoft.com/cli/azure/install-azure-cli") //nolint:staticcheck // ST1005: "Azure CLI" is a product name

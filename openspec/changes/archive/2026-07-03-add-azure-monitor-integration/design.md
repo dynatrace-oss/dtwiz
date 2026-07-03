@@ -23,7 +23,6 @@ All Azure mutations go through the `az` CLI (the standard tool on operator machi
 
 **Non-Goals:**
 
-- A standalone `dtwiz update azure` subcommand (update is reached through `dtwiz setup`).
 - Multi-subscription or management-group scope (always subscription scope).
 - Configuring non-default feature sets or location subsets (zero-config: all locations, all `*_essential` feature sets).
 - Integration tests against a real Azure tenant.
@@ -79,6 +78,8 @@ This is the safest update strategy with respect to partial failure:
 - **Blast radius is a single atomic write.** The update call either succeeds (new config live) or fails (prior config still live); there is no intermediate broken state, and the auth chain is never in scope.
 
 The trade-off is that an update does **not** self-heal broken auth (for example, a manually deleted federated credential or revoked role). That is rare and user-caused; the explicit recovery path is `dtwiz uninstall azure` followed by `dtwiz install azure`. The update therefore requires exactly one complete connection (one that already carries its bound application ID) and aborts with install or uninstall guidance when zero or many are found.
+
+Because this reconcile logic is safe to run any time a complete connection exists, it is exposed three ways rather than only through `dtwiz setup`: as its own `dtwiz update azure` subcommand (matching the `install`/`update`/`uninstall` trio otel already has), and from `dtwiz install azure` itself. Re-running `install azure` against an already-configured environment now delegates to the same reconcile instead of throwing an error — otel's `install` behaves the same way when re-run (it doesn't just terminate and tell the user to uninstall first), and there was no reason to keep Azure's install less forgiving once the update path existed as a real entry point. Install still refuses to touch the SP/federated credential/role itself: it only delegates when it finds exactly one *complete* connection; an incomplete or duplicated connection still aborts with the uninstall/reinstall guidance, since that state can't be safely auto-repaired.
 
 ### 10. Issuer URL derived from the environment URL
 

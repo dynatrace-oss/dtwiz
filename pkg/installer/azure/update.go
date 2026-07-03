@@ -10,7 +10,7 @@ import (
 )
 
 // UpdateAzure reconciles only the monitoring configuration; the auth chain (connection, SP, federated credential, role) is never touched.
-// Reached from `dtwiz setup` when a connection already exists; there is no `dtwiz update azure` subcommand.
+// Reached from `dtwiz update azure` directly, or from `dtwiz setup` when a connection already exists.
 func UpdateAzure(envURL, platformToken string, dryRun bool, startTime time.Time) error {
 	dtc, err := newSDKDTClient(envURL, platformToken)
 	if err != nil {
@@ -162,7 +162,7 @@ func azureUpdatePrintPreview(cfg azureConfig, monConfigIDs []string) {
 	fmt.Printf("  Environment:        %s\n", cfg.EnvURL)
 	fmt.Printf("  Tenant ID:          %s\n", cfg.TenantID)
 	fmt.Printf("  Subscription:       %s\n", cfg.SubscriptionID)
-	fmt.Printf("  Connection name:    %s (unchanged)\n", cfg.ConnectionName)
+	fmt.Printf("  Connection name:    %s (already exists, unchanged)\n", cfg.ConnectionName)
 	fmt.Printf("  Configuration name: %s\n", cfg.ConfigurationName)
 	fmt.Println()
 	display.ColorMessage.Println("  Authentication (connection, Service Principal, federated credential, role) is left unchanged.")
