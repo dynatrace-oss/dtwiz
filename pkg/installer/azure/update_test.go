@@ -136,7 +136,7 @@ func TestUpdateAzurePreviewLeavesAuthUnchanged(t *testing.T) {
 	if !strings.Contains(out, "update Azure monitoring configuration") {
 		t.Errorf("expected an update step in preview; got:\n%s", out)
 	}
-	if !strings.Contains(out, "(unchanged)") {
+	if !strings.Contains(out, "(already exists, unchanged)") {
 		t.Errorf("expected preview to mark the connection as unchanged; got:\n%s", out)
 	}
 }

@@ -142,6 +142,7 @@ func installAzureWithRunner(
 	if len(existing) > 0 {
 		// Complete connection found: reconcile monitoring config in place; don't recreate the SP (Entra "Constraints violated" hazard).
 		if _, err := selectUpdatableConnection(existing); err == nil {
+			fmt.Println("\n  Note: prerequisites already exist — running update instead of a fresh install.")
 			return updateAzureWithRunner(envURL, platformToken, dryRun, startTime, runner, dtc)
 		}
 		return fmt.Errorf("azure connection '%s' already exists but is incomplete or duplicated: run `dtwiz uninstall azure` then `dtwiz install azure` for a clean setup", integrationName)
