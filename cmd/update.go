@@ -73,7 +73,7 @@ var updateAzureCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if _, err := validateCredentials(envURL, "", platformTok); err != nil {
+		if err := checkPlatformToken(envURL, platformTok); err != nil {
 			return err
 		}
 		if err := azure.UpdateAzure(envURL, platformTok, updateDryRun, StartTime); err != nil {

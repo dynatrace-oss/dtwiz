@@ -130,7 +130,7 @@ func installAzureWithRunner(
 	sleeper func(time.Duration),
 	dtc dtclient,
 ) error {
-	subscriptionID, tenantID, err := azurePreflightChecks(runner, envURL, platformToken)
+	subscriptionID, tenantID, err := azureAccountInfo(runner)
 	if err != nil {
 		return err
 	}
@@ -146,6 +146,9 @@ func installAzureWithRunner(
 		}
 		return fmt.Errorf("azure connection '%s' already exists but is incomplete or duplicated: run `dtwiz uninstall azure` then `dtwiz install azure` for a clean setup", integrationName)
 	}
+
+	// Only check RBAC when actually installing — role assignment creation requires it; update does not.
+	azureCheckRBAC(runner, "/subscriptions/"+subscriptionID)
 
 	cfg := azureConfig{
 		ConnectionName:    integrationName,
