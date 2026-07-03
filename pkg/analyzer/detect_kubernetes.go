@@ -12,6 +12,24 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 )
 
+// K8s distribution constants used across detection, installation, and recommendation.
+const (
+	DistroGKE             = "GKE"
+	DistroEKS             = "EKS"
+	DistroAKS             = "AKS"
+	DistroIKS             = "IKS"
+	DistroOpenShift       = "OpenShift"
+	DistroK3s             = "k3s"
+	DistroRKE             = "RKE"
+	DistroKubernetes      = "kubernetes"
+	DistroGKEAutopilot    = "GKE-Autopilot"
+	DistroEKSBottlerocket = "EKS-Bottlerocket"
+	DistroMinikube        = "minikube"
+	DistroKind            = "kind"
+	DistroTKGI            = "TKGI"
+	DistroNone            = "None was detected"
+)
+
 // fetchKubeContext returns the current kubectl context name, or empty string on failure.
 func fetchKubeContext() string {
 	_, ctx := runCmd("kubectl", "config", "current-context")
@@ -30,10 +48,15 @@ func fetchKubeServerURL() string {
 	return serverURL
 }
 
-// resolveDistro identifies the K8s distribution by running heuristic detection
-// followed by sub-variant probing.
-func resolveDistro(kubeCtx, cluster, serverURL, serverVersion string) string {
-	return ProbeK8sSubVariant(DetectK8sDistribution(kubeCtx, cluster, serverURL, serverVersion))
+// fetchKubeIdentity fetches context, cluster, and server URL concurrently.
+func fetchKubeIdentity() (kubeCtx, cluster, serverURL string) {
+	var wg sync.WaitGroup
+	wg.Add(3)
+	go func() { defer wg.Done(); kubeCtx = fetchKubeContext() }()
+	go func() { defer wg.Done(); cluster = FetchKubeCluster() }()
+	go func() { defer wg.Done(); serverURL = fetchKubeServerURL() }()
+	wg.Wait()
+	return
 }
 
 // DetectKubernetes checks for a reachable Kubernetes cluster.
@@ -42,21 +65,18 @@ func DetectKubernetes() *KubernetesInfo {
 
 	ok, _ := runCmd("kubectl", "cluster-info", "--request-timeout=5s")
 	if !ok {
-		info.Distribution = "None was detected"
+		info.Distribution = DistroNone
 		return info
 	}
 	info.Available = true
 
-	var (
-		ctx, cluster, serverURL, ver, nodesOut string
-		wg                                     sync.WaitGroup
-	)
-	wg.Add(5)
-	go func() { defer wg.Done(); ctx = fetchKubeContext() }()
-	go func() { defer wg.Done(); cluster = FetchKubeCluster() }()
-	go func() { defer wg.Done(); serverURL = fetchKubeServerURL() }()
+	var ver, nodesOut string
+	var wg sync.WaitGroup
+	wg.Add(2)
 	go func() { defer wg.Done(); _, ver = runCmd("kubectl", "version", "-o", "json") }()
 	go func() { defer wg.Done(); _, nodesOut = runCmd("kubectl", "get", "nodes", "--no-headers", "-o", "name") }()
+
+	ctx, cluster, serverURL := fetchKubeIdentity()
 	wg.Wait()
 
 	info.Context = ctx
@@ -66,7 +86,7 @@ func DetectKubernetes() *KubernetesInfo {
 		info.NodeCount = len(strings.Split(strings.TrimSpace(nodesOut), "\n"))
 	}
 
-	info.Distribution = resolveDistro(ctx, cluster, serverURL, info.ServerVersion)
+	info.Distribution = ProbeK8sSubVariant(DetectK8sDistribution(ctx, cluster, serverURL, info.ServerVersion))
 	return info
 }
 
@@ -75,16 +95,9 @@ func DetectKubernetes() *KubernetesInfo {
 // that require a live cluster connection — suitable for use before user confirmation.
 func DetectKubernetesIdentity() *KubernetesInfo {
 	info := &KubernetesInfo{}
-
-	var cluster, serverURL string
-	var wg sync.WaitGroup
-	wg.Add(3)
-	go func() { defer wg.Done(); info.Context = fetchKubeContext() }()
-	go func() { defer wg.Done(); cluster = FetchKubeCluster() }()
-	go func() { defer wg.Done(); serverURL = fetchKubeServerURL() }()
-	wg.Wait()
-
-	info.Distribution = resolveDistro(info.Context, cluster, serverURL, "")
+	ctx, cluster, serverURL := fetchKubeIdentity()
+	info.Context = ctx
+	info.Distribution = ProbeK8sSubVariant(DetectK8sDistribution(ctx, cluster, serverURL, ""))
 	return info
 }
 
@@ -112,36 +125,36 @@ func DetectK8sDistribution(kubeCtx, cluster, serverURL, serverVersion string) st
 	// GKE
 	if strings.HasPrefix(ctxLower, "gke_") || strings.Contains(clusterLower, "gke") ||
 		strings.Contains(serverURLLower, "googleapis.com") {
-		return "GKE"
+		return DistroGKE
 	}
 	// EKS
 	if strings.HasPrefix(ctxLower, "arn:") || strings.Contains(serverURLLower, ".eks.amazonaws.com") ||
 		strings.Contains(ctxLower, ":eks:") {
-		return "EKS"
+		return DistroEKS
 	}
 	// AKS
 	if strings.Contains(serverURLLower, ".azmk8s.io") || strings.Contains(clusterLower, ".azmk8s.io") ||
 		strings.Contains(ctxLower, "aks") {
-		return "AKS"
+		return DistroAKS
 	}
 	// IKS
 	if strings.Contains(serverURLLower, ".containers.cloud.ibm.com") {
-		return "IKS"
+		return DistroIKS
 	}
 	// OpenShift
 	if strings.Contains(ctxLower, "openshift") || strings.Contains(verLower, "openshift") {
-		return "OpenShift"
+		return DistroOpenShift
 	}
 	// k3s
 	if strings.Contains(verLower, "k3s") {
-		return "k3s"
+		return DistroK3s
 	}
 	// RKE (RKE2 — gitVersion contains +rke2)
 	if strings.Contains(verLower, "+rke2") {
-		return "RKE"
+		return DistroRKE
 	}
 
-	return "kubernetes"
+	return DistroKubernetes
 }
 
 type cmdRunner func(timeout time.Duration, cmd string, args ...string) (string, error)
@@ -154,7 +167,7 @@ func ProbeK8sSubVariant(distro string) string {
 
 func probeK8sSubVariant(distro string, run cmdRunner) string {
 	switch distro {
-	case "GKE":
+	case DistroGKE:
 		// GKE Autopilot nodes always use the "gk3-" name prefix; Standard nodes use "gke-".
 		// This is the officially documented signal per GKE Autopilot node naming conventions.
 		output, err := run(5*time.Second, "kubectl", "get", "nodes",
@@ -163,24 +176,24 @@ func probeK8sSubVariant(distro string, run cmdRunner) string {
 			display.PrintWarning("GKE Autopilot probe", err)
 		}
 		return ClassifyK8sSubVariant(distro, output, err)
-	case "EKS":
+	case DistroEKS:
 		output, err := run(5*time.Second, "kubectl", "get", "nodes",
 			"-o", "jsonpath={.items[*].status.nodeInfo.osImage}")
 		if err != nil {
 			display.PrintWarning("EKS Bottlerocket probe", err)
 		}
 		return ClassifyK8sSubVariant(distro, output, err)
-	case "kubernetes":
+	case DistroKubernetes:
 		minikubeOut, minikubeErr := run(5*time.Second, "kubectl", "get", "nodes",
 			"-l", "minikube.k8s.io/name", "--no-headers", "-o", "name")
 		if minikubeErr == nil && strings.TrimSpace(minikubeOut) != "" {
-			return "minikube"
+			return DistroMinikube
 		}
 
 		kindOut, kindErr := run(5*time.Second, "kubectl", "get", "nodes",
 			"-o", "jsonpath={.items[0].spec.providerID}")
 		if kindErr == nil && strings.HasPrefix(strings.TrimSpace(kindOut), "kind://") {
-			return "kind"
+			return DistroKind
 		}
 
 		output, err := run(5*time.Second, "kubectl", "get", "namespace", "pks-system",
@@ -202,19 +215,19 @@ func ClassifyK8sSubVariant(distro, output string, err error) string {
 		return distro
 	}
 	switch distro {
-	case "GKE":
+	case DistroGKE:
 		for _, name := range strings.Fields(output) {
 			if strings.HasPrefix(name, "gk3-") {
-				return "GKE-Autopilot"
+				return DistroGKEAutopilot
 			}
 		}
-	case "EKS":
+	case DistroEKS:
 		if strings.Contains(strings.ToLower(output), "bottlerocket") {
-			return "EKS-Bottlerocket"
+			return DistroEKSBottlerocket
 		}
-	case "kubernetes":
+	case DistroKubernetes:
 		if strings.TrimSpace(output) == "Active" {
-			return "TKGI"
+			return DistroTKGI
 		}
 	}
 	return distro

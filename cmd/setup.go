@@ -14,6 +14,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/azure"
+	k8s "github.com/dynatrace-oss/dtwiz/pkg/installer/kubernetes"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
 	"github.com/dynatrace-oss/dtwiz/pkg/recommender"
 )
@@ -187,7 +188,7 @@ var setupCmd = &cobra.Command{
 				k8sClusterName = info.Kubernetes.Cluster
 				k8sDistro = info.Kubernetes.Distribution
 			}
-			installErr = installer.InstallKubernetes(envURL, classicTok, k8sClusterName, k8sDistro, setupDryRun)
+			installErr = k8s.InstallKubernetes(envURL, classicTok, k8sClusterName, k8sDistro, setupDryRun)
 		case recommender.MethodDocker:
 			installErr = installer.InstallDocker(envURL, classicTok, setupDryRun)
 		case recommender.MethodOtelCollector:

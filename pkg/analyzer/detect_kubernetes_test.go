@@ -14,17 +14,17 @@ func TestDetectK8sDistribution(t *testing.T) {
 		version   string
 		want      string
 	}{
-		{"gke_project_region_cluster", "", "", "", "GKE"},
-		{"arn:aws:eks:us-east-1:123:cluster/my-cluster", "", "", "", "EKS"},
-		{"my-cluster-context", "", "https://my-cluster-abc123.hcp.eastus.azmk8s.io:443", "", "AKS"},
-		{"my-aks-context", "my-cluster.azmk8s.io", "", "", "AKS"},
-		{"openshift-context", "", "", "", "OpenShift"},
-		{"docker-desktop", "", "", "v1.30.0-k3s1", "k3s"},
-		{"some-other-context", "", "", "v1.30.0", "kubernetes"},
+		{"gke_project_region_cluster", "", "", "", DistroGKE},
+		{"arn:aws:eks:us-east-1:123:cluster/my-cluster", "", "", "", DistroEKS},
+		{"my-cluster-context", "", "https://my-cluster-abc123.hcp.eastus.azmk8s.io:443", "", DistroAKS},
+		{"my-aks-context", "my-cluster.azmk8s.io", "", "", DistroAKS},
+		{"openshift-context", "", "", "", DistroOpenShift},
+		{"docker-desktop", "", "", "v1.30.0-k3s1", DistroK3s},
+		{"some-other-context", "", "", "v1.30.0", DistroKubernetes},
 		// IKS: server URL signal
-		{"prod-context", "", "https://c1.us-south.containers.cloud.ibm.com:31234", "", "IKS"},
+		{"prod-context", "", "https://c1.us-south.containers.cloud.ibm.com:31234", "", DistroIKS},
 		// RKE: gitVersion +rke2 signal
-		{"rke-context", "", "", "v1.28.9+rke2r1", "RKE"},
+		{"rke-context", "", "", "v1.28.9+rke2r1", DistroRKE},
 	}
 
 	for _, tt := range tests {
@@ -55,100 +55,100 @@ func TestProbeK8sSubVariant(t *testing.T) {
 		// GKE → Autopilot
 		{
 			name:   "GKE Autopilot detected",
-			distro: "GKE",
+			distro: DistroGKE,
 			calls:  []fakeCall{{"gk3-my-cluster-pool-1-abc123-xyz", nil}},
-			want:   "GKE-Autopilot",
+			want:   DistroGKEAutopilot,
 		},
 		{
 			name:   "GKE Standard unchanged",
-			distro: "GKE",
+			distro: DistroGKE,
 			calls:  []fakeCall{{"gke-my-cluster-pool-1-abc123-xyz", nil}},
-			want:   "GKE",
+			want:   DistroGKE,
 		},
 		{
 			name:   "GKE probe error falls back to parent",
-			distro: "GKE",
+			distro: DistroGKE,
 			calls:  []fakeCall{{"", errProbe}},
-			want:   "GKE",
+			want:   DistroGKE,
 		},
 
 		// EKS → Bottlerocket
 		{
 			name:   "EKS Bottlerocket detected",
-			distro: "EKS",
+			distro: DistroEKS,
 			calls:  []fakeCall{{"Bottlerocket OS 1.14.0", nil}},
-			want:   "EKS-Bottlerocket",
+			want:   DistroEKSBottlerocket,
 		},
 		{
 			name:   "EKS Standard unchanged",
-			distro: "EKS",
+			distro: DistroEKS,
 			calls:  []fakeCall{{"Amazon Linux 2", nil}},
-			want:   "EKS",
+			want:   DistroEKS,
 		},
 		{
 			name:   "EKS probe error falls back to parent",
-			distro: "EKS",
+			distro: DistroEKS,
 			calls:  []fakeCall{{"", errProbe}},
-			want:   "EKS",
+			want:   DistroEKS,
 		},
 
 		// kubernetes → minikube (first probe: minikube node label)
 		{
 			name:   "minikube detected via node label",
-			distro: "kubernetes",
+			distro: DistroKubernetes,
 			calls:  []fakeCall{{"node/minikube", nil}},
-			want:   "minikube",
+			want:   DistroMinikube,
 		},
 
 		// kubernetes → kind (second probe: providerID)
 		{
 			name:   "kind detected via providerID",
-			distro: "kubernetes",
+			distro: DistroKubernetes,
 			calls: []fakeCall{
 				{"", nil},                  // minikube label probe: empty → not minikube
 				{"kind://docker/...", nil}, // kind providerID probe
 			},
-			want: "kind",
+			want: DistroKind,
 		},
 
 		// kubernetes → TKGI (third probe: pks-system namespace)
 		{
 			name:   "TKGI detected via pks-system namespace",
-			distro: "kubernetes",
+			distro: DistroKubernetes,
 			calls: []fakeCall{
 				{"", nil},
 				{"", nil},
 				{"Active", nil},
 			},
-			want: "TKGI",
+			want: DistroTKGI,
 		},
 
 		// kubernetes → generic fallthrough
 		{
 			name:   "generic kubernetes when no probe matches",
-			distro: "kubernetes",
+			distro: DistroKubernetes,
 			calls:  []fakeCall{{"", nil}, {"", nil}, {"", nil}},
-			want:   "kubernetes",
+			want:   DistroKubernetes,
 		},
 		{
 			name:   "TKGI namespace Terminating falls through to kubernetes",
-			distro: "kubernetes",
+			distro: DistroKubernetes,
 			calls:  []fakeCall{{"", nil}, {"", nil}, {"Terminating", nil}},
-			want:   "kubernetes",
+			want:   DistroKubernetes,
 		},
 		{
 			name:   "TKGI probe error falls through to kubernetes",
-			distro: "kubernetes",
+			distro: DistroKubernetes,
 			calls:  []fakeCall{{"", nil}, {"", nil}, {"", errProbe}},
-			want:   "kubernetes",
+			want:   DistroKubernetes,
 		},
 
 		// unrecognised distro passes through unchanged
 		{
 			name:   "unknown distro unchanged",
-			distro: "AKS",
+			distro: DistroAKS,
 			calls:  nil,
-			want:   "AKS",
+			want:   DistroAKS,
 		},
 	}
 
@@ -181,17 +181,17 @@ func TestClassifyK8sSubVariant(t *testing.T) {
 		err    error
 		want   string
 	}{
-		{"GKE", "gk3-my-cluster-pool-1-abc123-xyz", nil, "GKE-Autopilot"},
-		{"GKE", "gke-my-cluster-pool-1-abc123-xyz", nil, "GKE"},
-		{"GKE", "", errProbe, "GKE"},
-		{"EKS", "Bottlerocket OS 1.14.0", nil, "EKS-Bottlerocket"},
-		{"EKS", "Amazon Linux 2", nil, "EKS"},
-		{"EKS", "", errProbe, "EKS"},
-		{"kubernetes", "Active", nil, "TKGI"},
-		{"kubernetes", "", nil, "kubernetes"},
-		{"kubernetes", "Terminating", nil, "kubernetes"},
-		{"kubernetes", "", errProbe, "kubernetes"},
-		{"AKS", "", nil, "AKS"},
+		{DistroGKE, "gk3-my-cluster-pool-1-abc123-xyz", nil, DistroGKEAutopilot},
+		{DistroGKE, "gke-my-cluster-pool-1-abc123-xyz", nil, DistroGKE},
+		{DistroGKE, "", errProbe, DistroGKE},
+		{DistroEKS, "Bottlerocket OS 1.14.0", nil, DistroEKSBottlerocket},
+		{DistroEKS, "Amazon Linux 2", nil, DistroEKS},
+		{DistroEKS, "", errProbe, DistroEKS},
+		{DistroKubernetes, "Active", nil, DistroTKGI},
+		{DistroKubernetes, "", nil, DistroKubernetes},
+		{DistroKubernetes, "Terminating", nil, DistroKubernetes},
+		{DistroKubernetes, "", errProbe, DistroKubernetes},
+		{DistroAKS, "", nil, DistroAKS},
 	}
 
 	for _, tt := range tests {

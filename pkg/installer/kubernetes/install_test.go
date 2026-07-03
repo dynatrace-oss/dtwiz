@@ -1,8 +1,10 @@
-package installer
+package kubernetes
 
 import (
 	"strings"
 	"testing"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 )
 
 func baseTemplateData() dynakubeTemplateData {
@@ -54,7 +56,7 @@ func TestRenderDynakubeTemplate_NoPlaceholders(t *testing.T) {
 
 func TestRenderDynakubeTemplate_NoAggregationLabel(t *testing.T) {
 	// aggregate-to-monitoring label deprecated since Operator 1.9.0; must never appear.
-	for _, distro := range []string{"EKS", "EKS-Bottlerocket", "GKE", "OpenShift", "AKS", "kubernetes", ""} {
+	for _, distro := range []string{analyzer.DistroEKS, analyzer.DistroEKSBottlerocket, analyzer.DistroGKE, analyzer.DistroOpenShift, analyzer.DistroAKS, analyzer.DistroKubernetes, ""} {
 		out, err := renderDynakubeTemplate(distroTemplateData(baseTemplateData(), distro))
 		if err != nil {
 			t.Fatalf("distro %q: renderDynakubeTemplate: %v", distro, err)
@@ -68,7 +70,7 @@ func TestRenderDynakubeTemplate_NoAggregationLabel(t *testing.T) {
 func TestRenderDynakubeTemplate_NoReadonlyVolumeAnnotation(t *testing.T) {
 	// injection-readonly-volume must never appear — it was only needed for
 	// Operator 0.12.0+ and < 1.7.0; dtwiz targets Operator >= 1.7.0.
-	for _, distro := range []string{"EKS-Bottlerocket", "EKS", "GKE", "OpenShift", "kubernetes", ""} {
+	for _, distro := range []string{analyzer.DistroEKSBottlerocket, analyzer.DistroEKS, analyzer.DistroGKE, analyzer.DistroOpenShift, analyzer.DistroKubernetes, ""} {
 		out, err := renderDynakubeTemplate(distroTemplateData(baseTemplateData(), distro))
 		if err != nil {
 			t.Fatalf("distro %q: renderDynakubeTemplate: %v", distro, err)
@@ -80,7 +82,7 @@ func TestRenderDynakubeTemplate_NoReadonlyVolumeAnnotation(t *testing.T) {
 }
 
 func TestDistroTemplateData_KSPM(t *testing.T) {
-	kspmDistros := []string{"EKS", "AKS", "kubernetes", "minikube", "kind", "k3s", ""}
+	kspmDistros := []string{analyzer.DistroEKS, analyzer.DistroAKS, analyzer.DistroKubernetes, analyzer.DistroMinikube, analyzer.DistroKind, analyzer.DistroK3s, ""}
 	for _, distro := range kspmDistros {
 		d := distroTemplateData(baseTemplateData(), distro)
 		if !d.EnableKSPM {
@@ -88,7 +90,7 @@ func TestDistroTemplateData_KSPM(t *testing.T) {
 		}
 	}
 
-	noKSPMDistros := []string{"GKE", "GKE-Autopilot", "OpenShift", "EKS-Bottlerocket", "RKE", "IKS", "TKGI"}
+	noKSPMDistros := []string{analyzer.DistroGKE, analyzer.DistroGKEAutopilot, analyzer.DistroOpenShift, analyzer.DistroEKSBottlerocket, analyzer.DistroRKE, analyzer.DistroIKS, analyzer.DistroTKGI}
 	for _, distro := range noKSPMDistros {
 		d := distroTemplateData(baseTemplateData(), distro)
 		if d.EnableKSPM {
@@ -98,12 +100,12 @@ func TestDistroTemplateData_KSPM(t *testing.T) {
 }
 
 func TestDistroTemplateData_PrivilegedAnnotation(t *testing.T) {
-	d := distroTemplateData(baseTemplateData(), "OpenShift")
+	d := distroTemplateData(baseTemplateData(), analyzer.DistroOpenShift)
 	if !d.PrivilegedAnnotation {
 		t.Error("OpenShift: expected PrivilegedAnnotation=true")
 	}
 
-	for _, distro := range []string{"EKS", "AKS", "GKE", "EKS-Bottlerocket", "kubernetes", ""} {
+	for _, distro := range []string{analyzer.DistroEKS, analyzer.DistroAKS, analyzer.DistroGKE, analyzer.DistroEKSBottlerocket, analyzer.DistroKubernetes, ""} {
 		d := distroTemplateData(baseTemplateData(), distro)
 		if d.PrivilegedAnnotation {
 			t.Errorf("distro %q: expected PrivilegedAnnotation=false", distro)
@@ -116,8 +118,8 @@ func TestDistroTemplateData_KubeletPath(t *testing.T) {
 		distro string
 		want   string
 	}{
-		{"IKS", "/var/data/kubelet"},
-		{"TKGI", "/var/vcap/data/kubelet"},
+		{analyzer.DistroIKS, "/var/data/kubelet"},
+		{analyzer.DistroTKGI, "/var/vcap/data/kubelet"},
 	}
 	for _, c := range cases {
 		d := distroTemplateData(baseTemplateData(), c.distro)
@@ -126,7 +128,7 @@ func TestDistroTemplateData_KubeletPath(t *testing.T) {
 		}
 	}
 
-	for _, distro := range []string{"EKS", "AKS", "GKE", "OpenShift", "kubernetes", ""} {
+	for _, distro := range []string{analyzer.DistroEKS, analyzer.DistroAKS, analyzer.DistroGKE, analyzer.DistroOpenShift, analyzer.DistroKubernetes, ""} {
 		d := distroTemplateData(baseTemplateData(), distro)
 		if d.KubeletPath != "" {
 			t.Errorf("distro %q: expected empty KubeletPath, got %q", distro, d.KubeletPath)
@@ -135,7 +137,7 @@ func TestDistroTemplateData_KubeletPath(t *testing.T) {
 }
 
 func TestRenderDynakubeTemplate_KSPM_Present(t *testing.T) {
-	for _, distro := range []string{"EKS", "AKS", "kubernetes", ""} {
+	for _, distro := range []string{analyzer.DistroEKS, analyzer.DistroAKS, analyzer.DistroKubernetes, ""} {
 		out, err := renderDynakubeTemplate(distroTemplateData(baseTemplateData(), distro))
 		if err != nil {
 			t.Fatalf("distro %q: renderDynakubeTemplate: %v", distro, err)
@@ -150,7 +152,7 @@ func TestRenderDynakubeTemplate_KSPM_Present(t *testing.T) {
 }
 
 func TestRenderDynakubeTemplate_KSPM_Absent(t *testing.T) {
-	for _, distro := range []string{"GKE", "GKE-Autopilot", "OpenShift", "EKS-Bottlerocket", "RKE", "IKS", "TKGI"} {
+	for _, distro := range []string{analyzer.DistroGKE, analyzer.DistroGKEAutopilot, analyzer.DistroOpenShift, analyzer.DistroEKSBottlerocket, analyzer.DistroRKE, analyzer.DistroIKS, analyzer.DistroTKGI} {
 		out, err := renderDynakubeTemplate(distroTemplateData(baseTemplateData(), distro))
 		if err != nil {
 			t.Fatalf("distro %q: renderDynakubeTemplate: %v", distro, err)
@@ -165,7 +167,7 @@ func TestRenderDynakubeTemplate_KSPM_Absent(t *testing.T) {
 }
 
 func TestRenderDynakubeTemplate_OpenShiftAnnotation(t *testing.T) {
-	out, err := renderDynakubeTemplate(distroTemplateData(baseTemplateData(), "OpenShift"))
+	out, err := renderDynakubeTemplate(distroTemplateData(baseTemplateData(), analyzer.DistroOpenShift))
 	if err != nil {
 		t.Fatalf("renderDynakubeTemplate: %v", err)
 	}
@@ -176,7 +178,7 @@ func TestRenderDynakubeTemplate_OpenShiftAnnotation(t *testing.T) {
 }
 
 func TestRenderDynakubeTemplate_OpenShiftAnnotation_Absent(t *testing.T) {
-	for _, distro := range []string{"EKS", "AKS", "GKE", "EKS-Bottlerocket", "kubernetes", ""} {
+	for _, distro := range []string{analyzer.DistroEKS, analyzer.DistroAKS, analyzer.DistroGKE, analyzer.DistroEKSBottlerocket, analyzer.DistroKubernetes, ""} {
 		out, err := renderDynakubeTemplate(distroTemplateData(baseTemplateData(), distro))
 		if err != nil {
 			t.Fatalf("distro %q: renderDynakubeTemplate: %v", distro, err)
@@ -192,8 +194,8 @@ func TestRenderDynakubeTemplate_KubeletPath(t *testing.T) {
 		distro string
 		want   string
 	}{
-		{"IKS", "kubeletPath: /var/data/kubelet"},
-		{"TKGI", "kubeletPath: /var/vcap/data/kubelet"},
+		{analyzer.DistroIKS, "kubeletPath: /var/data/kubelet"},
+		{analyzer.DistroTKGI, "kubeletPath: /var/vcap/data/kubelet"},
 	}
 	for _, c := range cases {
 		out, err := renderDynakubeTemplate(distroTemplateData(baseTemplateData(), c.distro))
@@ -205,7 +207,7 @@ func TestRenderDynakubeTemplate_KubeletPath(t *testing.T) {
 		}
 	}
 
-	for _, distro := range []string{"EKS", "AKS", "GKE", "OpenShift", "kubernetes", ""} {
+	for _, distro := range []string{analyzer.DistroEKS, analyzer.DistroAKS, analyzer.DistroGKE, analyzer.DistroOpenShift, analyzer.DistroKubernetes, ""} {
 		out, err := renderDynakubeTemplate(distroTemplateData(baseTemplateData(), distro))
 		if err != nil {
 			t.Fatalf("distro %q: renderDynakubeTemplate: %v", distro, err)

@@ -9,6 +9,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/azure"
+	k8s "github.com/dynatrace-oss/dtwiz/pkg/installer/kubernetes"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
@@ -37,7 +38,7 @@ var uninstallKubernetesCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		k8sInfo := analyzer.DetectKubernetesIdentity()
-		return installer.UninstallKubernetes(k8sInfo.Context, k8sInfo.Distribution, uninstallDryRun)
+		return k8s.UninstallKubernetes(k8sInfo.Context, k8sInfo.Distribution, uninstallDryRun)
 	},
 }
 
