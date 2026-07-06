@@ -102,11 +102,13 @@ func detectAllProjects(runtimes []runtimeInfo) []detectedProject {
 		// interpreter is installed, so run it to verify it's usable.
 		var available bool
 		var stubOnly bool
+		var binPath string
 		if rt.binName == "python3" || rt.binName == "python" {
 			_, err := DetectPython()
 			available = err == nil
 			if !available {
-				_, lookErr := exec.LookPath(rt.binName)
+				var lookErr error
+				binPath, lookErr = exec.LookPath(rt.binName)
 				stubOnly = lookErr == nil // binary found but not usable
 			}
 		} else {
@@ -115,7 +117,11 @@ func detectAllProjects(runtimes []runtimeInfo) []detectedProject {
 		}
 		if !available {
 			if stubOnly {
-				fmt.Printf("  Skipping %s instrumentation — '%s' found on PATH but not usable.\n", rt.name, rt.binName)
+				if isWindowsStorePythonStub(binPath) {
+					fmt.Printf("  Skipping %s instrumentation — '%s' is a Windows Store stub, not a real interpreter.\n  Install Python 3 from https://python.org or disable it in Settings → Apps → Advanced app settings → App execution aliases.\n", rt.name, rt.binName)
+				} else {
+					fmt.Printf("  Skipping %s instrumentation — '%s' found on PATH but not usable.\n", rt.name, rt.binName)
+				}
 			} else {
 				fmt.Printf("  Skipping %s instrumentation — '%s' not found on PATH.\n", rt.name, rt.binName)
 			}

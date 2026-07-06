@@ -37,6 +37,14 @@ func DetectPython() (string, error) {
 	return "", fmt.Errorf("Python 3 interpreter not found: install Python 3 and ensure either `python3` or `python` is in PATH") //nolint:staticcheck // ST1005: keep brand capitalization
 }
 
+// isWindowsStorePythonStub reports whether the given path is the Windows Store
+// Python stub (located under the WindowsApps directory). The stub exists on
+// PATH by default but only opens the Microsoft Store when invoked — it is not
+// a real interpreter.
+func isWindowsStorePythonStub(path string) bool {
+	return strings.Contains(filepath.ToSlash(path), "WindowsApps")
+}
+
 func validatePythonPrerequisites() (string, error) {
 	pythonBin, err := DetectPython()
 	if err != nil {
