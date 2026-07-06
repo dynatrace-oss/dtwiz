@@ -77,7 +77,7 @@ var setupCmd = &cobra.Command{
 		azureConfigured := false
 		gcpConfigured := false
 		if envURL, _, platformTok, credErr := getDtEnvironment(); credErr == nil {
-			_ = installer.RunConcurrently(
+			if err := installer.RunConcurrently(
 				func() error {
 					exists, err := azure.ConnectionExists(envURL, platformTok)
 					azureConfigured = exists
@@ -88,7 +88,9 @@ var setupCmd = &cobra.Command{
 					gcpConfigured = exists
 					return err
 				},
-			)
+			); err != nil {
+				logger.Debug("connection existence check failed, badging as not configured", "err", err)
+			}
 		}
 
 		for i, r := range actionable {
