@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.28] - 2026-07-06
+
+### Added
+
+- `install azure`, `update azure`, `uninstall azure`: new Azure cloud integration — provisions the Service Principal / federated credential auth chain, activates the `da-azure` extension, and creates monitoring configuration with location and feature-set selection; `update azure` reconciles the monitoring config in place without touching auth, and `install azure` delegates to update when a complete connection already exists
+- `install aws-lambda`: instrumented functions now get a runtime info container
+- `uninstall kubernetes`: `--dry-run` support, shows the removal plan before confirmation
+
+### Changed
+
+- `install otel`: directory scanning now excludes the parent of the current working directory to avoid noisy/irrelevant project detections
+- Kubernetes install and uninstall logic broken down into smaller, more maintainable pieces; distribution detection functions cleaned up
+- Dependency bumps: `golang.org/x/net` 0.54.0 → 0.55.0, `actions/checkout` v6 → v7
+
 ## [0.2.27] - 2026-06-30
 
 ### Added
@@ -387,7 +401,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.27...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.28...HEAD
+[0.2.28]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.27...v0.2.28
 [0.2.27]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.26...v0.2.27
 [0.2.26]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.25...v0.2.26
 [0.2.25]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.24...v0.2.25
