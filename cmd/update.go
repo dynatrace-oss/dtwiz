@@ -9,6 +9,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/azure"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -50,9 +51,9 @@ var updateOtelCmd = &cobra.Command{
 		}
 		var updateErr error
 		if updateOtelConfigPath != "" {
-			updateErr = installer.UpdateOtelConfig(updateOtelConfigPath, envURL, classicTok, platformTok, updateDryRun)
+			updateErr = otel.UpdateOtelConfig(updateOtelConfigPath, envURL, classicTok, platformTok, updateDryRun)
 		} else {
-			updateErr = installer.UpdateOtelConfigInteractive(envURL, classicTok, platformTok, updateDryRun)
+			updateErr = otel.UpdateOtelConfigInteractive(envURL, classicTok, platformTok, updateDryRun)
 		}
 		if errors.Is(updateErr, installer.ErrInstallCancelled) {
 			return nil

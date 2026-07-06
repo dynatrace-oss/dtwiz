@@ -312,6 +312,13 @@ func pollAll(queryURL, token string, fromClause string, awsAccountID string) wat
 	return state
 }
 
+type dqlResponse struct {
+	State  string `json:"state"`
+	Result struct {
+		Records []map[string]interface{} `json:"records"`
+	} `json:"result"`
+}
+
 func executeDQL(queryURL, token, dql string) *dqlResponse {
 	payload := map[string]interface{}{
 		"query":                      dql,

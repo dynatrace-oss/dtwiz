@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
 	"github.com/dynatrace-oss/dtwiz/test/integration"
 	"github.com/dynatrace-oss/dtwiz/test/integration/grail"
 )
@@ -43,7 +44,7 @@ func TestOTelAutoInstrumentation(t *testing.T) {
 				}
 			},
 			install: func(env *integration.TestEnv, appDir, svcName string) error {
-				return installer.InstallOtelPython(env.EnvURL, env.ClassicToken, env.PlatformToken, svcName, appDir, false)
+				return otel.InstallOtelPython(env.EnvURL, env.ClassicToken, env.PlatformToken, svcName, appDir, false)
 			},
 		},
 		{
@@ -66,7 +67,7 @@ func TestOTelAutoInstrumentation(t *testing.T) {
 				if err := os.MkdirAll(filepath.Join(appDir, "node_modules"), 0755); err != nil {
 					return err
 				}
-				return installer.InstallOtelNode(env.EnvURL, env.ClassicToken, env.PlatformToken, svcName, appDir, false)
+				return otel.InstallOtelNode(env.EnvURL, env.ClassicToken, env.PlatformToken, svcName, appDir, false)
 			},
 		},
 		{
@@ -89,7 +90,7 @@ func TestOTelAutoInstrumentation(t *testing.T) {
 				if err != nil {
 					return fmt.Errorf("mvn build failed: %w\n%s", err, out)
 				}
-				return installer.InstallOtelJava(env.EnvURL, env.ClassicToken, svcName, appDir, false)
+				return otel.InstallOtelJava(env.EnvURL, env.ClassicToken, svcName, appDir, false)
 			},
 		},
 	}

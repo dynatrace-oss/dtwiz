@@ -16,6 +16,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/azure"
 	k8s "github.com/dynatrace-oss/dtwiz/pkg/installer/kubernetes"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/dynatrace-oss/dtwiz/pkg/recommender"
 )
@@ -137,7 +138,7 @@ var setupCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-			if err := installer.InstallDemo(envURL, classicTok, platformTok, setupDryRun); err != nil {
+			if err := otel.InstallDemo(envURL, classicTok, platformTok, setupDryRun); err != nil {
 				if errors.Is(err, installer.ErrInstallCancelled) {
 					return nil
 				}
@@ -195,9 +196,9 @@ var setupCmd = &cobra.Command{
 		case recommender.MethodDocker:
 			installErr = installer.InstallDocker(envURL, classicTok, setupDryRun)
 		case recommender.MethodOtelCollector:
-			installErr = installer.InstallOtelCollector(envURL, classicTok, platformTok, setupDryRun)
+			installErr = otel.InstallOtelCollector(envURL, classicTok, platformTok, setupDryRun)
 		case recommender.MethodOtelUpdate:
-			installErr = installer.UpdateOtelConfigInteractive(envURL, classicTok, platformTok, setupDryRun)
+			installErr = otel.UpdateOtelConfigInteractive(envURL, classicTok, platformTok, setupDryRun)
 		case recommender.MethodAWS:
 			installErr = installer.InstallAWS(c.Platform, envURL, platformTok, setupDryRun, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
 		case recommender.MethodAzure:
