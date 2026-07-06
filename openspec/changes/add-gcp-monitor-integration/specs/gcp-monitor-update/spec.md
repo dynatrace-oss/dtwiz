@@ -2,9 +2,25 @@
 
 ## ADDED Requirements
 
-### Requirement: Update is an in-place monitoring-config reconcile reached through setup
+### Requirement: Update is an in-place monitoring-config reconcile reachable from `dtwiz update gcp`, `dtwiz install gcp`, and `dtwiz setup`
 
-The system SHALL provide an `UpdateGCP` entry point that refreshes an existing integration in place by reconciling **only** the `da-gcp` monitoring configuration to the latest schema-derived defaults. The authentication chain SHALL NOT be modified by an update: the Dynatrace connection, the GCP service account, the project Viewer binding, and the impersonation binding. There SHALL intentionally be no `dtwiz update gcp` subcommand; the update path SHALL be reached from `dtwiz setup` when a complete GCP connection already exists.
+The system SHALL provide an `UpdateGCP` entry point that refreshes an existing integration in place by reconciling **only** the `da-gcp` monitoring configuration to the latest schema-derived defaults. The authentication chain SHALL NOT be modified by an update: the Dynatrace connection, the GCP service account, the project Viewer binding, and the impersonation binding. The update flow SHALL be reachable via three paths: (1) `dtwiz update gcp` — explicit standalone update command; (2) `dtwiz install gcp` when a complete connection already exists — transparently redirects to the update flow; (3) `dtwiz setup` when a complete GCP connection already exists — routes to update instead of fresh install.
+
+### Requirement: `dtwiz update gcp` subcommand
+
+The system SHALL expose `dtwiz update gcp` as a standalone CLI command (`cobra.NoArgs`) under the `update` verb. It SHALL resolve the Dynatrace environment URL and platform token from the standard sources, validate the platform token before proceeding, and honor the shared `--dry-run` flag. The command SHALL register under `updateCmd` and follow the same subcommand pattern as `dtwiz update azure`.
+
+#### Scenario: `dtwiz update gcp` registered
+
+- **GIVEN** the CLI is built
+- **WHEN** the user runs `dtwiz update gcp`
+- **THEN** the GCP update flow runs against the resolved environment and platform token
+
+#### Scenario: Platform token validated before update
+
+- **GIVEN** the platform token is provided
+- **WHEN** `dtwiz update gcp` runs
+- **THEN** the platform token is validated against the environment before any update logic runs
 
 #### Scenario: Setup routes to update when a complete connection exists
 

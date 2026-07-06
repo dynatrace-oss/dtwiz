@@ -91,24 +91,25 @@ func TestGCPDryRun(t *testing.T) {
 	}
 }
 
-func TestGCPConnectionAlreadyExistsIsRejected(t *testing.T) {
+func TestGCPInstallRedirectsToUpdateWhenConnectionExists(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
 	defer stubExecLookPath(t)()
 
 	mutating := 0
 	dtc := &fakeDTClient{
-		connObjectID:     "a1b2c3d4-0000-0000-0000-000000000001",
-		dtSAEmail:        "dt-monitor@dynatrace-prod.iam.gserviceaccount.com",
 		findConnObjectID: "existing-conn-id",
 		findConnSAEmail:  "dtwiz-gcp@my-project.iam.gserviceaccount.com",
 	}
-	err := captureStdoutErr(func() error {
-		return installGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, happyGcloudRunner(&mutating), noSleep, dtc)
+	out := captureStdout(t, func() {
+		_ = installGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, happyGcloudRunner(&mutating), noSleep, dtc)
 	})
-	if err == nil {
-		t.Fatal("expected error for existing connection, got nil")
+	if !strings.Contains(out, "prerequisites already exist") {
+		t.Errorf("expected note about existing prerequisites; got:\n%s", out)
 	}
-	if !strings.Contains(err.Error(), "already exists") {
-		t.Errorf("expected 'already exists' in error, got: %v", err)
+	if dtc.createConnCalled {
+		t.Error("install must not create a new connection when one already exists")
 	}
 	if mutating != 0 {
 		t.Errorf("expected 0 mutating gcloud calls, got %d", mutating)

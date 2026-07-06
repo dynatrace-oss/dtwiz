@@ -45,15 +45,17 @@ The system SHALL run preflight checks before mutating any resource: the `gcloud`
 - **WHEN** preflight parses the output
 - **THEN** the resolved project ID is the value on the last line, not the notice text
 
-### Requirement: Abort or resume based on existing connection completeness
+### Requirement: Redirect to update, resume, or abort based on existing connection completeness
 
-Before installing, the system SHALL discover every Dynatrace connection named `dtwiz-gcp` and classify each as complete (carries a bound service-account email) or incomplete (does not). If any complete connection is found, the system SHALL abort with guidance to run `dtwiz uninstall gcp` first. If more than one incomplete connection is found, the system SHALL abort with guidance to uninstall and reinstall for a clean slate. If exactly one incomplete connection is found, the system SHALL resume it: its object ID SHALL be reused in step 2 instead of creating a new connection, and the remaining steps SHALL proceed normally.
+Before installing, the system SHALL discover every Dynatrace connection named `dtwiz-gcp` and classify each as complete (carries a bound service-account email) or incomplete (does not). If exactly one complete connection is found, the system SHALL print a note ("prerequisites already exist — running update instead of a fresh install") and transparently redirect to the update flow without making any new gcloud mutations. If more than one complete connection is found, the system SHALL fall through to the ambiguity check below. If more than one incomplete connection is found, the system SHALL abort with guidance to uninstall and reinstall for a clean slate. If exactly one incomplete connection is found, the system SHALL resume it: its object ID SHALL be reused in step 2 instead of creating a new connection, and the remaining steps SHALL proceed normally.
 
-#### Scenario: Existing complete connection blocks install
+#### Scenario: Existing complete connection redirects to update
 
-- **GIVEN** a connection named `dtwiz-gcp` already carries a bound service-account email
+- **GIVEN** exactly one connection named `dtwiz-gcp` already carries a bound service-account email
 - **WHEN** `dtwiz install gcp` runs
-- **THEN** it aborts without mutating anything and tells the user to uninstall first
+- **THEN** it prints a note that prerequisites already exist and runs the update flow instead of a fresh install
+- **AND** no new gcloud mutations are made
+- **AND** no new Dynatrace connection is created
 
 #### Scenario: Single incomplete connection is resumed
 

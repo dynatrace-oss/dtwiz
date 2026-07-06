@@ -23,6 +23,66 @@ func TestUpdateAzureCmd_Registered(t *testing.T) {
 	}
 }
 
+func TestUpdateGcpCmd_Registered(t *testing.T) {
+	found := false
+	for _, cmd := range updateCmd.Commands() {
+		if cmd.Use == "gcp" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		names := make([]string, 0, len(updateCmd.Commands()))
+		for _, cmd := range updateCmd.Commands() {
+			names = append(names, cmd.Use)
+		}
+		t.Errorf("expected gcp subcommand to be registered under update, found: %v", names)
+	}
+}
+
+func TestUpdateGcpCmd_RunE_ValidatesPlatformToken(t *testing.T) {
+	origCredentialHTTPClient := credentialHTTPClient
+	origEnvironmentFlag := environmentFlag
+	origPlatformTokenFlag := platformTokenFlag
+	origAccessTokenFlag := accessTokenFlag
+	t.Cleanup(func() {
+		credentialHTTPClient = origCredentialHTTPClient
+		environmentFlag = origEnvironmentFlag
+		platformTokenFlag = origPlatformTokenFlag
+		accessTokenFlag = origAccessTokenFlag
+	})
+
+	validationCalled := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		validationCalled = true
+		if r.URL.Path != "/platform/storage/query/v1/query:execute" {
+			t.Errorf("unexpected request path: %s", r.URL.Path)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer dt0s16.platform" {
+			t.Errorf("Authorization header = %q, want platform bearer token", got)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	credentialHTTPClient = srv.Client()
+	environmentFlag = srv.URL
+	platformTokenFlag = "dt0s16.platform"
+	accessTokenFlag = "dt0c01.access"
+
+	err := updateGcpCmd.RunE(updateGcpCmd, nil)
+	if err == nil {
+		t.Fatal("expected platform token validation error, got nil")
+	}
+	if !validationCalled {
+		t.Fatal("expected GCP update command to validate the platform token")
+	}
+}
+
 func TestUpdateAzureCmd_RunE_ValidatesPlatformToken(t *testing.T) {
 	origCredentialHTTPClient := credentialHTTPClient
 	origEnvironmentFlag := environmentFlag

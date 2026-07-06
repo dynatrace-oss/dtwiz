@@ -35,7 +35,7 @@
 ## 6. Install Workflow
 
 - [x] 6.1 `InstallGCP` entry point + `installGCPWithRunner` testable core (injected runner/sleeper/dtclient) in `pkg/installer/gcp/install.go`
-- [x] 6.2 `gcpResumableConnection`: complete connection aborts (guidance: uninstall first); >1 incomplete connection aborts as ambiguous; exactly one incomplete connection is resumed (reused in step 2 instead of creating a duplicate)
+- [x] 6.2 `gcpResumableConnection`: >1 incomplete connections aborts as ambiguous; exactly one incomplete connection is resumed (reused in step 2 instead of creating a duplicate). In `installGCPWithRunner`, before calling `gcpResumableConnection`, check for exactly one complete connection via `selectUpdatableConnection`: if found, print "prerequisites already exist — running update instead of a fresh install" and redirect to `updateGCPWithRunner` without any gcloud mutations
 - [x] 6.3 `gcpConfig` assembly, `gcpPrintPreview`, `--dry-run` stop, `ConfirmProceed`
 - [x] 6.4 `runInstallSteps`: the 7 ordered steps (enable APIs → create/resume connection → create SA → grant Viewer → grant impersonation → finalize connection → create monitoring config), tracking `completedSteps` for partial-failure reporting
 - [x] 6.5 `gcpRunStep`: shared retry wrapper (`installer.Retry` + `installer.Jitter`, up to 12 attempts / 5s base) for the `gcloud` steps (enable APIs, grant Viewer, grant impersonation), retrying only `installer.IsNotFoundErr`
@@ -65,15 +65,17 @@
 - [x] 9.2 Add `uninstallGcpCmd` (`dtwiz uninstall gcp`, `cobra.NoArgs`) in `cmd/uninstall.go` → `gcp.UninstallGCP`
 - [x] 9.3 In `cmd/setup.go`: pre-check `azure.ConnectionExists` and `gcp.ConnectionExists` concurrently (`installer.RunConcurrently`), badge the GCP entry when a complete connection exists, route to `UpdateGCP` vs `InstallGCP`, and suppress the generic post-install watch for GCP (it runs its own)
 - [x] 9.4 `pkg/recommender/recommender.go`: drop `ComingSoon`/"(coming soon)" for the GCP recommendation now that it is actionable
+- [x] 9.5 Add `updateGcpCmd` (`dtwiz update gcp`, `cobra.NoArgs`) in `cmd/update.go` → `gcp.UpdateGCP`; import `pkg/installer/gcp`; validate platform token via `checkPlatformToken` before calling update; register with `updateCmd.AddCommand`
 
 ## 10. Tests
 
 - [x] 10.1 `config.go` / `helpers_test.go`: `gcpServiceAccountEmail`, `findServiceAccountEmail`/`isServiceAccountEmail`, `gcpCreateServiceAccount` reuse-on-exists, idempotent deletes
 - [x] 10.2 `dtapi_test.go`: schema enum extraction, `*_essential` filtering, constraint-violation parsing, create/update/find/delete via fake SDK responses, `splitConnectionsByCompleteness`
 - [x] 10.3 `preflight_test.go` (via `install_test.go`/`uninstall_test.go` runners): CLI-missing, not-logged-in, no-active-project, Cloud Shell banner stripping
-- [x] 10.4 `install_test.go`: full 7-step workflow with injected runner/sleeper/dtclient, existing-complete-connection abort, ambiguous-incomplete-connections abort, partial-connection resume (no duplicate `createConnection` call, IDs threaded through), dry-run, step-1/3/4/5 permission hints, step-6 propagation retries, step-6 fail-fast on permanent permission error, partial-failure hint
+- [x] 10.4 `install_test.go`: full 7-step workflow with injected runner/sleeper/dtclient, existing-complete-connection redirects to update (`TestGCPInstallRedirectsToUpdateWhenConnectionExists`: note printed, no new connection created, 0 mutating gcloud calls), ambiguous-incomplete-connections abort, partial-connection resume (no duplicate `createConnection` call, IDs threaded through), dry-run, step-1/3/4/5 permission hints, step-6 propagation retries, step-6 fail-fast on permanent permission error, partial-failure hint
 - [x] 10.5 `uninstall_test.go`: discovery, `connectionExistsWithClient` complete/incomplete/none, nothing-to-do, best-effort continue-on-failure, step count
 - [x] 10.6 `update_test.go`: concurrent discovery+preflight, in-place reconcile of existing config(s), create-when-missing, `selectUpdatableConnection` abort cases (no complete / multiple connections)
 - [x] 10.7 `pkg/installer`: `concurrent_test.go` (all-succeed, joined-errors), `retry_test.go` (`Jitter` bounds)
 - [x] 10.8 `pkg/analyzer/detect_gcp_test.go`: `CleanGCloudConfigValue` (plain value, Cloud Shell notice, unset-with-notice)
 - [x] 10.9 `make test` and `make lint`: all pass
+- [x] 10.10 `cmd/update_test.go`: `TestUpdateGcpCmd_Registered` (gcp subcommand registered under update), `TestUpdateGcpCmd_RunE_ValidatesPlatformToken` (platform token validated before update runs)
