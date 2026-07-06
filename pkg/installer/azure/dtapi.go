@@ -22,8 +22,6 @@ const (
 
 	azureLocationEnumKey   = "dynatrace.datasource.azure:location"
 	azureFeatureSetEnumKey = "FeatureSetsType"
-
-	listPageSize = 50
 )
 
 type connRef struct {
@@ -204,5 +202,16 @@ func (d *sdkDTClient) findAllMonitoringConfigs(name string) ([]string, error) {
 }
 
 func (d *sdkDTClient) deleteMonitoring(configID string) error {
-	return d.DeleteMonitoringConfiguration(extensionName, configID)
+	err := d.DeleteMonitoringConfiguration(extensionName, configID)
+	if err == nil {
+		return nil
+	}
+	// The extension SDK does not surface 404 as httpclient.ErrNotFound (no %w wrapping),
+	// so errors.Is won't work. Fall back to string matching to treat already-gone as success.
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "not found") || strings.Contains(msg, "404") {
+		logger.Debug("monitoring config already gone", "configId", configID)
+		return nil
+	}
+	return err
 }
