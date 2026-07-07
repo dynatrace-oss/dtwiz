@@ -136,7 +136,40 @@ It SHALL skip if `az` is not found on PATH. It SHALL fatal with an actionable me
 
 ---
 
-### Requirement: `MonitoringConfigExists` reports whether the Azure monitoring configuration is present
+### Requirement: `TestGCPLifecycle` exercises the full Google Cloud installer lifecycle
+
+`TestGCPLifecycle` SHALL install the Google Cloud integration, verify the Dynatrace connection and monitoring configuration exist, then uninstall and verify both are gone.
+
+It SHALL skip if `gcloud` is not found on PATH. It SHALL fatal with an actionable message if no active GCP project is configured.
+
+#### Scenario: Skips when `gcloud` is not on PATH
+
+- **WHEN** `gcloud` is not found on PATH
+- **THEN** the test is skipped
+
+#### Scenario: Fatals when no active project is set
+
+- **WHEN** `gcloud config get-value project` returns an empty or unset value
+- **THEN** the test fatals with a message instructing the developer to run `gcloud auth login` and set a project
+
+#### Scenario: Full lifecycle succeeds
+
+- **WHEN** `gcloud` is installed and an active project is configured
+- **THEN** `InstallGCP` runs without error
+- **THEN** `gcp.ConnectionExists` returns true
+- **THEN** `gcp.MonitoringConfigExists` returns true
+- **THEN** `UninstallGCP` runs without error
+- **THEN** `gcp.ConnectionExists` returns false
+- **THEN** `gcp.MonitoringConfigExists` returns false
+
+#### Scenario: Safety-net cleanup runs on partial failure
+
+- **WHEN** the test fails after install but before explicit uninstall
+- **THEN** `t.Cleanup` calls `UninstallGCP` to remove any created resources
+
+---
+
+### Requirement: `azure.MonitoringConfigExists` reports whether the Azure monitoring configuration is present
 
 `azure.MonitoringConfigExists(envURL, platformToken string)` SHALL return `true` if a monitoring configuration named after the integration exists in the given Dynatrace environment, and `false` otherwise.
 
@@ -148,6 +181,22 @@ It SHALL skip if `az` is not found on PATH. It SHALL fatal with an actionable me
 #### Scenario: Returns false when configuration does not exist
 
 - **WHEN** no Azure monitoring configuration exists
+- **THEN** `MonitoringConfigExists` returns `(false, nil)`
+
+---
+
+### Requirement: `gcp.MonitoringConfigExists` reports whether the GCP monitoring configuration is present
+
+`gcp.MonitoringConfigExists(envURL, platformToken string)` SHALL return `true` if a monitoring configuration named after the integration exists in the given Dynatrace environment, and `false` otherwise.
+
+#### Scenario: Returns true when configuration exists
+
+- **WHEN** the GCP monitoring configuration has been created
+- **THEN** `MonitoringConfigExists` returns `(true, nil)`
+
+#### Scenario: Returns false when configuration does not exist
+
+- **WHEN** no GCP monitoring configuration exists
 - **THEN** `MonitoringConfigExists` returns `(false, nil)`
 
 ---

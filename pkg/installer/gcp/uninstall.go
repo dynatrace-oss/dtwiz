@@ -51,6 +51,16 @@ func gcpGatherServiceAccounts(conns []connRef, projectID string) []string {
 	return out
 }
 
+// MonitoringConfigExists reports whether a GCP monitoring configuration named integrationName exists.
+func MonitoringConfigExists(envURL, platformToken string) (bool, error) {
+	dtc, err := newSDKDTClient(envURL, platformToken)
+	if err != nil {
+		return false, err
+	}
+	ids, err := dtc.findAllMonitoringConfigs(integrationName)
+	return len(ids) > 0, err
+}
+
 func UninstallGCP(envURL, platformToken string, dryRun bool) error {
 	dtc, err := newSDKDTClient(envURL, platformToken)
 	if err != nil {

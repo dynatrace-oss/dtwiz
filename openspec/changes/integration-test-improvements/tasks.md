@@ -34,6 +34,11 @@
 - [x] 6.4 Export `TEST_DEBUG` from make so the test binary sees it
 - [x] 6.5 Add `RACE_FLAG` conditional: skip `-race` on Windows (race detector requires cgo)
 
+## 8. GCP lifecycle test
+
+- [x] 8.1 Export `MonitoringConfigExists(envURL, platformToken string)` from `pkg/installer/gcp/uninstall.go`
+- [x] 8.2 Create `test/e2e/gcp_test.go` with `TestGCPLifecycle`: skips if `gcloud` is not on PATH; fatals with instructions if no active project is set; installs, verifies connection and monitoring config exist, then uninstalls and verifies both are gone
+
 ## 7. Documentation
 
 - [x] 7.1 Update `docs/contributing/testing.md`: document `Parallelize`, `SEQUENTIAL=true`, `TEST_DEBUG`, and the per-test infrastructure prerequisites table

@@ -6,8 +6,8 @@ The integration test suite had several gaps that made it harder to use and trust
 
 - Tests ran sequentially, so the full suite took longer than necessary.
 - Setting `AutoConfirm = true` was done per-test, which was unsafe to do in parallel (a finishing test could reset the flag while other tests were still running).
-- The Kubernetes and Azure installers had no lifecycle tests; install and uninstall were never validated end-to-end against a real cluster or cloud account.
-- When `TestAzureLifecycle` wanted to verify that a monitoring configuration was removed after uninstall, there was no exported function to check for it.
+- The Kubernetes, Azure, and GCP installers had no lifecycle tests; install and uninstall were never validated end-to-end against a real cluster or cloud account.
+- When `TestAzureLifecycle` and `TestGCPLifecycle` wanted to verify that a monitoring configuration was removed after uninstall, there was no exported function to check for it.
 - The test output was hard to read: no summary of how many tests passed, failed, or were skipped.
 - When a test failed, there was no easy way to see the DQL queries that ran or the Kubernetes state at the time of failure.
 
@@ -19,6 +19,8 @@ The integration test suite had several gaps that made it harder to use and trust
 - A `TestKubernetesLifecycle` test installs and uninstalls the Dynatrace Operator against a real cluster and checks that topology data appeared in Dynatrace.
 - A `TestAzureLifecycle` test installs and uninstalls the Azure Monitor integration against a real Azure subscription and checks that the Dynatrace connection and monitoring configuration exist and are cleaned up.
 - `azure.MonitoringConfigExists()` is exported so the Azure lifecycle test can check post-uninstall state.
+- A `TestGCPLifecycle` test installs and uninstalls the Google Cloud integration against a real GCP project and checks that the Dynatrace connection and monitoring configuration exist and are cleaned up.
+- `gcp.MonitoringConfigExists()` is exported so the GCP lifecycle test can check post-uninstall state.
 - A DQL debug mode (`TEST_DEBUG=1`) logs DQL queries as they run and dumps Kubernetes pod/event state on test failure.
 - `make test-integration` prints a summary (passed/failed/skipped counts) after the run.
 - The timeout for `make test-integration` is raised from 15 to 30 minutes to accommodate the new lifecycle tests.
@@ -45,5 +47,7 @@ none
 - `test/integration/grail/kubernetes.go`: new file; `WaitForKubernetesCluster` and `RequireKubernetesCluster`
 - `test/integration/grail/execute.go`: adds `TEST_DEBUG` DQL logging
 - `pkg/installer/azure/uninstall.go`: exports `MonitoringConfigExists`
+- `test/e2e/gcp_test.go`: new file; `TestGCPLifecycle`
+- `pkg/installer/gcp/uninstall.go`: exports `MonitoringConfigExists`
 - `makefile`: parallel-safe test runner, `SEQUENTIAL` flag, test summary, 30 min timeout, `TEST_DEBUG` pass-through
 - `docs/contributing/testing.md`: updated to reflect parallel execution, `Parallelize` usage, and new infrastructure-dependent tests
