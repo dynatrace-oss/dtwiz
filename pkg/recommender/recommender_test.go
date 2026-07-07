@@ -250,8 +250,8 @@ func TestGenerateRecommendations_GCP(t *testing.T) {
 	for _, r := range recs {
 		if r.Method == recommender.MethodGCP {
 			found = true
-			if !r.ComingSoon {
-				t.Error("expected ComingSoon=true for GCP recommendation")
+			if r.ComingSoon {
+				t.Error("expected ComingSoon=false for GCP recommendation")
 			}
 		}
 	}

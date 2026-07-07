@@ -472,6 +472,31 @@ func TestAzureGetSPObjectID_ExhaustedRetries(t *testing.T) {
 	}
 }
 
+func TestAzureGetSPObjectID_NotFoundSignalOnlyInStdoutStillRetries(t *testing.T) {
+	// Some az CLI error shapes put the useful detail in stdout rather than in the
+	// Go/stderr-derived error text. The retry classifier must see the same combined
+	// signal the inline check does, or it stops after a single attempt instead of
+	// retrying up to 5 times.
+	callCount := 0
+	runner := func(_ string, _ []string, _ []string) (string, error) {
+		callCount++
+		if callCount < 3 {
+			return `{"error": "does not exist yet"}`, fmt.Errorf("exit status 1")
+		}
+		return `{"id":"object-id-111"}`, nil
+	}
+	id, err := azureGetSPObjectID(runner, "client-id-000", noSleep)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if id != "object-id-111" {
+		t.Errorf("got id %q, want object-id-111", id)
+	}
+	if callCount != 3 {
+		t.Errorf("expected 3 calls (retries continue based on combined err+stdout signal), got %d", callCount)
+	}
+}
+
 func TestAzureGetSPObjectID_JSONParseFail(t *testing.T) {
 	runner := func(_ string, _ []string, _ []string) (string, error) {
 		return "not valid json{{", nil

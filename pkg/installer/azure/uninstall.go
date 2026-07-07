@@ -76,33 +76,15 @@ func UninstallAzure(envURL, platformToken string, dryRun bool) error {
 }
 
 func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc dtclient) error {
-	type monitorRes struct {
-		ids []string
-		err error
+	var monConfigIDs []string
+	var conns []connRef
+	err := installer.RunConcurrently(
+		func() (err error) { monConfigIDs, err = dtc.findAllMonitoringConfigs(integrationName); return },
+		func() (err error) { conns, err = dtc.findAllConnections(integrationName); return },
+	)
+	if err != nil {
+		return err
 	}
-	type connRes struct {
-		conns []connRef
-		err   error
-	}
-	monitorCh := make(chan monitorRes, 1)
-	connCh := make(chan connRes, 1)
-	go func() {
-		ids, err := dtc.findAllMonitoringConfigs(integrationName)
-		monitorCh <- monitorRes{ids: ids, err: err}
-	}()
-	go func() {
-		conns, err := dtc.findAllConnections(integrationName)
-		connCh <- connRes{conns: conns, err: err}
-	}()
-	mr := <-monitorCh
-	cr := <-connCh
-	if mr.err != nil {
-		return mr.err
-	}
-	if cr.err != nil {
-		return cr.err
-	}
-	monConfigIDs, conns := mr.ids, cr.conns
 	clientIDs := azureGatherClientIDs(runner, conns, integrationName, envURL)
 
 	if len(monConfigIDs) == 0 && len(conns) == 0 && len(clientIDs) == 0 {

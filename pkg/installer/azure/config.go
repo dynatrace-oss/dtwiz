@@ -2,18 +2,16 @@
 package azure
 
 import (
-	"fmt"
-	"os/exec"
-	"strings"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 )
 
 // execLookPath is a variable alias for exec.LookPath, allowing tests to stub it.
-var execLookPath = exec.LookPath
+var execLookPath = installer.ExecLookPath
 
 // cmdRunner is a function that runs a command and captures its stdout.
 // It receives the executable name, argument slice, and optional environment
 // variables (nil means inherit from the current process).
-type cmdRunner func(name string, args []string, env []string) (stdout string, err error)
+type cmdRunner = installer.CmdRunner
 
 // azureConfig holds all configuration needed for the Azure Monitor integration.
 type azureConfig struct {
@@ -39,16 +37,4 @@ const (
 )
 
 // realRunner is the production cmdRunner implementation.
-func realRunner(name string, args []string, env []string) (string, error) {
-	cmd := exec.Command(name, args...)
-	if env != nil {
-		cmd.Env = env
-	}
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok && len(exitErr.Stderr) > 0 {
-			return string(out), fmt.Errorf("%w: %s", err, strings.TrimSpace(string(exitErr.Stderr)))
-		}
-	}
-	return string(out), err
-}
+var realRunner = installer.RealRunner

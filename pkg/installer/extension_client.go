@@ -1,0 +1,197 @@
+package installer
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/dynatrace-oss/dtctl/sdk/api/extension"
+	"github.com/dynatrace-oss/dtctl/sdk/api/settings"
+	"github.com/dynatrace-oss/dtctl/sdk/httpclient"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
+)
+
+// ExtensionClient bundles the Dynatrace Settings and Extensions API handlers
+// shared by every hyperscaler installer (azure, gcp, ...). Each installer wraps
+// it in its own package-local client type and adds the cloud-specific methods
+// (createConnection, updateConnection, createMonitoring, ...) that depend on
+// its own settings schema and extension name.
+type ExtensionClient struct {
+	C         *httpclient.Client
+	Settings  *settings.Handler
+	Extension *extension.Handler
+}
+
+// NewExtensionClient builds an ExtensionClient authenticated against the
+// Platform (apps) API of the given Dynatrace environment.
+func NewExtensionClient(envURL, platformToken string) (*ExtensionClient, error) {
+	appsURL := AppsURL(envURL)
+	c, err := httpclient.New(appsURL, httpclient.WithToken(platformToken))
+	if err != nil {
+		return nil, fmt.Errorf("creating Dynatrace API client: %w", err)
+	}
+	if logger.IsDebug() {
+		c.EnableVerboseLogging(2, os.Stderr)
+	}
+	return &ExtensionClient{
+		C:         c,
+		Settings:  settings.NewHandler(c),
+		Extension: extension.NewHandler(c),
+	}, nil
+}
+
+// DeleteConnection deletes a Settings object by ID; a 404 (already gone) is treated as success.
+func (e *ExtensionClient) DeleteConnection(objectID string) error {
+	obj, err := e.Settings.Get(context.Background(), objectID)
+	if err != nil {
+		if errors.Is(err, httpclient.ErrNotFound) {
+			logger.Debug("connection already gone", "objectId", objectID)
+			return nil
+		}
+		return fmt.Errorf("delete connection: get current: %w", err)
+	}
+	logger.Debug("deleting connection", "objectId", objectID, "schemaVersion", obj.SchemaVersion)
+	if err := e.Settings.Delete(context.Background(), objectID, obj.SchemaVersion); err != nil {
+		if errors.Is(err, httpclient.ErrNotFound) {
+			logger.Debug("connection already gone", "objectId", objectID)
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+// FindAllMonitoringConfigs returns the object IDs of every monitoring configuration
+// under extensionName whose "description" field equals name.
+func (e *ExtensionClient) FindAllMonitoringConfigs(extensionName, name string) ([]string, error) {
+	list, err := e.Extension.ListMonitoringConfigurations(context.Background(), extensionName, "", 0)
+	if err != nil {
+		return nil, fmt.Errorf("find monitoring configs: %w", err)
+	}
+	var ids []string
+	for _, item := range list.Items {
+		var val map[string]any
+		if err := json.Unmarshal(item.Value, &val); err != nil {
+			continue
+		}
+		if desc, _ := val["description"].(string); desc == name {
+			logger.Debug("found monitoring config", "objectId", item.ObjectID, "name", name)
+			ids = append(ids, item.ObjectID)
+		}
+	}
+	if len(ids) == 0 {
+		logger.Debug("monitoring config not found", "name", name)
+	}
+	return ids, nil
+}
+
+// DeleteMonitoringConfiguration deletes a monitoring configuration; a 404 (already gone) is treated as success.
+func (e *ExtensionClient) DeleteMonitoringConfiguration(extensionName, configID string) error {
+	err := e.Extension.DeleteMonitoringConfiguration(context.Background(), extensionName, configID)
+	if errors.Is(err, httpclient.ErrNotFound) {
+		logger.Debug("monitoring config already gone", "configId", configID)
+		return nil
+	}
+	return err
+}
+
+// ExtensionSchema is the subset of a Dynatrace extension's monitoring-configuration
+// schema needed to read enum values (e.g. supported locations or feature sets).
+type ExtensionSchema struct {
+	Enums map[string]struct {
+		Items []struct {
+			Value string `json:"value"`
+		} `json:"items"`
+	} `json:"enums"`
+}
+
+// EnumValues returns the non-empty values of the schema enum identified by key.
+func (s *ExtensionSchema) EnumValues(key string) []string {
+	e, ok := s.Enums[key]
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(e.Items))
+	for _, it := range e.Items {
+		if it.Value != "" {
+			out = append(out, it.Value)
+		}
+	}
+	return out
+}
+
+// FetchExtensionSchema fetches and parses the monitoring-configuration schema for
+// the given extension version.
+func (e *ExtensionClient) FetchExtensionSchema(extensionName, version string) (*ExtensionSchema, error) {
+	raw, err := e.Extension.GetMonitoringConfigurationSchema(context.Background(), extensionName, version)
+	if err != nil {
+		return nil, fmt.Errorf("fetch extension schema: %w", err)
+	}
+	var schema ExtensionSchema
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		return nil, fmt.Errorf("parse extension schema: %w", err)
+	}
+	keys := make([]string, 0, len(schema.Enums))
+	for k := range schema.Enums {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	logger.Debug("extension schema enum keys", "count", len(keys), "keys", keys)
+	return &schema, nil
+}
+
+// LatestExtensionVersion returns the highest semver version installed for extensionName.
+func (e *ExtensionClient) LatestExtensionVersion(extensionName string) (string, error) {
+	versionList, err := e.Extension.Get(context.Background(), extensionName)
+	if err != nil {
+		return "", fmt.Errorf("get extension versions: %w", err)
+	}
+	if len(versionList.Items) == 0 {
+		return "", fmt.Errorf("no versions found for extension %s", extensionName)
+	}
+	versions := make([]string, 0, len(versionList.Items))
+	for _, item := range versionList.Items {
+		if item.Version != "" {
+			versions = append(versions, item.Version)
+		}
+	}
+	if len(versions) == 0 {
+		return "", fmt.Errorf("no non-empty versions found for extension %s", extensionName)
+	}
+	sort.Slice(versions, func(i, j int) bool {
+		return cmpSemver(versions[i], versions[j]) > 0
+	})
+	return versions[0], nil
+}
+
+// cmpSemver compares two dotted version strings numerically, segment by segment
+// (missing trailing segments count as 0), returning -1, 0, or 1.
+func cmpSemver(a, b string) int {
+	ap, bp := strings.Split(a, "."), strings.Split(b, ".")
+	n := len(ap)
+	if len(bp) > n {
+		n = len(bp)
+	}
+	for i := range n {
+		ai, bi := 0, 0
+		if i < len(ap) {
+			ai, _ = strconv.Atoi(ap[i])
+		}
+		if i < len(bp) {
+			bi, _ = strconv.Atoi(bp[i])
+		}
+		if ai != bi {
+			if ai > bi {
+				return 1
+			}
+			return -1
+		}
+	}
+	return 0
+}

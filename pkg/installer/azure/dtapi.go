@@ -2,17 +2,11 @@ package azure
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"os"
-	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/dynatrace-oss/dtctl/sdk/api/extension"
 	"github.com/dynatrace-oss/dtctl/sdk/api/settings"
-	"github.com/dynatrace-oss/dtctl/sdk/httpclient"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
@@ -28,8 +22,6 @@ const (
 
 	azureLocationEnumKey   = "dynatrace.datasource.azure:location"
 	azureFeatureSetEnumKey = "FeatureSetsType"
-
-	listPageSize = 50
 )
 
 type connRef struct {
@@ -50,29 +42,19 @@ type dtclient interface {
 }
 
 type sdkDTClient struct {
-	c         *httpclient.Client
-	settings  *settings.Handler
-	extension *extension.Handler
+	*installer.ExtensionClient
 }
 
 func newSDKDTClient(envURL, platformToken string) (*sdkDTClient, error) {
-	appsURL := installer.AppsURL(envURL)
-	c, err := httpclient.New(appsURL, httpclient.WithToken(platformToken))
+	ec, err := installer.NewExtensionClient(envURL, platformToken)
 	if err != nil {
-		return nil, fmt.Errorf("creating Dynatrace API client: %w", err)
+		return nil, err
 	}
-	if logger.IsDebug() {
-		c.EnableVerboseLogging(2, os.Stderr)
-	}
-	return &sdkDTClient{
-		c:         c,
-		settings:  settings.NewHandler(c),
-		extension: extension.NewHandler(c),
-	}, nil
+	return &sdkDTClient{ExtensionClient: ec}, nil
 }
 
 func (d *sdkDTClient) createConnection(name string) (string, error) {
-	resp, err := d.settings.Create(context.Background(), settings.SettingsObjectCreate{
+	resp, err := d.Settings.Create(context.Background(), settings.SettingsObjectCreate{
 		SchemaID: connectionSchemaID,
 		Scope:    "environment",
 		Value: map[string]any{
@@ -91,12 +73,12 @@ func (d *sdkDTClient) createConnection(name string) (string, error) {
 }
 
 func (d *sdkDTClient) updateConnection(objectID, name, tenantID, clientID string) error {
-	obj, err := d.settings.Get(context.Background(), objectID)
+	obj, err := d.Settings.Get(context.Background(), objectID)
 	if err != nil {
 		return fmt.Errorf("update connection: get current: %w", err)
 	}
 	logger.Debug("updating connection", "objectId", objectID, "schemaVersion", obj.SchemaVersion, "currentValue", obj.Value, "tenantID", tenantID, "clientID", clientID)
-	return d.settings.Update(context.Background(), objectID, obj.SchemaVersion, map[string]any{
+	return d.Settings.Update(context.Background(), objectID, obj.SchemaVersion, map[string]any{
 		"name": name,
 		"type": "federatedIdentityCredential",
 		"federatedIdentityCredential": map[string]any{
@@ -108,7 +90,14 @@ func (d *sdkDTClient) updateConnection(objectID, name, tenantID, clientID string
 }
 
 func (d *sdkDTClient) findAllConnections(name string) ([]connRef, error) {
-	list, err := d.settings.ListObjects(context.Background(), connectionSchemaID, "environment", listPageSize)
+	// NOTE: the sibling GCP connections schema (builtin:hyperscaler-authentication.
+	// connections.gcp) was confirmed live to return zero results when filtered by
+	// scopes=environment, even for objects whose own "scope" field is literally
+	// "environment" — see pkg/installer/gcp/dtapi.go. That fix was tried here too by
+	// analogy but never independently confirmed against the Azure schema, so it's kept
+	// reverted to the working, verified behavior until someone reproduces the same bug
+	// against builtin:hyperscaler-authentication.connections.azure specifically.
+	list, err := d.Settings.ListObjects(context.Background(), connectionSchemaID, "environment", 0)
 	if err != nil {
 		return nil, fmt.Errorf("find connections: %w", err)
 	}
@@ -132,23 +121,7 @@ func (d *sdkDTClient) findAllConnections(name string) ([]connRef, error) {
 }
 
 func (d *sdkDTClient) deleteConnection(objectID string) error {
-	obj, err := d.settings.Get(context.Background(), objectID)
-	if err != nil {
-		if errors.Is(err, httpclient.ErrNotFound) {
-			logger.Debug("connection already gone", "objectId", objectID)
-			return nil
-		}
-		return fmt.Errorf("delete connection: get current: %w", err)
-	}
-	logger.Debug("deleting connection", "objectId", objectID, "schemaVersion", obj.SchemaVersion)
-	if err := d.settings.Delete(context.Background(), objectID, obj.SchemaVersion); err != nil {
-		if errors.Is(err, httpclient.ErrNotFound) {
-			logger.Debug("connection already gone", "objectId", objectID)
-			return nil
-		}
-		return err
-	}
-	return nil
+	return d.DeleteConnection(objectID)
 }
 
 // buildMonitoringConfig is shared by createMonitoring and updateMonitoring so both produce identical configs.
@@ -156,23 +129,23 @@ func (d *sdkDTClient) deleteConnection(objectID string) error {
 func (d *sdkDTClient) buildMonitoringConfig(configName, connectionObjectID, clientID, subscriptionID string) (extension.MonitoringConfigurationCreate, error) {
 	var body extension.MonitoringConfigurationCreate
 
-	version, err := d.latestExtensionVersion()
+	version, err := d.LatestExtensionVersion(extensionName)
 	if err != nil {
 		return body, err
 	}
 	logger.Debug("using extension version", "version", version)
 
-	schema, err := d.fetchExtensionSchema(version)
+	schema, err := d.FetchExtensionSchema(extensionName, version)
 	if err != nil {
 		return body, err
 	}
 
-	locations := schema.enumValues(azureLocationEnumKey)
+	locations := schema.EnumValues(azureLocationEnumKey)
 	if len(locations) == 0 {
 		return body, fmt.Errorf("no locations found under enum %q in extension schema", azureLocationEnumKey)
 	}
 	featureSets := make([]string, 0)
-	for _, fs := range schema.enumValues(azureFeatureSetEnumKey) {
+	for _, fs := range schema.EnumValues(azureFeatureSetEnumKey) {
 		if strings.HasSuffix(fs, "_essential") {
 			featureSets = append(featureSets, fs)
 		}
@@ -210,7 +183,7 @@ func (d *sdkDTClient) createMonitoring(configName, connectionObjectID, clientID,
 	if err != nil {
 		return fmt.Errorf("create monitoring: %w", err)
 	}
-	_, err = d.extension.CreateMonitoringConfiguration(context.Background(), extensionName, body)
+	_, err = d.Extension.CreateMonitoringConfiguration(context.Background(), extensionName, body)
 	return err
 }
 
@@ -220,129 +193,25 @@ func (d *sdkDTClient) updateMonitoring(configID, configName, connectionObjectID,
 	if err != nil {
 		return fmt.Errorf("update monitoring: %w", err)
 	}
-	_, err = d.extension.UpdateMonitoringConfiguration(context.Background(), extensionName, configID, body)
+	_, err = d.Extension.UpdateMonitoringConfiguration(context.Background(), extensionName, configID, body)
 	return err
 }
 
 func (d *sdkDTClient) findAllMonitoringConfigs(name string) ([]string, error) {
-	list, err := d.extension.ListMonitoringConfigurations(context.Background(), extensionName, "", listPageSize)
-	if err != nil {
-		return nil, fmt.Errorf("find monitoring configs: %w", err)
-	}
-	var ids []string
-	for _, item := range list.Items {
-		var val map[string]any
-		if err := json.Unmarshal(item.Value, &val); err != nil {
-			continue
-		}
-		if desc, _ := val["description"].(string); desc == name {
-			logger.Debug("found monitoring config", "objectId", item.ObjectID, "name", name)
-			ids = append(ids, item.ObjectID)
-		}
-	}
-	if len(ids) == 0 {
-		logger.Debug("monitoring config not found", "name", name)
-	}
-	return ids, nil
+	return d.FindAllMonitoringConfigs(extensionName, name)
 }
 
 func (d *sdkDTClient) deleteMonitoring(configID string) error {
-	err := d.extension.DeleteMonitoringConfiguration(context.Background(), extensionName, configID)
-	if err != nil {
-		// SDK drops *APIError for 404 (no %w), so errors.Is/As won't work.
-		msg := strings.ToLower(err.Error())
-		if strings.Contains(msg, "not found") || strings.Contains(msg, "404") {
-			logger.Debug("monitoring config already gone", "configId", configID)
-			return nil
-		}
-		return err
-	}
-	return nil
-}
-
-type extensionSchema struct {
-	Enums map[string]struct {
-		Items []struct {
-			Value string `json:"value"`
-		} `json:"items"`
-	} `json:"enums"`
-}
-
-func (s *extensionSchema) enumValues(key string) []string {
-	e, ok := s.Enums[key]
-	if !ok {
+	err := d.DeleteMonitoringConfiguration(extensionName, configID)
+	if err == nil {
 		return nil
 	}
-	out := make([]string, 0, len(e.Items))
-	for _, it := range e.Items {
-		if it.Value != "" {
-			out = append(out, it.Value)
-		}
+	// The extension SDK does not surface 404 as httpclient.ErrNotFound (no %w wrapping),
+	// so errors.Is won't work. Fall back to string matching to treat already-gone as success.
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "not found") || strings.Contains(msg, "404") {
+		logger.Debug("monitoring config already gone", "configId", configID)
+		return nil
 	}
-	return out
-}
-
-func (d *sdkDTClient) fetchExtensionSchema(version string) (*extensionSchema, error) {
-	raw, err := d.extension.GetMonitoringConfigurationSchema(context.Background(), extensionName, version)
-	if err != nil {
-		return nil, fmt.Errorf("fetch extension schema: %w", err)
-	}
-	var schema extensionSchema
-	if err := json.Unmarshal(raw, &schema); err != nil {
-		return nil, fmt.Errorf("parse extension schema: %w", err)
-	}
-	keys := make([]string, 0, len(schema.Enums))
-	for k := range schema.Enums {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	logger.Debug("extension schema enum keys", "count", len(keys), "keys", keys)
-	return &schema, nil
-}
-
-func (d *sdkDTClient) latestExtensionVersion() (string, error) {
-	versionList, err := d.extension.Get(context.Background(), extensionName)
-	if err != nil {
-		return "", fmt.Errorf("get extension versions: %w", err)
-	}
-	if len(versionList.Items) == 0 {
-		return "", fmt.Errorf("no versions found for extension %s", extensionName)
-	}
-	versions := make([]string, 0, len(versionList.Items))
-	for _, item := range versionList.Items {
-		if item.Version != "" {
-			versions = append(versions, item.Version)
-		}
-	}
-	if len(versions) == 0 {
-		return "", fmt.Errorf("no non-empty versions found for extension %s", extensionName)
-	}
-	sort.Slice(versions, func(i, j int) bool {
-		return cmpSemver(versions[i], versions[j]) > 0
-	})
-	return versions[0], nil
-}
-
-func cmpSemver(a, b string) int {
-	ap, bp := strings.Split(a, "."), strings.Split(b, ".")
-	n := len(ap)
-	if len(bp) > n {
-		n = len(bp)
-	}
-	for i := range n {
-		ai, bi := 0, 0
-		if i < len(ap) {
-			ai, _ = strconv.Atoi(ap[i])
-		}
-		if i < len(bp) {
-			bi, _ = strconv.Atoi(bp[i])
-		}
-		if ai != bi {
-			if ai > bi {
-				return 1
-			}
-			return -1
-		}
-	}
-	return 0
+	return err
 }
