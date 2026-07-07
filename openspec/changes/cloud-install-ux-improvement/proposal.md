@@ -1,3 +1,5 @@
+# Proposal: Cloud Install UX Improvement
+
 ## Why
 
 Two UX gaps for cloud installs: the watch screen footer links to QuickStart (which doesn't show cloud resources yet), and the setup menu doesn't distinguish install vs update for Azure/GCP. OTel recommendation wording also needed clarification.
@@ -13,6 +15,7 @@ Two UX gaps for cloud installs: the watch screen footer links to QuickStart (whi
 ## Capabilities
 
 ### New Capabilities
+
 - `cloud-install-footer`: Footer variant for cloud installs linking to the Clouds app.
 - `cloud-recommend-ux`: Recommender and setup menu distinguish install vs update for Azure/GCP; OTel wording fixes.
 
@@ -25,3 +28,4 @@ Two UX gaps for cloud installs: the watch screen footer links to QuickStart (whi
 - `pkg/recommender/recommender.go` — new methods, updated titles
 - `pkg/analyzer/analyzer.go` — `AzureConfigured`, `GCPConfigured` fields on `SystemInfo`
 - `cmd/setup.go` — connection pre-check moved earlier, dispatches on new method constants
+

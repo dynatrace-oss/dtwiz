@@ -1,3 +1,5 @@
+# Cloud Install UX Improvement Tasks
+
 ## 1. Core Implementation
 
 - [x] 1.1 Add `cloudInstall bool` param to `watchIngest` in `pkg/installer/ingest_watch.go`
@@ -24,3 +26,4 @@
 
 - [x] 4.1 Verify build passes: `make build`
 - [x] 4.2 Verify tests pass: `make test`
+
