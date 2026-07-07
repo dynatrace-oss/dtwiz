@@ -36,3 +36,10 @@ func hostByNameQuery(hostName string) string {
 		hostName,
 	)
 }
+
+func kubernetesClusterByNameQuery(clusterName string) string {
+	return fmt.Sprintf(
+		`fetch logs, from: now()-10m | filter k8s.cluster.name == %q | limit 1`,
+		clusterName,
+	)
+}

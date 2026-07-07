@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
 	"github.com/dynatrace-oss/dtwiz/test/integration"
 	"github.com/dynatrace-oss/dtwiz/test/integration/grail"
@@ -56,12 +55,9 @@ func TestOneAgentLifecycle(t *testing.T) {
 
 	installDir := oneAgentInstallDir()
 
+	integration.Parallelize(t)
 	env := integration.SetupIntegration(t)
 	t.Logf("test ID: %s", env.TestID)
-
-	originalAutoConfirm := installer.AutoConfirm
-	installer.AutoConfirm = true
-	t.Cleanup(func() { installer.AutoConfirm = originalAutoConfirm })
 
 	// Safety-net cleanup: only runs if install succeeded, so the host is never
 	// left permanently monitored if a later assertion fails.
