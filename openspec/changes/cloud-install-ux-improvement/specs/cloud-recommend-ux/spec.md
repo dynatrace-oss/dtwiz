@@ -48,4 +48,3 @@ The OTel update recommendation SHALL read "update existing OpenTelemetry Collect
 
 - **WHEN** no OTel Collector is running and `dtwiz setup` or `dtwiz recommend` lists recommendations
 - **THEN** the title contains "via new OpenTelemetry Collector"
-

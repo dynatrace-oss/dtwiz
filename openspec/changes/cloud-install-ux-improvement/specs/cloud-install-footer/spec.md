@@ -29,4 +29,3 @@ For all other install methods, the watch screen footer SHALL continue to show "S
 
 - **WHEN** any non-cloud install completes and the watch screen renders
 - **THEN** the footer shows the QuickStart link, not the Clouds app link
-

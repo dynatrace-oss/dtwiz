@@ -31,4 +31,3 @@ Alternatives considered:
 
 - Minimal risk — pure rendering change, no API or data model impact.
 - If a future cloud method is added, callers must remember to use `WatchIngestCloud`. Mitigated: function name is self-documenting.
-

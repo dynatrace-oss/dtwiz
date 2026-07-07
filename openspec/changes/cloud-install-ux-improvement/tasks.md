@@ -26,4 +26,3 @@
 
 - [x] 4.1 Verify build passes: `make build`
 - [x] 4.2 Verify tests pass: `make test`
-

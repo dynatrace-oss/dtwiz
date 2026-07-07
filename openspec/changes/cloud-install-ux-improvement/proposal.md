@@ -28,4 +28,3 @@ Two UX gaps for cloud installs: the watch screen footer links to QuickStart (whi
 - `pkg/recommender/recommender.go` — new methods, updated titles
 - `pkg/analyzer/analyzer.go` — `AzureConfigured`, `GCPConfigured` fields on `SystemInfo`
 - `cmd/setup.go` — connection pre-check moved earlier, dispatches on new method constants
-
