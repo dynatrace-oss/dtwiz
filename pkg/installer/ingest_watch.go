@@ -15,6 +15,7 @@ import (
 	"github.com/fatih/color"
 	"golang.org/x/term"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -96,7 +97,7 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsA
 	_ = green
 
 	linkFn := func(url, label string) string {
-		return termHyperlink(url, label, isTTY)
+		return termHyperlink(url, label, display.StdoutSupportsHyperlinks())
 	}
 
 	var prevLines int
