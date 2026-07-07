@@ -45,6 +45,7 @@ Both `TestKubernetesLifecycle` and `TestAzureLifecycle` register a cleanup that 
 ### `TEST_DEBUG` for DQL and cluster diagnostics
 
 Debugging a failing integration test often requires knowing what DQL queries ran and what state the cluster was in at the time of failure. Setting `TEST_DEBUG=1` enables two things:
+
 - DQL queries are logged as they run (added to `grail/execute.go`).
 - On Kubernetes test failure, `kubectl get pods` and `kubectl get events` output is logged.
 
