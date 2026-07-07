@@ -53,7 +53,7 @@ type watchState struct {
 // fromClause is injected directly into DQL queries — accepts RFC3339 timestamps
 // or DQL relative expressions (e.g. "now()-1h").
 func WatchIngest(envURL, pToken, fromClause string) {
-	watchIngest(envURL, pToken, fromClause, nil, "")
+	watchIngest(envURL, pToken, fromClause, nil, "", false)
 }
 
 // WatchIngestWithStatus is like WatchIngest but displays a background-task
@@ -61,17 +61,24 @@ func WatchIngest(envURL, pToken, fromClause string) {
 // The caller sends status messages to statusCh; the most recent message is
 // shown on every render. Passing a nil channel disables status updates.
 func WatchIngestWithStatus(envURL, pToken, fromClause string, statusCh <-chan string) {
-	watchIngest(envURL, pToken, fromClause, statusCh, "")
+	watchIngest(envURL, pToken, fromClause, statusCh, "", false)
 }
 
 // WatchIngestAWS is like WatchIngestWithStatus but additionally scopes the
 // cloud-platform signal queries (metrics + da-* logs) to a specific AWS
 // account ID so noise from other accounts in the same tenant is filtered out.
 func WatchIngestAWS(envURL, pToken, fromClause string, statusCh <-chan string, awsAccountID string) {
-	watchIngest(envURL, pToken, fromClause, statusCh, awsAccountID)
+	watchIngest(envURL, pToken, fromClause, statusCh, awsAccountID, true)
 }
 
-func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsAccountID string) {
+// WatchIngestCloud is like WatchIngest but shows a "See your cloud resources
+// in the Clouds app" footer instead of the QuickStart link. Use this for
+// AWS, GCP, and Azure installs.
+func WatchIngestCloud(envURL, pToken, fromClause string) {
+	watchIngest(envURL, pToken, fromClause, nil, "", true)
+}
+
+func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsAccountID string, cloudInstall bool) {
 	if pToken == "" {
 		fmt.Println("  Platform token required for watch. Set --platform-token or DT_PLATFORM_TOKEN.")
 		return
@@ -163,11 +170,16 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsA
 		renderSection(&buf, "Requests", state.Requests, appsURL, highlight, dim, bold, linkFn)
 		renderSection(&buf, "Exceptions", state.Exceptions, appsURL, highlight, dim, bold, linkFn)
 
-		// QuickStart footer
+		// Footer
 		separator := " ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
 		highlight.Fprint(&buf, separator)
-		highlight.Fprintf(&buf, " 👉 See all your data and findings in Dynatrace QuickStart\n")
-		fmt.Fprintf(&buf, "    %s\n", linkFn(appsURL+"/ui/apps/dynatrace.quickstart/", "→ Open Dynatrace QuickStart"))
+		if cloudInstall {
+			highlight.Fprintf(&buf, " 👉 See your cloud resources in the Clouds app\n")
+			fmt.Fprintf(&buf, "    %s\n", linkFn(appsURL+"/ui/apps/dynatrace.clouds/smartscape/services", "→ Open Clouds"))
+		} else {
+			highlight.Fprintf(&buf, " 👉 See all your data and findings in Dynatrace QuickStart\n")
+			fmt.Fprintf(&buf, "    %s\n", linkFn(appsURL+"/ui/apps/dynatrace.quickstart/", "→ Open Dynatrace QuickStart"))
+		}
 		highlight.Fprint(&buf, separator)
 		buf.WriteString("\n")
 		dim.Fprint(&buf, " Press Enter to continue or keep watching...")

@@ -197,7 +197,7 @@ func azureWatchIngest(cfg azureConfig, startTime time.Time) {
 		return
 	}
 	fromClause := startTime.UTC().Format("2006-01-02T15:04:05Z")
-	installer.WatchIngest(cfg.EnvURL, cfg.PlatformToken, fromClause)
+	installer.WatchIngestCloud(cfg.EnvURL, cfg.PlatformToken, fromClause)
 }
 
 func runInstallSteps(cfg azureConfig, runner cmdRunner, sleeper func(time.Duration), dtc dtclient) error {
