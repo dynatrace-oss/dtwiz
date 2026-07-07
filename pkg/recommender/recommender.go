@@ -23,7 +23,9 @@ const (
 	MethodOtelUpdate       IngestMethod = "otel-update"
 	MethodAWS              IngestMethod = "aws"
 	MethodAzure            IngestMethod = "azure"
+	MethodAzureUpdate      IngestMethod = "azure-update"
 	MethodGCP              IngestMethod = "gcp"
+	MethodGCPUpdate        IngestMethod = "gcp-update"
 	MethodAlreadyInstalled IngestMethod = "already-installed"
 	MethodNotSupported     IngestMethod = "not-supported"
 )
@@ -69,7 +71,7 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 		recs = append(recs, Recommendation{
 			Method:   MethodOtelUpdate,
 			Priority: 0,
-			Title:    "This machine's services (patch existing OpenTelemetry Collector)",
+			Title:    "This machine's services (update existing OpenTelemetry Collector)",
 			Description: fmt.Sprintf(
 				"An OpenTelemetry Collector is running%s. Add the Dynatrace OTLP exporter to send telemetry to Dynatrace.",
 				configHint,
@@ -87,7 +89,7 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 	recs = append(recs, Recommendation{
 		Method:        MethodOtelCollector,
 		Priority:      0,
-		Title:         "This machine's services (via OpenTelemetry)",
+		Title:         "This machine's services (via new OpenTelemetry Collector)",
 		Description:   "Deploy the Dynatrace OpenTelemetry Collector to ingest traces, metrics, and logs via OTLP.",
 		Prerequisites: []string{"Dynatrace API token with ingest scopes"},
 		Steps: []string{
@@ -161,20 +163,32 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 
 	// 8. Azure detected.
 	if system.Azure != nil && system.Azure.Available {
+		method := MethodAzure
+		title := "Azure cloud services"
+		if system.AzureConfigured {
+			method = MethodAzureUpdate
+			title = "Azure cloud services (update)"
+		}
 		recs = append(recs, Recommendation{
-			Method:      MethodAzure,
+			Method:      method,
 			Priority:    50,
-			Title:       "Azure cloud services",
+			Title:       title,
 			Description: fmt.Sprintf("Azure subscription detected (%s).", system.Azure.SubscriptionID),
 		})
 	}
 
 	// 9. GCP detected.
 	if system.GCP != nil && system.GCP.Available {
+		method := MethodGCP
+		title := "GCP cloud services"
+		if system.GCPConfigured {
+			method = MethodGCPUpdate
+			title = "GCP cloud services (update)"
+		}
 		recs = append(recs, Recommendation{
-			Method:      MethodGCP,
+			Method:      method,
 			Priority:    50,
-			Title:       "GCP cloud services",
+			Title:       title,
 			Description: fmt.Sprintf("GCP project detected (%s).", system.GCP.ProjectID),
 		})
 	}

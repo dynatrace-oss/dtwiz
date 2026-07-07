@@ -53,6 +53,25 @@ var setupCmd = &cobra.Command{
 		}
 		fmt.Println(info.Summary())
 
+		// Pre-check Azure/GCP connection status so the recommender can emit the
+		// right method (install vs update) for each cloud integration.
+		if envURL, _, platformTok, credErr := getDtEnvironment(); credErr == nil {
+			if err := installer.RunConcurrently(
+				func() error {
+					exists, err := azure.ConnectionExists(envURL, platformTok)
+					info.AzureConfigured = exists
+					return err
+				},
+				func() error {
+					exists, err := gcp.ConnectionExists(envURL, platformTok)
+					info.GCPConfigured = exists
+					return err
+				},
+			); err != nil {
+				logger.Debug("connection existence check failed, assuming not configured", "err", err)
+			}
+		}
+
 		fmt.Println()
 		display.Header("Recommendations — What do you want to monitor?")
 		recs := recommender.GenerateRecommendations(info)
@@ -73,43 +92,8 @@ var setupCmd = &cobra.Command{
 			return nil
 		}
 
-		// Pre-check Azure/GCP status so we can badge those entries in the list.
-		azureConfigured := false
-		gcpConfigured := false
-		if envURL, _, platformTok, credErr := getDtEnvironment(); credErr == nil {
-			if err := installer.RunConcurrently(
-				func() error {
-					exists, err := azure.ConnectionExists(envURL, platformTok)
-					azureConfigured = exists
-					return err
-				},
-				func() error {
-					exists, err := gcp.ConnectionExists(envURL, platformTok)
-					gcpConfigured = exists
-					return err
-				},
-			); err != nil {
-				logger.Debug("connection existence check failed, badging as not configured", "err", err)
-			}
-		}
-
 		for i, r := range actionable {
-			title := r.Title
-			if r.Method == recommender.MethodAzure {
-				if azureConfigured {
-					title += "  [update]"
-				} else {
-					title += "  [install]"
-				}
-			}
-			if r.Method == recommender.MethodGCP {
-				if gcpConfigured {
-					title += "  [update]"
-				} else {
-					title += "  [install]"
-				}
-			}
-			fmt.Printf("  %s  %s\n", display.ColorHeader.Sprintf("[%d]", i+1), title)
+			fmt.Printf("  %s  %s\n", display.ColorHeader.Sprintf("[%d]", i+1), r.Title)
 		}
 		// Show coming-soon items (informational only, not selectable).
 		for _, r := range recs {
@@ -186,8 +170,7 @@ var setupCmd = &cobra.Command{
 		}
 
 		headerVerb := "Installing"
-		if (selected.Method == recommender.MethodAzure && azureConfigured) ||
-			(selected.Method == recommender.MethodGCP && gcpConfigured) {
+		if selected.Method == recommender.MethodAzureUpdate || selected.Method == recommender.MethodGCPUpdate {
 			headerVerb = "Updating"
 		}
 		display.Header(fmt.Sprintf("%s: %s", headerVerb, selected.Title))
@@ -221,18 +204,14 @@ var setupCmd = &cobra.Command{
 		case recommender.MethodAWS:
 			installErr = installer.InstallAWS(c.Platform, envURL, platformTok, setupDryRun, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
 		case recommender.MethodAzure:
-			if azureConfigured {
-				installErr = azure.UpdateAzure(envURL, platformTok, setupDryRun, StartTime)
-			} else {
-				installErr = azure.InstallAzure(envURL, platformTok, setupDryRun, StartTime)
-			}
+			installErr = azure.InstallAzure(envURL, platformTok, setupDryRun, StartTime)
+		case recommender.MethodAzureUpdate:
+			installErr = azure.UpdateAzure(envURL, platformTok, setupDryRun, StartTime)
 		case recommender.MethodGCP:
-			logger.Debug("setup selected GCP", "configured", gcpConfigured)
-			if gcpConfigured {
-				installErr = gcp.UpdateGCP(envURL, platformTok, setupDryRun, StartTime)
-			} else {
-				installErr = gcp.InstallGCP(envURL, platformTok, setupDryRun, StartTime)
-			}
+			installErr = gcp.InstallGCP(envURL, platformTok, setupDryRun, StartTime)
+		case recommender.MethodGCPUpdate:
+			logger.Debug("setup selected GCP update")
+			installErr = gcp.UpdateGCP(envURL, platformTok, setupDryRun, StartTime)
 		default:
 			return fmt.Errorf("unsupported method: %s", selected.Method)
 		}
@@ -246,7 +225,8 @@ var setupCmd = &cobra.Command{
 		// own generic watch from inside the installer; both start their own watch, so
 		// the generic post-install watch here is only used for the other methods.
 		if !setupDryRun && selected.Method != recommender.MethodAWS &&
-			selected.Method != recommender.MethodAzure && selected.Method != recommender.MethodGCP {
+			selected.Method != recommender.MethodAzure && selected.Method != recommender.MethodAzureUpdate &&
+			selected.Method != recommender.MethodGCP && selected.Method != recommender.MethodGCPUpdate {
 			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
 		}
 		return nil
