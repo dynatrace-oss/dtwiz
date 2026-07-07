@@ -56,19 +56,25 @@ var setupCmd = &cobra.Command{
 		// Pre-check Azure/GCP connection status so the recommender can emit the
 		// right method (install vs update) for each cloud integration.
 		if envURL, _, platformTok, credErr := getDtEnvironment(); credErr == nil {
-			if err := installer.RunConcurrently(
-				func() error {
+			var checks []func() error
+			if info.Azure != nil && info.Azure.Available {
+				checks = append(checks, func() error {
 					exists, err := azure.ConnectionExists(envURL, platformTok)
 					info.AzureConfigured = exists
 					return err
-				},
-				func() error {
+				})
+			}
+			if info.GCP != nil && info.GCP.Available {
+				checks = append(checks, func() error {
 					exists, err := gcp.ConnectionExists(envURL, platformTok)
 					info.GCPConfigured = exists
 					return err
-				},
-			); err != nil {
-				logger.Debug("connection existence check failed, assuming not configured", "err", err)
+				})
+			}
+			if len(checks) > 0 {
+				if err := installer.RunConcurrently(checks...); err != nil {
+					logger.Debug("connection existence check failed, assuming not configured", "err", err)
+				}
 			}
 		}
 

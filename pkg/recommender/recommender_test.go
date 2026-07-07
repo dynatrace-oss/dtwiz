@@ -228,6 +228,9 @@ func TestGenerateRecommendations_Azure(t *testing.T) {
 			if r.ComingSoon {
 				t.Error("expected ComingSoon=false for Azure recommendation")
 			}
+			if r.Title != "Azure cloud services" {
+				t.Errorf("expected title %q, got %q", "Azure cloud services", r.Title)
+			}
 		}
 	}
 	if !found {
@@ -254,6 +257,9 @@ func TestGenerateRecommendations_AzureConfigured(t *testing.T) {
 		}
 		if r.Method == recommender.MethodAzureUpdate {
 			foundUpdate = true
+			if r.Title != "Azure cloud services (update)" {
+				t.Errorf("expected title %q, got %q", "Azure cloud services (update)", r.Title)
+			}
 		}
 	}
 	if !foundUpdate {
@@ -278,6 +284,9 @@ func TestGenerateRecommendations_GCP(t *testing.T) {
 			found = true
 			if r.ComingSoon {
 				t.Error("expected ComingSoon=false for GCP recommendation")
+			}
+			if r.Title != "GCP cloud services" {
+				t.Errorf("expected title %q, got %q", "GCP cloud services", r.Title)
 			}
 		}
 	}
@@ -305,6 +314,9 @@ func TestGenerateRecommendations_GCPConfigured(t *testing.T) {
 		}
 		if r.Method == recommender.MethodGCPUpdate {
 			foundUpdate = true
+			if r.Title != "GCP cloud services (update)" {
+				t.Errorf("expected title %q, got %q", "GCP cloud services (update)", r.Title)
+			}
 		}
 	}
 	if !foundUpdate {
