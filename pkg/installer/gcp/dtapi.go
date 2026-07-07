@@ -50,10 +50,6 @@ const (
 	extensionAPI  = "/platform/extensions/v2/extensions/" + extensionName
 	monitoringAPI = extensionAPI + "/monitoring-configurations"
 
-	// VERIFY: the following GCP-specific identifiers/value shapes mirror the Azure
-	// integration by analogy. They are isolated here so a single edit corrects the
-	// whole flow if they differ from the live environment.
-	//
 	//   connectionSchemaID   — DT settings schema for the GCP connection.
 	//   dtPrincipalSchemaID  — read-only schema exposing the Dynatrace principal
 	//                          (the service account that must be granted
