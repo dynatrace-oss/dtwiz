@@ -61,7 +61,7 @@ Debugging a failing integration test often requires knowing what DQL queries ran
 
 ### `kubernetesClusterByNameQuery` and `WaitForKubernetesCluster`
 
-The existing `grail` helpers follow the pattern: a `*Query` function builds the DQL string, a `WaitFor*` function polls until records appear, and a `Require*` function wraps the poll and fatals if it fails. The Kubernetes helpers follow the same pattern. The DQL query fetches logs with `k8s.cluster.name` matching the cluster context name (lowercased to match what Dynatrace normalizes it to).
+The existing `grail` helpers follow the pattern: a `*Query` function builds the DQL string, a `WaitFor*` function polls until records appear, and a `Require*` function wraps the poll and fatals if it fails. The Kubernetes helpers follow the same pattern. The DQL query uses `smartscapeNodes "K8S_CLUSTER", from: -30m, to: now() | filter name == <clusterName>`, consistent with the SERVICE and HOST helpers. A `fetch logs` approach was considered but dropped for the same reasons `fetch spans` was dropped for traces — entity-level queries are more reliable than raw ingestion queries.
 
 ## Risks / Trade-offs
 

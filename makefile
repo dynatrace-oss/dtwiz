@@ -62,7 +62,7 @@ endif
 TEST_DEBUG ?= $(DEBUG)
 export TEST_DEBUG
 
-test-integration: SHELL := /bin/bash
+test-integration: SHELL := bash
 test-integration:
 ifeq ($(strip $(TEST_DT_ENVIRONMENT)),)
 	$(error TEST_DT_ENVIRONMENT is not set)

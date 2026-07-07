@@ -39,7 +39,7 @@ func hostByNameQuery(hostName string) string {
 
 func kubernetesClusterByNameQuery(clusterName string) string {
 	return fmt.Sprintf(
-		`fetch logs, from: now()-10m | filter k8s.cluster.name == %q | limit 1`,
+		`smartscapeNodes "K8S_CLUSTER", from: -30m, to: now() | filter name == %q`,
 		clusterName,
 	)
 }

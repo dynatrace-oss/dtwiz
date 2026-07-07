@@ -61,9 +61,9 @@ func SetupIntegration(t *testing.T) *TestEnv {
 	}
 }
 
-// Parallelize marks the test as parallel unless TEST_SEQUENTIAL=1 is set.
-// Use it at the top of each top-level integration test so that
-// `make test-integration` runs them concurrently by default; pass
+// Parallelize marks the test as parallel unless TEST_SEQUENTIAL is set to a
+// non-empty value. Use it at the top of each top-level integration test so
+// that `make test-integration` runs them concurrently by default; pass
 // SEQUENTIAL=true to the make invocation to opt out.
 func Parallelize(t *testing.T) {
 	t.Helper()
