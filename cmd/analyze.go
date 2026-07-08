@@ -7,7 +7,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 )
 
 var analyzeJSON bool
@@ -18,7 +17,7 @@ var analyzeCmd = &cobra.Command{
 	Long:  `Detect platform, container runtime, orchestration, existing agents, cloud providers, and running services.`,
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		info, err := analyzer.AnalyzeSystem()
+		info, err := analyzeSystem()
 		if err != nil {
 			return fmt.Errorf("analysis failed: %w", err)
 		}
