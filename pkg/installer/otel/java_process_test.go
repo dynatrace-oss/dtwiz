@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/testutil"
+	"github.com/dynatrace-oss/dtwiz/test/helpers"
 )
 
 func mustCreateFile(t *testing.T, path string) {
@@ -308,7 +308,7 @@ func TestDetectJavaEntrypoints_NoEntrypoint(t *testing.T) {
 
 func TestPromptEntrypointSelection_AutoSelectsSingle(t *testing.T) {
 	eps := []JavaEntrypoint{{Command: "java -jar app.jar", Description: "app"}}
-	testutil.CaptureStdout(t, func() {
+	helpers.CaptureStdout(t, func() {
 		got := promptEntrypointSelection(eps)
 		if got == nil {
 			t.Fatal("expected auto-selection, got nil")
@@ -325,7 +325,7 @@ func TestPromptEntrypointSelection_MultipleSelect(t *testing.T) {
 		{Command: "java -jar b.jar", Description: "b"},
 	}
 	setTestStdin(t, "2\n")
-	testutil.CaptureStdout(t, func() {
+	helpers.CaptureStdout(t, func() {
 		got := promptEntrypointSelection(eps)
 		if got == nil {
 			t.Fatal("expected selection, got nil")
@@ -342,7 +342,7 @@ func TestPromptEntrypointSelection_Skip(t *testing.T) {
 		{Command: "java -jar b.jar"},
 	}
 	setTestStdin(t, "\n")
-	testutil.CaptureStdout(t, func() {
+	helpers.CaptureStdout(t, func() {
 		got := promptEntrypointSelection(eps)
 		if got != nil {
 			t.Fatalf("expected nil on empty input, got %+v", got)

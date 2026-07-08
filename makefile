@@ -16,7 +16,7 @@ build:
 install:
 	$(GO) install .
 
-COVERAGE_THRESHOLD ?= 30
+COVERAGE_THRESHOLD ?= 50
 
 test:
 	$(GO) test ./pkg/... -coverprofile=coverage.out
@@ -45,6 +45,24 @@ fmt:
 lint:
 	golangci-lint run ./...
 
+ifeq ($(OS),Windows_NT)
+RACE_FLAG :=
+else
+RACE_FLAG := -race
+endif
+
+# SEQUENTIAL=true runs integration tests one at a time (default: parallel).
+SEQUENTIAL ?= false
+ifeq ($(SEQUENTIAL),true)
+SEQ_ENV := TEST_SEQUENTIAL=1
+else
+SEQ_ENV :=
+endif
+
+TEST_DEBUG ?= $(DEBUG)
+export TEST_DEBUG
+
+test-integration: SHELL := bash
 test-integration:
 ifeq ($(strip $(TEST_DT_ENVIRONMENT)),)
 	$(error TEST_DT_ENVIRONMENT is not set)
@@ -52,11 +70,17 @@ endif
 ifeq ($(strip $(TEST_DT_PLATFORM_TOKEN)),)
 	$(error TEST_DT_PLATFORM_TOKEN is not set)
 endif
-ifeq ($(OS),Windows_NT)
-	$(GO) test -v -tags integration -timeout 15m $(if $(RUN),-run $(RUN),) ./test/e2e/...
-else
-	$(GO) test -v -race -tags integration -timeout 15m $(if $(RUN),-run $(RUN),) ./test/e2e/...
-endif
+	@set -o pipefail; \
+	LOG=$$(mktemp); \
+	trap 'rm -f "$$LOG"' EXIT; \
+	$(SEQ_ENV) $(GO) test -v -count=1 $(RACE_FLAG) -tags integration -timeout 30m $(if $(RUN),-run $(RUN),) ./test/e2e/... 2>&1 | tee "$$LOG"; \
+	status=$$?; \
+	echo ""; \
+	echo "=== Integration Test Summary ==="; \
+	grep -E "^--- (PASS|FAIL|SKIP):" "$$LOG" | sed 's/^--- //' | sort; \
+	echo ""; \
+	echo "$$(grep -c '^--- PASS:' "$$LOG") passed, $$(grep -c '^--- FAIL:' "$$LOG") failed, $$(grep -c '^--- SKIP:' "$$LOG") skipped"; \
+	exit $$status
 
 clean:
 	rm -f $(BINARY)

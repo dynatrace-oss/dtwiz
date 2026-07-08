@@ -23,6 +23,16 @@ func connectionExistsWithClient(dtc dtclient) (bool, error) {
 	return len(conns) > 0, err
 }
 
+// MonitoringConfigExists reports whether an Azure monitoring configuration named integrationName exists.
+func MonitoringConfigExists(envURL, platformToken string) (bool, error) {
+	dtc, err := newSDKDTClient(envURL, platformToken)
+	if err != nil {
+		return false, err
+	}
+	ids, err := dtc.findAllMonitoringConfigs(integrationName)
+	return len(ids) > 0, err
+}
+
 // azureGatherClientIDs collects client IDs to delete. Connection-bound IDs are trusted directly;
 // display-name matches are verified via federated credential (Entra names aren't unique).
 func azureGatherClientIDs(runner cmdRunner, conns []connRef, name, envURL string) []string {

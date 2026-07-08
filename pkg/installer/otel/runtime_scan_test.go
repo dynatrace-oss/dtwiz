@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/testutil"
+	"github.com/dynatrace-oss/dtwiz/test/helpers"
 )
 
 func TestIsIgnoredDir(t *testing.T) {
@@ -135,7 +135,7 @@ func TestScanProjectDirs_CWD(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutil.SetTestWorkingDir(t, dir)
+	helpers.SetTestWorkingDir(t, dir)
 	projects := scanProjectDirs([]string{"go.mod"}, nil)
 	found := false
 	for _, p := range projects {
@@ -163,7 +163,7 @@ func TestScanProjectDirs_SubDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutil.SetTestWorkingDir(t, dir)
+	helpers.SetTestWorkingDir(t, dir)
 	projects := scanProjectDirs([]string{"package.json"}, nil)
 	realSubDir, _ := filepath.EvalSymlinks(subDir)
 	found := false
@@ -188,7 +188,7 @@ func TestScanProjectDirs_ExcludeDirs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutil.SetTestWorkingDir(t, dir)
+	helpers.SetTestWorkingDir(t, dir)
 	projects := scanProjectDirs([]string{"package.json"}, []string{"node_modules"})
 	for _, p := range projects {
 		if strings.Contains(p.Path, "node_modules") {
@@ -208,7 +208,7 @@ func TestScanProjectDirs_MultipleMarkers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutil.SetTestWorkingDir(t, dir)
+	helpers.SetTestWorkingDir(t, dir)
 	projects := scanProjectDirs([]string{"pom.xml", "build.gradle"}, nil)
 	found := false
 	for _, p := range projects {
@@ -227,7 +227,7 @@ func TestScanProjectDirs_MultipleMarkers(t *testing.T) {
 func TestScanProjectDirs_NoMarkers(t *testing.T) {
 	dir := t.TempDir()
 
-	testutil.SetTestWorkingDir(t, dir)
+	helpers.SetTestWorkingDir(t, dir)
 	projects := scanProjectDirs([]string{"go.mod"}, nil)
 	realDir, _ := filepath.EvalSymlinks(dir)
 	for _, p := range projects {
@@ -256,7 +256,7 @@ func TestScanProjectDirs_NoiseDirs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutil.SetTestWorkingDir(t, dir)
+	helpers.SetTestWorkingDir(t, dir)
 	projects := scanProjectDirs([]string{"go.mod"}, nil)
 
 	for _, p := range projects {
@@ -286,7 +286,7 @@ func TestScanProjectDirs_DotDirSkipped(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutil.SetTestWorkingDir(t, dir)
+	helpers.SetTestWorkingDir(t, dir)
 	projects := scanProjectDirs([]string{"go.mod"}, nil)
 	for _, p := range projects {
 		if strings.Contains(p.Path, ".hidden") {
@@ -312,7 +312,7 @@ func TestScanProjectDirs_MonorepoGrouping(t *testing.T) {
 		}
 	}
 
-	testutil.SetTestWorkingDir(t, root)
+	helpers.SetTestWorkingDir(t, root)
 	projects := scanProjectDirs([]string{"go.mod"}, nil)
 
 	paths := make(map[string]bool, len(projects))
@@ -338,7 +338,7 @@ func TestScanProjectDirs_DeepNesting(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutil.SetTestWorkingDir(t, root)
+	helpers.SetTestWorkingDir(t, root)
 	projects := scanProjectDirs([]string{"go.mod"}, nil)
 
 	want := filepath.Join("a", "b", "c", "d")
@@ -375,7 +375,7 @@ func TestScanProjectDirs_SubtreePruning(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutil.SetTestWorkingDir(t, root)
+	helpers.SetTestWorkingDir(t, root)
 	projects := scanProjectDirs([]string{"go.mod"}, nil)
 
 	count := 0
@@ -405,7 +405,7 @@ func TestScanProjectDirs_ParentNotScanned(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutil.SetTestWorkingDir(t, cwd)
+	helpers.SetTestWorkingDir(t, cwd)
 	projects := scanProjectDirs([]string{"go.mod"}, nil)
 
 	if len(projects) != 0 {
@@ -447,7 +447,7 @@ func TestScanProjectDirs_WindowsSystemDirSkipped(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutil.SetTestWorkingDir(t, dir)
+	helpers.SetTestWorkingDir(t, dir)
 	for _, p := range scanProjectDirs([]string{"go.mod"}, nil) {
 		if strings.Contains(p.Path, "System32") {
 			t.Errorf("Windows system dir 'System32' must be skipped, got %s", p.Path)
@@ -466,7 +466,7 @@ func TestScanProjectDirs_DevDirFound(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutil.SetTestWorkingDir(t, dir)
+	helpers.SetTestWorkingDir(t, dir)
 	found := false
 	for _, p := range scanProjectDirs([]string{"go.mod"}, nil) {
 		if strings.HasSuffix(filepath.ToSlash(p.Path), "/dev") {
@@ -497,7 +497,7 @@ func TestScanProjectDirs_WideParallelTree(t *testing.T) {
 		}
 	}
 
-	testutil.SetTestWorkingDir(t, root)
+	helpers.SetTestWorkingDir(t, root)
 	projects := scanProjectDirs([]string{"go.mod"}, nil)
 
 	found := make(map[string]bool, siblings)
@@ -554,7 +554,7 @@ func TestParseWinProcessOutput_SingleLine(t *testing.T) {
 func TestPromptProjectSelection_SingleProjectRangeHint(t *testing.T) {
 	projects := []ScannedProject{{Path: "/home/user/myapp", Markers: []string{"package.json"}}}
 	setTestStdin(t, "\n") // skip selection
-	output := testutil.CaptureStdout(t, func() {
+	output := helpers.CaptureStdout(t, func() {
 		promptProjectSelection("Node.js", projects)
 	})
 	if !strings.Contains(output, "instrument [1] or press") {

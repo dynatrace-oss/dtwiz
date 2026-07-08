@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/client"
 )
+
+var debugDQL = os.Getenv("TEST_DEBUG") != ""
 
 func executeDQL(ctx context.Context, platform *client.PlatformClient, dql string) ([]TraceRecord, error) {
 	payload := map[string]interface{}{
@@ -15,6 +18,9 @@ func executeDQL(ctx context.Context, platform *client.PlatformClient, dql string
 		"maxResultRecords":           200,
 	}
 
+	if debugDQL {
+		log.Printf("DQL execute: query: %s", dql)
+	}
 	log.Printf("DQL execute: posting query to %s", grailExecutePath)
 	var resp grailResponse
 	raw, err := platform.HTTP().R().

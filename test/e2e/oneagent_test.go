@@ -3,6 +3,7 @@
 package e2e_test
 
 import (
+	"flag"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,11 +12,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
 	"github.com/dynatrace-oss/dtwiz/test/integration"
 	"github.com/dynatrace-oss/dtwiz/test/integration/grail"
 )
+
+var oneAgentQuiet = flag.Bool("quiet", false, "run OneAgent install/uninstall in quiet mode (no confirmation prompts; requires elevated privileges on Windows)")
 
 // oneAgentInstallDir returns OneAgent's well-known install location for the
 // current OS. The package-internal variable of the same name is not exported,
@@ -53,12 +55,9 @@ func TestOneAgentLifecycle(t *testing.T) {
 
 	installDir := oneAgentInstallDir()
 
+	integration.Parallelize(t)
 	env := integration.SetupIntegration(t)
 	t.Logf("test ID: %s", env.TestID)
-
-	originalAutoConfirm := installer.AutoConfirm
-	installer.AutoConfirm = true
-	t.Cleanup(func() { installer.AutoConfirm = originalAutoConfirm })
 
 	// Safety-net cleanup: only runs if install succeeded, so the host is never
 	// left permanently monitored if a later assertion fails.
@@ -67,7 +66,7 @@ func TestOneAgentLifecycle(t *testing.T) {
 		if !installed {
 			return
 		}
-		if uerr := oneagent.UninstallOneAgentV2(oneagent.UninstallOptions{}); uerr != nil {
+		if uerr := oneagent.UninstallOneAgentV2(oneagent.UninstallOptions{Quiet: *oneAgentQuiet}); uerr != nil {
 			t.Logf("cleanup: uninstall failed: %v", uerr)
 		}
 	})
@@ -75,6 +74,7 @@ func TestOneAgentLifecycle(t *testing.T) {
 	t.Log("installing OneAgent (fullstack)")
 	if err := oneagent.InstallOneAgentV2(env.Client, oneagent.InstallOptions{
 		HostGroup: env.TestID, // unique tag to aid correlation and manual debugging
+		Quiet:     *oneAgentQuiet,
 	}); err != nil {
 		t.Fatalf("InstallOneAgentV2: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestOneAgentLifecycle(t *testing.T) {
 	t.Logf("found %d host record(s) for %q", len(hosts), hostName)
 
 	t.Log("uninstalling OneAgent")
-	if err := oneagent.UninstallOneAgentV2(oneagent.UninstallOptions{}); err != nil {
+	if err := oneagent.UninstallOneAgentV2(oneagent.UninstallOptions{Quiet: *oneAgentQuiet}); err != nil {
 		t.Fatalf("UninstallOneAgentV2: %v", err)
 	}
 	installed = false // uninstall succeeded; safety-net cleanup is no longer needed

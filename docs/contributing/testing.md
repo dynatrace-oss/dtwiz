@@ -32,8 +32,11 @@ Integration tests require a live Dynatrace environment and are opt-in:
 # Copy the template and fill in your credentials
 cp .e2e.env.example .e2e.env
 
-# Run integration tests
+# Run integration tests (parallel by default)
 make test-integration
+
+# Run integration tests sequentially
+make test-integration SEQUENTIAL=true
 ```
 
 ## Writing Unit Tests
@@ -101,7 +104,7 @@ Integration tests live in `test/e2e/` and carry the `//go:build integration` bui
 
 Set these in `.e2e.env` (gitignored). `make test-integration` loads the file automatically.
 
-**Test setup:** call `integration.SetupIntegration(t)` at the start of each test. It validates the environment variables, creates a shared `client.Client`, and returns a `TestEnv` with a unique `TestID` and a `t.TempDir()` for scratch files.
+**Test setup:** call `integration.Parallelize(t)` then `integration.SetupIntegration(t)` at the start of each test. `Parallelize` marks the test as parallel (respects `SEQUENTIAL=true`); `SetupIntegration` validates environment variables, creates a shared `client.Client`, and returns a `TestEnv` with a unique `TestID` and a `t.TempDir()` for scratch files.
 
 ```go
 //go:build integration
@@ -111,6 +114,7 @@ package e2e_test
 import "github.com/dynatrace-oss/dtwiz/test/integration"
 
 func TestMyInstaller(t *testing.T) {
+    integration.Parallelize(t)
     env := integration.SetupIntegration(t)
 
     svcName := env.TestID + "-my-svc"
@@ -122,6 +126,15 @@ func TestMyInstaller(t *testing.T) {
 **Fixtures:** sample applications for language-specific OTel tests live in `test/fixtures/`. Each fixture is a minimal runnable app. Use them as the target directory when testing `install otel-*` commands.
 
 **Assertions:** use `test/integration/grail` helpers to query Dynatrace via DQL and verify that telemetry actually arrived. Poll with a timeout rather than sleeping — the `grail.WaitFor*` helpers handle this.
+
+**Tests with extra infrastructure prerequisites:** some lifecycle tests need more than a Dynatrace tenant and skip (or fail with an actionable message) when their prerequisite isn't met:
+
+| Test | Extra prerequisite | Behavior when missing |
+|---|---|---|
+| `TestKubernetesLifecycle` | `kubectl` + `helm` on PATH, and a cluster reachable via the current kubeconfig context (point it at a disposable cluster, e.g. kind/minikube — the test does not provision one) | Skips |
+| `TestAzureLifecycle` | `az` CLI logged in (`az login`) to a subscription where the signed-in account can create App Registrations and role assignments at subscription scope | Skips if `az` isn't installed; fails with instructions if installed but not logged in |
+
+These tests create and tear down real cluster/cloud resources, so point them at disposable environments.
 
 ## Mocking Conventions
 

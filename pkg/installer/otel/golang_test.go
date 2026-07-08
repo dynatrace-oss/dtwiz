@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/testutil"
+	"github.com/dynatrace-oss/dtwiz/test/helpers"
 )
 
 func TestDetectGoProjects_Found(t *testing.T) {
@@ -17,7 +17,7 @@ func TestDetectGoProjects_Found(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutil.SetTestWorkingDir(t, dir)
+	helpers.SetTestWorkingDir(t, dir)
 	projects := detectGoProjects()
 	found := false
 	for _, p := range projects {
@@ -37,7 +37,7 @@ func TestDetectGoProjects_None(t *testing.T) {
 	dir := t.TempDir()
 	realDir, _ := filepath.EvalSymlinks(dir)
 
-	testutil.SetTestWorkingDir(t, dir)
+	helpers.SetTestWorkingDir(t, dir)
 	projects := detectGoProjects()
 	for _, p := range projects {
 		if p.Path == dir || p.Path == realDir {
@@ -97,7 +97,7 @@ func TestDetectGoPlan_FindsProject(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutil.SetTestWorkingDir(t, dir)
+	helpers.SetTestWorkingDir(t, dir)
 	setTestStdin(t, "1\n")
 
 	plan := DetectGoPlan("https://tenant.live.dynatrace.com", "token")
@@ -119,7 +119,7 @@ func TestGoInstrumentationPlan_Runtime(t *testing.T) {
 func TestGoInstrumentationPlan_PrintPlanSteps(t *testing.T) {
 	plan := &GoInstrumentationPlan{Project: GoProject{ScannedProject: ScannedProject{Path: "/tmp/go-svc"}, ModuleName: "github.com/example/go-svc"}}
 
-	output := testutil.CaptureStdout(t, func() {
+	output := helpers.CaptureStdout(t, func() {
 		plan.PrintPlanSteps()
 	})
 
@@ -137,7 +137,7 @@ func TestGoInstrumentationPlan_Execute(t *testing.T) {
 		EnvVars: map[string]string{"OTEL_SERVICE_NAME": "go-svc"},
 	}
 
-	output := testutil.CaptureStdout(t, func() {
+	output := helpers.CaptureStdout(t, func() {
 		plan.Execute()
 	})
 

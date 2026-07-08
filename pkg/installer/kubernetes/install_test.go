@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
+	"github.com/dynatrace-oss/dtwiz/test/helpers"
 )
 
 func baseTemplateData() dynakubeTemplateData {
@@ -274,6 +275,126 @@ func TestRenderDynakubeTemplate_AgentsDynaKubeStructure(t *testing.T) {
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("DynaKube #2: expected %q in manifest", want)
+		}
+	}
+}
+
+func TestSanitizeK8sName(t *testing.T) {
+	cases := []struct{ input, want string }{
+		// Basic lowercasing
+		{"MyCluster", "mycluster"},
+		// Special chars replaced with hyphens
+		{"my_cluster.name", "my-cluster-name"},
+		// Leading/trailing hyphens trimmed
+		{"--my-cluster--", "my-cluster"},
+		// Empty input → fallback
+		{"", "dynakube"},
+		// All special chars → fallback
+		{"___", "dynakube"},
+		// 24 chars, truncated to 23 — no trailing hyphen
+		{"this-is-a-very-long-clux", "this-is-a-very-long-clu"},
+		// 24 chars, truncated to 23 — trailing hyphen trimmed
+		{"this-is-a-very-long-cl-x", "this-is-a-very-long-cl"},
+	}
+	for _, c := range cases {
+		t.Run(c.input, func(t *testing.T) {
+			got := sanitizeK8sName(c.input)
+			if got != c.want {
+				t.Errorf("sanitizeK8sName(%q) = %q, want %q", c.input, got, c.want)
+			}
+		})
+	}
+}
+
+func TestBuildDynakubeManifest(t *testing.T) {
+	const apiURL = "https://abc123.live.dynatracelabs.com"
+	const token = "dt0c01.test-token"
+	const clusterName = "test-cluster"
+
+	manifest, err := buildDynakubeManifest(apiURL, token, clusterName, "")
+	if err != nil {
+		t.Fatalf("buildDynakubeManifest: %v", err)
+	}
+	if manifest == "" {
+		t.Fatal("expected non-empty manifest")
+	}
+	if !strings.Contains(manifest, apiURL+"/api") {
+		t.Errorf("manifest does not contain API URL %q", apiURL+"/api")
+	}
+	if !strings.Contains(manifest, "name: "+clusterName) {
+		t.Errorf("manifest does not contain cluster name %q", clusterName)
+	}
+	if !strings.Contains(manifest, token) {
+		t.Error("manifest does not contain the token")
+	}
+}
+
+func TestResolveClusterName_ExplicitName(t *testing.T) {
+	cases := []struct{ input, want string }{
+		{"MyCluster", "mycluster"},
+		{"my_cluster", "my-cluster"},
+		{"this-is-a-very-long-cluster-name-wow", "this-is-a-very-long-clu"},
+	}
+	for _, c := range cases {
+		t.Run(c.input, func(t *testing.T) {
+			got := resolveClusterName(c.input, "https://abc123.live.dynatracelabs.com")
+			if got != c.want {
+				t.Errorf("resolveClusterName(%q, ...) = %q, want %q", c.input, got, c.want)
+			}
+		})
+	}
+}
+
+func TestResolveClusterName_FallsBackToNonEmpty(t *testing.T) {
+	// With no explicit name the function calls fetchClusterName, which always
+	// returns at least "dynakube". Verify the result is never empty.
+	got := resolveClusterName("", "https://abc123.live.dynatracelabs.com")
+	if got == "" {
+		t.Error("resolveClusterName with no explicit name returned empty string")
+	}
+}
+
+func TestHandleK8sDryRun(t *testing.T) {
+	// fmt.Println and display.PrintSteps go to os.Stdout (captured by CaptureStdout).
+	// display.PrintAlignedStatusLines goes to color.Output (not captured here).
+	out := helpers.CaptureStdout(t, func() {
+		handleK8sDryRun(
+			"https://abc123.live.dynatracelabs.com/api",
+			"my-cluster",
+			"EKS",
+			"install dynatrace-operator ...",
+		)
+	})
+	for _, want := range []string{
+		"[dry-run]",
+		"Ensure Helm is installed",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("handleK8sDryRun: expected %q in output, got: %q", want, out)
+		}
+	}
+}
+
+func TestPrintK8sPreview(t *testing.T) {
+	// display.PrintlnColored, PrintAlignedStatusLines, and PrintStepsColored all
+	// write to color.Output — use CaptureOutput to capture them.
+	manifest := "kind: Secret\nmetadata:\n  name: test\n"
+	out := helpers.CaptureOutput(t, func() {
+		printK8sPreview(
+			"my-cluster",
+			"EKS",
+			"https://abc123.live.dynatracelabs.com/api",
+			manifest,
+			"helm install dynatrace-operator ...",
+		)
+	})
+	for _, want := range []string{
+		"my-cluster",
+		"EKS",
+		"helm install",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("printK8sPreview: expected %q in output, got: %q", want, out)
 		}
 	}
 }

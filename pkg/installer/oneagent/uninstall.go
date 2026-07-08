@@ -11,6 +11,7 @@ import (
 // UninstallOptions configures the OneAgent V2 uninstall behaviour.
 type UninstallOptions struct {
 	DryRun bool
+	Quiet  bool
 }
 
 // UninstallOneAgentV2 removes Dynatrace OneAgent from the current host.
@@ -29,13 +30,15 @@ func UninstallOneAgentV2(opts UninstallOptions) error {
 		return nil
 	}
 
-	ok, err := installer.ConfirmProceed("  Proceed with OneAgent uninstall?")
-	if err != nil {
-		return fmt.Errorf("reading confirmation: %w", err)
-	}
-	if !ok {
-		display.PrintStatusLine("result", "uninstall cancelled", display.ColorMuted)
-		return installer.ErrInstallCancelled
+	if !opts.Quiet {
+		ok, err := installer.ConfirmProceed("  Proceed with OneAgent uninstall?")
+		if err != nil {
+			return fmt.Errorf("reading confirmation: %w", err)
+		}
+		if !ok {
+			display.PrintStatusLine("result", "uninstall cancelled", display.ColorMuted)
+			return installer.ErrInstallCancelled
+		}
 	}
 
 	if err := runUninstallFn(); err != nil {

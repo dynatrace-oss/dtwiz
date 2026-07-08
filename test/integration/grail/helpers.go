@@ -36,3 +36,10 @@ func hostByNameQuery(hostName string) string {
 		hostName,
 	)
 }
+
+func kubernetesClusterByNameQuery(clusterName string) string {
+	return fmt.Sprintf(
+		`smartscapeNodes "K8S_CLUSTER", from: -30m, to: now() | filter name == %q`,
+		clusterName,
+	)
+}
