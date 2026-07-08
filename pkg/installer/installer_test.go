@@ -1,6 +1,9 @@
 package installer
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestAuthHeader(t *testing.T) {
 	tests := []struct {
@@ -96,5 +99,79 @@ func TestExtractTenantID(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("ExtractTenantID(%q) = %q, want %q", tt.input, got, tt.want)
 		}
+	}
+}
+
+func TestIngestTimeFormat_IsRFC3339(t *testing.T) {
+	// Go's reference time is Mon Jan 2 15:04:05 MST 2006 → RFC3339: "2006-01-02T15:04:05Z"
+	const wantRFC3339 = "2006-01-02T15:04:05Z"
+	if IngestTimeFormat != wantRFC3339 {
+		t.Errorf("IngestTimeFormat = %q, want RFC3339 reference value %q", IngestTimeFormat, wantRFC3339)
+	}
+}
+
+// ── ShouldProceed ─────────────────────────────────────────────────────────────
+
+func TestShouldProceed_DryRunReturnsFalseNoError(t *testing.T) {
+	proceed, err := ShouldProceed(true, "Installation")
+	if proceed {
+		t.Error("dry-run must return proceed=false")
+	}
+	if err != nil {
+		t.Errorf("dry-run must return nil error, got %v", err)
+	}
+}
+
+func TestShouldProceed_AutoConfirmProceeds(t *testing.T) {
+	old := AutoConfirm
+	AutoConfirm = true
+	defer func() { AutoConfirm = old }()
+
+	var proceed bool
+	var err error
+	withStdin(t, "", func() {
+		proceed, err = ShouldProceed(false, "Installation")
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !proceed {
+		t.Error("AutoConfirm=true must return proceed=true")
+	}
+}
+
+func TestShouldProceed_UserAccepts(t *testing.T) {
+	old := AutoConfirm
+	AutoConfirm = false
+	defer func() { AutoConfirm = old }()
+
+	var proceed bool
+	var err error
+	withStdin(t, "y\n", func() {
+		proceed, err = ShouldProceed(false, "Update")
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !proceed {
+		t.Error("user confirming with 'y' must return proceed=true")
+	}
+}
+
+func TestShouldProceed_UserDeclines(t *testing.T) {
+	old := AutoConfirm
+	AutoConfirm = false
+	defer func() { AutoConfirm = old }()
+
+	var proceed bool
+	var err error
+	withStdin(t, "n\n", func() {
+		proceed, err = ShouldProceed(false, "Uninstall")
+	})
+	if proceed {
+		t.Error("user declining must return proceed=false")
+	}
+	if !errors.Is(err, ErrInstallCancelled) {
+		t.Errorf("user declining must return ErrInstallCancelled, got %v", err)
 	}
 }

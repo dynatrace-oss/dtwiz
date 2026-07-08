@@ -153,7 +153,7 @@ var setupCmd = &cobra.Command{
 				return err
 			}
 			if !setupDryRun {
-				installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
+				installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat))
 			}
 			return nil
 		}
@@ -208,7 +208,7 @@ var setupCmd = &cobra.Command{
 		case recommender.MethodOtelUpdate:
 			installErr = otel.UpdateOtelConfigInteractive(envURL, classicTok, platformTok, setupDryRun)
 		case recommender.MethodAWS:
-			installErr = installer.InstallAWS(c.Platform, envURL, platformTok, setupDryRun, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
+			installErr = installer.InstallAWS(c.Platform, envURL, platformTok, setupDryRun, StartTime.UTC().Format(installer.IngestTimeFormat))
 		case recommender.MethodAzure:
 			installErr = azure.InstallAzure(envURL, platformTok, setupDryRun, StartTime)
 		case recommender.MethodAzureUpdate:
@@ -238,7 +238,7 @@ var setupCmd = &cobra.Command{
 			recommender.MethodDocker,
 			recommender.MethodOtelCollector,
 			recommender.MethodOtelUpdate:
-			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
+			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat))
 		}
 		return nil
 	},

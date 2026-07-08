@@ -79,7 +79,7 @@ var installOneAgentCmd = &cobra.Command{
 			return err
 		}
 		if !installDryRun {
-			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
+			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat))
 		}
 		return nil
 	},
@@ -111,7 +111,7 @@ var installKubernetesCmd = &cobra.Command{
 			return err
 		}
 		if !installDryRun {
-			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
+			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat))
 		}
 		return nil
 	},
@@ -138,7 +138,7 @@ var installDockerCmd = &cobra.Command{
 			return err
 		}
 		if !installDryRun {
-			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
+			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat))
 		}
 		return nil
 	},
@@ -164,7 +164,7 @@ var installOtelCmd = &cobra.Command{
 			return err
 		}
 		if !installDryRun {
-			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
+			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat))
 		}
 		return nil
 	},
@@ -190,7 +190,7 @@ var installOtelCollectorCmd = &cobra.Command{
 			return err
 		}
 		if !installDryRun {
-			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
+			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat))
 		}
 		return nil
 	},
@@ -218,7 +218,7 @@ var installOtelPythonCmd = &cobra.Command{
 			return err
 		}
 		if !installDryRun {
-			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
+			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat))
 		}
 		return nil
 	},
@@ -269,7 +269,7 @@ var installOtelJavaCmd = &cobra.Command{
 			return err
 		}
 		if !installDryRun {
-			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
+			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat))
 		}
 		return nil
 	},
@@ -292,7 +292,7 @@ var installAWSCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := installer.InstallAWS(c.Platform, envURL, platformTok, installDryRun, StartTime.UTC().Format("2006-01-02T15:04:05Z")); err != nil {
+		if err := installer.InstallAWS(c.Platform, envURL, platformTok, installDryRun, StartTime.UTC().Format(installer.IngestTimeFormat)); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
 				return nil
 			}
@@ -322,7 +322,7 @@ var installAWSLambdaCmd = &cobra.Command{
 			return err
 		}
 		if !installDryRun {
-			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
+			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat))
 		}
 		return nil
 	},
@@ -393,7 +393,7 @@ var installDemoCmd = &cobra.Command{
 			return err
 		}
 		if !installDryRun {
-			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
+			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat))
 		}
 		return nil
 	},

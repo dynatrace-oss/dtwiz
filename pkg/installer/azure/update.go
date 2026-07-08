@@ -56,20 +56,9 @@ func updateAzureWithRunner(
 
 	azureUpdatePrintPreview(cfg, monConfigIDs)
 
-	if dryRun {
-		fmt.Println("  [dry-run] No changes were made.")
-		return nil
+	if proceed, err := installer.ShouldProceed(dryRun, "Update"); !proceed {
+		return err
 	}
-
-	ok, err := installer.ConfirmProceed("  Apply?")
-	if err != nil {
-		return fmt.Errorf("reading confirmation: %w", err)
-	}
-	if !ok {
-		fmt.Println("  Update cancelled.")
-		return installer.ErrInstallCancelled
-	}
-	fmt.Println()
 
 	if err := reconcileMonitoring(cfg, monConfigIDs, dtc); err != nil {
 		return err
@@ -79,7 +68,7 @@ func updateAzureWithRunner(
 	display.ColorMessage.Println("  Azure Monitor integration updated!")
 	fmt.Println()
 
-	azureWatchIngest(cfg, startTime)
+	installer.WatchIngestCloudFromTime(cfg.EnvURL, cfg.PlatformToken, startTime)
 	return nil
 }
 

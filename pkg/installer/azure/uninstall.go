@@ -104,20 +104,9 @@ func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc 
 
 	azureUninstallPrintPreview(envURL, monConfigIDs, conns, clientIDs, integrationName, integrationName)
 
-	if dryRun {
-		fmt.Println("  [dry-run] No changes were made.")
-		return nil
+	if proceed, err := installer.ShouldProceed(dryRun, "Uninstall"); !proceed {
+		return err
 	}
-
-	ok, err := installer.ConfirmProceed("  Apply?")
-	if err != nil {
-		return fmt.Errorf("reading confirmation: %w", err)
-	}
-	if !ok {
-		fmt.Println("  Uninstall cancelled.")
-		return installer.ErrInstallCancelled
-	}
-	fmt.Println()
 
 	totalSteps := uninstallStepCount(monConfigIDs, conns, clientIDs)
 	if err := runUninstallSteps(0, totalSteps, monConfigIDs, conns, clientIDs, runner, dtc); err != nil {

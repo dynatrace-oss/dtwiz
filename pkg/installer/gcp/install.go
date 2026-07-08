@@ -218,20 +218,9 @@ func installGCPWithRunner(
 
 	gcpPrintPreview(cfg)
 
-	if dryRun {
-		fmt.Println("  [dry-run] No changes were made.")
-		return nil
+	if proceed, err := installer.ShouldProceed(dryRun, "Installation"); !proceed {
+		return err
 	}
-
-	ok, err := installer.ConfirmProceed("  Apply?")
-	if err != nil {
-		return fmt.Errorf("reading confirmation: %w", err)
-	}
-	if !ok {
-		fmt.Println("  Installation cancelled.")
-		return installer.ErrInstallCancelled
-	}
-	fmt.Println()
 
 	if err := runInstallSteps(cfg, runner, sleeper, dtc); err != nil {
 		return err
@@ -240,17 +229,8 @@ func installGCPWithRunner(
 	display.ColorMessage.Println("  Google Cloud integration setup complete!")
 	fmt.Println()
 
-	gcpWatchIngest(cfg, startTime)
+	installer.WatchIngestCloudFromTime(cfg.EnvURL, cfg.PlatformToken, startTime)
 	return nil
-}
-
-// gcpWatchIngest is skipped when startTime is zero (the unit-test path).
-func gcpWatchIngest(cfg gcpConfig, startTime time.Time) {
-	if startTime.IsZero() {
-		return
-	}
-	fromClause := startTime.UTC().Format("2006-01-02T15:04:05Z")
-	installer.WatchIngestCloud(cfg.EnvURL, cfg.PlatformToken, fromClause)
 }
 
 func runInstallSteps(cfg gcpConfig, runner cmdRunner, sleeper func(time.Duration), dtc dtclient) error {

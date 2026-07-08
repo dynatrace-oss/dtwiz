@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 )
 
 // helper: build a dqlResponse with the given (resource type, count) rows.
@@ -237,5 +238,34 @@ func TestPollAllCloudFilter_EscapesAccountID(t *testing.T) {
 	want := `| filter aws.account.id == "\"; drop everything" `
 	if got != want {
 		t.Errorf("filter clause = %q, want %q", got, want)
+	}
+}
+
+// ── WatchIngestFromTime ───────────────────────────────────────────────────────
+
+func TestWatchIngestFromTime_ZeroTimeIsNoOp(t *testing.T) {
+	// Must return immediately without making any network calls.
+	// A real call with a non-zero time would block on the poll loop.
+	done := make(chan struct{})
+	go func() {
+		WatchIngestFromTime("https://example.apps.dynatrace.com", "token", time.Time{})
+		close(done)
+	}()
+	select {
+	case <-done:
+		// ok
+	case <-time.After(time.Second):
+		t.Fatal("WatchIngestFromTime with zero time must return immediately")
+	}
+}
+
+func TestWatchIngestFromTime_FormatsTimeWithIngestTimeFormat(t *testing.T) {
+	// Verify that IngestTimeFormat, when applied to a known time, produces the
+	// expected DQL from-clause string (UTC, no sub-second precision).
+	ts := time.Date(2025, 7, 8, 14, 30, 0, 0, time.UTC)
+	got := ts.UTC().Format(IngestTimeFormat)
+	want := "2025-07-08T14:30:00Z"
+	if got != want {
+		t.Errorf("time.Format(IngestTimeFormat) = %q, want %q", got, want)
 	}
 }

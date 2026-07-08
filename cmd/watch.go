@@ -31,7 +31,7 @@ var watchCmd = &cobra.Command{
 
 		fromClause := watchFromFlag
 		if fromClause == "" {
-			fromClause = StartTime.UTC().Format("2006-01-02T15:04:05Z")
+			fromClause = StartTime.UTC().Format(installer.IngestTimeFormat)
 		}
 
 		installer.WatchIngest(envURL, pTok, fromClause)

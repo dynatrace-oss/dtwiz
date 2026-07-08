@@ -144,14 +144,9 @@ func (d *sdkDTClient) buildMonitoringConfig(configName, connectionObjectID, clie
 	if len(locations) == 0 {
 		return body, fmt.Errorf("no locations found under enum %q in extension schema", azureLocationEnumKey)
 	}
-	featureSets := make([]string, 0)
-	for _, fs := range schema.EnumValues(azureFeatureSetEnumKey) {
-		if strings.HasSuffix(fs, "_essential") {
-			featureSets = append(featureSets, fs)
-		}
-	}
-	if len(featureSets) == 0 {
-		return body, fmt.Errorf("no \"_essential\" feature sets found under enum %q in extension schema", azureFeatureSetEnumKey)
+	featureSets, err := schema.EssentialFeatureSets(azureFeatureSetEnumKey)
+	if err != nil {
+		return body, err
 	}
 	logger.Debug("monitoring defaults from schema", "locations", len(locations), "featureSets", len(featureSets))
 
