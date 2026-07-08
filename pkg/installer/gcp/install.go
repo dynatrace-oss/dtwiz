@@ -126,8 +126,8 @@ func gcpPartialFailureHint(cfg gcpConfig, completedSteps map[int]bool) {
 	}
 	saEmail := cfg.serviceAccountEmail()
 	fmt.Println()
-	display.ColorWarning.Println("  The following resources were already created and may need to be cleaned up")
-	display.ColorWarning.Println("  (or just re-run `dtwiz uninstall gcp`, which removes them all):")
+	display.ColorWarning.Println("  Installation stopped. Resources created so far need to be cleaned up")
+	display.ColorWarning.Println("  (run `dtwiz uninstall gcp` to remove them all, or delete manually):")
 	if completedSteps[2] {
 		fmt.Printf("    • DT connection '%s': delete with: dtctl delete gcp connection --name %s\n",
 			cfg.ConnectionName, cfg.ConnectionName)
@@ -250,7 +250,7 @@ func gcpWatchIngest(cfg gcpConfig, startTime time.Time) {
 		return
 	}
 	fromClause := startTime.UTC().Format("2006-01-02T15:04:05Z")
-	installer.WatchIngest(cfg.EnvURL, cfg.PlatformToken, fromClause)
+	installer.WatchIngestCloud(cfg.EnvURL, cfg.PlatformToken, fromClause)
 }
 
 func runInstallSteps(cfg gcpConfig, runner cmdRunner, sleeper func(time.Duration), dtc dtclient) error {

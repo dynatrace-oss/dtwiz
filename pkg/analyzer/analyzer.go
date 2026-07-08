@@ -144,7 +144,9 @@ type SystemInfo struct {
 	OtelConfigPath   string           `json:"otel_config_path,omitempty"`
 	AWS              *AWSInfo         `json:"aws,omitempty"`
 	Azure            *AzureInfo       `json:"azure,omitempty"`
+	AzureConfigured  bool             `json:"azure_configured,omitempty"`
 	GCP              *GCPInfo         `json:"gcp,omitempty"`
+	GCPConfigured    bool             `json:"gcp_configured,omitempty"`
 	Services         []string         `json:"services"`
 }
 

@@ -228,10 +228,42 @@ func TestGenerateRecommendations_Azure(t *testing.T) {
 			if r.ComingSoon {
 				t.Error("expected ComingSoon=false for Azure recommendation")
 			}
+			if r.Title != "Azure cloud services" {
+				t.Errorf("expected title %q, got %q", "Azure cloud services", r.Title)
+			}
 		}
 	}
 	if !found {
-		t.Error("expected azure recommendation when Azure is available")
+		t.Error("expected azure install recommendation when Azure is available and not configured")
+	}
+}
+
+func TestGenerateRecommendations_AzureConfigured(t *testing.T) {
+	system := &analyzer.SystemInfo{
+		Platform:         analyzer.PlatformLinux,
+		ContainerRuntime: analyzer.ContainerRuntimeNone,
+		Orchestrator:     analyzer.OrchestratorNone,
+		Azure: &analyzer.AzureInfo{
+			Available:      true,
+			SubscriptionID: "sub-123",
+		},
+		AzureConfigured: true,
+	}
+	recs := recommender.GenerateRecommendations(system)
+	foundUpdate := false
+	for _, r := range recs {
+		if r.Method == recommender.MethodAzure {
+			t.Error("expected MethodAzureUpdate, not MethodAzure, when Azure is already configured")
+		}
+		if r.Method == recommender.MethodAzureUpdate {
+			foundUpdate = true
+			if r.Title != "Azure cloud services (update)" {
+				t.Errorf("expected title %q, got %q", "Azure cloud services (update)", r.Title)
+			}
+		}
+	}
+	if !foundUpdate {
+		t.Error("expected azure-update recommendation when Azure is available and already configured")
 	}
 }
 
@@ -253,10 +285,42 @@ func TestGenerateRecommendations_GCP(t *testing.T) {
 			if r.ComingSoon {
 				t.Error("expected ComingSoon=false for GCP recommendation")
 			}
+			if r.Title != "GCP cloud services" {
+				t.Errorf("expected title %q, got %q", "GCP cloud services", r.Title)
+			}
 		}
 	}
 	if !found {
-		t.Error("expected gcp recommendation when GCP is available")
+		t.Error("expected gcp install recommendation when GCP is available and not configured")
+	}
+}
+
+func TestGenerateRecommendations_GCPConfigured(t *testing.T) {
+	system := &analyzer.SystemInfo{
+		Platform:         analyzer.PlatformLinux,
+		ContainerRuntime: analyzer.ContainerRuntimeNone,
+		Orchestrator:     analyzer.OrchestratorNone,
+		GCP: &analyzer.GCPInfo{
+			Available: true,
+			ProjectID: "my-project",
+		},
+		GCPConfigured: true,
+	}
+	recs := recommender.GenerateRecommendations(system)
+	foundUpdate := false
+	for _, r := range recs {
+		if r.Method == recommender.MethodGCP {
+			t.Error("expected MethodGCPUpdate, not MethodGCP, when GCP is already configured")
+		}
+		if r.Method == recommender.MethodGCPUpdate {
+			foundUpdate = true
+			if r.Title != "GCP cloud services (update)" {
+				t.Errorf("expected title %q, got %q", "GCP cloud services (update)", r.Title)
+			}
+		}
+	}
+	if !foundUpdate {
+		t.Error("expected gcp-update recommendation when GCP is available and already configured")
 	}
 }
 

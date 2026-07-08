@@ -97,8 +97,8 @@ func azurePartialFailureHint(cfg azureConfig, completedSteps map[int]bool) {
 		return
 	}
 	fmt.Println()
-	display.ColorWarning.Println("  The following resources were already created and may need to be cleaned up")
-	display.ColorWarning.Println("  (or just re-run `dtwiz uninstall azure`, which removes them all):")
+	display.ColorWarning.Println("  Installation stopped. Resources created so far need to be cleaned up")
+	display.ColorWarning.Println("  (run `dtwiz uninstall azure` to remove them all, or delete manually):")
 	if completedSteps[1] {
 		fmt.Printf("    • DT connection '%s': delete with: dtctl delete azure connection --name %s\n",
 			cfg.ConnectionName, cfg.ConnectionName)
@@ -197,7 +197,7 @@ func azureWatchIngest(cfg azureConfig, startTime time.Time) {
 		return
 	}
 	fromClause := startTime.UTC().Format("2006-01-02T15:04:05Z")
-	installer.WatchIngest(cfg.EnvURL, cfg.PlatformToken, fromClause)
+	installer.WatchIngestCloud(cfg.EnvURL, cfg.PlatformToken, fromClause)
 }
 
 func runInstallSteps(cfg azureConfig, runner cmdRunner, sleeper func(time.Duration), dtc dtclient) error {
