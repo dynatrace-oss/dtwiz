@@ -318,4 +318,3 @@ func TestExtensionSchema_EssentialFeatureSets_KeyNotFound(t *testing.T) {
 		t.Fatal("expected error for missing enum key, got nil")
 	}
 }
-
