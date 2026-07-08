@@ -216,7 +216,6 @@ var setupCmd = &cobra.Command{
 		case recommender.MethodGCP:
 			installErr = gcp.InstallGCP(envURL, platformTok, setupDryRun, StartTime)
 		case recommender.MethodGCPUpdate:
-			logger.Debug("setup selected GCP update")
 			installErr = gcp.UpdateGCP(envURL, platformTok, setupDryRun, StartTime)
 		default:
 			return fmt.Errorf("unsupported method: %s", selected.Method)
@@ -227,12 +226,18 @@ var setupCmd = &cobra.Command{
 			}
 			return installErr
 		}
+		if setupDryRun {
+			return nil
+		}
 		// AWS scopes its watch to the account (WatchIngestAWS); Azure and GCP run their
-		// own generic watch from inside the installer; both start their own watch, so
-		// the generic post-install watch here is only used for the other methods.
-		if !setupDryRun && selected.Method != recommender.MethodAWS &&
-			selected.Method != recommender.MethodAzure && selected.Method != recommender.MethodAzureUpdate &&
-			selected.Method != recommender.MethodGCP && selected.Method != recommender.MethodGCPUpdate {
+		// own generic watch from inside the installer. Only the methods below use the
+		// generic post-install watch.
+		switch selected.Method {
+		case recommender.MethodOneAgent,
+			recommender.MethodKubernetes,
+			recommender.MethodDocker,
+			recommender.MethodOtelCollector,
+			recommender.MethodOtelUpdate:
 			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format("2006-01-02T15:04:05Z"))
 		}
 		return nil
