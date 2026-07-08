@@ -4,11 +4,11 @@
 
 ### Requirement: Update is an in-place monitoring-config reconcile reachable from `dtwiz update gcp`, `dtwiz install gcp`, and `dtwiz setup`
 
-The system SHALL provide an `UpdateGCP` entry point that refreshes an existing integration in place by reconciling **only** the `da-gcp` monitoring configuration to the latest schema-derived defaults. The authentication chain SHALL NOT be modified by an update: the Dynatrace connection, the GCP service account, the project Viewer binding, and the impersonation binding. The update flow SHALL be reachable via three paths: (1) `dtwiz update gcp` — explicit standalone update command; (2) `dtwiz install gcp` when a complete connection already exists — transparently redirects to the update flow; (3) `dtwiz setup` when a complete GCP connection already exists — routes to update instead of fresh install.
+The system SHALL refresh an existing integration in place by reconciling **only** the `da-gcp` monitoring configuration to the latest schema-derived defaults. An update SHALL NOT modify the authentication chain: the Dynatrace connection, GCP service account, project Viewer binding, or impersonation binding. The update flow SHALL be reachable via three paths: (1) `dtwiz update gcp` as an explicit standalone command; (2) `dtwiz install gcp` when a complete connection already exists, which transparently redirects to the update flow; (3) `dtwiz setup` when a complete GCP connection already exists, which routes to update instead of a fresh install.
 
 ### Requirement: `dtwiz update gcp` subcommand
 
-The system SHALL expose `dtwiz update gcp` as a standalone CLI command (`cobra.NoArgs`) under the `update` verb. It SHALL resolve the Dynatrace environment URL and platform token from the standard sources, validate the platform token before proceeding, and honor the shared `--dry-run` flag. The command SHALL register under `updateCmd` and follow the same subcommand pattern as `dtwiz update azure`.
+The system SHALL expose `dtwiz update gcp` as the CLI command for GCP update, accepting no positional arguments. It SHALL resolve the Dynatrace environment URL and platform token from the standard sources, validate the platform token before proceeding, and honor the shared `--dry-run` flag.
 
 #### Scenario: `dtwiz update gcp` registered
 
@@ -27,7 +27,7 @@ The system SHALL expose `dtwiz update gcp` as a standalone CLI command (`cobra.N
 - **GIVEN** a connection named `dtwiz-gcp` already exists and carries a bound service-account email
 - **WHEN** the user selects GCP in `dtwiz setup`
 - **THEN** the setup flow runs an in-place reconcile instead of a fresh install
-- **AND** the GCP entry in the setup list is badged as already configured
+- **AND** the GCP entry in the setup list is marked as already configured
 
 #### Scenario: Setup installs (or resumes) when not completely configured
 
@@ -85,7 +85,7 @@ The system SHALL present a preview with the environment, project, service accoun
 
 ### Requirement: Reconcile every monitoring configuration to schema-derived defaults
 
-After confirmation, the system SHALL rewrite each discovered monitoring configuration in place using the latest schema-derived defaults (highest extension version, all `*_essential` feature sets, project filtering scoped to the active `gcloud` project, and a credential entry referencing the existing connection object ID and service-account email). When no monitoring configuration exists, the system SHALL create one with the same defaults. The same empty-enum fail-fast as install SHALL apply. Because each configuration is rewritten with a single atomic write, a failure SHALL leave the prior configuration intact and SHALL NOT have touched the authentication chain.
+After confirmation, the system SHALL rewrite each discovered monitoring configuration in place using the latest schema-derived defaults (highest extension version, all default feature sets, project filtering scoped to the active `gcloud` project, and the monitoring configuration referencing the existing connection object ID and service-account email). When no monitoring configuration exists, the system SHALL create one with the same defaults. The same fail-fast as install applies when the schema yields no feature sets. Because each configuration is rewritten with a single atomic write, a failure SHALL leave the prior configuration intact and SHALL NOT have touched the authentication chain.
 
 #### Scenario: Existing configuration updated in place
 

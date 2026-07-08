@@ -4,7 +4,7 @@
 
 ### Requirement: Install command and entry point
 
-The system SHALL expose `dtwiz install azure` as the final runnable command for Azure installation, accepting no extra positional arguments. The command SHALL set up the Dynatrace Azure Monitor integration, resolve the Dynatrace environment URL and platform token from the standard sources (`--environment`/`DT_ENVIRONMENT`, `--platform-token`/`DT_PLATFORM_TOKEN`), and honor the shared `--dry-run` flag.
+The system SHALL expose `dtwiz install azure` as the CLI command for Azure installation, accepting no positional arguments. The command SHALL set up the Dynatrace Azure Monitor integration, resolve the Dynatrace environment URL and platform token from the standard sources (`--environment`/`DT_ENVIRONMENT`, `--platform-token`/`DT_PLATFORM_TOKEN`), and honor the shared `--dry-run` flag.
 
 #### Scenario: Install command registered
 
@@ -117,14 +117,14 @@ The system SHALL execute the installation as seven ordered steps: (1) create the
 
 ### Requirement: Monitoring configuration defaults derived from the live extension schema
 
-The system SHALL determine the extension version to use by selecting the highest semantic version available for `com.dynatrace.extension.da-azure`. It SHALL fetch that version's monitoring-configuration schema and populate the configuration's location filtering from the location enum and the feature sets from the feature-sets enum, keeping only values ending in `_essential`. Subscription filtering SHALL be set to include the logged-in subscription, and the credential entry SHALL reference the connection object ID and Service Principal client ID using federated authentication. If no locations or no `_essential` feature sets are found, the system SHALL fail with a descriptive error rather than create a partial configuration.
+The system SHALL determine the extension version to use by selecting the highest semantic version available for `com.dynatrace.extension.da-azure`. It SHALL fetch that version's monitoring-configuration schema and populate the location filtering from the schema's location list and the feature sets with the schema's default feature sets. Subscription filtering SHALL be set to include the logged-in subscription, and the monitoring configuration SHALL reference the connection object ID and Service Principal client ID using federated authentication. If the schema defines no locations or no default feature sets, the system SHALL fail with a descriptive error rather than create a partial configuration.
 
-#### Scenario: Defaults populated from schema enums
+#### Scenario: Defaults populated from schema
 
-- **GIVEN** the latest `da-azure` schema exposes location and feature-set enums
+- **GIVEN** the extension schema defines available locations and feature sets
 - **WHEN** the monitoring configuration is created
 - **THEN** location filtering contains all schema location values
-- **AND** feature sets contains exactly the `*_essential` values from the schema
+- **AND** feature sets contains exactly the schema's default feature sets
 
 #### Scenario: Highest extension version selected
 
@@ -132,11 +132,11 @@ The system SHALL determine the extension version to use by selecting the highest
 - **WHEN** the installer chooses a version
 - **THEN** it selects the highest by semantic-version comparison
 
-#### Scenario: Empty enums fail fast
+#### Scenario: Empty location or feature-set list fails fast
 
-- **GIVEN** the schema yields no locations or no `_essential` feature sets
+- **GIVEN** the schema defines no locations or no default feature sets
 - **WHEN** the monitoring configuration would be created
-- **THEN** the install fails with an error naming the missing enum and creates no configuration
+- **THEN** the install fails with a descriptive error and creates no configuration
 
 ### Requirement: Tolerate Azure propagation delays on SP lookup
 

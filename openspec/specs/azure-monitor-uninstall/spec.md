@@ -4,7 +4,7 @@
 
 ### Requirement: Uninstall command and entry point
 
-The system SHALL expose `dtwiz uninstall azure` as the final runnable command for Azure removal, accepting no extra positional arguments. It SHALL remove the Dynatrace Azure Monitor integration created by the installer, resolve the environment URL and platform token from the standard sources, and honor the shared `--dry-run` flag. The package SHALL also expose a helper for callers (such as `dtwiz setup`) to detect whether an existing integration is present.
+The system SHALL expose `dtwiz uninstall azure` as the CLI command for Azure removal, accepting no positional arguments. It SHALL remove the Dynatrace Azure Monitor integration created by the installer, resolve the environment URL and platform token from the standard sources, and honor the shared `--dry-run` flag. The package SHALL also expose a helper for callers (such as `dtwiz setup`) to detect whether an existing integration is present.
 
 #### Scenario: Uninstall command registered
 

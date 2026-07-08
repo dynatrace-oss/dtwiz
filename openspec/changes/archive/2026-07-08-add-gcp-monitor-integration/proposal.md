@@ -29,7 +29,7 @@ This change adds a single-command GCP Monitor integration that automates the ful
 - New package `pkg/installer/gcp/`: `config.go`, `install.go`, `dtapi.go`, `helpers.go`, `preflight.go`, `uninstall.go`, `update.go` (+ tests).
 - `cmd/install.go`: adds `dtwiz install gcp`.
 - `cmd/uninstall.go`: adds `dtwiz uninstall gcp`.
-- `cmd/setup.go`: badges the GCP entry when a complete connection is already configured, routes to update vs install (running both existence checks concurrently with Azure's), and suppresses the generic post-install watch for GCP (the installer runs it itself).
+- `cmd/setup.go`: marks the GCP entry when a complete connection is already configured, routes to update or install (running both existence checks concurrently with Azure's), and suppresses the generic post-install watch for GCP (the installer runs it itself).
 - `pkg/analyzer/detect_gcp.go`: exports `CleanGCloudConfigValue` so the installer parses `gcloud config get-value` output identically to detection (stripping the Cloud Shell "active configuration" notice line); GCP detection itself already existed.
 - `pkg/recommender/recommender.go`: drops the `coming soon` framing for the GCP recommendation (removes `ComingSoon: true` and the "(coming soon)" title suffix) so GCP becomes an actionable recommendation (+ `recommender_test.go` update).
 - `pkg/installer/{cmdrunner.go,concurrent.go,extension_client.go,retry.go}`: new shared utilities (command execution, concurrent error-joining fan-out, Dynatrace Settings/Extensions API client, retry-with-jitter) extracted so the Azure and GCP installers share one implementation instead of two near-duplicates; `pkg/installer/azure/*` was refactored onto these in the same change.
