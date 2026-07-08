@@ -244,9 +244,9 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 			return true // dup via symlink: skip children but don't re-record
 		}
 
-		logger.Debug("project dir matched", "path", dir, "markers", strings.Join(matchedMarkers, ","))
+		logger.Debug("project dir matched", "path", resolvedDir, "markers", strings.Join(matchedMarkers, ","))
 		mu.Lock()
-		discoveredProjects = append(discoveredProjects, ScannedProject{Path: dir, Markers: matchedMarkers})
+		discoveredProjects = append(discoveredProjects, ScannedProject{Path: resolvedDir, Markers: matchedMarkers})
 		mu.Unlock()
 		return true
 	}
