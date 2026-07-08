@@ -8,7 +8,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/testutil"
+	"github.com/dynatrace-oss/dtwiz/test/helpers"
 )
 
 func TestDtOTLPEndpoint(t *testing.T) {
@@ -452,7 +452,7 @@ func TestUpdateOtelConfig_ContainerDryRun_HostMounted(t *testing.T) {
 		}
 	}
 
-	output := testutil.CaptureStdout(t, func() {
+	output := helpers.CaptureStdout(t, func() {
 		_ = UpdateOtelConfig(configPath, "https://env.live.dynatrace.com", "mytoken", "", true)
 	})
 
@@ -494,7 +494,7 @@ func TestUpdateOtelConfig_ContainerDryRun_NotInRestartPlan(t *testing.T) {
 		}
 	}
 
-	output := testutil.CaptureStdout(t, func() {
+	output := helpers.CaptureStdout(t, func() {
 		_ = UpdateOtelConfig(configPath, "https://env.live.dynatrace.com", "mytoken", "", true)
 	})
 
@@ -574,7 +574,7 @@ service:
 	}
 	w.Close()
 
-	testutil.CaptureStdout(t, func() {
+	helpers.CaptureStdout(t, func() {
 		if err := UpdateOtelConfigInteractive("https://env.live.dynatrace.com", "mytoken", "", true); err != nil {
 			t.Errorf("UpdateOtelConfigInteractive dry-run error: %v", err)
 		}

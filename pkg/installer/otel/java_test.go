@@ -14,7 +14,7 @@ import (
 	"github.com/fatih/color"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
-	"github.com/dynatrace-oss/dtwiz/pkg/testutil"
+	"github.com/dynatrace-oss/dtwiz/test/helpers"
 )
 
 // ── test helpers ──────────────────────────────────────────────────────────────
@@ -53,7 +53,7 @@ func makeMavenProjectWithFatJar(t *testing.T) {
 		t.Fatal(err)
 	}
 	makeTestJar(t, targetDir, "app.jar", "Manifest-Version: 1.0\nMain-Class: com.example.App\n")
-	testutil.SetTestWorkingDir(t, dir)
+	helpers.SetTestWorkingDir(t, dir)
 	setTestStdin(t, "1\n")
 }
 
@@ -83,7 +83,7 @@ func TestDetectJavaProjects_Maven(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutil.SetTestWorkingDir(t, dir)
+	helpers.SetTestWorkingDir(t, dir)
 	projects := detectJavaProjects()
 	if len(projects) == 0 {
 		t.Fatal("expected at least one Java project, got none")
@@ -109,7 +109,7 @@ func TestDetectJavaProjects_Gradle(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutil.SetTestWorkingDir(t, dir)
+	helpers.SetTestWorkingDir(t, dir)
 	projects := detectJavaProjects()
 	if len(projects) == 0 {
 		t.Fatal("expected at least one Java project, got none")
@@ -138,7 +138,7 @@ func TestDetectJavaProjects_None(t *testing.T) {
 	dir := t.TempDir()
 	realDir, _ := filepath.EvalSymlinks(dir)
 
-	testutil.SetTestWorkingDir(t, dir)
+	helpers.SetTestWorkingDir(t, dir)
 	projects := detectJavaProjects()
 	for _, p := range projects {
 		if p.Path == dir || p.Path == realDir {
@@ -165,7 +165,7 @@ func TestDetectJavaPlan_FindsProject(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte("<project/>"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	testutil.SetTestWorkingDir(t, dir)
+	helpers.SetTestWorkingDir(t, dir)
 	setTestStdin(t, "1\n")
 
 	plan := DetectJavaPlan("https://tenant.live.dynatrace.com", "token")
@@ -211,7 +211,7 @@ func TestJavaInstrumentationPlan_Runtime(t *testing.T) {
 func TestJavaInstrumentationPlan_PrintPlanSteps(t *testing.T) {
 	plan := &JavaInstrumentationPlan{Project: ScannedProject{Path: "/tmp/service"}}
 
-	output := testutil.CaptureStdout(t, func() {
+	output := helpers.CaptureStdout(t, func() {
 		plan.PrintPlanSteps()
 	})
 
@@ -232,7 +232,7 @@ func TestJavaInstrumentationPlan_PrintPlanSteps_Updated(t *testing.T) {
 		},
 	}
 
-	output := testutil.CaptureStdout(t, func() {
+	output := helpers.CaptureStdout(t, func() {
 		plan.PrintPlanSteps()
 	})
 
@@ -258,7 +258,7 @@ func TestJavaInstrumentationPlan_Execute(t *testing.T) {
 		EnvVars: map[string]string{"OTEL_SERVICE_NAME": "orders-api"},
 	}
 
-	testutil.CaptureStdout(t, func() {
+	helpers.CaptureStdout(t, func() {
 		plan.Execute()
 	})
 }
@@ -310,7 +310,7 @@ func TestJavaInstrumentationPlan_Execute_MultiModuleDispatch(t *testing.T) {
 		},
 	}
 
-	testutil.CaptureStdout(t, func() {
+	helpers.CaptureStdout(t, func() {
 		plan.Execute()
 	})
 	output := colorBuf.String()
@@ -347,7 +347,7 @@ func TestDetectJavaPlan_MultiModule_HasSubModules(t *testing.T) {
 		}
 	}
 
-	testutil.SetTestWorkingDir(t, root)
+	helpers.SetTestWorkingDir(t, root)
 	setTestStdin(t, "1\n")
 
 	plan := DetectJavaPlan("https://tenant.live.dynatrace.com", "token")
@@ -375,7 +375,7 @@ func TestDownloadJavaAgent_CreatesDirectory(t *testing.T) {
 	defer srv.Close()
 	redirectAgentDownloadURL(t, srv)
 
-	testutil.CaptureStdout(t, func() {
+	helpers.CaptureStdout(t, func() {
 		path, err := downloadJavaAgent()
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -494,7 +494,7 @@ func TestInstallOtelJava_DryRun(t *testing.T) {
 	skipIfNoJava(t)
 	makeMavenProjectWithFatJar(t)
 
-	output := testutil.CaptureStdout(t, func() {
+	output := helpers.CaptureStdout(t, func() {
 		err := InstallOtelJava("https://tenant.live.dynatrace.com", "tok", "test-svc", "", true)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -522,10 +522,10 @@ func TestInstallOtelJava_SkipReturnsInstallCancelled(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte("<project/>"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	testutil.SetTestWorkingDir(t, dir)
+	helpers.SetTestWorkingDir(t, dir)
 	setTestStdin(t, "\n") // skip project selection
 
-	testutil.CaptureStdout(t, func() {
+	helpers.CaptureStdout(t, func() {
 		err := InstallOtelJava("https://tenant.live.dynatrace.com", "tok", "", "", false)
 		if !errors.Is(err, installer.ErrInstallCancelled) {
 			t.Errorf("expected installer.ErrInstallCancelled when skipping, got %v", err)
@@ -541,10 +541,10 @@ func TestInstallOtelJava_NoBuildArtifact_NoRunningProcess(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte("<project/>"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	testutil.SetTestWorkingDir(t, dir)
+	helpers.SetTestWorkingDir(t, dir)
 	setTestStdin(t, "1\n")
 
-	testutil.CaptureStdout(t, func() {
+	helpers.CaptureStdout(t, func() {
 		err := InstallOtelJava("https://tenant.live.dynatrace.com", "tok", "", "", false)
 		if err == nil {
 			t.Fatal("expected error when no build tool is present, got nil")
@@ -566,10 +566,10 @@ func TestInstallOtelJava_AutoBuildFails(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte("<project/>"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	testutil.SetTestWorkingDir(t, dir)
+	helpers.SetTestWorkingDir(t, dir)
 	setTestStdin(t, "1\n")
 
-	testutil.CaptureStdout(t, func() {
+	helpers.CaptureStdout(t, func() {
 		err := InstallOtelJava("https://tenant.live.dynatrace.com", "tok", "", "", false)
 		if err == nil {
 			t.Fatal("expected error when auto-build fails, got nil")

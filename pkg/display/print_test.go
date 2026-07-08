@@ -5,11 +5,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/testutil"
+	"github.com/dynatrace-oss/dtwiz/test/helpers"
 )
 
 func TestHeader_PrintsIndentedTitle(t *testing.T) {
-	got := testutil.CaptureOutput(t, func() {
+	got := helpers.CaptureOutput(t, func() {
 		Header("Connection Status")
 	})
 	if !strings.Contains(got, "  Connection Status\n") {
@@ -21,7 +21,7 @@ func TestHeader_PrintsIndentedTitle(t *testing.T) {
 }
 
 func TestPrintSectionDivider_PrintsIndentedSeparator(t *testing.T) {
-	got := testutil.CaptureOutput(t, func() {
+	got := helpers.CaptureOutput(t, func() {
 		PrintSectionDivider()
 	})
 	if !strings.HasPrefix(got, "  ") {
@@ -36,7 +36,7 @@ func TestPrintSectionDivider_PrintsIndentedSeparator(t *testing.T) {
 }
 
 func TestPrintStatusLine_FormatsLabelAndMessage(t *testing.T) {
-	got := testutil.CaptureOutput(t, func() {
+	got := helpers.CaptureOutput(t, func() {
 		PrintStatusLine("Environment", "✓ https://abc.live.com", ColorOK)
 	})
 	want := "  Environment:  ✓ https://abc.live.com\n"
@@ -46,7 +46,7 @@ func TestPrintStatusLine_FormatsLabelAndMessage(t *testing.T) {
 }
 
 func TestPrintStatusLine_ErrorMessage(t *testing.T) {
-	got := testutil.CaptureOutput(t, func() {
+	got := helpers.CaptureOutput(t, func() {
 		PrintStatusLine("Access Token", "✗ not set (use --access-token)", ColorError)
 	})
 	want := "  Access Token:  ✗ not set (use --access-token)\n"
@@ -56,7 +56,7 @@ func TestPrintStatusLine_ErrorMessage(t *testing.T) {
 }
 
 func TestPrintStatusLine_EmptyMessage(t *testing.T) {
-	got := testutil.CaptureOutput(t, func() {
+	got := helpers.CaptureOutput(t, func() {
 		PrintStatusLine("Label", "", ColorOK)
 	})
 	want := "  Label:  \n"
@@ -66,7 +66,7 @@ func TestPrintStatusLine_EmptyMessage(t *testing.T) {
 }
 
 func TestPrintFlagLine_NoColonAfterLabel(t *testing.T) {
-	got := testutil.CaptureOutput(t, func() {
+	got := helpers.CaptureOutput(t, func() {
 		PrintFlagLine("DTWIZ_ALL_RUNTIMES", "✓ enabled (env)", ColorOK)
 	})
 	want := "  DTWIZ_ALL_RUNTIMES  ✓ enabled (env)\n"
@@ -76,7 +76,7 @@ func TestPrintFlagLine_NoColonAfterLabel(t *testing.T) {
 }
 
 func TestPrintError_FormatsLabelAndError(t *testing.T) {
-	got := testutil.CaptureOutput(t, func() {
+	got := helpers.CaptureOutput(t, func() {
 		PrintError("Setup", errors.New("connection refused"))
 	})
 	want := "  Setup: ✗ connection refused\n"
@@ -86,7 +86,7 @@ func TestPrintError_FormatsLabelAndError(t *testing.T) {
 }
 
 func TestPrintWarning_FormatsLabelAndError(t *testing.T) {
-	got := testutil.CaptureErrorOutput(t, func() {
+	got := helpers.CaptureErrorOutput(t, func() {
 		PrintWarning("EKS Bottlerocket probe", errors.New("exit status 1"))
 	})
 	want := "  EKS Bottlerocket probe: ⚠ exit status 1\n"
@@ -97,8 +97,8 @@ func TestPrintWarning_FormatsLabelAndError(t *testing.T) {
 
 func TestPrintWarning_DiffersFromPrintError(t *testing.T) {
 	err := errors.New("kubectl timeout")
-	warning := testutil.CaptureErrorOutput(t, func() { PrintWarning("probe", err) })
-	errOut := testutil.CaptureOutput(t, func() { PrintError("probe", err) })
+	warning := helpers.CaptureErrorOutput(t, func() { PrintWarning("probe", err) })
+	errOut := helpers.CaptureOutput(t, func() { PrintError("probe", err) })
 	if warning == errOut {
 		t.Error("PrintWarning() and PrintError() should produce different output (⚠ vs ✗)")
 	}
@@ -137,7 +137,7 @@ func TestHyperlink_NonTTYEnvironment_NoEscapeCodes(t *testing.T) {
 
 func TestPrintInfoBox_RendersContentRow(t *testing.T) {
 	const boxWidth = 97
-	got := testutil.CaptureStdout(t, func() {
+	got := helpers.CaptureStdout(t, func() {
 		PrintInfoBox("hello world")
 	})
 	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
@@ -158,7 +158,7 @@ func TestPrintInfoBox_RendersContentRow(t *testing.T) {
 }
 
 func TestPrintInfoBox_BlankLineRendersEmptyRow(t *testing.T) {
-	got := testutil.CaptureStdout(t, func() {
+	got := helpers.CaptureStdout(t, func() {
 		PrintInfoBox("line one", "", "line two")
 	})
 	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
@@ -176,7 +176,7 @@ func TestPrintInfoBox_BlankLineRendersEmptyRow(t *testing.T) {
 }
 
 func TestPrintAlignedStatusLine_PadsLabelToWidth(t *testing.T) {
-	got := testutil.CaptureOutput(t, func() {
+	got := helpers.CaptureOutput(t, func() {
 		PrintAlignedStatusLine("API URL", "https://foo.com", 13, ColorDefault)
 	})
 	want := "  API URL:       https://foo.com\n"
@@ -186,7 +186,7 @@ func TestPrintAlignedStatusLine_PadsLabelToWidth(t *testing.T) {
 }
 
 func TestPrintln_IndentsAndFormats(t *testing.T) {
-	got := testutil.CaptureStdout(t, func() {
+	got := helpers.CaptureStdout(t, func() {
 		Println("hello %s", "world")
 	})
 	want := "  hello world\n"
@@ -196,7 +196,7 @@ func TestPrintln_IndentsAndFormats(t *testing.T) {
 }
 
 func TestPrintlnColored_IndentsMessage(t *testing.T) {
-	got := testutil.CaptureOutput(t, func() {
+	got := helpers.CaptureOutput(t, func() {
 		PrintlnColored(ColorDefault, "Dynatrace Kubernetes Integration")
 	})
 	want := "  Dynatrace Kubernetes Integration\n"
@@ -206,7 +206,7 @@ func TestPrintlnColored_IndentsMessage(t *testing.T) {
 }
 
 func TestPrintSteps_NumbersAndIndents(t *testing.T) {
-	got := testutil.CaptureStdout(t, func() {
+	got := helpers.CaptureStdout(t, func() {
 		PrintSteps("", "Ensure Helm is installed", "kubectl apply -f dynakube.yaml")
 	})
 	want := "  Steps:\n    1. Ensure Helm is installed\n    2. kubectl apply -f dynakube.yaml\n"
@@ -216,7 +216,7 @@ func TestPrintSteps_NumbersAndIndents(t *testing.T) {
 }
 
 func TestPrintStepsColored_NumbersAndIndents(t *testing.T) {
-	got := testutil.CaptureOutput(t, func() {
+	got := helpers.CaptureOutput(t, func() {
 		PrintStepsColored(ColorDefault, "", "step one", "step two")
 	})
 	want := "  Steps:\n    1. step one\n    2. step two\n"
@@ -227,8 +227,8 @@ func TestPrintStepsColored_NumbersAndIndents(t *testing.T) {
 
 func TestPrintFlagLine_DiffersFromPrintStatusLine(t *testing.T) {
 	label, message := "DTWIZ_ALL_RUNTIMES", "✓ enabled (cli)"
-	flagLine := testutil.CaptureOutput(t, func() { PrintFlagLine(label, message, ColorOK) })
-	statusLine := testutil.CaptureOutput(t, func() { PrintStatusLine(label, message, ColorOK) })
+	flagLine := helpers.CaptureOutput(t, func() { PrintFlagLine(label, message, ColorOK) })
+	statusLine := helpers.CaptureOutput(t, func() { PrintStatusLine(label, message, ColorOK) })
 	if flagLine == statusLine {
 		t.Error("PrintFlagLine() and PrintStatusLine() should produce different output (colon vs no colon)")
 	}

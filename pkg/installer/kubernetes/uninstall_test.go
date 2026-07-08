@@ -8,7 +8,7 @@ import (
 
 	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
-	"github.com/dynatrace-oss/dtwiz/pkg/testutil"
+	"github.com/dynatrace-oss/dtwiz/test/helpers"
 )
 
 func withStdin(t *testing.T, input string, fn func()) {
@@ -36,7 +36,7 @@ func withFakeRunCmdQuiet(t *testing.T, fn func(name string, args ...string) erro
 
 func TestUninstallKubernetes_Cancelled(t *testing.T) {
 	withStdin(t, "n\n", func() {
-		out := testutil.CaptureStdout(t, func() {
+		out := helpers.CaptureStdout(t, func() {
 			err := UninstallKubernetes("my-ctx", analyzer.DistroAKS, false)
 			if err != nil {
 				t.Fatalf("expected nil on cancel, got: %v", err)
@@ -55,7 +55,7 @@ func TestUninstallKubernetes_ShowsClusterInfo(t *testing.T) {
 
 	withFakeRunCmdQuiet(t, func(_ string, _ ...string) error { return nil })
 
-	out := testutil.CaptureStdout(t, func() {
+	out := helpers.CaptureStdout(t, func() {
 		_ = UninstallKubernetes("FreeTrialKubernetesTest", analyzer.DistroAKS, false)
 	})
 	if !strings.Contains(out, "The affected cluster is: AKS context=FreeTrialKubernetesTest") {
@@ -70,7 +70,7 @@ func TestUninstallKubernetes_NoClusterInfoWhenContextEmpty(t *testing.T) {
 
 	withFakeRunCmdQuiet(t, func(_ string, _ ...string) error { return nil })
 
-	out := testutil.CaptureStdout(t, func() {
+	out := helpers.CaptureStdout(t, func() {
 		_ = UninstallKubernetes("", "", false)
 	})
 	if strings.Contains(out, "The affected cluster is") {
@@ -89,7 +89,7 @@ func TestUninstallKubernetes_Success(t *testing.T) {
 		return nil
 	})
 
-	out := testutil.CaptureStdout(t, func() {
+	out := helpers.CaptureStdout(t, func() {
 		if err := UninstallKubernetes("my-ctx", analyzer.DistroGKE, false); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -117,7 +117,7 @@ func TestUninstallKubernetes_EdgeConnectDeletedEvenWhenDynaKubeFails(t *testing.
 		return nil
 	})
 
-	testutil.CaptureStdout(t, func() { _ = UninstallKubernetes("my-ctx", analyzer.DistroEKS, false) })
+	helpers.CaptureStdout(t, func() { _ = UninstallKubernetes("my-ctx", analyzer.DistroEKS, false) })
 
 	ranEdgeConnect := false
 	for _, c := range calls {
@@ -142,7 +142,7 @@ func TestUninstallKubernetes_KubectlDeleteFails(t *testing.T) {
 		return nil
 	})
 
-	testutil.CaptureStdout(t, func() {
+	helpers.CaptureStdout(t, func() {
 		err := UninstallKubernetes("my-ctx", analyzer.DistroEKS, false)
 		if err == nil {
 			t.Fatal("expected error when kubectl delete dynakube fails")
@@ -162,7 +162,7 @@ func TestUninstallKubernetes_HelmUninstallFails(t *testing.T) {
 		return nil
 	})
 
-	testutil.CaptureStdout(t, func() {
+	helpers.CaptureStdout(t, func() {
 		err := UninstallKubernetes("my-ctx", analyzer.DistroEKS, false)
 		if err == nil {
 			t.Fatal("expected error when helm uninstall fails")
@@ -187,7 +187,7 @@ func TestUninstallKubernetes_HelmFailContinuesToNamespaceDeletion(t *testing.T) 
 		return nil
 	})
 
-	out := testutil.CaptureStdout(t, func() {
+	out := helpers.CaptureStdout(t, func() {
 		err := UninstallKubernetes("my-ctx", analyzer.DistroEKS, false)
 		if err == nil {
 			t.Fatal("expected error when helm uninstall fails")
@@ -222,7 +222,7 @@ func TestUninstallKubernetes_KubectlDeleteFailContinuesToEnd(t *testing.T) {
 		return nil
 	})
 
-	testutil.CaptureStdout(t, func() {
+	helpers.CaptureStdout(t, func() {
 		err := UninstallKubernetes("my-ctx", analyzer.DistroEKS, false)
 		if err == nil {
 			t.Fatal("expected error when kubectl delete dynakube fails")
@@ -253,7 +253,7 @@ func TestUninstallKubernetes_DryRun(t *testing.T) {
 		return nil
 	})
 
-	out := testutil.CaptureStdout(t, func() {
+	out := helpers.CaptureStdout(t, func() {
 		if err := UninstallKubernetes("my-ctx", "GKE", true); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -281,7 +281,7 @@ func TestUninstallKubernetes_DryRun_NoClusterInfoWhenContextEmpty(t *testing.T) 
 		return nil
 	})
 
-	out := testutil.CaptureStdout(t, func() {
+	out := helpers.CaptureStdout(t, func() {
 		if err := UninstallKubernetes("", "", true); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -320,7 +320,7 @@ func TestUninstallKubernetes_MultipleStepsFail(t *testing.T) {
 		return nil
 	})
 
-	out := testutil.CaptureStdout(t, func() {
+	out := helpers.CaptureStdout(t, func() {
 		err := UninstallKubernetes("my-ctx", analyzer.DistroEKS, false)
 		if err == nil {
 			t.Fatal("expected error when multiple steps fail")
@@ -332,5 +332,73 @@ func TestUninstallKubernetes_MultipleStepsFail(t *testing.T) {
 
 	if !strings.Contains(out, "Uninstall completed with errors") {
 		t.Errorf("expected completion-with-errors message, got: %q", out)
+	}
+}
+
+func TestUninstallKubernetes_Step2WaitFailsNonFatal(t *testing.T) {
+	orig := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = orig })
+
+	var calls []string
+	withFakeRunCmdQuiet(t, func(name string, args ...string) error {
+		calls = append(calls, name+" "+strings.Join(args, " "))
+		// kubectl -n dynatrace wait ... → args[2] == "wait"
+		if name == "kubectl" && len(args) > 2 && args[2] == "wait" {
+			return errors.New("kubectl: timed out waiting for pods")
+		}
+		return nil
+	})
+
+	out := helpers.CaptureStdout(t, func() {
+		if err := UninstallKubernetes("my-ctx", analyzer.DistroGKE, false); err != nil {
+			t.Fatalf("expected success when only step 2 fails, got: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "uninstalled successfully") {
+		t.Errorf("expected success message, got: %q", out)
+	}
+	ranHelm, ranNamespace := false, false
+	for _, c := range calls {
+		if strings.Contains(c, "helm uninstall") {
+			ranHelm = true
+		}
+		if strings.Contains(c, "delete namespace") {
+			ranNamespace = true
+		}
+	}
+	if !ranHelm {
+		t.Error("expected helm uninstall to run after step 2 warning")
+	}
+	if !ranNamespace {
+		t.Error("expected namespace deletion to run after step 2 warning")
+	}
+}
+
+func TestUninstallKubernetes_NamespaceOnlyFails(t *testing.T) {
+	orig := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = orig })
+
+	withFakeRunCmdQuiet(t, func(name string, args ...string) error {
+		if name == "kubectl" && len(args) > 1 && args[0] == "delete" && args[1] == "namespace" {
+			return errors.New("kubectl: namespace not found")
+		}
+		return nil
+	})
+
+	out := helpers.CaptureStdout(t, func() {
+		err := UninstallKubernetes("my-ctx", analyzer.DistroGKE, false)
+		if err == nil {
+			t.Fatal("expected error when namespace deletion fails")
+		}
+		if !strings.Contains(err.Error(), "one or more steps failed") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "Uninstall completed with errors") {
+		t.Errorf("expected errors message, got: %q", out)
 	}
 }

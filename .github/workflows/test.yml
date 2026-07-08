@@ -8,9 +8,8 @@ on:
   workflow_dispatch:
 
 # Minimum test coverage percentage required to pass CI.
-# Target: gradually increase to 30 -> 40 -> 50.
 env:
-  COVERAGE_THRESHOLD: 30
+  COVERAGE_THRESHOLD: 50
 
 jobs:
   test:
