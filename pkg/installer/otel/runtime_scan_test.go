@@ -410,7 +410,7 @@ func TestScanProjectDirs_RootMatchStillDescends(t *testing.T) {
 	realRoot, _ := filepath.EvalSymlinks(root)
 	realNested, _ := filepath.EvalSymlinks(nested)
 
-	testutil.SetTestWorkingDir(t, root)
+	helpers.SetTestWorkingDir(t, root)
 	projects := scanProjectDirs([]string{"go.mod"}, nil)
 
 	foundRoot, foundNested := false, false
