@@ -123,6 +123,7 @@ type GCPService struct {
 // GCPInfo holds details about a detected GCP environment.
 type GCPInfo struct {
 	Available         bool         `json:"available"`
+	Authenticated     bool         `json:"authenticated,omitempty"`
 	ProjectID         string       `json:"project_id,omitempty"`
 	Account           string       `json:"account,omitempty"`
 	Services          []GCPService `json:"services,omitempty"`
@@ -271,9 +272,13 @@ func (s *SystemInfo) Summary() string {
 		}
 		sb.WriteString(gcpLine + "\n")
 	} else {
+		gcpNoneMsg := "<none> — sign in with 'gcloud auth login' to detect your project"
+		if s.GCP != nil && s.GCP.Authenticated {
+			gcpNoneMsg = "<none> — set a project with 'gcloud config set project PROJECT_ID'"
+		}
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("GCP"),
-			display.ColorMuted.Sprint("<none> — sign in with 'gcloud auth login' to detect your project")))
+			display.ColorMuted.Sprint(gcpNoneMsg)))
 	}
 
 	switch {
