@@ -17,7 +17,6 @@ import (
 	k8s "github.com/dynatrace-oss/dtwiz/pkg/installer/kubernetes"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
-	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/dynatrace-oss/dtwiz/pkg/recommender"
 )
 
@@ -51,31 +50,6 @@ var setupCmd = &cobra.Command{
 			return fmt.Errorf("analysis failed: %w", err)
 		}
 		fmt.Println(info.Summary())
-
-		// Pre-check Azure/GCP connection status so the recommender can emit the
-		// right method (install vs update) for each cloud integration.
-		if envURL, _, platformTok, credErr := getDtEnvironment(); credErr == nil {
-			var checks []func() error
-			if info.AzureDetected() {
-				checks = append(checks, func() error {
-					exists, err := azure.ConnectionExists(envURL, platformTok)
-					info.AzureConfigured = exists
-					return err
-				})
-			}
-			if info.GCPDetected() {
-				checks = append(checks, func() error {
-					exists, err := gcp.ConnectionExists(envURL, platformTok)
-					info.GCPConfigured = exists
-					return err
-				})
-			}
-			if len(checks) > 0 {
-				if err := installer.RunConcurrently(checks...); err != nil {
-					logger.Debug("connection existence check failed, assuming not configured", "err", err)
-				}
-			}
-		}
 
 		fmt.Println()
 		display.Header("Recommendations — What do you want to monitor?")
