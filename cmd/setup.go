@@ -77,7 +77,6 @@ var setupCmd = &cobra.Command{
 			}
 		}
 
-
 		fmt.Println()
 		display.Header("Recommendations — What do you want to monitor?")
 		recs := recommender.GenerateRecommendations(info)
