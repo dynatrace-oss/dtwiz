@@ -4,7 +4,7 @@
 
 ### Requirement: Uninstall command and entry point
 
-The system SHALL expose `dtwiz uninstall gcp` as the final runnable command for GCP removal, accepting no extra positional arguments. It SHALL remove the Dynatrace GCP integration created by the installer, resolve the environment URL and platform token from the standard sources, and honor the shared `--dry-run` flag. The package SHALL also expose a helper for callers (such as `dtwiz setup`) to detect whether a complete integration is present.
+The system SHALL expose `dtwiz uninstall gcp` as the CLI command for GCP removal, accepting no positional arguments. It SHALL remove the Dynatrace GCP integration created by the installer, resolve the environment URL and platform token from the standard sources, and honor the shared `--dry-run` flag. The package SHALL also expose a helper for callers (such as `dtwiz setup`) to detect whether a complete integration is present.
 
 #### Scenario: Uninstall command registered
 

@@ -235,14 +235,9 @@ func (d *sdkDTClient) buildMonitoringConfig(configName, connectionObjectID, serv
 		return body, err
 	}
 
-	featureSets := make([]string, 0)
-	for _, fs := range schema.EnumValues(gcpFeatureSetEnumKey) {
-		if strings.HasSuffix(fs, "_essential") {
-			featureSets = append(featureSets, fs)
-		}
-	}
-	if len(featureSets) == 0 {
-		return body, fmt.Errorf("no \"_essential\" feature sets found under enum %q in extension schema", gcpFeatureSetEnumKey)
+	featureSets, err := schema.EssentialFeatureSets(gcpFeatureSetEnumKey)
+	if err != nil {
+		return body, err
 	}
 	logger.Debug("monitoring defaults from schema", "featureSets", len(featureSets))
 

@@ -94,20 +94,9 @@ func uninstallGCPWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc dt
 
 	gcpUninstallPrintPreview(envURL, projectID, monConfigIDs, conns, saEmails, integrationName, integrationName)
 
-	if dryRun {
-		fmt.Println("  [dry-run] No changes were made.")
-		return nil
+	if proceed, err := installer.ShouldProceed(dryRun, "Uninstall"); !proceed {
+		return err
 	}
-
-	ok, err := installer.ConfirmProceed("  Apply?")
-	if err != nil {
-		return fmt.Errorf("reading confirmation: %w", err)
-	}
-	if !ok {
-		fmt.Println("  Uninstall cancelled.")
-		return installer.ErrInstallCancelled
-	}
-	fmt.Println()
 
 	totalSteps := uninstallStepCount(monConfigIDs, conns, saEmails, projectID)
 	if err := runUninstallSteps(totalSteps, projectID, monConfigIDs, conns, saEmails, runner, dtc); err != nil {

@@ -126,6 +126,22 @@ func (s *ExtensionSchema) EnumValues(key string) []string {
 	return out
 }
 
+// EssentialFeatureSets returns every value in the enum identified by key whose
+// name ends with "_essential". Returns an error if none are found — a monitoring
+// config created without feature sets would silently collect no data.
+func (s *ExtensionSchema) EssentialFeatureSets(key string) ([]string, error) {
+	var out []string
+	for _, fs := range s.EnumValues(key) {
+		if strings.HasSuffix(fs, "_essential") {
+			out = append(out, fs)
+		}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no \"_essential\" feature sets found under enum %q in extension schema", key)
+	}
+	return out, nil
+}
+
 // FetchExtensionSchema fetches and parses the monitoring-configuration schema for
 // the given extension version.
 func (e *ExtensionClient) FetchExtensionSchema(extensionName, version string) (*ExtensionSchema, error) {

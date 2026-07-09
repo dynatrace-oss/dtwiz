@@ -3,6 +3,7 @@ package installer
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -242,5 +243,78 @@ func TestExtensionClientDeleteMonitoringConfiguration_ServerError(t *testing.T) 
 	err := newTestExtensionClient(t, srv.URL).DeleteMonitoringConfiguration(testExtensionName, "mon-001")
 	if err == nil {
 		t.Fatal("expected error for 404, got nil")
+	}
+}
+
+// ─── EssentialFeatureSets ────────────────────────────────────────────────────
+
+func TestExtensionSchema_EssentialFeatureSets_HappyPath(t *testing.T) {
+	schema := &ExtensionSchema{
+		Enums: map[string]struct {
+			Items []struct {
+				Value string `json:"value"`
+			} `json:"items"`
+		}{
+			"FSTypes": {Items: []struct {
+				Value string `json:"value"`
+			}{
+				{Value: "compute_essential"},
+				{Value: "storage_essential"},
+				{Value: "compute_premium"},
+			}},
+		},
+	}
+
+	fs, err := schema.EssentialFeatureSets("FSTypes")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(fs) != 2 {
+		t.Fatalf("expected 2 essential feature sets, got %d: %v", len(fs), fs)
+	}
+	for _, f := range fs {
+		if !strings.HasSuffix(f, "_essential") {
+			t.Errorf("non-essential value returned: %q", f)
+		}
+	}
+}
+
+func TestExtensionSchema_EssentialFeatureSets_NoEssential(t *testing.T) {
+	schema := &ExtensionSchema{
+		Enums: map[string]struct {
+			Items []struct {
+				Value string `json:"value"`
+			} `json:"items"`
+		}{
+			"FSTypes": {Items: []struct {
+				Value string `json:"value"`
+			}{
+				{Value: "compute_premium"},
+				{Value: "storage_premium"},
+			}},
+		},
+	}
+
+	_, err := schema.EssentialFeatureSets("FSTypes")
+	if err == nil {
+		t.Fatal("expected error when no _essential feature sets exist, got nil")
+	}
+	if !strings.Contains(err.Error(), "_essential") {
+		t.Errorf("error should mention _essential, got: %v", err)
+	}
+}
+
+func TestExtensionSchema_EssentialFeatureSets_KeyNotFound(t *testing.T) {
+	schema := &ExtensionSchema{
+		Enums: map[string]struct {
+			Items []struct {
+				Value string `json:"value"`
+			} `json:"items"`
+		}{},
+	}
+
+	_, err := schema.EssentialFeatureSets("NonExistent")
+	if err == nil {
+		t.Fatal("expected error for missing enum key, got nil")
 	}
 }

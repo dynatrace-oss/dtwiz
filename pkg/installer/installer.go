@@ -19,6 +19,31 @@ import (
 // confirmation prompt. Callers should treat it as a clean exit, not an error.
 var ErrInstallCancelled = errors.New("installation cancelled by user")
 
+// IngestTimeFormat is the RFC3339 timestamp format used in DQL from-clauses.
+const IngestTimeFormat = "2006-01-02T15:04:05Z"
+
+// ShouldProceed handles the dry-run check and user confirmation prompt
+// that appears at the end of every install/update/uninstall preview. verb is
+// the action noun used in the cancellation message ("Installation", "Update",
+// "Uninstall"). Returns (true, nil) to proceed, (false, nil) for dry-run, or
+// (false, err) when the user declines or reading stdin fails.
+func ShouldProceed(dryRun bool, verb string) (bool, error) {
+	if dryRun {
+		fmt.Println("  [dry-run] No changes were made.")
+		return false, nil
+	}
+	ok, err := ConfirmProceed("  Apply?")
+	if err != nil {
+		return false, fmt.Errorf("reading confirmation: %w", err)
+	}
+	if !ok {
+		fmt.Printf("  %s cancelled.\n", verb)
+		return false, ErrInstallCancelled
+	}
+	fmt.Println()
+	return true, nil
+}
+
 // AutoConfirm bypasses all confirmProceed prompts when set to true.
 // Set by the --yes / -y flag on install, update, and uninstall command groups.
 var AutoConfirm bool

@@ -4,7 +4,7 @@
 
 ### Requirement: Install command and entry point
 
-The system SHALL expose `dtwiz install gcp` as the final runnable command for GCP installation, accepting no extra positional arguments. The command SHALL set up the Dynatrace Google Cloud integration, resolve the Dynatrace environment URL and platform token from the standard sources (`--environment`/`DT_ENVIRONMENT`, `--platform-token`/`DT_PLATFORM_TOKEN`), and honor the shared `--dry-run` flag.
+The system SHALL expose `dtwiz install gcp` as the CLI command for GCP installation, accepting no positional arguments. The command SHALL set up the Dynatrace Google Cloud integration, resolve the Dynatrace environment URL and platform token from the standard sources (`--environment`/`DT_ENVIRONMENT`, `--platform-token`/`DT_PLATFORM_TOKEN`), and honor the shared `--dry-run` flag.
 
 #### Scenario: Install command registered
 
@@ -111,13 +111,13 @@ The system SHALL execute the installation as seven ordered steps: (1) enable the
 
 ### Requirement: Monitoring configuration defaults derived from the live extension schema
 
-The system SHALL determine the extension version to use by selecting the highest semantic version available for `com.dynatrace.extension.da-gcp`. It SHALL fetch that version's monitoring-configuration schema and populate the configuration's feature sets from the `FeatureSetsType` enum, keeping only values ending in `_essential`. Project filtering SHALL be set to the active `gcloud` project, and the credential entry SHALL reference the connection object ID and service-account email. If no `_essential` feature sets are found, the system SHALL fail with a descriptive error rather than create a partial configuration.
+The system SHALL determine the extension version to use by selecting the highest semantic version available for `com.dynatrace.extension.da-gcp`. It SHALL fetch that version's monitoring-configuration schema and populate the feature sets with the schema's default feature sets. Project filtering SHALL be set to the active `gcloud` project, and the monitoring configuration SHALL reference the connection object ID and service-account email. If the schema defines no default feature sets, the system SHALL fail with a descriptive error rather than create a partial configuration.
 
-#### Scenario: Defaults populated from schema enum
+#### Scenario: Defaults populated from schema
 
-- **GIVEN** the latest `da-gcp` schema exposes a `FeatureSetsType` enum
+- **GIVEN** the extension schema defines available feature sets
 - **WHEN** the monitoring configuration is created
-- **THEN** feature sets contains exactly the `*_essential` values from the schema
+- **THEN** feature sets contains exactly the schema's default feature sets
 
 #### Scenario: Highest extension version selected
 
@@ -125,11 +125,11 @@ The system SHALL determine the extension version to use by selecting the highest
 - **WHEN** the installer chooses a version
 - **THEN** it selects the highest by semantic-version comparison
 
-#### Scenario: Empty feature-set enum fails fast
+#### Scenario: Empty feature-set list fails fast
 
-- **GIVEN** the schema yields no `_essential` feature sets
+- **GIVEN** the schema defines no default feature sets
 - **WHEN** the monitoring configuration would be created
-- **THEN** the install fails with an error naming the missing enum and creates no configuration
+- **THEN** the install fails with a descriptive error and creates no configuration
 
 ### Requirement: Tolerate GCP IAM propagation delays on gcloud steps
 
@@ -149,7 +149,7 @@ The system SHALL retry each `gcloud`-driven step that can race a just-created re
 
 ### Requirement: Retry connection finalization only on the verified propagation signal
 
-The system SHALL retry the Dynatrace connection finalization (step 6) up to 30 times, with a jittered ~30-second initial delay followed by a jittered ~5-second delay between subsequent attempts, while the error contains the verified constraint-violation signal for an unpropagated impersonation binding. It SHALL exclude a permanent schema-mismatch error (`Unknown property`) from retrying even though it is also reported as a constraint violation, and it SHALL NOT treat every error mentioning "permission" as retryable, so a permanent Dynatrace-side authorization failure fails immediately instead of exhausting the retry budget.
+The system SHALL retry the Dynatrace connection finalization (step 6) up to 30 times, with a jittered ~30-second initial delay followed by a jittered ~5-second delay between subsequent attempts, while the error contains the verified constraint-violation signal for an unpropagated impersonation binding. It SHALL exclude permanent schema-mismatch errors from retrying even though they are also reported as constraint violations, and it SHALL NOT treat every error mentioning "permission" as retryable, so a permanent Dynatrace-side authorization failure fails immediately instead of exhausting the retry budget.
 
 #### Scenario: Propagation error retried
 
@@ -159,7 +159,7 @@ The system SHALL retry the Dynatrace connection finalization (step 6) up to 30 t
 
 #### Scenario: Permanent schema mismatch stops retrying
 
-- **GIVEN** step 6 returns a constraint violation whose detail is `Unknown property`
+- **GIVEN** step 6 returns a permanent schema-mismatch error
 - **WHEN** the update runs
 - **THEN** the retry loop stops immediately and the error is returned
 

@@ -57,6 +57,15 @@ func WatchIngest(envURL, pToken, fromClause string) {
 	watchIngest(envURL, pToken, fromClause, nil, "", false)
 }
 
+// WatchIngestCloudFromTime is like WatchIngest but calls WatchIngestCloud.
+// Use this for Azure and GCP installs and updates.
+func WatchIngestCloudFromTime(envURL, pToken string, startTime time.Time) {
+	if startTime.IsZero() {
+		return
+	}
+	WatchIngestCloud(envURL, pToken, startTime.UTC().Format(IngestTimeFormat))
+}
+
 // WatchIngestWithStatus is like WatchIngest but displays a background-task
 // status line (e.g. a CloudFormation deployment) in the watch header.
 // The caller sends status messages to statusCh; the most recent message is

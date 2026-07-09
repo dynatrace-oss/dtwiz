@@ -4,7 +4,7 @@
 
 ### Requirement: Update is an in-place monitoring-config reconcile
 
-The system SHALL provide an `UpdateAzure` entry point that refreshes an existing integration in place by reconciling **only** the `da-azure` monitoring configuration to the latest schema-derived defaults. The authentication chain SHALL NOT be modified by an update: the Dynatrace connection, the Azure Service Principal, the federated credential, and the Monitoring Reader role assignment. The update path SHALL be reachable as its own `dtwiz update azure` subcommand, from `dtwiz setup` when an Azure connection already exists, and from `dtwiz install azure` when it finds a complete existing connection.
+The system SHALL refresh an existing integration in place by reconciling **only** the `da-azure` monitoring configuration to the latest schema-derived defaults. The authentication chain SHALL NOT be modified by an update: the Dynatrace connection, the Azure Service Principal, the federated credential, and the Monitoring Reader role assignment. The update path SHALL be reachable as its own `dtwiz update azure` subcommand, from `dtwiz setup` when an Azure connection already exists, and from `dtwiz install azure` when it finds a complete existing connection.
 
 #### Scenario: Direct subcommand invocation
 
@@ -17,7 +17,7 @@ The system SHALL provide an `UpdateAzure` entry point that refreshes an existing
 - **GIVEN** an Azure connection named `dtwiz-azure` already exists
 - **WHEN** the user selects Azure in `dtwiz setup`
 - **THEN** the setup flow runs an in-place reconcile instead of a fresh install
-- **AND** the Azure entry in the setup list is badged as already configured
+- **AND** the Azure entry in the setup list is marked as already configured
 
 #### Scenario: Setup installs fresh when not configured
 
@@ -87,7 +87,7 @@ The system SHALL present a preview with the environment, tenant, subscription, c
 
 ### Requirement: Reconcile every monitoring configuration to schema-derived defaults
 
-After confirmation, the system SHALL rewrite each discovered monitoring configuration in place using the latest schema-derived defaults (highest extension version, all schema locations, all `*_essential` feature sets, subscription filtering scoped to the logged-in subscription, and a federated credential referencing the existing connection object ID and Service Principal client ID). When no monitoring configuration exists, the system SHALL create one with the same defaults. The same empty-enum fail-fast as install SHALL apply. Because each configuration is rewritten with a single atomic write, a failure SHALL leave the prior configuration intact and SHALL NOT have touched the authentication chain.
+After confirmation, the system SHALL rewrite each discovered monitoring configuration in place using the latest schema-derived defaults (highest extension version, all schema locations, the schema's default feature sets, subscription filtering scoped to the logged-in subscription, and the monitoring configuration referencing the existing connection object ID and Service Principal client ID using federated authentication). When no monitoring configuration exists, the system SHALL create one with the same defaults. The same fail-fast as install applies when the schema yields no locations or feature sets. Because each configuration is rewritten with a single atomic write, a failure SHALL leave the prior configuration intact and SHALL NOT have touched the authentication chain.
 
 #### Scenario: Existing configuration updated in place
 
