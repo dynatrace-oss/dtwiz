@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.29] - 2026-07-09
+
+### Added
+
+- `install gcp`, `update gcp`, `uninstall gcp`: new GCP cloud integration — provisions a Workload Identity Federation pool and provider, activates the `da-gcp` extension, and creates monitoring configuration with project and feature-set selection; `update gcp` reconciles the monitoring config in place without touching auth, and `install gcp` delegates to update when a complete connection already exists
+- `install gcp` / `install azure`: Azure and GCP resource types are now included in the ingest watch cloud monitoring section
+- Integration tests for GCP, Azure, and Kubernetes install/update/uninstall lifecycles; e2e tests for GCP and Azure behind the `integration` build tag
+
+### Changed
+
+- OTel installer code reorganized into `pkg/installer/otel/` subdirectory for a cleaner package layout
+- `setup`: improved wording and messaging for cloud installation flow — clearer progress indicators, better hyperlink detection, and more actionable recommendations
+- Shared `ExtensionClient` abstraction extracted for Azure and GCP Dynatrace API interactions (extension activation, polling, status checks)
+- Shared `retry` and `concurrent` utilities added to `pkg/installer/` for use across cloud installers
+- Test helpers moved from `pkg/testutil/` to `test/helpers/`
+
 ## [0.2.28] - 2026-07-06
 
 ### Added
@@ -401,7 +417,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.28...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.29...HEAD
+[0.2.29]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.28...v0.2.29
 [0.2.28]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.27...v0.2.28
 [0.2.27]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.26...v0.2.27
 [0.2.26]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.25...v0.2.26
