@@ -6,6 +6,179 @@ import (
 	"testing"
 )
 
+// nodesResp builds a dqlResponse for the smartscapeNodes query (type + count fields).
+func nodesResp(rows ...struct {
+	typeName string
+	count    int
+}) *dqlResponse {
+	resp := &dqlResponse{}
+	for _, row := range rows {
+		resp.Result.Records = append(resp.Result.Records, map[string]interface{}{
+			"type":  row.typeName,
+			"count": float64(row.count),
+		})
+	}
+	return resp
+}
+
+// ── parseNodes ──────────────────────────────────────────────────────────────
+
+func TestParseNodes_NilResponse(t *testing.T) {
+	cloud, k8s := parseNodes(nil)
+	if cloud.Count != 0 || k8s.Count != 0 {
+		t.Errorf("nil response must yield zero counts, got cloud=%d k8s=%d", cloud.Count, k8s.Count)
+	}
+}
+
+func TestParseNodes_ZeroCountRowsIgnored(t *testing.T) {
+	resp := nodesResp(
+		struct {
+			typeName string
+			count    int
+		}{"AWS_EC2_INSTANCE", 0},
+		struct {
+			typeName string
+			count    int
+		}{"K8S_CLUSTER", 0},
+	)
+	cloud, k8s := parseNodes(resp)
+	if cloud.Count != 0 || k8s.Count != 0 {
+		t.Errorf("zero-count rows must not contribute, got cloud=%d k8s=%d", cloud.Count, k8s.Count)
+	}
+}
+
+func TestParseNodes_AWSEntitiesGoToCloud(t *testing.T) {
+	resp := nodesResp(struct {
+		typeName string
+		count    int
+	}{"AWS_EC2_INSTANCE", 7})
+	cloud, k8s := parseNodes(resp)
+	if cloud.Count != 7 {
+		t.Errorf("AWS_ entities must count as cloud, got cloud.Count=%d", cloud.Count)
+	}
+	if k8s.Count != 0 {
+		t.Errorf("AWS_ entities must not count as k8s, got k8s.Count=%d", k8s.Count)
+	}
+	if !strings.Contains(cloud.Details, "ec2 instances") {
+		t.Errorf("cloud detail should contain humanized AWS type, got %q", cloud.Details)
+	}
+}
+
+func TestParseNodes_AzureEntitiesGoToCloud(t *testing.T) {
+	resp := nodesResp(struct {
+		typeName string
+		count    int
+	}{"AZURE_MICROSOFT_VIRTUAL_MACHINE", 3})
+	cloud, k8s := parseNodes(resp)
+	if cloud.Count != 3 {
+		t.Errorf("AZURE_ entities must count as cloud, got cloud.Count=%d", cloud.Count)
+	}
+	if k8s.Count != 0 {
+		t.Errorf("AZURE_ entities must not count as k8s, got k8s.Count=%d", k8s.Count)
+	}
+	// AZURE_MICROSOFT_ prefix stripped → "virtual machine" → humanized
+	if !strings.Contains(cloud.Details, "virtual machine") {
+		t.Errorf("cloud detail should contain humanized Azure type, got %q", cloud.Details)
+	}
+}
+
+func TestParseNodes_GCPEntitiesGoToCloud(t *testing.T) {
+	resp := nodesResp(struct {
+		typeName string
+		count    int
+	}{"GCP_CLOUD_RUN_SERVICE", 4})
+	cloud, k8s := parseNodes(resp)
+	if cloud.Count != 4 {
+		t.Errorf("GCP_ entities must count as cloud, got cloud.Count=%d", cloud.Count)
+	}
+	if k8s.Count != 0 {
+		t.Errorf("GCP_ entities must not count as k8s, got k8s.Count=%d", k8s.Count)
+	}
+	if !strings.Contains(cloud.Details, "cloud run service") {
+		t.Errorf("cloud detail should contain humanized GCP type, got %q", cloud.Details)
+	}
+}
+
+func TestParseNodes_K8sAndContainerGoToKubernetes(t *testing.T) {
+	resp := nodesResp(
+		struct {
+			typeName string
+			count    int
+		}{"K8S_CLUSTER", 2},
+		struct {
+			typeName string
+			count    int
+		}{"CONTAINER", 5},
+	)
+	cloud, k8s := parseNodes(resp)
+	if k8s.Count != 7 {
+		t.Errorf("K8S_ + CONTAINER must count as k8s, got k8s.Count=%d", k8s.Count)
+	}
+	if cloud.Count != 0 {
+		t.Errorf("K8S_/CONTAINER must not count as cloud, got cloud.Count=%d", cloud.Count)
+	}
+}
+
+func TestParseNodes_MixedCloudProvidersAggregateCount(t *testing.T) {
+	resp := nodesResp(
+		struct {
+			typeName string
+			count    int
+		}{"AWS_EC2_INSTANCE", 10},
+		struct {
+			typeName string
+			count    int
+		}{"AZURE_MICROSOFT_VIRTUAL_MACHINE", 5},
+		struct {
+			typeName string
+			count    int
+		}{"GCP_CLOUD_RUN_SERVICE", 3},
+		struct {
+			typeName string
+			count    int
+		}{"K8S_NODE", 8},
+	)
+	cloud, k8s := parseNodes(resp)
+	if cloud.Count != 18 {
+		t.Errorf("mixed cloud count must be 10+5+3=18, got %d", cloud.Count)
+	}
+	if k8s.Count != 8 {
+		t.Errorf("k8s count must be 8, got %d", k8s.Count)
+	}
+	// All three providers' breakdowns must appear in details.
+	if !strings.Contains(cloud.Details, "ec2 instances") {
+		t.Errorf("AWS breakdown missing from cloud details: %q", cloud.Details)
+	}
+	if !strings.Contains(cloud.Details, "virtual machine") {
+		t.Errorf("Azure breakdown missing from cloud details: %q", cloud.Details)
+	}
+	if !strings.Contains(cloud.Details, "cloud run service") {
+		t.Errorf("GCP breakdown missing from cloud details: %q", cloud.Details)
+	}
+}
+
+func TestParseNodes_UnknownTypesIgnored(t *testing.T) {
+	resp := nodesResp(struct {
+		typeName string
+		count    int
+	}{"SERVICE", 99})
+	cloud, k8s := parseNodes(resp)
+	if cloud.Count != 0 || k8s.Count != 0 {
+		t.Errorf("unknown type must not contribute to any section, got cloud=%d k8s=%d", cloud.Count, k8s.Count)
+	}
+}
+
+func TestParseNodes_CloudDetailsEmptyWhenNoCloudEntities(t *testing.T) {
+	resp := nodesResp(struct {
+		typeName string
+		count    int
+	}{"K8S_CLUSTER", 2})
+	cloud, _ := parseNodes(resp)
+	if cloud.Details != "" {
+		t.Errorf("cloud.Details must be empty when no cloud entities present, got %q", cloud.Details)
+	}
+}
+
 // helper: build a dqlResponse with the given (resource type, count) rows.
 func cloudResp(rows ...struct {
 	rt    string

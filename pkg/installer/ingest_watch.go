@@ -409,7 +409,7 @@ func parseNodes(resp *dqlResponse) (cloud, k8s watchSection) {
 		return
 	}
 
-	var cloudTypes, k8sTypes []typeCount
+	var awsTypes, azureTypes, gcpTypes, k8sTypes []typeCount
 
 	for _, rec := range resp.Result.Records {
 		typeName, _ := rec["type"].(string)
@@ -418,16 +418,33 @@ func parseNodes(resp *dqlResponse) (cloud, k8s watchSection) {
 			continue
 		}
 
-		if strings.HasPrefix(typeName, "AWS_") {
-			cloudTypes = append(cloudTypes, typeCount{typeName, count})
+		switch {
+		case strings.HasPrefix(typeName, "AWS_"):
+			awsTypes = append(awsTypes, typeCount{typeName, count})
 			cloud.Count += count
-		} else if strings.HasPrefix(typeName, "K8S_") || typeName == "CONTAINER" {
+		case strings.HasPrefix(typeName, "AZURE_"):
+			azureTypes = append(azureTypes, typeCount{typeName, count})
+			cloud.Count += count
+		case strings.HasPrefix(typeName, "GCP_"):
+			gcpTypes = append(gcpTypes, typeCount{typeName, count})
+			cloud.Count += count
+		case strings.HasPrefix(typeName, "K8S_") || typeName == "CONTAINER":
 			k8sTypes = append(k8sTypes, typeCount{typeName, count})
 			k8s.Count += count
 		}
 	}
 
-	cloud.Details = formatTypeBreakdown(cloudTypes, "AWS_")
+	var cloudDetailParts []string
+	if s := formatTypeBreakdown(awsTypes, "AWS_"); s != "" {
+		cloudDetailParts = append(cloudDetailParts, s)
+	}
+	if s := formatTypeBreakdown(azureTypes, "AZURE_MICROSOFT_"); s != "" {
+		cloudDetailParts = append(cloudDetailParts, s)
+	}
+	if s := formatTypeBreakdown(gcpTypes, "GCP_"); s != "" {
+		cloudDetailParts = append(cloudDetailParts, s)
+	}
+	cloud.Details = strings.Join(cloudDetailParts, ", ")
 	k8s.Details = formatTypeBreakdown(k8sTypes, "K8S_")
 
 	return
