@@ -57,17 +57,7 @@ func WatchIngest(envURL, pToken, fromClause string) {
 	watchIngest(envURL, pToken, fromClause, nil, "", false)
 }
 
-// WatchIngestFromTime is a convenience wrapper for installers: it formats
-// startTime as a DQL RFC3339 from-clause and calls WatchIngest. A zero
-// startTime is a no-op (used to skip watching in unit tests).
-func WatchIngestFromTime(envURL, pToken string, startTime time.Time) {
-	if startTime.IsZero() {
-		return
-	}
-	WatchIngest(envURL, pToken, startTime.UTC().Format(IngestTimeFormat))
-}
-
-// WatchIngestCloudFromTime is like WatchIngestFromTime but calls WatchIngestCloud.
+// WatchIngestCloudFromTime is like WatchIngest but calls WatchIngestCloud.
 // Use this for Azure and GCP installs and updates.
 func WatchIngestCloudFromTime(envURL, pToken string, startTime time.Time) {
 	if startTime.IsZero() {
