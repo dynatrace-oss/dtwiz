@@ -150,6 +150,9 @@ type SystemInfo struct {
 	Services         []string         `json:"services"`
 }
 
+func (s *SystemInfo) AzureDetected() bool { return s.Azure != nil && s.Azure.Available }
+func (s *SystemInfo) GCPDetected() bool   { return s.GCP != nil && s.GCP.Available }
+
 const (
 	labelWidth = 18
 )
@@ -233,7 +236,7 @@ func (s *SystemInfo) Summary() string {
 			display.ColorMuted.Sprint("<none> — sign in with 'aws configure' to detect your account")))
 	}
 
-	if s.Azure != nil && s.Azure.Available {
+	if s.AzureDetected() {
 		azureLine := fmt.Sprintf("  %s subscription=%s",
 			label("Azure"),
 			s.Azure.SubscriptionID)
@@ -253,7 +256,7 @@ func (s *SystemInfo) Summary() string {
 			display.ColorMuted.Sprint("<none> — sign in with 'az login' to detect your subscription")))
 	}
 
-	if s.GCP != nil && s.GCP.Available {
+	if s.GCPDetected() {
 		gcpLine := fmt.Sprintf("  %s project=%s",
 			label("GCP"),
 			s.GCP.ProjectID)
