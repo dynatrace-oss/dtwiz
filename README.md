@@ -91,14 +91,19 @@ The `main` channel is rebuilt automatically on every push to `main` and is inten
 | `dtwiz install demo` | Download the "schnitzel" demo app and instrument it end-to-end *(experimental; enable with --experimental or DTWIZ_EXPERIMENTAL=true)* |
 | `dtwiz install aws` | Set up Dynatrace AWS CloudFormation integration |
 | `dtwiz install aws-lambda` | Install Dynatrace Lambda Layer on all functions |
-| `dtwiz install azure` | Set up Dynatrace Azure Monitor integration *(coming soon)* |
-| `dtwiz install gcp` | Set up Dynatrace Google Cloud Platform integration *(coming soon)* |
+| `dtwiz install azure` | Set up Dynatrace Azure Monitor integration |
+| `dtwiz install gcp` | Set up Dynatrace Google Cloud Platform integration |
 | `dtwiz uninstall oneagent` | Uninstall Dynatrace OneAgent from this host |
 | `dtwiz uninstall kubernetes` | Remove Dynatrace Operator and DynaKube resources from Kubernetes |
 | `dtwiz uninstall otel` | Kill running OTel Collector processes and remove installation files |
 | `dtwiz uninstall aws` | Remove the Dynatrace AWS CloudFormation stack and monitoring configuration |
+| `dtwiz uninstall aws-lambda` | Remove Dynatrace Lambda Layer from all functions |
+| `dtwiz uninstall azure` | Remove the Dynatrace Azure Monitor integration |
+| `dtwiz uninstall gcp` | Remove the Dynatrace Google Cloud integration |
 | `dtwiz uninstall self` | Remove the dtwiz binary and its PATH entry |
 | `dtwiz update otel` | Patch an existing OTel Collector config with the Dynatrace exporter |
+| `dtwiz update azure` | Reconcile the Dynatrace Azure Monitor integration's monitoring configuration |
+| `dtwiz update gcp` | Reconcile the Dynatrace Google Cloud integration's monitoring configuration |
 | `dtwiz watch` | Live-watch for newly ingested data in Dynatrace (services, logs, traces, etc.) |
 | `dtwiz status` | Show Dynatrace connection status and system state |
 
