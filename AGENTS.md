@@ -13,30 +13,54 @@ dtwiz setup                  # interactive: analyze → recommend → pick → i
 dtwiz analyze [--json]       # detect platform, containers, K8s, agents, cloud, services
 dtwiz recommend [--json]     # ranked ingestion recommendations
 dtwiz status                 # connection status + system analysis
-dtwiz install <method>       # oneagent | kubernetes | docker | otel | otel-python | aws | azure | gcp
-dtwiz update <method>        # otel (patch existing OTel Collector config) | azure (reconcile monitoring config)
-dtwiz uninstall <method>     # oneagent | kubernetes | otel | aws | self
+dtwiz watch [--from <time>]  # poll Dynatrace every 5s and display live ingest summary
+dtwiz install <method>       # oneagent | kubernetes | otel | otel-collector | aws | aws-lambda | azure | gcp
+dtwiz update <method>        # otel (patch existing OTel Collector config) | azure | gcp (reconcile monitoring config)
+dtwiz uninstall <method>     # oneagent | kubernetes | otel | aws | aws-lambda | azure | gcp | self
 ```
 
-All install/update/uninstall commands support `--dry-run`. Destructive commands show a preview and prompt for confirmation.
+All install/update/uninstall commands support `--dry-run` and `--yes`/`-y` (skip confirmation prompts). Destructive commands show a preview and prompt for confirmation.
+
+**Hidden/experimental methods** (require `--experimental` or `DTWIZ_EXPERIMENTAL=true`): `install docker`, `install demo`, `update otel`.
+
+**Post-install watch:** After a successful (non-dry-run) install, most commands automatically call `WatchIngest()` to poll until new data appears.
 
 ## Project structure
 
 ```text
 main.go                         # entry point → cmd.Execute()
 cmd/
-  root.go                       # cobra root, persistent flags: --environment, --access-token, --platform-token
+  root.go                       # cobra root, persistent flags; setupClientFromCreds(), setupClient()
   auth.go                       # getDtEnvironment(), accessToken(), platformToken(), URL helpers
-  analyze.go, recommend.go, setup.go, status.go, version.go
+  analyze.go, recommend.go, setup.go, status.go, version.go, watch.go
   install.go, update.go, uninstall.go
 pkg/
   analyzer/                     # system detection (platform, Docker, K8s, OneAgent, OTel, AWS, Azure, services)
+  client/                       # typed Dynatrace HTTP client: Client, ClassicClient, PlatformClient
+  display/                      # centralized output formatting: Header(), PrintSectionDivider(), colors
+  extensions/                   # Dynatrace Extensions v2 API (install, monitoring configs)
+  featureflags/                 # feature flag registry: AllRuntimes, Experimental; CLI flags + env vars
+  logger/                       # structured logging: Init(debug, verbosity), Debug(), Verbose()
   recommender/                  # recommendation engine (priority-ranked, method-based)
-  installer/                    # shared utilities (URL/token helpers, RunCommand) + per-method installers
+  installer/                    # shared cross-cutting utilities only — no method logic here
     installer.go                # AuthHeader(), APIURL(), AppsURL(), ExtractTenantID(), RunCommand()
-    oneagent.go, kubernetes.go, docker.go, otel.go, otel_update.go, otel_python.go, aws.go
-    dynakube.tmpl, otel.tmpl, aws.tmpl   # embedded Go templates
+                                # ErrInstallCancelled, ShouldProceed(), ConfirmProceed(), AutoConfirm
+    cmdrunner.go                # CmdRunner type; RealRunner, ExecLookPath (stubbable in tests)
+    concurrent.go               # RunConcurrently() — fan-out goroutines, joins errors
+    retry.go                    # retry helpers for transient cloud CLI errors
+    ingest_watch.go             # WatchIngest(), IngestTimeFormat
+    self_uninstall_unix.go, self_uninstall_windows.go
     sudo_unix.go, sudo_windows.go
+    aws/                        # AWS CloudFormation + Lambda install/uninstall
+    azure/                      # Azure Monitor install/update/uninstall + DT API helpers
+    gcp/                        # GCP integration install/update/uninstall + DT API helpers
+    kubernetes/                 # Dynatrace Operator install/uninstall; dynakube.tmpl
+    oneagent/                   # OneAgent download, install, uninstall, connectivity check
+    otel/                       # OTel Collector install/update/uninstall; otel.tmpl
+
+  **Folder-per-method rule:** every `dtwiz install <method>` maps to a subfolder under `installer/`
+  (e.g. `install otel` → `installer/otel/`, `install kubernetes` → `installer/kubernetes/`). The
+  root `installer/` package contains only shared utilities used across methods.
 scripts/
   install.sh, install.ps1      # curl|sh installer scripts
 ```
@@ -47,8 +71,8 @@ Two URL families — getting this wrong causes 404s or auth errors:
 
 | Family | Pattern | Auth | Use for |
 |---|---|---|---|
-| **Classic** (no `.apps.`) | `<env-id>.<domain>/api/...` | `Api-Token dt0c01.*` | `/api/v1`, `/api/v2`, OneAgent download, OTel ingest |
-| **Platform** (with `.apps.`) | `<env-id>.apps.<domain>/platform/...` | `Bearer <token>` | DQL/Grail queries, Platform APIs |
+| **Classic** (no `.apps.`) | `<env-id>.<domain>/api/...` | `Bearer <platform-token>` | `/api/v1`, `/api/v2`, OneAgent download, OTel ingest |
+| **Platform** (with `.apps.`) | `<env-id>.apps.<domain>/platform/...` | `Bearer <platform-token>` | DQL/Grail queries, Platform APIs |
 
 **URL conversion helpers in `pkg/installer/installer.go`:**
 
@@ -56,27 +80,31 @@ Two URL families — getting this wrong causes 404s or auth errors:
 - `AppsURL()` — insert `.apps.` → platform URL
 - `ExtractTenantID()` — first DNS label from URL
 
-**DQL endpoint always needs `Bearer` auth** — even for `dt0c01.*` tokens. `Api-Token` scheme → 403.
+**DQL endpoint always needs `Bearer` auth.**
 
 ## Auth & token rules
 
-| Token prefix | Type | Usage |
-|---|---|---|
-| `dt0c01.*` | API token | Classic API (`Api-Token` header) |
-| `dt0s16.*` | Platform token | New API |
+Only the **platform token** (`dt0s16.*`) is used. The Classic API access token (`dt0c01.*`) is deprecated and supported only for legacy environments via the opt-in `--access-token` flag — it is intentionally **not** read from `DT_ACCESS_TOKEN`.
 
 `AuthHeader()`: `dt0c01.*` → `Api-Token <token>`, everything else → `Bearer <token>`.
 
-Credentials resolved from: `--environment` flag → `DT_ENVIRONMENT` env var; `--platform-token` flag → `DT_PLATFORM_TOKEN` env var. The Classic API **access token is opt-in and flag-only**: `--access-token` activates access-token auth and is intentionally **not** read from `DT_ACCESS_TOKEN`, so a leftover env var can never silently switch Classic API calls onto it. When `--access-token` is absent, the platform token is used for Classic API calls too.
+Credentials resolved from: `--environment` flag → `DT_ENVIRONMENT` env var; `--platform-token` flag → `DT_PLATFORM_TOKEN` env var. When `--access-token` is absent (the default), the platform token is used for all API calls including the Classic API.
 
 ## Key design rules
 
 - **Zero-config defaults:** OneAgent full-stack mode, K8s `cloudNativeFullStack`, AWS all services + all regions.
+- **Prefer dtctl/SDK over custom code:** Before implementing a Dynatrace API call or integration helper from scratch, check whether the Dynatrace SDK or `dtctl` already provides the capability. Use the MCP tools (`mcp_dynatrace-app_sdk_search`, `mcp_dynatrace-app_sdk_get_doc`) to search the SDK. Prefer library calls over raw HTTP requests to avoid reimplementing auth, pagination, retries, and error handling.
 
 ## CLI conventions
 
 - **Args validation:** All leaf commands must set `Args: cobra.NoArgs`. Parent commands with required subcommands use `Args: cobra.MinimumNArgs(1)`.
 - **`--dry-run` pattern:** Defined once as a `PersistentFlags().BoolVar()` on the parent command (`installCmd`, `updateCmd`, `uninstallCmd`), shared by all subcommands via a package-level variable.
+- **`--yes`/`-y` auto-confirm:** Same pattern as `--dry-run` — one `PersistentFlags().BoolVarP()` per verb group, sets `installer.AutoConfirm`. When true, `ConfirmProceed()` returns immediately without prompting.
+- **`-v` / `--debug` flags:** Defined on root. `logger.Init(debugFlag, verbosityFlag)` is called in `PersistentPreRun` on root and reproduced in every `PersistentPreRun` that overrides root's.
+- **Feature flags:** Registered in `pkg/featureflags/`. Applied via `featureflags.ApplyCLIOverrides(cmd.Flags())` in `PersistentPreRun`. Each flag has a CLI name (e.g. `--experimental`), an env var (e.g. `DTWIZ_EXPERIMENTAL`), and a default. Currently registered: `AllRuntimes`, `Experimental`.
+- **`ErrInstallCancelled` sentinel:** Installers return `installer.ErrInstallCancelled` when the user declines the confirmation prompt. Command handlers must check `errors.Is(err, installer.ErrInstallCancelled)` and treat it as a clean exit (return nil).
+- **`ShouldProceed(dryRun, verb)` helper:** Standard gate at the end of every install/update/uninstall preview. Handles dry-run short-circuit and the confirmation prompt in one call. Returns `(proceed bool, err error)` — on decline returns `(false, ErrInstallCancelled)`.
+- **Typed API client:** Commands that call Dynatrace APIs create a `*client.Client` via `setupClientFromCreds(envURL, classicTok, platformTok)` or `setupClient()` (resolves+validates credentials internally). The client exposes `.Classic` and `.Platform` sub-clients backed by `resty`.
 - **Verb-noun command tree:** Top-level verbs are `install`, `update`, `uninstall`. Methods are subcommands (`dtwiz install otel`, `dtwiz update otel`). New operations get their own verb — don't nest verbs under `install`.
 
 ## UX: transparency before execution
@@ -148,6 +176,24 @@ if runtime.GOOS != "windows" {
 - Use `context.Context` propagation throughout
 - Handle SIGINT/SIGTERM gracefully for long-running operations
 - Use `logger.Debug()` for diagnostic log lines that help with troubleshooting (process detection, API calls, config generation, etc.)
+
+## Specs & change workflow (openspec)
+
+When the user talks about "specs", "a spec", "writing a spec", or "a change" they mean the **openspec** workflow under `openspec/`. Use the right skill — don't improvise:
+
+| User intent | Skill to invoke |
+|---|---|
+| Explore / think through an idea | `openspec-explore` → `/opsx:explore` |
+| Propose a new change (design + tasks) | `openspec-propose` → `/opsx:propose` |
+| Implement tasks from an existing change | `openspec-apply-change` → `/opsx:apply` |
+| Finalize and archive a completed change | `openspec-archive-change` → `/opsx:archive` |
+
+**Key paths:**
+- Active changes: `openspec/changes/<name>/` — contains `proposal.md`, `design.md`, `tasks.md`
+- Archived changes: `openspec/changes/archive/`
+- Standalone specs (no implementation yet): `openspec/specs/<name>/`
+
+**When to create a spec:** any non-trivial feature or architectural decision should go through `openspec-propose` before implementation begins. For small, clearly scoped bug fixes or documentation edits, skip it.
 
 ## Build & release
 
