@@ -189,6 +189,7 @@ When the user talks about "specs", "a spec", "writing a spec", or "a change" the
 | Finalize and archive a completed change | `openspec-archive-change` → `/opsx:archive` |
 
 **Key paths:**
+
 - Active changes: `openspec/changes/<name>/` — contains `proposal.md`, `design.md`, `tasks.md`
 - Archived changes: `openspec/changes/archive/`
 - Standalone specs (no implementation yet): `openspec/specs/<name>/`
