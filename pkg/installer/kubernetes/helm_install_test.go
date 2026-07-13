@@ -65,48 +65,6 @@ func TestHelmOperatorArgs_DisableCSI(t *testing.T) {
 	}
 }
 
-func TestMergePathEntries(t *testing.T) {
-	cases := []struct {
-		desc    string
-		current string
-		newPath string
-		want    string
-	}{
-		{
-			desc:    "new entry appended",
-			current: `C:\Windows;C:\Windows\system32`,
-			newPath: `C:\Program Files\Helm`,
-			want:    `C:\Windows;C:\Windows\system32;C:\Program Files\Helm`,
-		},
-		{
-			desc:    "duplicate not added (case-insensitive)",
-			current: `C:\Windows;C:\Program Files\Helm`,
-			newPath: `C:\program files\helm`,
-			want:    `C:\Windows;C:\Program Files\Helm`,
-		},
-		{
-			desc:    "only new entries appended from mixed list",
-			current: `C:\Windows`,
-			newPath: `C:\Windows;C:\Program Files\Helm`,
-			want:    `C:\Windows;C:\Program Files\Helm`,
-		},
-		{
-			desc:    "empty new path returns current unchanged",
-			current: `C:\Windows`,
-			newPath: "",
-			want:    `C:\Windows`,
-		},
-	}
-	for _, c := range cases {
-		t.Run(c.desc, func(t *testing.T) {
-			got := mergeEnvVarPathEntries(c.current, c.newPath)
-			if got != c.want {
-				t.Errorf("mergeEnvVarPathEntries(%q, %q) = %q, want %q", c.current, c.newPath, got, c.want)
-			}
-		})
-	}
-}
-
 // createFakeWinget writes a fake winget executable to a temp directory and
 // returns the directory path. exitCode controls what the fake binary exits with.
 func createFakeWinget(t *testing.T, exitCode int) string {

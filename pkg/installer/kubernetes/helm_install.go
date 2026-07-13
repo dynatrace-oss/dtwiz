@@ -2,7 +2,6 @@ package kubernetes
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
@@ -71,48 +70,10 @@ func installHelmWindows() error {
 	// winget adds Helm to the Windows registry PATH but not to the current
 	// process's PATH (which was inherited at startup). Refresh it so that
 	// subsequent exec.LookPath("helm") calls can find the new binary.
-	if err := refreshWindowsPath(); err != nil {
+	if err := installer.RefreshWindowsPath(); err != nil {
 		fmt.Printf("  Warning: could not refresh PATH after Helm install: %v\n", err)
 	}
 	return nil
-}
-
-// refreshWindowsPath reads the user PATH from the Windows registry via
-// PowerShell and appends any new entries to the current process's PATH.
-// No-op on non-Windows.
-func refreshWindowsPath() error {
-	if runtime.GOOS != "windows" {
-		return nil
-	}
-	out, err := exec.Command("powershell", "-NoProfile", "-Command",
-		"[Environment]::GetEnvironmentVariable('Path','User')").Output()
-	if err != nil {
-		return fmt.Errorf("reading PATH from registry: %w", err)
-	}
-	registryPath := strings.TrimSpace(string(out))
-	if registryPath == "" {
-		return fmt.Errorf("registry returned empty PATH")
-	}
-	return os.Setenv("PATH", mergeEnvVarPathEntries(os.Getenv("PATH"), registryPath))
-}
-
-// mergeEnvVarPathEntries appends entries from newPath to current that are not already
-// present (case-insensitive). Returns current unchanged if nothing new to add.
-func mergeEnvVarPathEntries(current, newPath string) string {
-	existing := make(map[string]bool)
-	for _, e := range strings.Split(current, ";") {
-		existing[strings.ToLower(e)] = true
-	}
-	var toAdd []string
-	for _, e := range strings.Split(newPath, ";") {
-		if e != "" && !existing[strings.ToLower(e)] {
-			toAdd = append(toAdd, e)
-		}
-	}
-	if len(toAdd) == 0 {
-		return current
-	}
-	return current + ";" + strings.Join(toAdd, ";")
 }
 
 // isOperatorInstalled checks whether the dynatrace-operator Helm release
