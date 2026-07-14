@@ -654,6 +654,12 @@ if [ "$1" = "-m" ] && [ "$2" = "venv" ] && [ "$3" = "--help" ]; then
   echo "usage: venv"
   exit 0
 fi
+if [ "$1" = "-m" ] && [ "$2" = "venv" ] && [ -n "$3" ]; then
+  /bin/mkdir -p "$3/bin"
+  printf "#!/bin/sh\nexit 0\n" > "$3/bin/python3"
+  /bin/chmod +x "$3/bin/python3"
+  exit 0
+fi
 echo "unexpected args: $@" >&2
 exit 1
 `, 0o755)

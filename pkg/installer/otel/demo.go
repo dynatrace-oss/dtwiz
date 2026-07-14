@@ -28,8 +28,9 @@ func checkDemoExists() bool {
 }
 
 // pythonInstallPlan returns the command (name + args) needed to install Python 3
-// on the current platform, or an error if installation cannot be automated.
-// Returns nil, nil if Python is already present.
+// and its prerequisites (pip, venv) on the current platform, or an error if
+// installation cannot be automated. Returns nil, nil if all prerequisites are
+// already present.
 func pythonInstallPlan() ([]string, error) {
 	// On Windows the process may have a stale PATH (e.g. Python was installed by
 	// a previous dtwiz run in the same terminal session). Refresh before checking.
@@ -40,9 +41,19 @@ func pythonInstallPlan() ([]string, error) {
 			logger.Debug("pythonInstallPlan: PATH refreshed from registry")
 		}
 	}
-	if _, err := DetectPython(); err == nil {
-		logger.Debug("pythonInstallPlan: Python already available, skipping install")
-		return nil, nil // already available
+	pythonBin, err := DetectPython()
+	if err == nil {
+		// On Windows and macOS, Python bundles pip — presence of the interpreter is enough.
+		// On Linux, pip and venv are separate packages that may be missing even when
+		// python3 is installed, so we must probe them explicitly.
+		if runtime.GOOS != "linux" {
+			logger.Debug("pythonInstallPlan: Python already available, skipping install")
+			return nil, nil
+		}
+		_, pipErr := exec.Command(pythonBin, "-m", "pip", "--version").CombinedOutput()
+		if pipErr == nil && probeVenvPip(pythonBin) {
+			return nil, nil
+		}
 	}
 
 	switch runtime.GOOS {
@@ -53,13 +64,12 @@ func pythonInstallPlan() ([]string, error) {
 		return []string{"brew", "install", "python3"}, nil
 
 	case "linux":
-		distro := detectLinuxDistro()
-		switch distro {
+		switch detectLinuxDistro() {
 		case "debian", "ubuntu":
-			return []string{"sudo", "apt-get", "install", "-y", "python3"}, nil
+			return []string{"sudo", "apt-get", "install", "-y", "python3", "python3-pip", "python3-venv"}, nil
 		default:
-			// RHEL/Fedora/CentOS/Rocky/Alma
-			return []string{"sudo", "dnf", "install", "-y", "python3"}, nil
+			// RHEL/Fedora/CentOS/Rocky/Alma — python3-pip brings ensurepip on these distros
+			return []string{"sudo", "dnf", "install", "-y", "python3", "python3-pip"}, nil
 		}
 
 	case "windows":
@@ -68,6 +78,26 @@ func pythonInstallPlan() ([]string, error) {
 	default:
 		return nil, fmt.Errorf("Python 3 is required but not found; please install it manually") //nolint:staticcheck // ST1005: keep brand capitalization
 	}
+}
+
+// describeDemoInstallCmd returns a short human-readable label for a demoInstallCmd result,
+// e.g. "python3, python3-pip, python3-venv via apt-get".
+func describeDemoInstallCmd(cmd []string) string {
+	for i, part := range cmd {
+		switch part {
+		case "brew":
+			return "python3 via brew"
+		case "apt-get", "dnf":
+			var pkgs []string
+			for _, p := range cmd[i+1:] {
+				if p != "install" && p != "-y" {
+					pkgs = append(pkgs, p)
+				}
+			}
+			return strings.Join(pkgs, ", ") + " via " + part
+		}
+	}
+	return strings.Join(cmd, " ")
 }
 
 // installPythonWindows installs Python 3 on Windows via winget. The exit code
@@ -226,11 +256,10 @@ func IsDemoRunning() bool {
 
 // InstallDemo orchestrates the schnitzel demo installation:
 // 1. Download & extract schnitzel (if not already present)
-// 2. Install Python if missing
+// 2. Install missing Python prerequisites (python3, pip, venv) if needed
 // 3. Install OTel Collector + Python auto-instrumentation targeting ./schnitzel
 func InstallDemo(envURL, token, platformTok string, dryRun bool) error {
 	demoExists := checkDemoExists()
-
 	pythonCmd, err := pythonInstallPlan()
 	if err != nil {
 		return err
@@ -247,7 +276,7 @@ func InstallDemo(envURL, token, platformTok string, dryRun bool) error {
 		step++
 	}
 	if pythonCmd != nil {
-		fmt.Printf("  %d) Install Python 3 via %s\n", step, pythonCmd[0])
+		fmt.Printf("  %d) Install %s\n", step, describeDemoInstallCmd(pythonCmd))
 		step++
 	}
 	fmt.Printf("  %d) Install OTel Collector\n", step)
@@ -281,9 +310,9 @@ func InstallDemo(envURL, token, platformTok string, dryRun bool) error {
 		fmt.Printf("  Demo directory ./%s/ already exists, skipping download.\n", demoDirName)
 	}
 
-	// Step 2: Install Python if needed
+	// Step 2: Install missing Python prerequisites if needed
 	if pythonCmd != nil {
-		fmt.Printf("  Installing Python 3 via %s...\n", pythonCmd[0])
+		fmt.Printf("  Installing %s...\n", describeDemoInstallCmd(pythonCmd))
 		var installErr error
 		if runtime.GOOS == "windows" {
 			installErr = installPythonWindows()
@@ -293,7 +322,7 @@ func InstallDemo(envURL, token, platformTok string, dryRun bool) error {
 		if installErr != nil {
 			return fmt.Errorf("Python installation failed: %w", installErr) //nolint:staticcheck // ST1005: keep brand capitalization
 		}
-		fmt.Println("  Python 3 installed.")
+		fmt.Println("  Python dependencies installed.")
 	}
 
 	// Step 3+4: OTel Collector + Python instrumentation

@@ -88,7 +88,36 @@ func validatePythonPrerequisites() (string, error) {
 		return "", fmt.Errorf("venv module is not available for the detected Python 3 interpreter (%s) — on Debian/Ubuntu run: apt install python3-venv: %w\n    %s", pythonBin, err, strings.TrimSpace(string(out)))
 	}
 	logger.Debug("python venv check succeeded", "python", pythonBin)
+	if !probeVenvPip(pythonBin) {
+		return "", fmt.Errorf("pip is not available in new virtualenvs for %s — on Debian/Ubuntu run: apt install python3-venv", pythonBin) //nolint:staticcheck // ST1005: keep brand capitalization
+	}
 	return pythonBin, nil
+}
+
+// probeVenvPip creates a temporary virtualenv and verifies pip works inside it.
+// On Debian/Ubuntu, 'import ensurepip' and 'python -m venv --help' succeed even
+// without python3-venv, but the created venv omits pip. This probe catches that.
+func probeVenvPip(pythonBin string) bool {
+	tmpDir, err := os.MkdirTemp("", "dtwiz-venv-probe-*")
+	if err != nil {
+		logger.Debug("venv pip probe: could not create temp dir", "error", err)
+		return true // can't test; let downstream commands surface any real error
+	}
+	defer os.RemoveAll(tmpDir)
+	if err := exec.Command(pythonBin, "-m", "venv", tmpDir).Run(); err != nil {
+		logger.Debug("venv pip probe: venv creation failed", "python", pythonBin, "error", err)
+		return false
+	}
+	for _, pyName := range []string{"python3", "python"} {
+		pyPath := filepath.Join(tmpDir, "bin", pyName)
+		if _, statErr := os.Stat(pyPath); statErr != nil {
+			continue
+		}
+		ok := exec.Command(pyPath, "-m", "pip", "--version").Run() == nil
+		logger.Debug("venv pip probe result", "python", pyPath, "ok", ok)
+		return ok
+	}
+	return false
 }
 
 func resolveVenvBinary(projectPath, name string) string {
