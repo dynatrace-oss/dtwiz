@@ -1,6 +1,7 @@
 package gcp
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -181,6 +182,40 @@ func TestGCPDTPrincipalUnresolvedFailsBeforeMutations(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error when DT principal cannot be resolved, got nil")
+	}
+	if mutating != 0 {
+		t.Errorf("expected 0 mutating gcloud calls, got %d", mutating)
+	}
+}
+
+func TestGCPPreviewNoticeWhenNoPrincipal(t *testing.T) {
+	defer stubExecLookPath(t)()
+
+	mutating := 0
+	dtc := happyFakeDTClient()
+	dtc.dtSAErr = errNoPrincipal
+
+	var out string
+	err := func() error {
+		r, w, _ := os.Pipe()
+		old := os.Stdout
+		os.Stdout = w
+		runErr := installGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, happyGcloudRunner(&mutating), noSleep, dtc)
+		os.Stdout = old
+		w.Close()
+		b, _ := io.ReadAll(r)
+		out = string(b)
+		return runErr
+	}()
+
+	if !errors.Is(err, installer.ErrInstallCancelled) {
+		t.Fatalf("expected ErrInstallCancelled, got: %v", err)
+	}
+	if !strings.Contains(out, "Preview") {
+		t.Errorf("expected Preview notice in output; got:\n%s", out)
+	}
+	if !strings.Contains(out, "docs.dynatrace.com") {
+		t.Errorf("expected docs URL in output; got:\n%s", out)
 	}
 	if mutating != 0 {
 		t.Errorf("expected 0 mutating gcloud calls, got %d", mutating)
