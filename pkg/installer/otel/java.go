@@ -258,7 +258,7 @@ func (p *JavaInstrumentationPlan) Execute() {
 		entrypoints := detectJavaEntrypoints(p.Project.Path)
 		if len(entrypoints) == 0 {
 			logger.Debug("no entrypoints found at execute time", "project", p.Project.Path)
-			display.PrintStatusLine("error", "no runnable entrypoint detected — build the project first", display.ColorError)
+			display.PrintStatusLine("error", noEntrypointMessage(p.Project.Path), display.ColorError)
 			return
 		}
 		ep = promptEntrypointSelection(entrypoints)
@@ -394,13 +394,13 @@ func InstallOtelJava(envURL, token, serviceName, projectPath string, dryRun bool
 			return nil
 		}
 		if err := attemptSingleModuleBuild(proj.Path); err != nil {
-			display.PrintStatusLine("error", "no runnable entrypoint detected — build the project first", display.ColorError)
+			display.PrintStatusLine("error", noEntrypointMessage(proj.Path), display.ColorError)
 			return err
 		}
 		entrypoints = detectJavaEntrypoints(proj.Path)
 		logger.Debug("detected java entrypoints after build", "count", len(entrypoints), "project", proj.Path)
 		if len(entrypoints) == 0 {
-			display.PrintStatusLine("error", "no runnable entrypoint detected — build the project first", display.ColorError)
+			display.PrintStatusLine("error", noEntrypointMessage(proj.Path), display.ColorError)
 			return fmt.Errorf("no runnable entrypoint detected")
 		}
 	}

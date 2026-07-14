@@ -284,23 +284,32 @@ func detectJavaEntrypoints(projectPath string) []JavaEntrypoint {
 	return entrypoints
 }
 
+// buildCommandStr returns the human-readable build command for the project, or ""
+// if no supported build tool is detected.
+func buildCommandStr(projectPath string) string {
+	if mvnCmd, _ := resolveMavenCmd(projectPath); mvnCmd != "" {
+		return mvnCmd + " clean package -DskipTests"
+	}
+	if gradleCmd, _ := resolveGradleCmd(projectPath); gradleCmd != "" {
+		return gradleCmd + " build -x test"
+	}
+	return ""
+}
+
 func attemptSingleModuleBuild(projectPath string) error {
 	mvnCmd, _ := resolveMavenCmd(projectPath)
 	gradleCmd, _ := resolveGradleCmd(projectPath)
 
 	var cmd *exec.Cmd
-	var displayCmd string
 
 	switch {
 	case mvnCmd != "":
-		displayCmd = mvnCmd + " clean package -DskipTests"
 		if strings.HasSuffix(mvnCmd, ".cmd") {
 			cmd = exec.Command("cmd", "/c", mvnCmd, "clean", "package", "-DskipTests")
 		} else {
 			cmd = exec.Command(mvnCmd, "clean", "package", "-DskipTests")
 		}
 	case gradleCmd != "":
-		displayCmd = gradleCmd + " build -x test"
 		if strings.HasSuffix(gradleCmd, ".bat") {
 			cmd = exec.Command("cmd", "/c", gradleCmd, "build", "-x", "test")
 		} else {
@@ -311,7 +320,7 @@ func attemptSingleModuleBuild(projectPath string) error {
 		return fmt.Errorf("no build tool detected")
 	}
 
-	logger.Debug("attempting auto-build", "command", displayCmd, "project", projectPath)
+	logger.Debug("attempting auto-build", "command", buildCommandStr(projectPath), "project", projectPath)
 	cmd.Dir = projectPath
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -323,6 +332,21 @@ func attemptSingleModuleBuild(projectPath string) error {
 
 	logger.Debug("auto-build succeeded", "project", projectPath)
 	return nil
+}
+
+// noEntrypointMessage returns a targeted message explaining why no runnable JAR
+// was found: missing JDK (javac), project not compiled yet, or unknown.
+func noEntrypointMessage(projectPath string) string {
+	if _, err := exec.LookPath("javac"); err != nil {
+		return "no runnable entrypoint detected — Java compiler (javac) not found.\n" +
+			"  Install a JDK (not just JRE): Maven and Gradle cannot compile without it.\n" +
+			"  Download from https://adoptium.net or use your system package manager."
+	}
+	if cmd := buildCommandStr(projectPath); cmd != "" {
+		return "no runnable entrypoint detected — project not compiled yet.\n" +
+			"  Run:  " + cmd
+	}
+	return "no runnable entrypoint detected — build the project first"
 }
 
 // promptEntrypointSelection presents a selection menu for available entrypoints.

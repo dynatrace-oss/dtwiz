@@ -389,6 +389,47 @@ func TestScanProjectDirs_SubtreePruning(t *testing.T) {
 	}
 }
 
+// TestScanProjectDirs_RootMatchStillDescends guards against a regression where
+// a marker file sitting directly in the scan root (e.g. a stray lockfile in
+// the user's cwd) short-circuited the walk and hid every nested project.
+func TestScanProjectDirs_RootMatchStillDescends(t *testing.T) {
+	root := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module root\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	nested := filepath.Join(root, "nested-app")
+	if err := os.MkdirAll(nested, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, "go.mod"), []byte("module nested\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	realRoot, _ := filepath.EvalSymlinks(root)
+	realNested, _ := filepath.EvalSymlinks(nested)
+
+	helpers.SetTestWorkingDir(t, root)
+	projects := scanProjectDirs([]string{"go.mod"}, nil)
+
+	foundRoot, foundNested := false, false
+	for _, p := range projects {
+		if p.Path == realRoot {
+			foundRoot = true
+		}
+		if p.Path == realNested {
+			foundNested = true
+		}
+	}
+	if !foundRoot {
+		t.Errorf("expected root dir itself to be reported as a match, got %v", projects)
+	}
+	if !foundNested {
+		t.Errorf("root match must not prevent descending into nested projects, got %v", projects)
+	}
+}
+
 func TestScanProjectDirs_ParentNotScanned(t *testing.T) {
 	grandparent := t.TempDir()
 

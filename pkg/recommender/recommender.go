@@ -162,7 +162,7 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 	}
 
 	// 8. Azure detected.
-	if system.Azure != nil && system.Azure.Available {
+	if system.AzureDetected() {
 		method := MethodAzure
 		title := "Azure cloud services"
 		if system.AzureConfigured {
@@ -178,7 +178,7 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 	}
 
 	// 9. GCP detected.
-	if system.GCP != nil && system.GCP.Available {
+	if system.GCPDetected() {
 		method := MethodGCP
 		title := "GCP cloud services"
 		if system.GCPConfigured {

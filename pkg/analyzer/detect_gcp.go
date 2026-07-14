@@ -13,6 +13,16 @@ func detectGCP() *GCPInfo {
 	ok, out := runCmd("gcloud", "config", "get-value", "project")
 	projectID := CleanGCloudConfigValue(out)
 	if !ok || projectID == "" || strings.Contains(projectID, "(unset)") {
+		if ok {
+			// gcloud is available but no project is set — check if the user is authenticated.
+			authOK, acctOut := runCmd("gcloud", "auth", "list", "--filter=status:ACTIVE", "--format=value(account)")
+			if authOK {
+				if acct := strings.TrimSpace(acctOut); acct != "" {
+					info.Authenticated = true
+					info.Account = acct
+				}
+			}
+		}
 		return info
 	}
 	info.Available = true

@@ -296,6 +296,26 @@ func TestDetectProjectVenvDir_PrefersFirst(t *testing.T) {
 	}
 }
 
+func TestIsWindowsStorePythonStub(t *testing.T) {
+	cases := []struct {
+		path string
+		want bool
+	}{
+		{`C:\Users\user\AppData\Local\Microsoft\WindowsApps\python3.exe`, true},
+		{`C:\Users\user\AppData\Local\Microsoft\WindowsApps\python.exe`, true},
+		{`C:\Python312\python.exe`, false},
+		{`C:\Program Files\Python312\python3.exe`, false},
+		{`/usr/bin/python3`, false},
+		{`/usr/local/bin/python3`, false},
+	}
+	for _, tc := range cases {
+		got := isWindowsStorePythonStub(tc.path)
+		if got != tc.want {
+			t.Errorf("isWindowsStorePythonStub(%q) = %v, want %v", tc.path, got, tc.want)
+		}
+	}
+}
+
 func TestResolveVenvBinary_AlternativeVenvNames(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix-only bin/ layout test")

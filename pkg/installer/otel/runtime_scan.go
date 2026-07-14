@@ -94,6 +94,9 @@ const (
 // walkCandidateDirs scans root + descendants in parallel and walks up to
 // parentLevels ancestors. visit receives each dir's entries (read once, reused
 // for matching and recursion); returning true means matched — skip children.
+// The scan root itself is exempted from the skip-children rule: it's the
+// user's cwd, not necessarily a project boundary, so a marker match there
+// (e.g. a stray lockfile) must not hide every nested project underneath it.
 func walkCandidateDirs(root string, parentLevels int, visit func(dir string, entries []os.DirEntry) bool, shouldSkip func(name string) bool) {
 	concurrency := max(runtime.NumCPU()*scanConcurrencyPerCPU, minScanConcurrency)
 	// When full, child scans run synchronously instead of spawning more goroutines.
@@ -103,17 +106,20 @@ func walkCandidateDirs(root string, parentLevels int, visit func(dir string, ent
 	var queued sync.Map
 	var wg sync.WaitGroup
 
-	var scanDir func(dir string, anyFound *atomic.Bool)
-	scanDir = func(dir string, anyFound *atomic.Bool) {
+	var scanDir func(dir string, anyFound *atomic.Bool, isRoot bool)
+	scanDir = func(dir string, anyFound *atomic.Bool, isRoot bool) {
 		defer wg.Done()
 
 		entries, _ := os.ReadDir(dir)
 
-		if visit(dir, entries) {
+		matched := visit(dir, entries)
+		if matched {
 			if anyFound != nil {
 				anyFound.Store(true)
 			}
-			return // matched: skip children
+			if !isRoot {
+				return // matched: skip children
+			}
 		}
 
 		for _, entry := range entries {
@@ -129,28 +135,28 @@ func walkCandidateDirs(root string, parentLevels int, visit func(dir string, ent
 				wg.Add(1)
 				go func(p string) {
 					defer func() { <-sem }()
-					scanDir(p, anyFound)
+					scanDir(p, anyFound, false)
 				}(childPath)
 			default:
 				// Pool saturated — run synchronously.
 				wg.Add(1)
-				scanDir(childPath, anyFound)
+				scanDir(childPath, anyFound, false)
 			}
 		}
 	}
 
-	scanTree := func(dir string) bool {
+	scanTree := func(dir string, isRoot bool) bool {
 		if _, loaded := queued.LoadOrStore(dir, struct{}{}); loaded {
 			return false
 		}
 		var found atomic.Bool
 		wg.Add(1)
-		scanDir(dir, &found)
+		scanDir(dir, &found, isRoot)
 		wg.Wait()
 		return found.Load()
 	}
 
-	scanTree(root)
+	scanTree(root, true)
 
 	currentDir := root
 	for range parentLevels {
@@ -159,7 +165,7 @@ func walkCandidateDirs(root string, parentLevels int, visit func(dir string, ent
 			break
 		}
 		logger.Debug("scanning ancestor dir", "path", parentDir)
-		if scanTree(parentDir) {
+		if scanTree(parentDir, false) {
 			break
 		}
 		currentDir = parentDir
@@ -238,9 +244,9 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 			return true // dup via symlink: skip children but don't re-record
 		}
 
-		logger.Debug("project dir matched", "path", dir, "markers", strings.Join(matchedMarkers, ","))
+		logger.Debug("project dir matched", "path", resolvedDir, "markers", strings.Join(matchedMarkers, ","))
 		mu.Lock()
-		discoveredProjects = append(discoveredProjects, ScannedProject{Path: dir, Markers: matchedMarkers})
+		discoveredProjects = append(discoveredProjects, ScannedProject{Path: resolvedDir, Markers: matchedMarkers})
 		mu.Unlock()
 		return true
 	}

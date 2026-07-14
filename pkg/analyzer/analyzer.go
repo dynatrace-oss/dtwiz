@@ -123,6 +123,7 @@ type GCPService struct {
 // GCPInfo holds details about a detected GCP environment.
 type GCPInfo struct {
 	Available         bool         `json:"available"`
+	Authenticated     bool         `json:"authenticated,omitempty"`
 	ProjectID         string       `json:"project_id,omitempty"`
 	Account           string       `json:"account,omitempty"`
 	Services          []GCPService `json:"services,omitempty"`
@@ -149,6 +150,9 @@ type SystemInfo struct {
 	GCPConfigured    bool             `json:"gcp_configured,omitempty"`
 	Services         []string         `json:"services"`
 }
+
+func (s *SystemInfo) AzureDetected() bool { return s.Azure != nil && s.Azure.Available }
+func (s *SystemInfo) GCPDetected() bool   { return s.GCP != nil && s.GCP.Available }
 
 const (
 	labelWidth = 18
@@ -233,7 +237,7 @@ func (s *SystemInfo) Summary() string {
 			display.ColorMuted.Sprint("<none> — sign in with 'aws configure' to detect your account")))
 	}
 
-	if s.Azure != nil && s.Azure.Available {
+	if s.AzureDetected() {
 		azureLine := fmt.Sprintf("  %s subscription=%s",
 			label("Azure"),
 			s.Azure.SubscriptionID)
@@ -253,7 +257,7 @@ func (s *SystemInfo) Summary() string {
 			display.ColorMuted.Sprint("<none> — sign in with 'az login' to detect your subscription")))
 	}
 
-	if s.GCP != nil && s.GCP.Available {
+	if s.GCPDetected() {
 		gcpLine := fmt.Sprintf("  %s project=%s",
 			label("GCP"),
 			s.GCP.ProjectID)
@@ -268,9 +272,13 @@ func (s *SystemInfo) Summary() string {
 		}
 		sb.WriteString(gcpLine + "\n")
 	} else {
+		gcpNoneMsg := "<none> — sign in with 'gcloud auth login' to detect your project"
+		if s.GCP != nil && s.GCP.Authenticated {
+			gcpNoneMsg = "<none> — set a project with 'gcloud config set project PROJECT_ID'"
+		}
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("GCP"),
-			display.ColorMuted.Sprint("<none> — sign in with 'gcloud auth login' to detect your project")))
+			display.ColorMuted.Sprint(gcpNoneMsg)))
 	}
 
 	switch {
