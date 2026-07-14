@@ -261,6 +261,7 @@ func RunCommandQuiet(name string, args ...string) error {
 	}
 	return nil
 }
+
 // RefreshWindowsPath appends any registry PATH entries missing from the current
 // process's PATH. No-op on non-Windows.
 func RefreshWindowsPath() error {
