@@ -23,33 +23,22 @@ func TestAuthHeader(t *testing.T) {
 	}
 }
 
-func TestClassicAPIURL(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"https://abc123.apps.dynatrace.com", "https://abc123.live.dynatrace.com"},
-		{"https://abc123.apps.dynatracelabs.com", "https://abc123.dynatracelabs.com"},
-		{"https://abc123.live.dynatrace.com", "https://abc123.live.dynatrace.com"},
-		{"https://abc123.dev.dynatracelabs.com", "https://abc123.dev.dynatracelabs.com"},
-	}
-	for _, tt := range tests {
-		got := ClassicAPIURL(tt.input)
-		if got != tt.want {
-			t.Errorf("ClassicAPIURL(%q) = %q, want %q", tt.input, got, tt.want)
-		}
-	}
-}
-
 func TestAPIURL(t *testing.T) {
 	tests := []struct {
 		input string
 		want  string
 	}{
+		// apps → classic conversion
 		{"https://abc123.apps.dynatrace.com", "https://abc123.live.dynatrace.com"},
 		{"https://abc123.apps.dynatracelabs.com", "https://abc123.dynatracelabs.com"},
+		{"https://abc123.dev.apps.dynatracelabs.com", "https://abc123.dev.dynatracelabs.com"},
+		// already-classic URLs returned unchanged
+		{"https://abc123.live.dynatrace.com", "https://abc123.live.dynatrace.com"},
+		{"https://abc123.dynatracelabs.com", "https://abc123.dynatracelabs.com"},
+		{"https://abc123.dev.dynatracelabs.com", "https://abc123.dev.dynatracelabs.com"},
+		// trailing slashes stripped
+		{"https://abc123.apps.dynatrace.com/", "https://abc123.live.dynatrace.com"},
 		{"https://abc123.live.dynatrace.com/", "https://abc123.live.dynatrace.com"},
-		{"https://abc123.dev.dynatracelabs.com/", "https://abc123.dev.dynatracelabs.com"},
 	}
 	for _, tt := range tests {
 		got := APIURL(tt.input)

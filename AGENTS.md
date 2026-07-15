@@ -52,7 +52,7 @@ Two URL families — getting this wrong causes 404s or auth errors:
 
 **URL conversion helpers in `pkg/installer/installer.go`:**
 
-- `APIURL()` / `ClassicAPIURL()` — strip `.apps.` → classic URL
+- `APIURL()` — strip `.apps.` → classic URL (also trims trailing slash)
 - `AppsURL()` — insert `.apps.` → platform URL
 - `ExtractTenantID()` — first DNS label from URL
 

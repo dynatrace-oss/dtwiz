@@ -127,19 +127,6 @@ func AuthHeader(token string) string {
 	return "Bearer " + token
 }
 
-// ClassicAPIURL converts a Dynatrace Platform URL to the equivalent Classic API
-// base URL used by the Classic API and the OneAgent installer endpoint.
-//
-// Mapping rules:
-//   - *.apps.dynatrace.com      → *.live.dynatrace.com      (production SaaS)
-//   - *.apps.dynatracelabs.com  → *.dynatracelabs.com       (dev/sprint envs)
-func ClassicAPIURL(environmentURL string) string {
-	s := environmentURL
-	s = strings.Replace(s, ".apps.dynatrace.com", ".live.dynatrace.com", 1)
-	s = strings.Replace(s, ".apps.dynatracelabs.com", ".dynatracelabs.com", 1)
-	return s
-}
-
 // APIURL converts any Dynatrace environment URL to the Classic API base URL.
 //
 // Mapping rules:
