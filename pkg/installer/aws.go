@@ -68,7 +68,6 @@ func isAWSCLIInstalled() bool {
 	return err == nil
 }
 
-// promptLine prints a prompt, reads a single line from stdin and trims
 // getAWSCallerInfo returns the AWS account ID and the configured default region.
 func getAWSCallerInfo() (accountID, region string, err error) {
 	// Account ID from STS
