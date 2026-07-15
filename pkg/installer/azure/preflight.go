@@ -36,6 +36,13 @@ var hasSupportedAzVersion = func() bool {
 	return maj > 2 || (maj == 2 && min >= 88)
 }
 
+func requireSupportedAzVersion() error {
+	if !hasSupportedAzVersion() {
+		return fmt.Errorf("please update Azure CLI to the latest version: https://aka.ms/install-azure-cli")
+	}
+	return nil
+}
+
 // azureAccountInfo returns the active Azure subscription and tenant IDs from `az account show`.
 func azureAccountInfo(runner cmdRunner) (subscriptionID, tenantID string, err error) {
 	if _, err = execLookPath("az"); err != nil {

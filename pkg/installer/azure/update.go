@@ -16,6 +16,9 @@ func UpdateAzure(envURL, platformToken string, dryRun bool, startTime time.Time)
 	if err != nil {
 		return err
 	}
+	if err := requireSupportedAzVersion(); err != nil {
+		return err
+	}
 	return updateAzureWithRunner(envURL, platformToken, dryRun, startTime, realRunner, dtc)
 }
 

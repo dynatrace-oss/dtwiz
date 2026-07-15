@@ -133,9 +133,6 @@ func installAzureWithRunner(
 	if err != nil {
 		return err
 	}
-	if !hasSupportedAzVersion() {
-		return fmt.Errorf("please update Azure CLI to the latest version: https://aka.ms/install-azure-cli")
-	}
 
 	existing, err := dtc.findAllConnections(integrationName)
 	if err != nil {
@@ -148,6 +145,9 @@ func installAzureWithRunner(
 			return updateAzureWithRunner(envURL, platformToken, dryRun, startTime, runner, dtc)
 		}
 		return fmt.Errorf("azure connection '%s' already exists but is incomplete or duplicated: run `dtwiz uninstall azure` then `dtwiz install azure` for a clean setup", integrationName)
+	}
+	if err := requireSupportedAzVersion(); err != nil {
+		return err
 	}
 
 	// Only check RBAC when actually installing — role assignment creation requires it; update does not.
@@ -272,7 +272,7 @@ func runInstallSteps(cfg azureConfig, runner cmdRunner, sleeper func(time.Durati
 	return nil
 }
 
-// parseAppID extracts appId from `az ad app create` output.
+// parseAppID extracts appId from `az ad sp create-for-rbac` output.
 func parseAppID(out string) (string, error) {
 	var app struct {
 		AppID string `json:"appId"`

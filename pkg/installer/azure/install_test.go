@@ -113,6 +113,35 @@ func TestAzureDryRun(t *testing.T) {
 	}
 }
 
+func TestAzureInstallRequiresSupportedAzVersion(t *testing.T) {
+	defer stubExecLookPath(t)()
+	hasSupportedAzVersion = func() bool { return false }
+
+	azCallsAfterAccountShow := 0
+	runner := func(name string, args []string, _ []string) (string, error) {
+		switch {
+		case name == "az" && len(args) > 1 && args[0] == "account" && args[1] == "show":
+			return stockAccountJSON, nil
+		default:
+			azCallsAfterAccountShow++
+			return "{}", nil
+		}
+	}
+
+	err := captureStdoutErr(func() error {
+		return installAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep, &noopDTClient{})
+	})
+	if err == nil {
+		t.Fatal("expected unsupported Azure CLI version error, got nil")
+	}
+	if !strings.Contains(err.Error(), "update Azure CLI") {
+		t.Errorf("expected Azure CLI update guidance, got: %v", err)
+	}
+	if azCallsAfterAccountShow != 0 {
+		t.Errorf("expected no az calls after account preflight, got %d", azCallsAfterAccountShow)
+	}
+}
+
 func TestAzureConnectionIDFlowsToStep3(t *testing.T) {
 	old := installer.AutoConfirm
 	installer.AutoConfirm = true
@@ -295,6 +324,7 @@ func TestAzureInstallWithCompleteConnectionDelegatesToUpdate(t *testing.T) {
 	installer.AutoConfirm = true
 	defer func() { installer.AutoConfirm = old }()
 	defer stubExecLookPath(t)()
+	hasSupportedAzVersion = func() bool { return false }
 
 	azMutatingCalls := 0
 	runner := func(name string, args []string, _ []string) (string, error) {
