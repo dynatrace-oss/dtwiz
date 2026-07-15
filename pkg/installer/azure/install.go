@@ -134,7 +134,7 @@ func installAzureWithRunner(
 		return err
 	}
 	if !hasSupportedAzVersion() {
-		return fmt.Errorf("Please update Azure CLI to the latest version: https://aka.ms/install-azure-cli")
+		return fmt.Errorf("please update Azure CLI to the latest version: https://aka.ms/install-azure-cli")
 	}
 
 	existing, err := dtc.findAllConnections(integrationName)
