@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -83,8 +84,8 @@ func TestSDKDTServiceAccount_NotFound(t *testing.T) {
 	defer srv.Close()
 
 	_, err := newTestSDKClient(t, srv.URL).dtServiceAccount()
-	if err == nil {
-		t.Fatal("expected error when no principal found, got nil")
+	if !errors.Is(err, errNoPrincipal) {
+		t.Fatalf("expected errNoPrincipal, got %v", err)
 	}
 }
 

@@ -3,6 +3,7 @@ package gcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -65,6 +66,11 @@ const (
 
 	gcpFeatureSetEnumKey = "FeatureSetsType"
 )
+
+// errNoPrincipal is returned by dtServiceAccount when the gcp-dynatrace-principal
+// schema exists but contains no service-account email — indicating the GCP integration
+// is not yet provisioned on this tenant (currently a Preview feature).
+var errNoPrincipal = errors.New("no Dynatrace GCP principal found")
 
 type connRef struct {
 	objectID            string
@@ -134,7 +140,10 @@ func (d *sdkDTClient) createConnection(name string) (string, error) {
 // gcp-dynatrace-principal schema. The exact field name is environment-managed,
 // so the value is located by scanning for a Google service-account email.
 func (d *sdkDTClient) dtServiceAccount() (string, error) {
-	list, err := d.Settings.ListObjects(context.Background(), dtPrincipalSchemaID, "environment", 0)
+	// Same quirk as findAllConnections: filtering by scopes=environment returns zero
+	// results for this schema even when the object is environment-scoped — drop the
+	// filter so the query param is omitted entirely.
+	list, err := d.Settings.ListObjects(context.Background(), dtPrincipalSchemaID, "", 0)
 	if err != nil {
 		return "", fmt.Errorf("resolve Dynatrace GCP principal: %w", err)
 	}
@@ -144,7 +153,7 @@ func (d *sdkDTClient) dtServiceAccount() (string, error) {
 			return email, nil
 		}
 	}
-	return "", fmt.Errorf("no Dynatrace GCP principal found under schema %q", dtPrincipalSchemaID)
+	return "", errNoPrincipal
 }
 
 func (d *sdkDTClient) updateConnection(objectID, name, serviceAccountEmail string) error {
