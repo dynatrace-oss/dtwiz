@@ -21,7 +21,14 @@ func stdoutSupportsHyperlinks() bool {
 	// Apple Terminal renders OSC 8 as underlined text but doesn't provide a
 	// right-click "Open URL" option. Fall back to plain text so its built-in
 	// URL detection can make the URL itself right-clickable.
-	return os.Getenv("TERM_PROGRAM") != "Apple_Terminal"
+	if os.Getenv("TERM_PROGRAM") == "Apple_Terminal" {
+		return false
+	}
+	// AWS CloudShell doesn't render OSC 8 hyperlinks.
+	if os.Getenv("AWS_EXECUTION_ENV") == "CloudShell" {
+		return false
+	}
+	return true
 }
 
 // StdoutSupportsHyperlinks reports whether stdout supports OSC 8 hyperlinks.
