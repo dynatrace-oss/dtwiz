@@ -37,8 +37,7 @@ func azureBuildStepCommands(cfg azureConfig) ([]string, error) {
 	return []string{
 		fmt.Sprintf("DT Settings API: create Azure connection '%s' (federatedIdentityCredential)  [env=%s token=***]",
 			cfg.ConnectionName, cfg.EnvURL),
-		fmt.Sprintf("az ad sp create-for-rbac --name %s --create-password false -o json",
-			cfg.ConnectionName),
+		fmt.Sprintf("az ad sp create-for-rbac --name %s --create-password false -o json", cfg.ConnectionName),
 		fmt.Sprintf(`az ad app federated-credential create --id %s --parameters '{"name":"%s","issuer":"%s","subject":"dt:connection-id/%s","audiences":["%s"]}'`,
 			clientID, fedCredName, issuer, connID, audience),
 		fmt.Sprintf("az ad sp show --id %s -o json", clientID),
@@ -134,6 +133,9 @@ func installAzureWithRunner(
 	if err != nil {
 		return err
 	}
+	if !hasSupportedAzVersion() {
+		return fmt.Errorf("Azure CLI 2.88.0 or later is required. Upgrade with: https://aka.ms/install-azure-cli")
+	}
 
 	existing, err := dtc.findAllConnections(integrationName)
 	if err != nil {
@@ -201,8 +203,7 @@ func runInstallSteps(cfg azureConfig, runner cmdRunner, sleeper func(time.Durati
 		azurePartialFailureHint(cfg, completed)
 		return err
 	}
-	completed[2] = true
-	clientID, tenantID, err := parseCreateSPOutput(out2)
+	clientID, err := parseAppID(out2)
 	if err != nil {
 		azurePartialFailureHint(cfg, completed)
 		return fmt.Errorf("step 2: parsing SP output: %w", err)
@@ -212,9 +213,7 @@ func runInstallSteps(cfg azureConfig, runner cmdRunner, sleeper func(time.Durati
 		return fmt.Errorf("step 2: az returned empty appId")
 	}
 	cfg.ClientID = clientID
-	if tenantID != "" {
-		cfg.TenantID = tenantID
-	}
+	completed[2] = true
 	display.ColorOK.Printf("  ✓ Service Principal created: %s\n", cfg.ClientID)
 
 	fedJSON, err := azureBuildFedCredJSON(connObjectID, cfg.EnvURL)
@@ -273,16 +272,15 @@ func runInstallSteps(cfg azureConfig, runner cmdRunner, sleeper func(time.Durati
 	return nil
 }
 
-// parseCreateSPOutput extracts appId and tenant from `az ad sp create-for-rbac` output.
-func parseCreateSPOutput(out string) (appID, tenantID string, err error) {
-	var sp struct {
-		AppID  string `json:"appId"`
-		Tenant string `json:"tenant"`
+// parseAppID extracts appId from `az ad app create` output.
+func parseAppID(out string) (string, error) {
+	var app struct {
+		AppID string `json:"appId"`
 	}
-	if err = json.Unmarshal([]byte(out), &sp); err != nil {
-		return "", "", err
+	if err := json.Unmarshal([]byte(out), &app); err != nil {
+		return "", err
 	}
-	return sp.AppID, sp.Tenant, nil
+	return app.AppID, nil
 }
 
 // createOrReplaceFedCred creates the federated credential, replacing a stale one from a previous partial install if present.

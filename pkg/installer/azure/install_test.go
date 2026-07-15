@@ -46,7 +46,7 @@ func buildHappyPathAzRunner(t *testing.T) *fakeAzureRunner {
 		calls: []fakeCall{
 			{name: "az", stdout: stockAccountJSON}, // preflight: account show
 			{name: "az", stdout: stockRBACJSON},    // preflight: signed-in-user (fails parse → RBAC skipped)
-			{name: "az", stdout: stockSPJSON},      // step 2
+			{name: "az", stdout: stockSPJSON},      // step 2: create-for-rbac
 			{name: "az", stdout: `{}`},             // step 3
 			{name: "az", stdout: stockSPShowJSON},  // step 4
 			{name: "az", stdout: `{}`},             // step 5
@@ -379,7 +379,7 @@ func TestAzureStep2FailsMentionsDTConnection(t *testing.T) {
 			return stockAccountJSON, nil
 		case name == "az" && len(args) > 0 && args[0] == "rest":
 			return stockRBACJSON, nil
-		case name == "az" && len(args) > 1 && args[0] == "ad" && args[1] == "sp":
+		case name == "az" && len(args) > 2 && args[0] == "ad" && args[1] == "sp" && args[2] == "create-for-rbac":
 			return "", fmt.Errorf("az ad sp create-for-rbac: permission denied")
 		default:
 			return "{}", nil
@@ -765,7 +765,7 @@ func TestAzureBuildStepCommands_RealValues(t *testing.T) {
 		want string
 	}{
 		{1, "dtwiz-azure"},               // connection name
-		{2, "dtwiz-azure"},               // sp create --name
+		{2, "dtwiz-azure"},               // sp create-for-rbac --name
 		{3, "client-id-000"},             // fed-cred create --id
 		{3, "conn-id-001"},               // subject dt:connection-id/<connID>
 		{3, fedCredName},                 // fed cred name constant

@@ -50,15 +50,21 @@ func captureStdoutErr(fn func() error) error {
 
 func noSleep(_ time.Duration) {}
 
-// stubExecLookPath overrides execLookPath to pretend az is always available.
+// stubExecLookPath overrides execLookPath to pretend az is always available,
+// and stubs hasSupportedAzVersion to return true (modern az, no legacy path).
 // Returns a restore function to defer.
 func stubExecLookPath(t *testing.T) func() {
 	t.Helper()
-	orig := execLookPath
+	origLookPath := execLookPath
+	origHasCP := hasSupportedAzVersion
 	execLookPath = func(_ string) (string, error) {
 		return "/usr/local/bin/az", nil
 	}
-	return func() { execLookPath = orig }
+	hasSupportedAzVersion = func() bool { return true }
+	return func() {
+		execLookPath = origLookPath
+		hasSupportedAzVersion = origHasCP
+	}
 }
 
 // ── mock dtclient implementations ─────────────────────────────────────────────
