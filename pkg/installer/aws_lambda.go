@@ -171,7 +171,7 @@ func listLambdaFunctions() ([]lambdaFunction, error) {
 // getDTConnectionInfo calls the Dynatrace connection info API to obtain tenant
 // UUID and cluster ID for Lambda env vars.
 func getDTConnectionInfo(envURL, token string) (*dtConnectionInfo, error) {
-	apiURL := ClassicAPIURL(envURL)
+	apiURL := APIURL(envURL)
 	endpoint := apiURL + "/api/v1/deployment/installer/agent/connectioninfo"
 
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
@@ -217,7 +217,7 @@ func getDTConnectionInfo(envURL, token string) (*dtConnectionInfo, error) {
 	return &dtConnectionInfo{
 		TenantUUID: info.TenantUUID,
 		ClusterID:  clusterID,
-		BaseURL:    ClassicAPIURL(envURL),
+		BaseURL:    APIURL(envURL),
 		Token:      connToken,
 	}, nil
 }
@@ -225,7 +225,7 @@ func getDTConnectionInfo(envURL, token string) (*dtConnectionInfo, error) {
 // getClusterID fetches the numeric cluster ID from the Dynatrace Classic API.
 // Endpoint: GET /api/v1/config/clusterid → { "clusterId": 997993252 }
 func getClusterID(envURL, token string) (string, error) {
-	apiURL := ClassicAPIURL(envURL)
+	apiURL := APIURL(envURL)
 	endpoint := apiURL + "/api/v1/config/clusterid"
 
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
@@ -268,7 +268,7 @@ func getClusterID(envURL, token string) (string, error) {
 // Endpoint: GET /api/v2/tokens/agentConnectionToken
 // Required scope: environment-api:agent-connection-tokens:read
 func getAgentConnectionToken(envURL, token string) (string, error) {
-	apiURL := ClassicAPIURL(envURL)
+	apiURL := APIURL(envURL)
 	endpoint := apiURL + "/api/v2/agentConnectionToken"
 
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
@@ -324,7 +324,7 @@ func getLambdaLayerARN(cache layerARNCache, envURL, token, techtype, arch, regio
 		return arn, nil
 	}
 
-	apiURL := ClassicAPIURL(envURL)
+	apiURL := APIURL(envURL)
 	endpoint := fmt.Sprintf("%s/api/v1/deployment/lambda/layer?arch=%s&techtype=%s&region=%s&withCollector=excluded",
 		apiURL, archToDTArch(arch), techtype, region)
 

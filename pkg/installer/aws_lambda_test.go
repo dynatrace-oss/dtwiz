@@ -440,9 +440,9 @@ func TestTruncate(t *testing.T) {
 	}
 }
 
-// TestLambdaAPIClassicURL is a regression test: *.apps.dynatrace.com must map
-// to *.live.dynatrace.com, not *.dynatrace.com
-func TestLambdaAPIClassicURL(t *testing.T) {
+// TestLambdaAPIURL is a regression test: *.apps.dynatrace.com must map to
+// *.live.dynatrace.com (not *.dynatrace.com), and trailing slashes must be stripped.
+func TestLambdaAPIURL(t *testing.T) {
 	tests := []struct {
 		input string
 		want  string
@@ -452,11 +452,13 @@ func TestLambdaAPIClassicURL(t *testing.T) {
 		{"https://abc123.dev.apps.dynatracelabs.com", "https://abc123.dev.dynatracelabs.com"},
 		{"https://bzu85488.live.dynatrace.com", "https://bzu85488.live.dynatrace.com"},
 		{"https://abc123.dynatracelabs.com", "https://abc123.dynatracelabs.com"},
+		{"https://bzu85488.apps.dynatrace.com/", "https://bzu85488.live.dynatrace.com"},
+		{"https://abc123.apps.dynatracelabs.com/", "https://abc123.dynatracelabs.com"},
 	}
 	for _, tt := range tests {
-		got := ClassicAPIURL(tt.input)
+		got := APIURL(tt.input)
 		if got != tt.want {
-			t.Errorf("ClassicAPIURL(%q) = %q, want %q — Lambda API calls would hit wrong host", tt.input, got, tt.want)
+			t.Errorf("APIURL(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
 }
