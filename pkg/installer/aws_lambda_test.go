@@ -1,6 +1,10 @@
 package installer
 
 import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -434,4 +438,188 @@ func TestTruncate(t *testing.T) {
 			t.Errorf("truncate(%q, %d) = %q, want %q", tt.input, tt.maxLen, got, tt.want)
 		}
 	}
+}
+
+// TestLambdaAPIClassicURL is a regression test: *.apps.dynatrace.com must map
+// to *.live.dynatrace.com, not *.dynatrace.com
+func TestLambdaAPIClassicURL(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"https://bzu85488.apps.dynatrace.com", "https://bzu85488.live.dynatrace.com"},
+		{"https://abc123.apps.dynatracelabs.com", "https://abc123.dynatracelabs.com"},
+		{"https://abc123.dev.apps.dynatracelabs.com", "https://abc123.dev.dynatracelabs.com"},
+		{"https://bzu85488.live.dynatrace.com", "https://bzu85488.live.dynatrace.com"},
+		{"https://abc123.dynatracelabs.com", "https://abc123.dynatracelabs.com"},
+	}
+	for _, tt := range tests {
+		got := ClassicAPIURL(tt.input)
+		if got != tt.want {
+			t.Errorf("ClassicAPIURL(%q) = %q, want %q — Lambda API calls would hit wrong host", tt.input, got, tt.want)
+		}
+	}
+}
+
+func lambdaAPIServer(t *testing.T, tenantUUID, clusterID, connToken, layerARN string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/deployment/installer/agent/connectioninfo":
+			fmt.Fprintf(w, `{"tenantUUID":%q}`, tenantUUID)
+		case "/api/v1/config/clusterid":
+			fmt.Fprintf(w, `{"clusterId":%s}`, clusterID)
+		case "/api/v2/agentConnectionToken":
+			fmt.Fprintf(w, `{"token":%q}`, connToken)
+		case "/api/v1/deployment/lambda/layer":
+			fmt.Fprintf(w, `{"arns":[{"arn":%q}]}`, layerARN)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+}
+
+func TestGetDTConnectionInfo(t *testing.T) {
+	srv := lambdaAPIServer(t, "abc12345", "997993252", "dt0a01.mytoken", "")
+	defer srv.Close()
+
+	conn, err := getDTConnectionInfo(srv.URL, "dt0c01.testtoken")
+	if err != nil {
+		t.Fatalf("getDTConnectionInfo failed: %v", err)
+	}
+	if conn.TenantUUID != "abc12345" {
+		t.Errorf("TenantUUID = %q, want abc12345", conn.TenantUUID)
+	}
+	if conn.ClusterID != "997993252" {
+		t.Errorf("ClusterID = %q, want 997993252", conn.ClusterID)
+	}
+	if conn.Token != "dt0a01.mytoken" {
+		t.Errorf("Token = %q, want dt0a01.mytoken", conn.Token)
+	}
+	if conn.BaseURL != srv.URL {
+		t.Errorf("BaseURL = %q, want %q", conn.BaseURL, srv.URL)
+	}
+}
+
+func TestGetDTConnectionInfo_Errors(t *testing.T) {
+	t.Run("403 returns scope hint", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+		}))
+		defer srv.Close()
+
+		_, err := getDTConnectionInfo(srv.URL, "bad-token")
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !contains(err.Error(), "InstallerDownload") {
+			t.Errorf("error %q should mention InstallerDownload scope", err.Error())
+		}
+	})
+
+	t.Run("non-200 includes status code", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			fmt.Fprint(w, "service down")
+		}))
+		defer srv.Close()
+
+		_, err := getDTConnectionInfo(srv.URL, "token")
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !contains(err.Error(), "503") {
+			t.Errorf("error %q should contain HTTP status 503", err.Error())
+		}
+	})
+}
+
+func TestGetClusterID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/config/clusterid" {
+			t.Errorf("unexpected path %q", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"clusterId":123456789}`)
+	}))
+	defer srv.Close()
+
+	got, err := getClusterID(srv.URL, "token")
+	if err != nil {
+		t.Fatalf("getClusterID failed: %v", err)
+	}
+	if got != "123456789" {
+		t.Errorf("clusterID = %q, want 123456789", got)
+	}
+}
+
+func TestGetAgentConnectionToken(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v2/agentConnectionToken" {
+			t.Errorf("unexpected path %q", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"token":"dt0a01.abc.secret"}`)
+	}))
+	defer srv.Close()
+
+	got, err := getAgentConnectionToken(srv.URL, "token")
+	if err != nil {
+		t.Fatalf("getAgentConnectionToken failed: %v", err)
+	}
+	if got != "dt0a01.abc.secret" {
+		t.Errorf("token = %q, want dt0a01.abc.secret", got)
+	}
+}
+
+func TestGetLambdaLayerARN(t *testing.T) {
+	wantARN := "arn:aws:lambda:us-east-1:657959507023:layer:Dynatrace_OneAgent_nodejs_x86:42"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/deployment/lambda/layer" {
+			t.Errorf("unexpected path %q", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		b, _ := json.Marshal(map[string]any{"arns": []map[string]string{{"arn": wantARN}}})
+		w.Write(b) //nolint:errcheck
+	}))
+	defer srv.Close()
+
+	cache := layerARNCache{}
+
+	got, err := getLambdaLayerARN(cache, srv.URL, "token", "nodejs", "x86_64", "us-east-1")
+	if err != nil {
+		t.Fatalf("getLambdaLayerARN failed: %v", err)
+	}
+	if got != wantARN {
+		t.Errorf("ARN = %q, want %q", got, wantARN)
+	}
+
+	// Second call must use the cache (server closed below).
+	srv.Close()
+	cached, err := getLambdaLayerARN(cache, srv.URL, "token", "nodejs", "x86_64", "us-east-1")
+	if err != nil {
+		t.Fatalf("cached getLambdaLayerARN failed: %v", err)
+	}
+	if cached != wantARN {
+		t.Errorf("cached ARN = %q, want %q", cached, wantARN)
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
+		func() bool {
+			for i := 0; i <= len(s)-len(substr); i++ {
+				if s[i:i+len(substr)] == substr {
+					return true
+				}
+			}
+			return false
+		}())
 }

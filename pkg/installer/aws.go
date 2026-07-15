@@ -69,17 +69,6 @@ func isAWSCLIInstalled() bool {
 }
 
 // promptLine prints a prompt, reads a single line from stdin and trims
-// classicAPIURL strips the ".apps." segment from a Dynatrace apps URL so that
-// requests target the classic /api/v2 endpoint.
-//
-//	https://abc.apps.dynatracelabs.com  ->  https://abc.dynatracelabs.com
-func classicAPIURL(envURL string) string {
-	envURL = strings.TrimRight(envURL, "/")
-	envURL = strings.ReplaceAll(envURL, ".apps.dynatracelabs.com", ".dynatracelabs.com")
-	envURL = strings.ReplaceAll(envURL, ".apps.dynatrace.com", ".dynatrace.com")
-	return envURL
-}
-
 // getAWSCallerInfo returns the AWS account ID and the configured default region.
 func getAWSCallerInfo() (accountID, region string, err error) {
 	// Account ID from STS
