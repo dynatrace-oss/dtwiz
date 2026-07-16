@@ -156,6 +156,20 @@ func TestUpdateAzureCancelled(t *testing.T) {
 	}
 }
 
+func TestUpdateAzureRequiresSupportedAzVersion(t *testing.T) {
+	oldHasSupportedAzVersion := hasSupportedAzVersion
+	hasSupportedAzVersion = func() bool { return false }
+	defer func() { hasSupportedAzVersion = oldHasSupportedAzVersion }()
+
+	err := UpdateAzure("https://abc.live.dynatrace.com", "tok", true, time.Time{})
+	if err == nil {
+		t.Fatal("expected unsupported Azure CLI version error, got nil")
+	}
+	if !strings.Contains(err.Error(), "update Azure CLI") {
+		t.Errorf("expected Azure CLI update guidance, got: %v", err)
+	}
+}
+
 func TestUpdateAzureNoUsableConnection(t *testing.T) {
 	old := installer.AutoConfirm
 	installer.AutoConfirm = true

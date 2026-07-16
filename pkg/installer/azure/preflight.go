@@ -3,10 +3,45 @@ package azure
 import (
 	"encoding/json"
 	"fmt"
+	"os/exec"
+	"strconv"
+	"strings"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
+
+// hasSupportedAzVersion reports whether the installed az CLI supports --create-password false
+// in az ad sp create-for-rbac (requires az CLI >= 2.88). Stubbable for tests.
+var hasSupportedAzVersion = func() bool {
+	out, err := exec.Command("az", "version", "-o", "json").Output()
+	if err != nil {
+		return false
+	}
+	var v struct {
+		CLI string `json:"azure-cli"`
+	}
+	if err := json.Unmarshal(out, &v); err != nil || v.CLI == "" {
+		return false
+	}
+	parts := strings.SplitN(v.CLI, ".", 3)
+	if len(parts) < 2 {
+		return false
+	}
+	maj, err1 := strconv.Atoi(parts[0])
+	min, err2 := strconv.Atoi(parts[1])
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	return maj > 2 || (maj == 2 && min >= 88)
+}
+
+func requireSupportedAzVersion() error {
+	if !hasSupportedAzVersion() {
+		return fmt.Errorf("please update Azure CLI to the latest version: https://aka.ms/install-azure-cli")
+	}
+	return nil
+}
 
 // azureAccountInfo returns the active Azure subscription and tenant IDs from `az account show`.
 func azureAccountInfo(runner cmdRunner) (subscriptionID, tenantID string, err error) {

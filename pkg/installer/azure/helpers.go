@@ -68,8 +68,8 @@ func azureDeleteFedCred(runner cmdRunner, clientID string) error {
 }
 
 // azureListAppIDsByName finds leftover App Registrations from interrupted installs.
-// `az ad sp create-for-rbac --name X` reuses an existing app with that name, so a leftover
-// keeps the same appId across runs and triggers the DT "Constraints violated" error on reinstall.
+// A leftover app with the same display name keeps the same appId across runs and
+// triggers the DT "Constraints violated" error on reinstall.
 func azureListAppIDsByName(runner cmdRunner, name string) ([]string, error) {
 	out, err := runner("az", []string{"ad", "app", "list", "--display-name", name, "-o", "json"}, nil)
 	if err != nil {
