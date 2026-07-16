@@ -58,7 +58,6 @@ func allOnPath(name string) []string {
 	return found
 }
 
-
 // isWindowsStorePythonStub reports whether the given path is the Windows Store
 // Python stub (located under the WindowsApps directory). The stub exists on
 // PATH by default but only opens the Microsoft Store when invoked — it is not
