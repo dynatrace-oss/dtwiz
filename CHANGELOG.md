@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.30] - 2026-07-16
+
+### Changed
+
+- `install otel`: Python virtual environment stub files are now recognized during scanning, improving venv detection accuracy; runtime scan respects project boundaries more strictly to avoid false positives
+- `install otel`: Java process detection improved — better handling of missing `javac` and multi-module project layouts
+- `install gcp`: GCP environment detection refined for more accurate cloud identification
+- Dependency bumps: `golang.org/x/sys` 0.46.0 → 0.47.0, `golang.org/x/term` 0.44.0 → 0.45.0
+
+### Fixed
+
+- `install azure` / `update azure`: older Azure CLI versions that return subscription data in a different format are now handled gracefully; a preflight check is added to detect and report the incompatibility clearly
+- `install aws` / `install aws-lambda`: AWS endpoint URL parsing corrected to handle edge-case URL formats; hyperlinks in AWS output now render correctly on supported terminals
+- `install gcp`: a preview notice is now shown when the GCP Service Account principal has not been provisioned yet, instead of silently proceeding
+
 ## [0.2.29] - 2026-07-09
 
 ### Added
@@ -417,7 +432,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.29...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.30...HEAD
+[0.2.30]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.29...v0.2.30
 [0.2.29]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.28...v0.2.29
 [0.2.28]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.27...v0.2.28
 [0.2.27]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.26...v0.2.27
