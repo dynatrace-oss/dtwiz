@@ -196,6 +196,12 @@ func TestMergePathEntries(t *testing.T) {
 			newPath: "",
 			want:    `C:\Windows`,
 		},
+		{
+			desc:    "empty current path returns new entries without leading separator",
+			current: "",
+			newPath: `C:\Program Files\Helm;C:\Program Files\Python`,
+			want:    `C:\Program Files\Helm;C:\Program Files\Python`,
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.desc, func(t *testing.T) {

@@ -261,35 +261,3 @@ func RunCommandQuiet(name string, args ...string) error {
 	}
 	return nil
 }
-
-// RefreshWindowsPath appends any registry PATH entries missing from the current
-// process's PATH. No-op on non-Windows.
-func RefreshWindowsPath() error {
-	if runtime.GOOS != "windows" {
-		return nil
-	}
-	out, err := exec.Command("powershell", "-NoProfile", "-Command",
-		"[Environment]::GetEnvironmentVariable('Path','User')").Output()
-	if err != nil {
-		return fmt.Errorf("reading PATH from registry: %w", err)
-	}
-	return os.Setenv("PATH", mergePathEntries(os.Getenv("PATH"), strings.TrimSpace(string(out))))
-}
-
-// mergePathEntries appends entries from newPath not already in current (case-insensitive).
-func mergePathEntries(current, newPath string) string {
-	existing := make(map[string]bool)
-	for _, e := range strings.Split(current, ";") {
-		existing[strings.ToLower(e)] = true
-	}
-	var toAdd []string
-	for _, e := range strings.Split(newPath, ";") {
-		if e != "" && !existing[strings.ToLower(e)] {
-			toAdd = append(toAdd, e)
-		}
-	}
-	if len(toAdd) == 0 {
-		return current
-	}
-	return current + ";" + strings.Join(toAdd, ";")
-}

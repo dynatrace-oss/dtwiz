@@ -74,10 +74,22 @@ func pythonInstallPlan() ([]string, error) {
 // is ignored — winget returns non-zero for already-installed packages; DetectPython
 // is the true success signal.
 func installPythonWindows() error {
+	const manualPythonInstructions = "install Python manually from https://www.python.org/downloads/"
+
+	if _, err := exec.LookPath("winget"); err != nil {
+		return fmt.Errorf("winget was not found on PATH; install winget or %s", manualPythonInstructions)
+	}
+
 	logger.Debug("installPythonWindows: installing", "id", wingetPythonPackage)
-	_ = installer.RunCommand("winget", "install", "--id", wingetPythonPackage,
+	const includeWingetOutput = true
+	_, wingetErr := installer.RunCommandWithExitCode([]string{"winget", "install", "--id", wingetPythonPackage,
 		"--source", "winget",
-		"--accept-package-agreements", "--accept-source-agreements") // suppress interactive prompts
+		"--accept-package-agreements", "--accept-source-agreements"}, includeWingetOutput)
+	if wingetErr != nil {
+		logger.Debug("installPythonWindows: winget install failed", "error", wingetErr)
+	} else {
+		logger.Debug("installPythonWindows: winget install completed")
+	}
 	if refreshErr := installer.RefreshWindowsPath(); refreshErr != nil {
 		logger.Debug("installPythonWindows: RefreshWindowsPath failed", "error", refreshErr)
 		fmt.Printf("  Warning: could not refresh PATH: %v\n", refreshErr)
@@ -87,7 +99,10 @@ func installPythonWindows() error {
 	if _, err := DetectPython(); err == nil {
 		return nil
 	}
-	return fmt.Errorf("could not install Python 3 via winget; install manually from https://www.python.org/downloads/") //nolint:staticcheck // ST1005: keep brand capitalization
+	if wingetErr != nil {
+		return fmt.Errorf("could not install Python 3 via winget: %w; %s", wingetErr, manualPythonInstructions) //nolint:staticcheck // ST1005: keep brand capitalization
+	}
+	return fmt.Errorf("could not install Python 3 via winget; %s", manualPythonInstructions) //nolint:staticcheck // ST1005: keep brand capitalization
 }
 
 func detectLinuxDistro() string {
