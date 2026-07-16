@@ -1,4 +1,4 @@
-## Why
+# Why
 
 Windows installs can update the user PATH without updating the current dtwiz process. The demo installer also needs to avoid the Windows Store Python stub and use a real winget Python package ID.
 

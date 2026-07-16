@@ -1,4 +1,4 @@
-## 1. Windows Python Package
+# 1. Windows Python Package
 
 - [x] 1.1 Confirm the winget package ID exists for Python 3.14.
 - [x] 1.2 Use `Python.Python.3.14` for Windows demo Python installation.

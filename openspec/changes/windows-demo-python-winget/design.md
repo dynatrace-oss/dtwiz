@@ -1,4 +1,4 @@
-## Context
+# Context
 
 Windows package managers can install tools and update the user PATH, but the running dtwiz process keeps the PATH it inherited at startup. Windows can also expose Python Store launch aliases that are not usable interpreters for instrumentation.
 
