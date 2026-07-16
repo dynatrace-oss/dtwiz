@@ -68,8 +68,8 @@ func pythonInstallPlan() ([]string, error) {
 		case "debian", "ubuntu":
 			return []string{"sudo", "apt-get", "install", "-y", "python3", "python3-pip", "python3-venv"}, nil
 		default:
-			// RHEL/Fedora/CentOS/Rocky/Alma — python3-pip brings ensurepip on these distros
-			return []string{"sudo", "dnf", "install", "-y", "python3", "python3-pip"}, nil
+			// RHEL/Fedora/CentOS/Rocky/Alma
+			return []string{"sudo", "dnf", "install", "-y", "python3", "python3-pip", "python3-venv"}, nil
 		}
 
 	case "windows":
