@@ -42,13 +42,19 @@ func DetectPython() (string, error) {
 // allOnPath returns every executable named `name` found across all PATH
 // directories, in order of appearance. On Windows the ".exe" suffix is
 // appended automatically. Using os.Stat instead of exec.LookPath allows
-// callers to inspect all matches (e.g. to skip Windows Store stubs).
+// callers to inspect all matches (e.g. to skip Windows Store stubs). Empty
+// and relative PATH entries are ignored to avoid implicit current-directory
+// lookups.
 func allOnPath(name string) []string {
 	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(name), ".exe") {
 		name += ".exe"
 	}
 	var found []string
 	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+		if dir == "" || !filepath.IsAbs(dir) {
+			logger.Debug("skipping unsafe PATH entry during executable scan", "name", name, "dir", dir)
+			continue
+		}
 		p := filepath.Join(dir, name)
 		if _, err := os.Stat(p); err == nil {
 			found = append(found, p)

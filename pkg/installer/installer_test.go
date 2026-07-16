@@ -202,6 +202,12 @@ func TestMergePathEntries(t *testing.T) {
 			newPath: `C:\Program Files\Helm;C:\Program Files\Python`,
 			want:    `C:\Program Files\Helm;C:\Program Files\Python`,
 		},
+		{
+			desc:    "whitespace around entries is trimmed to avoid duplicates",
+			current: `C:\Tools`,
+			newPath: `C:\Tools `,
+			want:    `C:\Tools`,
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.desc, func(t *testing.T) {

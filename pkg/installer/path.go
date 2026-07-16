@@ -5,8 +5,8 @@ import "strings"
 func pathEntries(pathValue string) []string {
 	var entries []string
 	for _, entry := range strings.Split(pathValue, ";") {
-		if entry != "" {
-			entries = append(entries, entry)
+		if e := strings.TrimSpace(entry); e != "" {
+			entries = append(entries, e)
 		}
 	}
 	return entries
