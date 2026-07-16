@@ -42,6 +42,7 @@ var setupCmd = &cobra.Command{
 		}
 
 		fmt.Printf(" Looking for more deployment options beyond these popular ones? %s\n\n", display.Hyperlink("Visit docs", "https://docs.dynatrace.com/docs/ingest-from"))
+		fmt.Printf(" Learn about needed permissions? %s\n\n", display.Hyperlink("Visit docs", "https://github.com/dynatrace-oss/dtwiz/blob/main/README.md"))
 
 		display.Header("Analyzing system...")
 
