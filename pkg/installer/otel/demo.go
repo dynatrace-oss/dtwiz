@@ -208,12 +208,29 @@ func extractZip(zipPath, destDir string) error {
 	return nil
 }
 
+// IsDemoRunning returns true when the schnitzel demo services are already running.
+func IsDemoRunning() bool {
+	if !checkDemoExists() {
+		return false
+	}
+	absDemoDir, err := filepath.Abs(demoDirName)
+	if err != nil {
+		return false
+	}
+	running := len(matchingProcessIDs(absDemoDir, detectPythonProcesses())) > 0
+	if running {
+		logger.Debug("IsDemoRunning: demo already running, not showing demo")
+	}
+	return running
+}
+
 // InstallDemo orchestrates the schnitzel demo installation:
 // 1. Download & extract schnitzel (if not already present)
 // 2. Install Python if missing
 // 3. Install OTel Collector + Python auto-instrumentation targeting ./schnitzel
 func InstallDemo(envURL, token, platformTok string, dryRun bool) error {
 	demoExists := checkDemoExists()
+
 	pythonCmd, err := pythonInstallPlan()
 	if err != nil {
 		return err
