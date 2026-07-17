@@ -41,6 +41,24 @@ Set the following environment variables before running `dtwiz`:
 
 For legacy environments where the platform token lacks Classic API access, opt into a Classic API token (`dt0c01.*`) by passing `--access-token` explicitly. It is intentionally **not** read from `DT_ACCESS_TOKEN` — so a leftover env var can never silently change which token authenticates Classic API calls.
 
+### Platform token scopes
+
+> **Recommended:** Generate your platform token via the [Dynatrace QuickStart](https://docs.dynatrace.com/docs/discover-dynatrace/get-started/quickstart-guide) app on your own tenant. This is the tested path and provisions the scopes `dtwiz` needs.
+
+If you create the token manually, grant the following scopes. This list is a practical baseline covering the ingestion methods `dtwiz` supports; depending on which methods you install, you may not need all of them, and future features may require additional scopes.
+
+| Group | Scopes |
+|-------|--------|
+| **API tokens** | `api-tokens:tokens:read`, `api-tokens:tokens:write` |
+| **Data acquisition** | `data-acquisition:events:ingest`, `data-acquisition:logs:ingest`, `data-acquisition:metrics:ingest` |
+| **Extensions** | `extensions:configurations:read`, `extensions:configurations:write`, `extensions:definitions:read`, `extensions:definitions:write` |
+| **Fleet management** | `fleet-management:activegate.connection-info:read`, `fleet-management:activegate.tokens:create`, `fleet-management:activegates:download`, `fleet-management:activegates:read`, `fleet-management:activegates:write`, `fleet-management:cluster-id:read`, `fleet-management:container-images:read`, `fleet-management:oneagent.connection-info:read`, `fleet-management:oneagent.tokens:read`, `fleet-management:oneagents:download` |
+| **OpenPipeline** | `openpipeline:bizevents:ingest`, `openpipeline:events:ingest`, `openpipeline:events.custom:ingest`, `openpipeline:events.davis:ingest`, `openpipeline:events.sdlc:ingest`, `openpipeline:events.sdlc.custom:ingest`, `openpipeline:events.smartscape:ingest`, `openpipeline:logs:ingest`, `openpipeline:metrics:ingest`, `openpipeline:security.events:ingest`, `openpipeline:security.events.custom:ingest`, `openpipeline:traces:ingest` |
+| **Settings** | `settings:objects:read`, `settings:objects:write` |
+| **Storage (Grail)** | `storage:buckets:read`, `storage:entities:read`, `storage:events:read`, `storage:events:write`, `storage:files:write`, `storage:logs:read`, `storage:logs:write`, `storage:metrics:read`, `storage:metrics:write`, `storage:smartscape:read`, `storage:spans:read`, `storage:system:read` |
+
+Tenant admins can also consult the **DtWiz Ingestion User** policy, which is provisioned by default on customer tenants. It captures the scopes and Grail schemas the `dtwiz` user needs and serves as a reference for what to grant.
+
 ## Installation
 
 **Linux / macOS:**
