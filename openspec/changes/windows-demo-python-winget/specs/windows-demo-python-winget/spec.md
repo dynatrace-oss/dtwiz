@@ -9,7 +9,7 @@ The Windows demo installer SHALL install Python with a real winget package ID.
 #### Scenario: Python is missing on Windows
 
 - **WHEN** the demo installer needs to install Python on Windows
-- **THEN** it SHALL run `winget install --id Python.Python.3.14`
+- **THEN** it SHALL install using `winget` and a specific package ID
 - **AND** it SHALL use winget agreement flags so the command can run without extra prompts
 
 #### Scenario: winget is missing
