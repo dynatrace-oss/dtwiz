@@ -45,11 +45,23 @@ var setupCmd = &cobra.Command{
 
 		display.Header("Analyzing system...")
 
+		// Start demo-running check concurrently with system analysis — they are independent.
+		var demoRunningCh chan bool
+		if featureflags.IsEnabled(featureflags.Experimental) {
+			demoRunningCh = make(chan bool, 1)
+			go func() { demoRunningCh <- otel.IsDemoRunning() }()
+		}
+
 		info, err := analyzeSystem()
 		if err != nil {
 			return fmt.Errorf("analysis failed: %w", err)
 		}
 		fmt.Println(info.Summary())
+
+		var demoRunning bool
+		if demoRunningCh != nil {
+			demoRunning = <-demoRunningCh
+		}
 
 		fmt.Println()
 		display.Header("Recommendations — What do you want to monitor?")
@@ -80,7 +92,7 @@ var setupCmd = &cobra.Command{
 				fmt.Printf("  %s  %s\n", display.ColorDefault.Sprint(" · "), display.ColorDefault.Sprint(r.Title))
 			}
 		}
-		if featureflags.IsEnabled(featureflags.Experimental) {
+		if featureflags.IsEnabled(featureflags.Experimental) && !demoRunning {
 			fmt.Println()
 			fmt.Printf("  %s  %s\n", display.ColorDefault.Sprint("[d]"), display.ColorDefault.Sprint("Install demo app (schnitzel)"))
 		}
@@ -109,7 +121,6 @@ var setupCmd = &cobra.Command{
 
 		if input == "d" && featureflags.IsEnabled(featureflags.Experimental) {
 			fmt.Println()
-			display.Header("Installing: Demo app (schnitzel)")
 
 			envURL, accessTok, platformTok, err := getDtEnvironment()
 			if err != nil {
@@ -119,6 +130,8 @@ var setupCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
+
+			display.Header("Installing: Demo app (schnitzel)")
 			if err := otel.InstallDemo(envURL, classicTok, platformTok, setupDryRun); err != nil {
 				if errors.Is(err, installer.ErrInstallCancelled) {
 					return nil

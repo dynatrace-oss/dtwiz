@@ -46,7 +46,7 @@ func UninstallKubernetes(kubeCtx, distro string, dryRun bool) error {
 		return nil
 	}
 
-	if err := refreshWindowsPath(); err != nil {
+	if err := installer.RefreshWindowsPath(); err != nil {
 		display.Println("Warning: could not refresh PATH: %v", err)
 	}
 

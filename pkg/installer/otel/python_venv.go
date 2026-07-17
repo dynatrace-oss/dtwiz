@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
@@ -15,26 +16,52 @@ var venvNames = []string{".venv", "venv", "env", ".env"}
 
 func DetectPython() (string, error) {
 	for _, name := range []string{"python3", "python"} {
-		logger.Debug("checking python interpreter on PATH", "candidate", name)
-		path, err := exec.LookPath(name)
-		if err != nil {
-			logger.Debug("python interpreter not found on PATH", "candidate", name, "error", err)
-			continue
-		}
-		out, err := exec.Command(path, "--version").CombinedOutput()
-		if err != nil {
-			logger.Debug("python interpreter version probe failed", "candidate", name, "path", path, "error", err)
-			continue
-		}
-		version := strings.TrimSpace(string(out))
-		logger.Debug("python interpreter version probe succeeded", "candidate", name, "path", path, "version", version)
-		if strings.HasPrefix(version, "Python 3") {
-			logger.Debug("selected python interpreter", "candidate", name, "path", path)
-			return path, nil
+		for _, path := range allOnPath(name) {
+			if isWindowsStorePythonStub(path) {
+				logger.Debug("skipping Windows Store Python stub", "path", path)
+				continue
+			}
+			logger.Debug("checking python interpreter on PATH", "candidate", name, "path", path)
+			out, err := exec.Command(path, "--version").CombinedOutput()
+			if err != nil {
+				logger.Debug("python interpreter version probe failed", "candidate", name, "path", path, "error", err)
+				continue
+			}
+			version := strings.TrimSpace(string(out))
+			logger.Debug("python interpreter version probe succeeded", "candidate", name, "path", path, "version", version)
+			if strings.HasPrefix(version, "Python 3") {
+				logger.Debug("selected python interpreter", "candidate", name, "path", path)
+				return path, nil
+			}
 		}
 	}
 	logger.Debug("no usable python 3 interpreter found on PATH")
 	return "", fmt.Errorf("Python 3 interpreter not found: install Python 3 and ensure either `python3` or `python` is in PATH") //nolint:staticcheck // ST1005: keep brand capitalization
+}
+
+// allOnPath returns every executable named `name` found across all PATH
+// directories, in order of appearance. On Windows the ".exe" suffix is
+// appended automatically. Using os.Stat instead of exec.LookPath allows
+// callers to inspect all matches (e.g. to skip Windows Store stubs). Empty
+// and relative PATH entries are ignored to avoid implicit current-directory
+// lookups.
+func allOnPath(name string) []string {
+	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(name), ".exe") {
+		name += ".exe"
+	}
+	var found []string
+	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+		if dir == "" || !filepath.IsAbs(dir) {
+			logger.Debug("skipping unsafe PATH entry during executable scan", "name", name, "dir", dir)
+			continue
+		}
+		p := filepath.Join(dir, name)
+		if _, err := os.Stat(p); err == nil {
+			found = append(found, p)
+		}
+	}
+	logger.Debug("allOnPath scan complete", "name", name, "matches", found)
+	return found
 }
 
 // isWindowsStorePythonStub reports whether the given path is the Windows Store
@@ -42,7 +69,7 @@ func DetectPython() (string, error) {
 // PATH by default but only opens the Microsoft Store when invoked — it is not
 // a real interpreter.
 func isWindowsStorePythonStub(path string) bool {
-	return strings.Contains(filepath.ToSlash(path), "WindowsApps")
+	return strings.Contains(strings.ToLower(filepath.ToSlash(path)), "windowsapps")
 }
 
 func validatePythonPrerequisites() (string, error) {

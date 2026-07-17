@@ -13,14 +13,15 @@ import (
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 const (
-	demoZipURL  = "https://github.com/dietermayrhofer/schnitzel/archive/refs/heads/master.zip"
-	demoDirName = "schnitzel"
+	demoZipURL          = "https://github.com/dietermayrhofer/schnitzel/archive/refs/heads/master.zip"
+	demoDirName         = "schnitzel"
+	wingetPythonPackage = "Python.Python.3.14"
 )
 
-// checkDemoExists returns true if ./schnitzel/ already exists in the current working directory.
 func checkDemoExists() bool {
 	_, err := os.Stat(demoDirName)
 	return err == nil
@@ -30,7 +31,17 @@ func checkDemoExists() bool {
 // on the current platform, or an error if installation cannot be automated.
 // Returns nil, nil if Python is already present.
 func pythonInstallPlan() ([]string, error) {
+	// On Windows the process may have a stale PATH (e.g. Python was installed by
+	// a previous dtwiz run in the same terminal session). Refresh before checking.
+	if runtime.GOOS == "windows" {
+		if err := installer.RefreshWindowsPath(); err != nil {
+			logger.Debug("pythonInstallPlan: RefreshWindowsPath failed", "error", err)
+		} else {
+			logger.Debug("pythonInstallPlan: PATH refreshed from registry")
+		}
+	}
 	if _, err := DetectPython(); err == nil {
+		logger.Debug("pythonInstallPlan: Python already available, skipping install")
 		return nil, nil // already available
 	}
 
@@ -52,14 +63,48 @@ func pythonInstallPlan() ([]string, error) {
 		}
 
 	case "windows":
-		return []string{"winget", "install", "Python.Python.3"}, nil
+		return []string{"winget", "install", "--id", wingetPythonPackage}, nil
 
 	default:
 		return nil, fmt.Errorf("Python 3 is required but not found; please install it manually") //nolint:staticcheck // ST1005: keep brand capitalization
 	}
 }
 
-// detectLinuxDistro reads /etc/os-release and returns "debian", "ubuntu", or "rhel".
+// installPythonWindows installs Python 3 on Windows via winget. The exit code
+// is ignored — winget returns non-zero for already-installed packages; DetectPython
+// is the true success signal.
+func installPythonWindows() error {
+	const manualPythonInstructions = "install Python manually from https://www.python.org/downloads/"
+
+	if _, err := exec.LookPath("winget"); err != nil {
+		return fmt.Errorf("winget was not found on PATH; install winget or %s", manualPythonInstructions)
+	}
+
+	logger.Debug("installPythonWindows: installing", "id", wingetPythonPackage)
+	const includeWingetOutput = true
+	_, wingetErr := installer.RunCommandWithExitCode([]string{"winget", "install", "--id", wingetPythonPackage,
+		"--source", "winget",
+		"--accept-package-agreements", "--accept-source-agreements"}, includeWingetOutput)
+	if wingetErr != nil {
+		logger.Debug("installPythonWindows: winget install failed", "error", wingetErr)
+	} else {
+		logger.Debug("installPythonWindows: winget install completed")
+	}
+	if refreshErr := installer.RefreshWindowsPath(); refreshErr != nil {
+		logger.Debug("installPythonWindows: RefreshWindowsPath failed", "error", refreshErr)
+		fmt.Printf("  Warning: could not refresh PATH: %v\n", refreshErr)
+	} else {
+		logger.Debug("installPythonWindows: PATH refreshed from registry")
+	}
+	if _, err := DetectPython(); err == nil {
+		return nil
+	}
+	if wingetErr != nil {
+		return fmt.Errorf("could not install Python 3 via winget: %w; %s", wingetErr, manualPythonInstructions) //nolint:staticcheck // ST1005: keep brand capitalization
+	}
+	return fmt.Errorf("could not install Python 3 via winget; %s", manualPythonInstructions) //nolint:staticcheck // ST1005: keep brand capitalization
+}
+
 func detectLinuxDistro() string {
 	data, err := os.ReadFile("/etc/os-release")
 	if err != nil {
@@ -75,8 +120,8 @@ func detectLinuxDistro() string {
 	return "rhel"
 }
 
-// downloadAndExtractDemo downloads the schnitzel ZIP and extracts it to ./schnitzel/.
-// It extracts atomically: to a temp dir first, then renames.
+// downloadAndExtractDemo downloads the schnitzel ZIP and extracts it atomically
+// (to a temp dir first, then renames) to ./schnitzel/.
 func downloadAndExtractDemo() error {
 	resp, err := http.Get(demoZipURL)
 	if err != nil {
@@ -87,7 +132,6 @@ func downloadAndExtractDemo() error {
 		return fmt.Errorf("downloading demo: unexpected HTTP %d from %s", resp.StatusCode, demoZipURL)
 	}
 
-	// Write to temp file
 	tmpFile, err := os.CreateTemp("", "schnitzel-*.zip")
 	if err != nil {
 		return fmt.Errorf("creating temp file: %w", err)
@@ -100,7 +144,6 @@ func downloadAndExtractDemo() error {
 	}
 	tmpFile.Close()
 
-	// Extract to temp dir
 	tmpDir, err := os.MkdirTemp("", "schnitzel-extract-*")
 	if err != nil {
 		return fmt.Errorf("creating temp dir: %w", err)
@@ -118,14 +161,12 @@ func downloadAndExtractDemo() error {
 	}
 	extracted := filepath.Join(tmpDir, entries[0].Name())
 
-	// Atomic rename to ./schnitzel
 	if err := os.Rename(extracted, demoDirName); err != nil {
 		return fmt.Errorf("moving demo to %s: %w", demoDirName, err)
 	}
 	return nil
 }
 
-// extractZip extracts all files from zipPath into destDir.
 func extractZip(zipPath, destDir string) error {
 	r, err := zip.OpenReader(zipPath)
 	if err != nil {
@@ -167,18 +208,34 @@ func extractZip(zipPath, destDir string) error {
 	return nil
 }
 
+// IsDemoRunning returns true when the schnitzel demo services are already running.
+func IsDemoRunning() bool {
+	if !checkDemoExists() {
+		return false
+	}
+	absDemoDir, err := filepath.Abs(demoDirName)
+	if err != nil {
+		return false
+	}
+	running := len(matchingProcessIDs(absDemoDir, detectPythonProcesses())) > 0
+	if running {
+		logger.Debug("IsDemoRunning: demo already running, not showing demo")
+	}
+	return running
+}
+
 // InstallDemo orchestrates the schnitzel demo installation:
 // 1. Download & extract schnitzel (if not already present)
 // 2. Install Python if missing
 // 3. Install OTel Collector + Python auto-instrumentation targeting ./schnitzel
 func InstallDemo(envURL, token, platformTok string, dryRun bool) error {
 	demoExists := checkDemoExists()
+
 	pythonCmd, err := pythonInstallPlan()
 	if err != nil {
 		return err
 	}
 
-	// Build plan lines
 	fmt.Println()
 	display.ColorMessage.Println("  Dynatrace Demo Installation (schnitzel)")
 	fmt.Println()
@@ -227,8 +284,14 @@ func InstallDemo(envURL, token, platformTok string, dryRun bool) error {
 	// Step 2: Install Python if needed
 	if pythonCmd != nil {
 		fmt.Printf("  Installing Python 3 via %s...\n", pythonCmd[0])
-		if err := installer.RunCommand(pythonCmd[0], pythonCmd[1:]...); err != nil {
-			return fmt.Errorf("Python installation failed: %w", err) //nolint:staticcheck // ST1005: keep brand capitalization
+		var installErr error
+		if runtime.GOOS == "windows" {
+			installErr = installPythonWindows()
+		} else {
+			installErr = installer.RunCommand(pythonCmd[0], pythonCmd[1:]...)
+		}
+		if installErr != nil {
+			return fmt.Errorf("Python installation failed: %w", installErr) //nolint:staticcheck // ST1005: keep brand capitalization
 		}
 		fmt.Println("  Python 3 installed.")
 	}

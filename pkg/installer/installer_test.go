@@ -164,3 +164,57 @@ func TestShouldProceed_UserDeclines(t *testing.T) {
 		t.Errorf("user declining must return ErrInstallCancelled, got %v", err)
 	}
 }
+
+func TestMergePathEntries(t *testing.T) {
+	cases := []struct {
+		desc    string
+		current string
+		newPath string
+		want    string
+	}{
+		{
+			desc:    "new entry appended",
+			current: `C:\Windows;C:\Windows\system32`,
+			newPath: `C:\Program Files\Helm`,
+			want:    `C:\Windows;C:\Windows\system32;C:\Program Files\Helm`,
+		},
+		{
+			desc:    "duplicate not added (case-insensitive)",
+			current: `C:\Windows;C:\Program Files\Helm`,
+			newPath: `C:\program files\helm`,
+			want:    `C:\Windows;C:\Program Files\Helm`,
+		},
+		{
+			desc:    "only new entries appended from mixed list",
+			current: `C:\Windows`,
+			newPath: `C:\Windows;C:\Program Files\Helm`,
+			want:    `C:\Windows;C:\Program Files\Helm`,
+		},
+		{
+			desc:    "empty new path returns current unchanged",
+			current: `C:\Windows`,
+			newPath: "",
+			want:    `C:\Windows`,
+		},
+		{
+			desc:    "empty current path returns new entries without leading separator",
+			current: "",
+			newPath: `C:\Program Files\Helm;C:\Program Files\Python`,
+			want:    `C:\Program Files\Helm;C:\Program Files\Python`,
+		},
+		{
+			desc:    "whitespace around entries is trimmed to avoid duplicates",
+			current: `C:\Tools`,
+			newPath: `C:\Tools `,
+			want:    `C:\Tools`,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.desc, func(t *testing.T) {
+			got := mergePathEntries(c.current, c.newPath)
+			if got != c.want {
+				t.Errorf("mergePathEntries(%q, %q) = %q, want %q", c.current, c.newPath, got, c.want)
+			}
+		})
+	}
+}

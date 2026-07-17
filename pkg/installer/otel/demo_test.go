@@ -109,6 +109,65 @@ func TestPythonInstallPlanCurrentOS(t *testing.T) {
 	}
 }
 
+func TestInstallPythonWindows_WingetNotFound(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+
+	err := installPythonWindows()
+	if err == nil {
+		t.Fatal("expected error when winget is not on PATH")
+	}
+	if !strings.Contains(err.Error(), "winget was not found") {
+		t.Fatalf("error should mention missing winget, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "install winget") {
+		t.Fatalf("error should mention installing winget, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "python.org/downloads") {
+		t.Fatalf("error should include manual Python install URL, got: %v", err)
+	}
+}
+
+func TestInstallPythonWindows_WingetFailureIncludesRootCause(t *testing.T) {
+	dir := t.TempDir()
+	createPythonDemoTestCommand(t, dir, "winget", "winget boom", 1)
+	t.Setenv("PATH", dir)
+
+	err := installPythonWindows()
+	if err == nil {
+		t.Fatal("expected error when winget fails and Python is still unavailable")
+	}
+	if !strings.Contains(err.Error(), "could not install Python 3 via winget") {
+		t.Fatalf("error should mention winget install failure, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "winget boom") {
+		t.Fatalf("error should include winget root cause, got: %v", err)
+	}
+}
+
+func createPythonDemoTestCommand(t *testing.T, dir, name, output string, exitCode int) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		path := filepath.Join(dir, name+".bat")
+		content := "@echo off\r\necho " + output + "\r\n"
+		if exitCode != 0 {
+			content += "exit /b 1\r\n"
+		}
+		if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
+			t.Fatalf("create test command: %v", err)
+		}
+		return
+	}
+
+	path := filepath.Join(dir, name)
+	content := "#!/bin/sh\necho " + output + "\n"
+	if exitCode != 0 {
+		content += "exit 1\n"
+	}
+	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
+		t.Fatalf("create test command: %v", err)
+	}
+}
+
 func TestDetectLinuxDistro(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("Linux-only test")

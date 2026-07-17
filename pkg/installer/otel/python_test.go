@@ -3,7 +3,6 @@ package otel
 import (
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -298,10 +297,8 @@ func TestDetectPythonPlan_NoPythonOnPath(t *testing.T) {
 }
 
 func TestDetectPythonPlan_FindsProject(t *testing.T) {
-	if _, err := exec.LookPath("python3"); err != nil {
-		if _, err := exec.LookPath("python"); err != nil {
-			t.Skip("python not installed on PATH")
-		}
+	if _, err := DetectPython(); err != nil {
+		t.Skip("python 3 not available on PATH")
 	}
 
 	dir := t.TempDir()

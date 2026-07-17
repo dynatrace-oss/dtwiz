@@ -359,7 +359,7 @@ func printK8sPreview(clusterName, distroDisplay, apiURL, manifest, helmCmd strin
 //   - distro:      detected Kubernetes distribution (e.g. "GKE", "EKS"); empty falls back to defaults
 //   - dryRun:      when true, only print what would be done
 func InstallKubernetes(envURL, token, clusterName, distro string, dryRun bool) error {
-	if err := refreshWindowsPath(); err != nil {
+	if err := installer.RefreshWindowsPath(); err != nil {
 		display.PrintWarning("kubernetes", err)
 	}
 

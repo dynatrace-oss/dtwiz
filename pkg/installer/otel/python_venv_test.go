@@ -265,6 +265,25 @@ func TestDetectPython_FallbackToPython(t *testing.T) {
 	}
 }
 
+func TestAllOnPath_SkipsEmptyAndRelativePathEntries(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses Unix shell stubs and PATH separators")
+	}
+	cwd := t.TempDir()
+	absoluteDir := t.TempDir()
+	t.Chdir(cwd)
+
+	createStubFile(t, filepath.Join(cwd, "python3"), "#!/bin/sh\necho unsafe\n", 0o755)
+	createStubFile(t, filepath.Join(absoluteDir, "python3"), "#!/bin/sh\necho safe\n", 0o755)
+	t.Setenv("PATH", strings.Join([]string{"", ".", absoluteDir}, string(os.PathListSeparator)))
+
+	got := allOnPath("python3")
+	want := []string{filepath.Join(absoluteDir, "python3")}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("allOnPath() = %q, want %q", got, want)
+	}
+}
+
 func TestDetectProjectVenvDir_AlternativeVenvNames(t *testing.T) {
 	for _, venvName := range []string{"venv", "env", ".env"} {
 		t.Run(venvName, func(t *testing.T) {
