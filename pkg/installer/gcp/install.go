@@ -158,10 +158,10 @@ func InstallGCP(envURL, platformToken string, dryRun bool, startTime time.Time) 
 // is a resumable partial install (from a run that failed between step 2 and step 6): its
 // object ID is returned so step 2 reuses it instead of creating a duplicate. More than one
 // incomplete connection is ambiguous and asks for a clean slate, same as a complete one.
-func gcpResumableConnection(conns []connRef) (string, error) {
+func gcpResumableConnection(conns []connRef, name string) (string, error) {
 	complete, incomplete := splitConnectionsByCompleteness(conns)
 	if len(complete) > 0 {
-		return "", fmt.Errorf("gcp connection '%s' already exists: run `dtwiz uninstall gcp` to remove it first", integrationName)
+		return "", fmt.Errorf("gcp connection '%s' already exists: run `dtwiz uninstall gcp` to remove it first", name)
 	}
 	switch len(incomplete) {
 	case 0:
@@ -169,7 +169,7 @@ func gcpResumableConnection(conns []connRef) (string, error) {
 	case 1:
 		return incomplete[0].objectID, nil
 	default:
-		return "", fmt.Errorf("found %d incomplete GCP connections named %q: run `dtwiz uninstall gcp` then `dtwiz install gcp` for a clean single integration", len(incomplete), integrationName)
+		return "", fmt.Errorf("found %d incomplete GCP connections named %q: run `dtwiz uninstall gcp` then `dtwiz install gcp` for a clean single integration", len(incomplete), name)
 	}
 }
 
@@ -187,16 +187,18 @@ func installGCPWithRunner(
 		return err
 	}
 
-	existing, err := dtc.findAllConnections(integrationName)
+	name := integrationNameForEnv(envURL)
+
+	existing, err := dtc.findAllConnections(name)
 	if err != nil {
 		return fmt.Errorf("checking existing connection: %w", err)
 	}
 	// Complete connection found: reconcile monitoring config in place; don't recreate the SA/bindings.
-	if _, err := selectUpdatableConnection(existing); err == nil {
+	if _, err := selectUpdatableConnection(existing, name); err == nil {
 		fmt.Println("\n  Note: prerequisites already exist — running update instead of a fresh install.")
 		return updateGCPWithRunner(envURL, platformToken, dryRun, startTime, runner, dtc)
 	}
-	resumeConnID, err := gcpResumableConnection(existing)
+	resumeConnID, err := gcpResumableConnection(existing, name)
 	if err != nil {
 		return err
 	}
@@ -211,12 +213,12 @@ func installGCPWithRunner(
 	}
 
 	cfg := gcpConfig{
-		ConnectionName:     integrationName,
-		ConfigurationName:  integrationName,
+		ConnectionName:     name,
+		ConfigurationName:  name,
 		EnvURL:             envURL,
 		PlatformToken:      platformToken,
 		ProjectID:          projectID,
-		ServiceAccountName: serviceAccountName,
+		ServiceAccountName: name,
 		DTServiceAccount:   dtPrincipal,
 		ConnectionID:       resumeConnID,
 	}

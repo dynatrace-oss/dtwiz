@@ -51,14 +51,10 @@ func (cfg gcpConfig) serviceAccountEmail() string {
 }
 
 const (
-	// integrationName is the fixed name shared by the DT connection, the DT
-	// monitoring configuration, and the Google Cloud service account.
-	integrationName = "dtwiz-gcp"
-
-	// serviceAccountName is the fixed Google Cloud service-account ID (6-30 chars,
-	// lowercase letters, digits and hyphens). Its email is
-	// <serviceAccountName>@<project>.iam.gserviceaccount.com.
-	serviceAccountName = "dtwiz-gcp"
+	// integrationPrefix is the stable prefix shared by all dtwiz-created GCP
+	// resources. The full name is integrationPrefix + "-" + DT tenant ID so that
+	// each Dynatrace environment gets its own SA and connection.
+	integrationPrefix = "dtwiz-gcp"
 
 	// serviceAccountDisplayName is the human-readable display name of the SA.
 	serviceAccountDisplayName = "Dynatrace monitoring account"
@@ -69,6 +65,13 @@ const (
 	// tokenCreatorRole is granted to the Dynatrace principal on the SA (impersonation).
 	tokenCreatorRole = "roles/iam.serviceAccountTokenCreator"
 )
+
+// integrationNameForEnv returns the env-scoped integration name for a given DT
+// environment URL. Each DT environment gets its own GCP service account and connection
+// so that multiple environments pointing at the same GCP project don't collide.
+func integrationNameForEnv(envURL string) string {
+	return integrationPrefix + "-" + installer.ExtractTenantID(envURL)
+}
 
 // requiredAPIs are enabled on the active project before monitoring can collect data.
 // This list matches Dynatrace's own manual onboarding reference exactly — IAM-related

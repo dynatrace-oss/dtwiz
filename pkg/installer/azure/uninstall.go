@@ -88,8 +88,6 @@ func UninstallAzure(envURL, platformToken string, dryRun bool) error {
 }
 
 func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc dtclient) error {
-	// Use the prefix for DT resource discovery so that resources created with the
-	// old fixed name ("dtwiz-azure") and the current env-scoped name are both found.
 	var monConfigIDs []string
 	var conns []connRef
 	if err := installer.RunConcurrently(
@@ -98,24 +96,41 @@ func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc 
 	); err != nil {
 		return err
 	}
-	// Search Azure AD under both the current env-scoped name and the legacy fixed
-	// name so that app registrations from older installs are also cleaned up.
-	clientIDs := azureGatherClientIDs(runner, conns, []string{integrationNameForEnv(envURL), integrationPrefix}, envURL)
 
-	if len(monConfigIDs) == 0 && len(conns) == 0 && len(clientIDs) == 0 {
+	currentName := integrationNameForEnv(envURL)
+
+	// Current: IDs from DT connections + any orphaned app under the current env-scoped name.
+	// Failures when deleting these are hard errors.
+	currentClientIDs := azureGatherClientIDs(runner, conns, []string{currentName}, envURL)
+
+	// Legacy: orphaned apps found only under the old fixed name, excluding current IDs.
+	// Failures when deleting these are warnings only — the resource may be owned by
+	// someone else and the user may lack permission to delete it.
+	currentSet := make(map[string]bool, len(currentClientIDs))
+	for _, id := range currentClientIDs {
+		currentSet[id] = true
+	}
+	var legacyClientIDs []string
+	for _, id := range azureGatherClientIDs(runner, nil, []string{integrationPrefix}, envURL) {
+		if !currentSet[id] {
+			legacyClientIDs = append(legacyClientIDs, id)
+		}
+	}
+
+	allClientIDs := append(currentClientIDs, legacyClientIDs...)
+	if len(monConfigIDs) == 0 && len(conns) == 0 && len(allClientIDs) == 0 {
 		fmt.Println("  No Azure Monitor integration resources found; nothing to uninstall.")
 		return nil
 	}
 
-	displayName := integrationNameForEnv(envURL)
-	azureUninstallPrintPreview(envURL, monConfigIDs, conns, clientIDs, displayName, displayName)
+	azureUninstallPrintPreview(envURL, monConfigIDs, conns, allClientIDs, currentName, currentName)
 
 	if proceed, err := installer.ShouldProceed(dryRun, "Uninstall"); !proceed {
 		return err
 	}
 
-	totalSteps := uninstallStepCount(monConfigIDs, conns, clientIDs)
-	if err := runUninstallSteps(0, totalSteps, monConfigIDs, conns, clientIDs, runner, dtc); err != nil {
+	total := uninstallStepCount(monConfigIDs, conns, currentClientIDs, legacyClientIDs)
+	if err := runUninstallSteps(0, total, monConfigIDs, conns, currentClientIDs, legacyClientIDs, runner, dtc); err != nil {
 		return err
 	}
 
@@ -125,13 +140,14 @@ func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc 
 	return nil
 }
 
-func uninstallStepCount(monConfigIDs []string, conns []connRef, clientIDs []string) int {
+func uninstallStepCount(monConfigIDs []string, conns []connRef, currentClientIDs, legacyClientIDs []string) int {
 	// 2 steps per app (role assignment delete + app registration delete).
-	return len(monConfigIDs) + len(clientIDs)*2 + len(conns)
+	return len(monConfigIDs) + (len(currentClientIDs)+len(legacyClientIDs))*2 + len(conns)
 }
 
 // runUninstallSteps executes deletion steps; offset shifts step numbers when called mid-sequence (e.g. reinstall).
-func runUninstallSteps(offset, total int, monConfigIDs []string, conns []connRef, clientIDs []string, runner cmdRunner, dtc dtclient) error {
+// currentClientIDs failures are hard errors; legacyClientIDs failures are warnings only.
+func runUninstallSteps(offset, total int, monConfigIDs []string, conns []connRef, currentClientIDs, legacyClientIDs []string, runner cmdRunner, dtc dtclient) error {
 	step := offset
 	var errs []error
 
@@ -146,7 +162,7 @@ func runUninstallSteps(offset, total int, monConfigIDs []string, conns []connRef
 		display.ColorOK.Println("  ✓ Monitoring configuration deleted")
 	}
 
-	for _, clientID := range clientIDs {
+	for _, clientID := range currentClientIDs {
 		step++
 		fmt.Printf("  Step %d/%d: Delete Monitoring Reader role assignment...\n", step, total)
 		if err := azureDeleteRoleAssignment(runner, clientID); err != nil {
@@ -161,6 +177,24 @@ func runUninstallSteps(offset, total int, monConfigIDs []string, conns []connRef
 		if err := azureDeleteApp(runner, clientID); err != nil {
 			display.ColorWarning.Printf("  Warning: step %d failed: %v\n", step, err)
 			errs = append(errs, fmt.Errorf("step %d: %w", step, err))
+		} else {
+			display.ColorOK.Println("  ✓ App Registration deleted (Service Principal + federated credential removed)")
+		}
+	}
+
+	for _, clientID := range legacyClientIDs {
+		step++
+		fmt.Printf("  Step %d/%d: Delete Monitoring Reader role assignment (legacy)...\n", step, total)
+		if err := azureDeleteRoleAssignment(runner, clientID); err != nil {
+			display.ColorWarning.Printf("  Warning: step %d skipped: legacy resource cleanup failed (continuing): %v\n", step, err)
+		} else {
+			display.ColorOK.Println("  ✓ Role assignment deleted")
+		}
+
+		step++
+		fmt.Printf("  Step %d/%d: Delete Azure App Registration (legacy)...\n", step, total)
+		if err := azureDeleteApp(runner, clientID); err != nil {
+			display.ColorWarning.Printf("  Warning: step %d skipped: legacy resource cleanup failed (continuing): %v\n", step, err)
 		} else {
 			display.ColorOK.Println("  ✓ App Registration deleted (Service Principal + federated credential removed)")
 		}

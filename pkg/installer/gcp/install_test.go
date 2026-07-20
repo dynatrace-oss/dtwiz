@@ -585,11 +585,11 @@ func TestGCPStep7Fails(t *testing.T) {
 
 func TestGCPBuildStepCommands_StepCount(t *testing.T) {
 	cfg := gcpConfig{
-		ConnectionName:     integrationName,
-		ConfigurationName:  integrationName,
+		ConnectionName:     "dtwiz-gcp-abc",
+		ConfigurationName:  "dtwiz-gcp-abc",
 		EnvURL:             "https://abc.live.dynatrace.com",
 		ProjectID:          "my-project",
-		ServiceAccountName: serviceAccountName,
+		ServiceAccountName: "dtwiz-gcp-abc",
 	}
 	if got := len(gcpBuildStepCommands(cfg)); got != 7 {
 		t.Errorf("expected 7 steps, got %d", got)
@@ -598,11 +598,11 @@ func TestGCPBuildStepCommands_StepCount(t *testing.T) {
 
 func TestGCPBuildStepCommands_PlaceholderWhenPrincipalEmpty(t *testing.T) {
 	cfg := gcpConfig{
-		ConnectionName:     integrationName,
-		ConfigurationName:  integrationName,
+		ConnectionName:     "dtwiz-gcp-abc",
+		ConfigurationName:  "dtwiz-gcp-abc",
 		EnvURL:             "https://abc.live.dynatrace.com",
 		ProjectID:          "my-project",
-		ServiceAccountName: serviceAccountName,
+		ServiceAccountName: "dtwiz-gcp-abc",
 		// DTServiceAccount intentionally empty
 	}
 	steps := gcpBuildStepCommands(cfg)
@@ -613,11 +613,11 @@ func TestGCPBuildStepCommands_PlaceholderWhenPrincipalEmpty(t *testing.T) {
 
 func TestGCPBuildStepCommands_RealValues(t *testing.T) {
 	cfg := gcpConfig{
-		ConnectionName:      integrationName,
-		ConfigurationName:   integrationName,
+		ConnectionName:      "dtwiz-gcp-abc",
+		ConfigurationName:   "dtwiz-gcp-abc",
 		EnvURL:              "https://abc.live.dynatrace.com",
 		ProjectID:           "my-project",
-		ServiceAccountName:  serviceAccountName,
+		ServiceAccountName:  "dtwiz-gcp-abc",
 		ServiceAccountEmail: "dtwiz-gcp@my-project.iam.gserviceaccount.com",
 		DTServiceAccount:    "dt-monitor@dynatrace-prod.iam.gserviceaccount.com",
 	}
@@ -628,13 +628,13 @@ func TestGCPBuildStepCommands_RealValues(t *testing.T) {
 		want string
 	}{
 		{1, "compute.googleapis.com"},
-		{2, integrationName},
-		{3, serviceAccountName},
+		{2, "dtwiz-gcp-abc"},
+		{3, "dtwiz-gcp-abc"},
 		{4, "roles/viewer"},
 		{5, "dt-monitor@dynatrace-prod.iam.gserviceaccount.com"},
 		{5, "roles/iam.serviceAccountTokenCreator"},
 		{6, "dtwiz-gcp@my-project.iam.gserviceaccount.com"},
-		{7, integrationName},
+		{7, "dtwiz-gcp-abc"},
 	}
 	for _, tc := range checks {
 		if !strings.Contains(steps[tc.step-1], tc.want) {
@@ -649,12 +649,12 @@ func TestGCPMaskToken(t *testing.T) {
 	const secret = "dt0s16.verysecrettoken.abc"
 	preview := captureStdout(t, func() {
 		gcpPrintPreview(gcpConfig{
-			ConnectionName:     integrationName,
-			ConfigurationName:  integrationName,
+			ConnectionName:     "dtwiz-gcp-abc",
+			ConfigurationName:  "dtwiz-gcp-abc",
 			EnvURL:             "https://abc.live.dynatrace.com",
 			PlatformToken:      secret,
 			ProjectID:          "my-project",
-			ServiceAccountName: serviceAccountName,
+			ServiceAccountName: "dtwiz-gcp-abc",
 			DTServiceAccount:   "dt-monitor@dynatrace-prod.iam.gserviceaccount.com",
 		})
 	})
