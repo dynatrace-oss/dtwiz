@@ -10,11 +10,13 @@ left orphaned resources that a retry would hit again.
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Give each Dynatrace environment its own stable, predictable resource name.
 - Keep uninstall able to clean up resources from both old and new naming schemes.
 - Make legacy cleanup non-fatal.
 
 **Non-Goals:**
+
 - Add a user-facing flag to override the generated name.
 - Fix underlying cloud permission gaps (separate concern).
 
