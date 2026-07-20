@@ -28,13 +28,22 @@ type azureConfig struct {
 }
 
 const (
-	// integrationName is the fixed name shared by the DT connection, the DT
-	// monitoring configuration, and the Azure App Registration / Service Principal.
-	integrationName = "dtwiz-azure"
+	// integrationPrefix is the base name prefix for all dtwiz Azure resources.
+	// The actual integration name includes a subscription-derived suffix — use
+	// integrationNameForSubscription to build the full name.
+	integrationPrefix = "dtwiz-azure"
 
-	// fedCredName is the fixed name of the Entra federated credential.
+	// fedCredName is the fixed name of the Entra federated credential within the App Registration.
 	fedCredName = "dtwiz-azure-Federated-Credential"
 )
+
+// integrationNameForEnv returns the integration name for the given Dynatrace
+// environment URL. The DT tenant ID (first DNS label of the environment URL,
+// e.g. "fds1499d" from "fds1499d.apps.dynatracelabs.com") is appended so
+// the name is stable, human-readable, and unique per DT environment.
+func integrationNameForEnv(envURL string) string {
+	return integrationPrefix + "-" + installer.ExtractTenantID(envURL)
+}
 
 // realRunner is the production cmdRunner implementation.
 var realRunner = installer.RealRunner

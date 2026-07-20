@@ -109,7 +109,7 @@ func (e *ExtensionClient) FindAllMonitoringConfigs(extensionName, name string) (
 		if err := json.Unmarshal(item.Value, &val); err != nil {
 			continue
 		}
-		if desc, _ := val["description"].(string); desc == name {
+		if desc, _ := val["description"].(string); strings.HasPrefix(desc, name) {
 			logger.Debug("found monitoring config", "objectId", item.ObjectID, "name", name)
 			ids = append(ids, item.ObjectID)
 		}

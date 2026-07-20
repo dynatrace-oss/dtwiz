@@ -114,7 +114,7 @@ func (d *sdkDTClient) findAllConnections(name string) ([]connRef, error) {
 	var refs []connRef
 	for _, item := range list.Items {
 		n, _ := item.Value["name"].(string)
-		if n != name {
+		if !strings.HasPrefix(n, name) {
 			continue
 		}
 		appID := ""

@@ -19,23 +19,23 @@ func ConnectionExists(envURL, platformToken string) (bool, error) {
 }
 
 func connectionExistsWithClient(dtc dtclient) (bool, error) {
-	conns, err := dtc.findAllConnections(integrationName)
+	conns, err := dtc.findAllConnections(integrationPrefix)
 	return len(conns) > 0, err
 }
 
-// MonitoringConfigExists reports whether an Azure monitoring configuration named integrationName exists.
+// MonitoringConfigExists reports whether an Azure monitoring configuration exists.
 func MonitoringConfigExists(envURL, platformToken string) (bool, error) {
 	dtc, err := newSDKDTClient(envURL, platformToken)
 	if err != nil {
 		return false, err
 	}
-	ids, err := dtc.findAllMonitoringConfigs(integrationName)
+	ids, err := dtc.findAllMonitoringConfigs(integrationPrefix)
 	return len(ids) > 0, err
 }
 
 // azureGatherClientIDs collects client IDs to delete. Connection-bound IDs are trusted directly;
 // display-name matches are verified via federated credential (Entra names aren't unique).
-func azureGatherClientIDs(runner cmdRunner, conns []connRef, name, envURL string) []string {
+func azureGatherClientIDs(runner cmdRunner, conns []connRef, names []string, envURL string) []string {
 	set := make(map[string]bool)
 	for _, c := range conns {
 		if c.clientID != "" {
@@ -43,29 +43,31 @@ func azureGatherClientIDs(runner cmdRunner, conns []connRef, name, envURL string
 		}
 	}
 
-	ids, err := azureListAppIDsByName(runner, name)
-	if err != nil {
-		logger.Debug("az app list failed during cleanup, continuing", "err", err)
+	issuer, issuerErr := azureIssuerURL(envURL)
+	if issuerErr != nil {
+		display.ColorWarning.Printf("  Warning: skipping App Registration display-name cleanup: %v\n", issuerErr)
 	} else {
-		issuer, err := azureIssuerURL(envURL)
-		if err != nil {
-			display.ColorWarning.Printf("  Warning: skipping App Registration display-name cleanup: %v\n", err)
-			ids = nil
-		}
-		for _, id := range ids {
-			if set[id] {
-				continue // already trusted via a connection
-			}
-			ok, verr := azureAppHasDtwizFedCred(runner, id, issuer)
-			if verr != nil {
-				display.ColorWarning.Printf("  Warning: skipping App Registration %s named %q: could not verify it was created by dtwiz (%v)\n", id, name, verr)
+		for _, name := range names {
+			ids, err := azureListAppIDsByName(runner, name)
+			if err != nil {
+				logger.Debug("az app list failed during cleanup, continuing", "name", name, "err", err)
 				continue
 			}
-			if !ok {
-				display.ColorWarning.Printf("  Warning: skipping App Registration %s named %q: it lacks the dtwiz federated credential, so it was not created by dtwiz\n", id, name)
-				continue
+			for _, id := range ids {
+				if set[id] {
+					continue // already trusted via a connection
+				}
+				ok, verr := azureAppHasDtwizFedCred(runner, id, issuer)
+				if verr != nil {
+					display.ColorWarning.Printf("  Warning: skipping App Registration %s named %q: could not verify it was created by dtwiz (%v)\n", id, name, verr)
+					continue
+				}
+				if !ok {
+					display.ColorWarning.Printf("  Warning: skipping App Registration %s named %q: it lacks the dtwiz federated credential, so it was not created by dtwiz\n", id, name)
+					continue
+				}
+				set[id] = true
 			}
-			set[id] = true
 		}
 	}
 
@@ -86,23 +88,27 @@ func UninstallAzure(envURL, platformToken string, dryRun bool) error {
 }
 
 func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc dtclient) error {
+	// Use the prefix for DT resource discovery so that resources created with the
+	// old fixed name ("dtwiz-azure") and the current env-scoped name are both found.
 	var monConfigIDs []string
 	var conns []connRef
-	err := installer.RunConcurrently(
-		func() (err error) { monConfigIDs, err = dtc.findAllMonitoringConfigs(integrationName); return },
-		func() (err error) { conns, err = dtc.findAllConnections(integrationName); return },
-	)
-	if err != nil {
+	if err := installer.RunConcurrently(
+		func() (err error) { monConfigIDs, err = dtc.findAllMonitoringConfigs(integrationPrefix); return },
+		func() (err error) { conns, err = dtc.findAllConnections(integrationPrefix); return },
+	); err != nil {
 		return err
 	}
-	clientIDs := azureGatherClientIDs(runner, conns, integrationName, envURL)
+	// Search Azure AD under both the current env-scoped name and the legacy fixed
+	// name so that app registrations from older installs are also cleaned up.
+	clientIDs := azureGatherClientIDs(runner, conns, []string{integrationNameForEnv(envURL), integrationPrefix}, envURL)
 
 	if len(monConfigIDs) == 0 && len(conns) == 0 && len(clientIDs) == 0 {
 		fmt.Println("  No Azure Monitor integration resources found; nothing to uninstall.")
 		return nil
 	}
 
-	azureUninstallPrintPreview(envURL, monConfigIDs, conns, clientIDs, integrationName, integrationName)
+	displayName := integrationNameForEnv(envURL)
+	azureUninstallPrintPreview(envURL, monConfigIDs, conns, clientIDs, displayName, displayName)
 
 	if proceed, err := installer.ShouldProceed(dryRun, "Uninstall"); !proceed {
 		return err
