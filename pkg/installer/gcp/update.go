@@ -60,6 +60,10 @@ func updateGCPWithRunner(
 		return err
 	}
 
+	if err := dtc.installExtension(); err != nil {
+		return fmt.Errorf("installing extension %s: %w", extensionName, err)
+	}
+
 	if err := reconcileMonitoring(cfg, monConfigIDs, dtc); err != nil {
 		return err
 	}

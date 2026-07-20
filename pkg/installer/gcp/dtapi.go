@@ -62,6 +62,7 @@ const (
 	dtPrincipalSchemaID = "builtin:hyperscaler-authentication.connections.gcp-dynatrace-principal"
 	connectionType      = "serviceAccountImpersonation"
 	extensionName       = "com.dynatrace.extension.da-gcp"
+	extensionVersion    = "1.0.5"
 	monitoringScope     = "integration-gcp"
 
 	gcpFeatureSetEnumKey = "FeatureSetsType"
@@ -92,6 +93,7 @@ func splitConnectionsByCompleteness(conns []connRef) (complete, incomplete []con
 }
 
 type dtclient interface {
+	installExtension() error
 	createConnection(name string) (objectID string, err error)
 	// dtServiceAccount returns the Dynatrace principal granted impersonation rights.
 	dtServiceAccount() (email string, err error)
@@ -115,6 +117,14 @@ func newSDKDTClient(envURL, platformToken string) (*sdkDTClient, error) {
 		return nil, err
 	}
 	return &sdkDTClient{ExtensionClient: ec}, nil
+}
+
+func (d *sdkDTClient) installExtension() error {
+	if _, err := d.LatestExtensionVersion(extensionName); err == nil {
+		logger.Debug("extension already installed", "extension", extensionName)
+		return nil
+	}
+	return d.InstallExtension(extensionName, extensionVersion)
 }
 
 func (d *sdkDTClient) createConnection(name string) (string, error) {

@@ -46,6 +46,28 @@ func NewExtensionClient(envURL, platformToken string) (*ExtensionClient, error) 
 	}, nil
 }
 
+// InstallExtension activates a Dynatrace extension version. HTTP 400 and 409
+// are treated as success (extension already installed) so install/update flows
+// can safely reconcile prerequisites. The SDK wraps 409 into a named error
+// rather than *httpclient.APIError, so both the status-code and the string
+// check are required to cover all SDK-surfaced forms of "already installed".
+func (e *ExtensionClient) InstallExtension(extensionName, version string) error {
+	logger.Debug("installing extension", "extension", extensionName, "version", version)
+	installed, err := e.Extension.InstallFromHub(context.Background(), extensionName, version)
+	if err != nil {
+		var apiErr *httpclient.APIError
+		alreadyInstalled := (errors.As(err, &apiErr) && (apiErr.StatusCode == 400 || apiErr.StatusCode == 409)) ||
+			strings.Contains(err.Error(), "already installed")
+		if alreadyInstalled {
+			logger.Debug("extension already installed", "extension", extensionName, "version", version)
+			return nil
+		}
+		return fmt.Errorf("install extension %s@%s: %w", extensionName, version, err)
+	}
+	logger.Debug("extension installed", "extension", installed.ExtensionName, "version", installed.Version)
+	return nil
+}
+
 // DeleteConnection deletes a Settings object by ID; a 404 (already gone) is treated as success.
 func (e *ExtensionClient) DeleteConnection(objectID string) error {
 	obj, err := e.Settings.Get(context.Background(), objectID)

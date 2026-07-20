@@ -82,6 +82,43 @@ func TestExtensionClientDeleteConnection_404IsIdempotent(t *testing.T) {
 	}
 }
 
+// ─── InstallExtension ───────────────────────────────────────────────────────
+
+func TestExtensionClientInstallExtension_HappyPath(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %q, want POST", r.Method)
+		}
+		wantPath := "/platform/extensions/v2/extensions/" + testExtensionName
+		if r.URL.Path != wantPath {
+			t.Errorf("path = %q, want %q", r.URL.Path, wantPath)
+		}
+		if got := r.URL.Query().Get("version"); got != "1.2.3" {
+			t.Errorf("version query = %q, want 1.2.3", got)
+		}
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"extensionName":"` + testExtensionName + `","version":"1.2.3"}`))
+	}))
+	defer srv.Close()
+
+	if err := newTestExtensionClient(t, srv.URL).InstallExtension(testExtensionName, "1.2.3"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestExtensionClientInstallExtension_AlreadyInstalledIsSuccess(t *testing.T) {
+	for _, status := range []int{http.StatusBadRequest, http.StatusConflict} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(status)
+			_, _ = w.Write([]byte(`{"error":{"message":"extension already installed"}}`))
+		}))
+		if err := newTestExtensionClient(t, srv.URL).InstallExtension(testExtensionName, "1.2.3"); err != nil {
+			t.Errorf("status %d should be idempotent success, got: %v", status, err)
+		}
+		srv.Close()
+	}
+}
+
 // ─── LatestExtensionVersion ──────────────────────────────────────────────────
 
 func TestExtensionClientLatestExtensionVersion_HappyPath(t *testing.T) {

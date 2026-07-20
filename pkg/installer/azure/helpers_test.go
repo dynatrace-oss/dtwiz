@@ -72,6 +72,9 @@ func stubExecLookPath(t *testing.T) func() {
 // noopDTClient is used in tests that never reach the DT API calls.
 type noopDTClient struct{}
 
+func (noopDTClient) installExtension() error {
+	return fmt.Errorf("unexpected installExtension call")
+}
 func (noopDTClient) createConnection(string) (string, error) {
 	return "", fmt.Errorf("unexpected createConnection call")
 }
@@ -94,6 +97,8 @@ type fakeDTClient struct {
 	connObjectID     string
 	connErr          error
 	createConnCalled bool
+	installExtErr    error
+	installExtCalled bool
 	updateErr        error
 	monErr           error
 
@@ -128,6 +133,11 @@ func happyUninstallFakeDTClient() *fakeDTClient {
 		findConnClientID: "client-id-000",
 		findMonConfigID:  "mon-config-001",
 	}
+}
+
+func (f *fakeDTClient) installExtension() error {
+	f.installExtCalled = true
+	return f.installExtErr
 }
 
 func (f *fakeDTClient) createConnection(string) (string, error) {

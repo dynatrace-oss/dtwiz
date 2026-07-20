@@ -69,8 +69,33 @@ func TestGCPHappyPath(t *testing.T) {
 	if dtc.monCalledWith.connObjectID == "" {
 		t.Error("expected createMonitoring to be called")
 	}
+	if !dtc.installExtCalled {
+		t.Error("expected extension to be installed before createMonitoring")
+	}
 	if dtc.monCalledWith.projectID != "my-project" {
 		t.Errorf("createMonitoring projectID = %q, want my-project", dtc.monCalledWith.projectID)
+	}
+}
+
+func TestGCPInstallExtensionFailureStopsBeforeMonitoringConfig(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	dtc := happyFakeDTClient()
+	dtc.installExtErr = fmt.Errorf("extension install failed")
+	err := captureStdoutErr(func() error {
+		return installGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, happyGcloudRunner(nil), noSleep, dtc)
+	})
+	if err == nil {
+		t.Fatal("expected extension install error, got nil")
+	}
+	if !strings.Contains(err.Error(), "installing extension") {
+		t.Errorf("expected extension context in error, got: %v", err)
+	}
+	if dtc.createMonCalled {
+		t.Error("createMonitoring must not run when extension installation fails")
 	}
 }
 

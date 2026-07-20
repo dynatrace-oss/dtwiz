@@ -262,6 +262,11 @@ func runInstallSteps(cfg azureConfig, runner cmdRunner, sleeper func(time.Durati
 	}
 	display.ColorOK.Println("  ✓ Connection updated")
 
+	if err := dtc.installExtension(); err != nil {
+		azurePartialFailureHint(cfg, completed)
+		return fmt.Errorf("installing extension %s: %w", extensionName, err)
+	}
+
 	fmt.Printf("  Step 7/%d: Create Azure monitoring configuration...\n", total)
 	if err := dtc.createMonitoring(cfg.ConfigurationName, connObjectID, cfg.ClientID, cfg.SubscriptionID); err != nil {
 		azurePartialFailureHint(cfg, completed)

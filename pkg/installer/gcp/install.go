@@ -307,6 +307,11 @@ func runInstallSteps(cfg gcpConfig, runner cmdRunner, sleeper func(time.Duration
 	}
 	display.ColorOK.Println("  ✓ Connection updated")
 
+	if err := dtc.installExtension(); err != nil {
+		gcpPartialFailureHint(cfg, completed)
+		return fmt.Errorf("installing extension %s: %w", extensionName, err)
+	}
+
 	fmt.Printf("  Step 7/%d: Create GCP monitoring configuration...\n", total)
 	if err := dtc.createMonitoring(cfg.ConfigurationName, connObjectID, saEmail, cfg.ProjectID); err != nil {
 		gcpPartialFailureHint(cfg, completed)

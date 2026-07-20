@@ -79,6 +79,33 @@ func TestAzureHappyPath(t *testing.T) {
 	if dtc.monCalledWith.connObjectID == "" {
 		t.Error("expected createMonitoring to be called")
 	}
+	if !dtc.installExtCalled {
+		t.Error("expected extension to be installed before createMonitoring")
+	}
+}
+
+func TestAzureInstallExtensionFailureStopsBeforeMonitoringConfig(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	dtc := happyFakeDTClient()
+	dtc.installExtErr = fmt.Errorf("extension install failed")
+	fr := buildHappyPathAzRunner(t)
+
+	err := captureStdoutErr(func() error {
+		return installAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, fr.run, noSleep, dtc)
+	})
+	if err == nil {
+		t.Fatal("expected extension install error, got nil")
+	}
+	if !strings.Contains(err.Error(), "installing extension") {
+		t.Errorf("expected extension context in error, got: %v", err)
+	}
+	if dtc.createMonCalled {
+		t.Error("createMonitoring must not run when extension installation fails")
+	}
 }
 
 func TestAzureDryRun(t *testing.T) {
