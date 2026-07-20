@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-20
+
+### Fixed
+
+- `install azure` / `install gcp`: Dynatrace extension is now installed before monitoring configuration is created; handles tenants with no extensions gracefully
+
 ## [0.2.30] - 2026-07-16
 
 ### Changed
@@ -432,7 +438,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.30...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.30...v1.0.0
 [0.2.30]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.29...v0.2.30
 [0.2.29]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.28...v0.2.29
 [0.2.28]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.27...v0.2.28
