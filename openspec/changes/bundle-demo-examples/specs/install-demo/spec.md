@@ -2,9 +2,9 @@
 
 ## REMOVED Requirements
 
-### Requirement: Demo app download and extraction
+### Requirement: Demo app download and extraction from third-party repo
 
-**Reason**: The schnitzel app is now embedded in the dtwiz binary using `go:embed`. If `~/.dtwiz/examples/schnitzel/` does not exist, the binary extracts it locally. No network download is needed.
+**Reason**: The schnitzel app is now published as a dtwiz release asset. If `~/.dtwiz/examples/schnitzel/` does not exist, the binary downloads it from the current dtwiz GitHub release. The external third-party repository dependency is removed.
 
 **Migration**: No user-facing migration needed. The demo command handles extraction automatically.
 
@@ -20,14 +20,14 @@ Before executing any action, `install demo` SHALL display a compact plan and pro
 
 - **WHEN** `~/.dtwiz/examples/schnitzel/` does not exist
 - **AND** `python3` is not on PATH
-- **THEN** the plan SHALL list the steps: extract schnitzel from binary, install Python, install OTel Collector, instrument the demo app
+- **THEN** the plan SHALL list the steps: download schnitzel from release, install Python, install OTel Collector, instrument the demo app
 - **AND** end with a single `Proceed with installation? [Y/n]` prompt (default yes)
 
 #### Scenario: Path missing, python present
 
 - **WHEN** `~/.dtwiz/examples/schnitzel/` does not exist
 - **AND** `python3` is already on PATH
-- **THEN** the plan SHALL list the steps: extract schnitzel from binary, install OTel Collector, instrument the demo app
+- **THEN** the plan SHALL list the steps: download schnitzel from release, install OTel Collector, instrument the demo app
 - **AND** omit the Python install step
 
 #### Scenario: Path present, python not present
@@ -56,16 +56,16 @@ Before executing any action, `install demo` SHALL display a compact plan and pro
 
 After confirming, `install demo` SHALL invoke the OTel Collector installation followed by Python auto-instrumentation, targeting `~/.dtwiz/examples/schnitzel/`.
 
-#### Scenario: Path present — no extraction needed
+#### Scenario: Path present, no download needed
 
 - **WHEN** `~/.dtwiz/examples/schnitzel/` exists on the user's machine
 - **THEN** `InstallOtelCollector` SHALL be called with the absolute bundled path and `AutoConfirm = true`
 - **AND** no project selection prompts SHALL be shown to the user
 
-#### Scenario: Path missing — extract from binary then proceed
+#### Scenario: Path missing, download from release then proceed
 
 - **WHEN** `~/.dtwiz/examples/schnitzel/` does not exist
-- **THEN** the binary SHALL extract the embedded schnitzel files to `~/.dtwiz/examples/schnitzel/`
+- **THEN** the binary SHALL download `dtwiz-examples.tar.gz` from the current dtwiz release and extract it to `~/.dtwiz/examples/`
 - **AND** `InstallOtelCollector` SHALL then be called with that path and `AutoConfirm = true`
 
 #### Scenario: Python installation fails

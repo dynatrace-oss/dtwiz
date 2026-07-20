@@ -2,31 +2,32 @@
 
 ## Context
 
-The demo install flow currently fetches the schnitzel app from `github.com/dietermayrhofer/schnitzel` at runtime. This means the demo breaks if that repo moves or is unavailable, and the version of the example app is not tied to the dtwiz version. The schnitzel app is now maintained inside the dtwiz repo under `examples/schnitzel/`, so it can ship as part of the binary itself.
+The demo install flow currently fetches the schnitzel app from `github.com/dietermayrhofer/schnitzel` at runtime. This means the demo breaks if that repo moves or is unavailable, and the version of the example app is not tied to the dtwiz version. The schnitzel app is now maintained inside the dtwiz repo under `examples/schnitzel/`, so it can ship as part of the dtwiz release.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- Embed `examples/schnitzel/` in the dtwiz binary so the demo works without any network access to fetch the app
-- Extract to a fixed, predictable location when the path does not exist on disk
-- Remove all network-dependent demo setup code
+- Publish `examples/schnitzel/` as a release asset and download it on demand so the demo does not depend on any third-party repository
+- Save to a fixed location when the path does not exist on disk
+- Remove the dependency on the third-party schnitzel repository
 
 **Non-Goals:**
 
 - Starting the demo services automatically (users still run services manually)
-- Updating examples in place when dtwiz is upgraded (re-extraction replaces them)
+- Updating examples in place when dtwiz is upgraded (a re-download only happens when the path is absent)
 - Supporting multiple demo apps (only schnitzel for now)
 
 ## Decisions
 
-### `go:embed` over archive bundling or download fallback
+### Release asset download over `go:embed` or third-party download
 
-Embedding `examples/schnitzel/` directly in the binary using Go's `embed` package means the binary is fully self-contained. There is nothing to copy, download, or lose. As long as the dtwiz binary is on the machine, the demo can always extract the example app from itself.
+Publishing all examples together as `dtwiz-examples.tar.gz` and downloading it on demand keeps the binary small for all users. Users who never run the demo get no extra weight. The download only happens when `~/.dtwiz/examples/schnitzel/` is absent. The URL is built from the binary's built-in version string, so the downloaded files always match the running version. Schnitzel is one example inside the archive; future examples can be added to the same asset without changing the download mechanism.
 
 Alternatives considered:
+- **`go:embed`**: Demo files baked into every binary. Works offline after first extraction. Rejected because it adds demo overhead to all users, including those who never use the demo.
 - **Goreleaser archive + install script copy**: examples ship in the release archive and install scripts copy them to `~/.dtwiz/examples/`. Works for users who use the install script, but fails silently for users who download the binary manually. Also adds complexity to the install scripts on all platforms.
-- **Download fallback from own release archive**: if `~/.dtwiz/examples/schnitzel/` is missing, download the release archive and extract examples from it. Requires a network call and downloading the full archive just to get a few KB of Python files.
+- **Download the full release archive**: if `~/.dtwiz/examples/schnitzel/` is missing, download the full release archive and extract examples from it. Rejected in favor of a small dedicated asset (`dtwiz-examples.tar.gz`) that contains only the example apps.
 
 ### Examples location: `~/.dtwiz/examples/` over CWD
 
@@ -45,6 +46,7 @@ Alternatives considered:
 
 ## Risks / Trade-offs
 
-- **Binary size**: embedding the schnitzel Python files adds a small amount to the binary size. The schnitzel app is a handful of small text files, so the impact is negligible.
-- **Stale examples after upgrade**: if a user upgrades dtwiz and the old `~/.dtwiz/examples/schnitzel/` already exists, it will not be automatically refreshed. The new binary embeds the new version, but the on-disk copy stays until the user deletes it or the demo detects a version mismatch. For now this is acceptable; version checking is out of scope.
-- **User edits to extracted files**: if a user modifies `~/.dtwiz/examples/schnitzel/`, those changes persist. A re-extraction only happens when the path is absent. This is the intended behavior.
+- **Binary size**: no change. Demo files are not embedded in the binary. They are downloaded only when needed.
+- **Network requirement when path is absent**: downloading the release asset requires a network call if `~/.dtwiz/examples/schnitzel/` is missing. This is not a new limitation: the demo already requires network access for OTel Collector setup and Dynatrace ingestion.
+- **Stale examples after upgrade**: if a user upgrades dtwiz and the old `~/.dtwiz/examples/schnitzel/` already exists, it will not be automatically refreshed. The new binary will download the updated asset only when the path is absent. For now this is acceptable; version checking is out of scope.
+- **User edits to downloaded files**: if a user modifies `~/.dtwiz/examples/schnitzel/`, those changes persist. A re-download only happens when the path is absent. This is the intended behavior.

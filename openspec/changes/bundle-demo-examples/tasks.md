@@ -4,20 +4,20 @@
 - [ ] 1.2 Add `examples/schnitzel/.gitignore` to exclude runtime artifacts (e.g. `__pycache__/`, `*.pyc`)
 - [ ] 1.3 Remove any macOS metadata files (`.DS_Store`) from `examples/`
 
-## 2. Embed examples in the binary
+## 2. Publish schnitzel examples as a release asset
 
-- [ ] 2.1 Create `examples/embed.go` with a package declaration and a `//go:embed schnitzel` directive that exposes the embedded filesystem as an exported variable (e.g. `var FS embed.FS`)
-- [ ] 2.2 Verify the package builds cleanly and the embedded FS is accessible from other packages
+- [ ] 2.1 Update `.goreleaser.yaml` to package the `examples/` directory as `dtwiz-examples.tar.gz` and publish it as an additional release asset
+- [ ] 2.2 Verify the release asset builds cleanly with `goreleaser build --snapshot` and the archive contains the expected files
 
-## 3. Rewrite demo.go to use embedded FS
+## 3. Rewrite demo.go to use release asset download
 
 - [ ] 3.1 Add `bundledDemoPath()` function that returns `~/.dtwiz/examples/schnitzel` using `os.UserHomeDir()`
-- [ ] 3.2 Add `extractEmbeddedDemo(dst string)` function that walks the embedded FS and writes all files to the destination path using `os.MkdirAll` and `os.WriteFile`
+- [ ] 3.2 Add `downloadDemoExamples(dst string)` function that constructs the `dtwiz-examples.tar.gz` release asset URL from the binary's built-in version string, downloads the archive, and extracts it to the destination path
 - [ ] 3.3 Remove `downloadAndExtractDemo()`, `extractZip()`, and the `demoZipURL` constant
 - [ ] 3.4 Remove `checkDemoExists()` (no longer needed)
-- [ ] 3.5 Remove unused imports (`archive/zip`, `net/http`) from `demo.go`
-- [ ] 3.6 Update `InstallDemo` to call `extractEmbeddedDemo` when `bundledDemoPath()` does not exist, then pass the path to `InstallOtelCollectorWithProject`
-- [ ] 3.7 Update `InstallDemo` plan preview to show the extraction step only when the path is missing
+- [ ] 3.5 Remove unused imports from `demo.go`
+- [ ] 3.6 Update `InstallDemo` to call `downloadDemoExamples` when `bundledDemoPath()` does not exist, then pass the path to `InstallOtelCollectorWithProject`
+- [ ] 3.7 Update `InstallDemo` plan preview to show the download step only when the path is missing
 
 ## 4. Remove experimental flag gating from demo
 
@@ -38,16 +38,16 @@
 ## 7. Unit tests
 
 - [ ] 7.1 Add `TestBundledDemoPath` to verify the function returns an absolute path ending in `schnitzel` on all platforms
-- [ ] 7.2 Add `TestExtractEmbeddedDemo` to verify extraction creates the expected directory structure in a temp directory
+- [ ] 7.2 Add `TestDownloadDemoExamples` to verify that the function constructs the correct release asset URL from the version string and extracts files to the expected directory structure in a temp directory (use an HTTP test server to serve a fixture archive)
 - [ ] 7.3 Remove `TestCheckDemoExists` (function is deleted)
 - [ ] 7.4 Add a test for `scanProjectDirs` verifying that a project in the bundled examples path is returned even when CWD is a different directory
 - [ ] 7.5 Add a test verifying both CWD and bundled examples projects appear exactly once in combined results
 
 ## 8. Integration tests
 
-- [ ] 8.1 With `~/.dtwiz/examples/schnitzel/` absent, run `dtwiz install demo --dry-run` and verify the plan output includes the extraction step and references no GitHub download URL
+- [ ] 8.1 With `~/.dtwiz/examples/schnitzel/` absent, run `dtwiz install demo --dry-run` and verify the plan output includes the download step referencing the current version's release asset URL
 - [ ] 8.2 With `~/.dtwiz/examples/schnitzel/` absent, run `dtwiz install demo` and verify the directory is created with the expected files before OTel setup begins
-- [ ] 8.3 With `~/.dtwiz/examples/schnitzel/` already present, run `dtwiz install demo --dry-run` and verify the extraction step is omitted from the plan
+- [ ] 8.3 With `~/.dtwiz/examples/schnitzel/` already present, run `dtwiz install demo --dry-run` and verify the download step is omitted from the plan
 - [ ] 8.4 In `pkg/installer/otel/runtime_scan.go`, add a test that creates a Python project marker in a temp directory representing `~/.dtwiz/examples/schnitzel/`, sets CWD to a different directory, calls `scanProjectDirs`, and verifies the bundled project is returned
 - [ ] 8.5 Extend the test from 8.4 to also place a project in CWD and verify both projects appear exactly once in the results
 
