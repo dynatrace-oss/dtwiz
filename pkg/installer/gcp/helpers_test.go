@@ -89,14 +89,14 @@ func (noopDTClient) deleteMonitoring(string) error                     { return 
 
 // fakeDTClient records calls for assertion.
 type fakeDTClient struct {
-	connObjectID     string
-	connErr          error
-	dtSAEmail        string
-	dtSAErr          error
+	connObjectID  string
+	connErr       error
+	dtSAEmail     string
+	dtSAErr       error
 	installExtErr error
 	callSeq       []string // ordered record of installExtension / createMonitoring / updateMonitoring calls
 	updateErr     error
-	monErr           error
+	monErr        error
 
 	// uninstall
 	findConnObjectID string
