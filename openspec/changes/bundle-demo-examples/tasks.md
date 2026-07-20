@@ -1,3 +1,5 @@
+# Tasks: bundle-demo-examples
+
 ## 1. Add schnitzel example to the repository
 
 - [ ] 1.1 Add `examples/schnitzel/` directory with all service files (`frontend/`, `order/`, `delivery/`, `loadgenerator/`, `requirements.txt`, `README.md`)
@@ -21,7 +23,7 @@
 
 ## 4. Remove experimental flag gating from demo
 
-- [ ] 4.1 In `cmd/install.go`, remove `Hidden: true` and the experimental check from `installDemoCmd` (lines ~376-379)
+- [ ] 4.1 In `cmd/install.go`, remove `Hidden: true` and the experimental check from `installDemoCmd`
 - [ ] 4.2 In `cmd/setup.go`, remove the `featureflags.IsEnabled(featureflags.Experimental)` guard from the `[d]` menu option and the input handler
 - [ ] 4.3 In `pkg/recommender/recommender.go`, remove the experimental gate from the demo option in the formatted recommendations output
 

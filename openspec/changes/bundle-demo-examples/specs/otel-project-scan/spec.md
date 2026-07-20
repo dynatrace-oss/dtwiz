@@ -7,6 +7,7 @@
 The scanner SHALL include `~/.dtwiz/examples/` as an additional scan root alongside the working directory. This ensures that the demo app is visible in the project list regardless of the directory the user runs `dtwiz` from.
 
 The bundled examples path is:
+
 - macOS and Linux: `$HOME/.dtwiz/examples/`
 - Windows: `%USERPROFILE%\.dtwiz\examples\`
 

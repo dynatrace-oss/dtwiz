@@ -30,4 +30,6 @@ The demo install flow downloads the schnitzel app from an external GitHub reposi
 - `.goreleaser.yaml`: updated to publish `dtwiz-examples.tar.gz` as a release asset
 - `pkg/installer/otel/demo.go`: third-party download functions removed, `InstallDemo` rewritten to download from the dtwiz release asset and use the bundled path
 - No changes to `scripts/install.sh` or `scripts/install.ps1`
-- No changes to CLI surface, flags, or auth
+- No changes to flags or auth
+- `dtwiz install demo` becomes visible in help output
+- The experimental guard is removed from the `[d]` demo option in `dtwiz setup` and from the demo entry in `dtwiz recommend`
