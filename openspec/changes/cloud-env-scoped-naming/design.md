@@ -29,11 +29,11 @@ Use the first DNS label of the Dynatrace environment URL as the name suffix
 in the URL the user knows, is stable across sessions, requires no extra CLI calls,
 and is unique per DT environment.
 
-Alternatives considered: cloud-specific IDs (subscription ID, project ID) — rejected
+Alternatives considered: cloud-specific IDs (subscription ID, project ID): rejected
 because they don't distinguish two DT environments on the same account; signed-in
-identity — rejected because it breaks for service accounts and CI pipelines.
+identity: rejected because it breaks for service accounts and CI pipelines.
 
-**GCP constraint**: GCP service account IDs must be 6–30 characters. `dtwiz-gcp-`
+**GCP constraint**: GCP service account IDs must be 6-30 characters. `dtwiz-gcp-`
 is 10 characters; typical 8-character tenant IDs give 18 total, well within the limit.
 
 ### Uninstall discovery
@@ -47,7 +47,7 @@ App Registrations found by display-name lookup are included only if they carry t
 dtwiz federated credential fingerprint.
 
 **GCP only**: the legacy service account email is derived deterministically from
-`integrationPrefix` and the GCP project ID — no extra CLI lookup needed.
+`integrationPrefix` and the GCP project ID; no extra CLI lookup needed.
 
 ### Legacy cleanup
 
@@ -58,7 +58,7 @@ something it doesn't own.
 ### Azure update order
 
 Run account lookup before DT resource discovery in the update flow. Account lookup
-is a preflight gate — if the user is not logged in there is no point querying DT.
+is a preflight gate: if the user is not logged in there is no point querying DT.
 
 ## Risks / Trade-offs
 

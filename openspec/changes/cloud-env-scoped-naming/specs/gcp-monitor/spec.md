@@ -18,4 +18,4 @@ Discover connections and monitoring configurations under the derived name. Requi
 
 Discover all connections and monitoring configurations matching the `dtwiz-gcp*` prefix to cover both the old fixed name and new env-scoped names.
 
-Service-account cleanup is split into **current** (env-scoped email + any connection-bound emails) and **legacy** (the fixed `dtwiz-gcp@<project>` email when not already in the current set). Current failures are fatal; legacy failures are warn-only.
+Service-account cleanup is split into **current** (env-scoped email + any connection-bound emails) and **legacy** (the `dtwiz-gcp`-named service account for the project when not already in the current set). Current failures are fatal; legacy failures are warn-only.
