@@ -89,20 +89,20 @@ func TestInstallOtelPythonProjectPathNotFound(t *testing.T) {
 	}
 }
 
-// TestDemoInstallCmdCurrentOS verifies that demoInstallCmd returns a non-nil
+// TestDemoInstallCmdCurrentOS verifies that pythonInstallPlan returns a non-nil
 // command (or no error) on the current OS when any Python prerequisite is missing.
 func TestDemoInstallCmdCurrentOS(t *testing.T) {
-	cmd, err := demoInstallCmd()
+	cmd, err := pythonInstallPlan()
 	if err != nil && cmd != nil {
 		t.Fatalf("should not return both a command and an error: cmd=%v err=%v", cmd, err)
 	}
-	// On unsupported OS demoInstallCmd returns (nil, nil) — acceptable.
+	// On unsupported OS pythonInstallPlan returns (nil, nil) — acceptable.
 	switch runtime.GOOS {
 	case "darwin", "linux", "windows":
 		// On these OSes we expect either nil (prerequisites already satisfied) or a valid install command slice
 		if err != nil {
 			// Acceptable only on macOS without brew
-			t.Logf("demoInstallCmd returned error (expected on macOS without brew): %v", err)
+			t.Logf("pythonInstallPlan returned error (expected on macOS without brew): %v", err)
 		}
 	}
 }

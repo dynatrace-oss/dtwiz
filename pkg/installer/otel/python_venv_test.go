@@ -47,6 +47,23 @@ func TestValidatePythonPrerequisites_VenvNotFound(t *testing.T) {
 	}
 }
 
+func TestValidatePythonPrerequisites_VenvLacksPip(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell stubs only work on Unix")
+	}
+	pythonDir := requireFakePython3(t)
+	t.Setenv("PATH", pythonDir)
+	t.Setenv("DTWIZ_TEST_FAIL_VENV_PIP", "1")
+
+	_, err := validatePythonPrerequisites()
+	if err == nil {
+		t.Fatal("expected error when venv lacks pip, got nil")
+	}
+	if !strings.Contains(err.Error(), "pip is not available in new virtualenvs") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestValidatePythonPrerequisites_AllPresent(t *testing.T) {
 	pythonDir := requireFakePython3(t)
 	t.Setenv("PATH", pythonDir)
