@@ -64,6 +64,9 @@ func stubExecLookPath(t *testing.T) func() {
 // noopDTClient is used in tests that never reach the DT API calls.
 type noopDTClient struct{}
 
+func (noopDTClient) installExtension() error {
+	return fmt.Errorf("unexpected installExtension call")
+}
 func (noopDTClient) createConnection(string) (string, error) {
 	return "", fmt.Errorf("unexpected createConnection call")
 }
@@ -86,12 +89,14 @@ func (noopDTClient) deleteMonitoring(string) error                     { return 
 
 // fakeDTClient records calls for assertion.
 type fakeDTClient struct {
-	connObjectID string
-	connErr      error
-	dtSAEmail    string
-	dtSAErr      error
-	updateErr    error
-	monErr       error
+	connObjectID  string
+	connErr       error
+	dtSAEmail     string
+	dtSAErr       error
+	installExtErr error
+	callSeq       []string // ordered record of installExtension / createMonitoring / updateMonitoring calls
+	updateErr     error
+	monErr        error
 
 	// uninstall
 	findConnObjectID string
@@ -130,6 +135,11 @@ func happyUninstallFakeDTClient() *fakeDTClient {
 	}
 }
 
+func (f *fakeDTClient) installExtension() error {
+	f.callSeq = append(f.callSeq, "installExtension")
+	return f.installExtErr
+}
+
 func (f *fakeDTClient) createConnection(string) (string, error) {
 	f.createConnCalled = true
 	return f.connObjectID, f.connErr
@@ -148,6 +158,7 @@ func (f *fakeDTClient) updateConnection(objectID, name, serviceAccountEmail stri
 }
 func (f *fakeDTClient) createMonitoring(configName, connObjectID, serviceAccountEmail, projectID string) error {
 	f.createMonCalled = true
+	f.callSeq = append(f.callSeq, "createMonitoring")
 	f.monCalledWith.configName = configName
 	f.monCalledWith.connObjectID = connObjectID
 	f.monCalledWith.serviceAccountEmail = serviceAccountEmail
@@ -155,6 +166,7 @@ func (f *fakeDTClient) createMonitoring(configName, connObjectID, serviceAccount
 	return f.monErr
 }
 func (f *fakeDTClient) updateMonitoring(configID, configName, connObjectID, serviceAccountEmail, projectID string) error {
+	f.callSeq = append(f.callSeq, "updateMonitoring")
 	f.updateMonConfigIDs = append(f.updateMonConfigIDs, configID)
 	f.monCalledWith.configName = configName
 	f.monCalledWith.connObjectID = connObjectID
@@ -290,6 +302,31 @@ func TestGCPDeleteServiceAccount_NotFoundIsSuccess(t *testing.T) {
 	}
 	if err := gcpDeleteServiceAccount(runner, "x@p.iam.gserviceaccount.com", "p"); err != nil {
 		t.Errorf("not-found should be success, got: %v", err)
+	}
+}
+
+// assertBefore checks that first appears before second in seq, failing the test if either is absent or out of order.
+func assertBefore(t *testing.T, seq []string, first, second string) {
+	t.Helper()
+	fi, si := -1, -1
+	for i, s := range seq {
+		if s == first && fi == -1 {
+			fi = i
+		}
+		if s == second && si == -1 {
+			si = i
+		}
+	}
+	if fi == -1 {
+		t.Errorf("call sequence: %q was never called; sequence: %v", first, seq)
+		return
+	}
+	if si == -1 {
+		t.Errorf("call sequence: %q was never called; sequence: %v", second, seq)
+		return
+	}
+	if fi > si {
+		t.Errorf("call sequence: want %q before %q, got order: %v", first, second, seq)
 	}
 }
 

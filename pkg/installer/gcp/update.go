@@ -26,30 +26,32 @@ func updateGCPWithRunner(
 	runner cmdRunner,
 	dtc dtclient,
 ) error {
+	name := integrationNameForEnv(envURL)
+
 	var monConfigIDs []string
 	var conns []connRef
 	var projectID string
 	err := installer.RunConcurrently(
-		func() (err error) { monConfigIDs, err = dtc.findAllMonitoringConfigs(integrationName); return },
-		func() (err error) { conns, err = dtc.findAllConnections(integrationName); return },
+		func() (err error) { monConfigIDs, err = dtc.findAllMonitoringConfigs(integrationPrefix); return },
+		func() (err error) { conns, err = dtc.findAllConnections(integrationPrefix); return },
 		func() (err error) { projectID, _, err = gcpAccountInfo(runner); return },
 	)
 	if err != nil {
 		return err
 	}
 
-	conn, err := selectUpdatableConnection(conns)
+	conn, err := selectUpdatableConnection(conns, name)
 	if err != nil {
 		return err
 	}
 
 	cfg := gcpConfig{
-		ConnectionName:      integrationName,
-		ConfigurationName:   integrationName,
+		ConnectionName:      name,
+		ConfigurationName:   name,
 		EnvURL:              envURL,
 		PlatformToken:       platformToken,
 		ProjectID:           projectID,
-		ServiceAccountName:  serviceAccountName,
+		ServiceAccountName:  name,
 		ServiceAccountEmail: conn.serviceAccountEmail,
 		ConnectionID:        conn.objectID,
 	}
@@ -58,6 +60,10 @@ func updateGCPWithRunner(
 
 	if proceed, err := installer.ShouldProceed(dryRun, "Update"); !proceed {
 		return err
+	}
+
+	if err := dtc.installExtension(); err != nil {
+		return fmt.Errorf("installing extension %s: %w", extensionName, err)
 	}
 
 	if err := reconcileMonitoring(cfg, monConfigIDs, dtc); err != nil {
@@ -73,13 +79,13 @@ func updateGCPWithRunner(
 }
 
 // selectUpdatableConnection requires exactly one connection with a bound service account; partial or duplicate connections are rejected.
-func selectUpdatableConnection(conns []connRef) (connRef, error) {
+func selectUpdatableConnection(conns []connRef, name string) (connRef, error) {
 	usable, _ := splitConnectionsByCompleteness(conns)
 	switch {
 	case len(usable) == 0:
-		return connRef{}, fmt.Errorf("no complete GCP connection named %q found: run `dtwiz install gcp` to set one up (or `dtwiz uninstall gcp` then install to repair a partial one)", integrationName)
+		return connRef{}, fmt.Errorf("no complete GCP connection named %q found: run `dtwiz install gcp` to set one up (or `dtwiz uninstall gcp` then install to repair a partial one)", name)
 	case len(usable) > 1:
-		return connRef{}, fmt.Errorf("found %d GCP connections named %q: run `dtwiz uninstall gcp` then `dtwiz install gcp` for a clean single integration", len(usable), integrationName)
+		return connRef{}, fmt.Errorf("found %d GCP connections named %q: run `dtwiz uninstall gcp` then `dtwiz install gcp` for a clean single integration", len(usable), name)
 	default:
 		return usable[0], nil
 	}

@@ -15,7 +15,8 @@ func buildUninstallAzRunner(t *testing.T) *fakeAzureRunner {
 	return &fakeAzureRunner{
 		t: t,
 		calls: []fakeCall{
-			{name: "az", stdout: `[]`}, // azureGatherClientIDs: az ad app list (no extra apps)
+			{name: "az", stdout: `[]`}, // azureGatherClientIDs: az ad app list (env-scoped name)
+			{name: "az", stdout: `[]`}, // azureGatherClientIDs: az ad app list (legacy name)
 			{name: "az", stdout: `{}`}, // role assignment delete
 			{name: "az", stdout: `{}`}, // app registration delete
 		},
@@ -373,7 +374,7 @@ func TestAzureGatherClientIDs_ConnectionBoundID(t *testing.T) {
 		}
 		return "{}", nil
 	}
-	ids := azureGatherClientIDs(runner, conns, "dtwiz-azure", "https://abc.live.dynatrace.com")
+	ids := azureGatherClientIDs(runner, conns, []string{"dtwiz-azure"}, "https://abc.live.dynatrace.com")
 	if len(ids) != 1 || ids[0] != "client-001" {
 		t.Errorf("expected [client-001], got %v", ids)
 	}
@@ -391,7 +392,7 @@ func TestAzureGatherClientIDs_OrphanedAppIncluded(t *testing.T) {
 		}
 		return "{}", nil
 	}
-	ids := azureGatherClientIDs(runner, nil, "dtwiz-azure", "https://abc.live.dynatrace.com")
+	ids := azureGatherClientIDs(runner, nil, []string{"dtwiz-azure"}, "https://abc.live.dynatrace.com")
 	if len(ids) != 1 || ids[0] != "orphan-id" {
 		t.Errorf("expected [orphan-id], got %v", ids)
 	}
@@ -412,7 +413,7 @@ func TestAzureGatherClientIDs_AlreadyTrustedNotDuplicated(t *testing.T) {
 		}
 		return "{}", nil
 	}
-	ids := azureGatherClientIDs(runner, conns, "dtwiz-azure", "https://abc.live.dynatrace.com")
+	ids := azureGatherClientIDs(runner, conns, []string{"dtwiz-azure"}, "https://abc.live.dynatrace.com")
 	if len(ids) != 1 || ids[0] != "trusted-id" {
 		t.Errorf("expected exactly [trusted-id] (no duplicates), got %v", ids)
 	}
@@ -432,7 +433,7 @@ func TestAzureGatherClientIDs_UnrelatedAppSkipped(t *testing.T) {
 		}
 		return "{}", nil
 	}
-	ids := azureGatherClientIDs(runner, nil, "dtwiz-azure", "https://abc.live.dynatrace.com")
+	ids := azureGatherClientIDs(runner, nil, []string{"dtwiz-azure"}, "https://abc.live.dynatrace.com")
 	if len(ids) != 0 {
 		t.Errorf("expected empty (unrelated app must be skipped), got %v", ids)
 	}
@@ -447,7 +448,7 @@ func TestAzureGatherClientIDs_AzListFailureContinues(t *testing.T) {
 		}
 		return "{}", nil
 	}
-	ids := azureGatherClientIDs(runner, conns, "dtwiz-azure", "https://abc.live.dynatrace.com")
+	ids := azureGatherClientIDs(runner, conns, []string{"dtwiz-azure"}, "https://abc.live.dynatrace.com")
 	if len(ids) != 1 || ids[0] != "conn-client-id" {
 		t.Errorf("expected [conn-client-id] despite az list failure, got %v", ids)
 	}
@@ -466,7 +467,7 @@ func TestAzureGatherClientIDs_VerificationFailureSkipsWithWarning(t *testing.T) 
 	}
 	var ids []string
 	out := captureColorOutput(func() {
-		ids = azureGatherClientIDs(runner, nil, "dtwiz-azure", "https://abc.live.dynatrace.com")
+		ids = azureGatherClientIDs(runner, nil, []string{"dtwiz-azure"}, "https://abc.live.dynatrace.com")
 	})
 	if len(ids) != 0 {
 		t.Errorf("expected empty (unverifiable app skipped), got %v", ids)
@@ -537,7 +538,7 @@ func TestAzureGatherClientIDs_Sorted(t *testing.T) {
 		}
 		return "{}", nil
 	}
-	ids := azureGatherClientIDs(runner, conns, "dtwiz-azure", "https://abc.live.dynatrace.com")
+	ids := azureGatherClientIDs(runner, conns, []string{"dtwiz-azure"}, "https://abc.live.dynatrace.com")
 	if len(ids) != 2 || ids[0] != "aaa-id" || ids[1] != "zzz-id" {
 		t.Errorf("expected sorted [aaa-id, zzz-id], got %v", ids)
 	}

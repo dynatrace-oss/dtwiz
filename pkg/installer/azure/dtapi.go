@@ -30,6 +30,7 @@ type connRef struct {
 }
 
 type dtclient interface {
+	installExtension() error
 	createConnection(name string) (objectID string, err error)
 	updateConnection(objectID, name, tenantID, clientID string) error
 	createMonitoring(configName, connectionObjectID, clientID, subscriptionID string) error
@@ -51,6 +52,14 @@ func newSDKDTClient(envURL, platformToken string) (*sdkDTClient, error) {
 		return nil, err
 	}
 	return &sdkDTClient{ExtensionClient: ec}, nil
+}
+
+func (d *sdkDTClient) installExtension() error {
+	if _, err := d.LatestExtensionVersion(extensionName); err == nil {
+		logger.Debug("extension already installed", "extension", extensionName)
+		return nil
+	}
+	return d.InstallExtension(extensionName, "")
 }
 
 func (d *sdkDTClient) createConnection(name string) (string, error) {
@@ -104,7 +113,7 @@ func (d *sdkDTClient) findAllConnections(name string) ([]connRef, error) {
 	var refs []connRef
 	for _, item := range list.Items {
 		n, _ := item.Value["name"].(string)
-		if n != name {
+		if !installer.MatchesIntegrationName(n, name) {
 			continue
 		}
 		appID := ""

@@ -95,31 +95,39 @@ func TestGCPUninstallDryRun(t *testing.T) {
 
 func TestGCPUninstallStepCount(t *testing.T) {
 	conns := []connRef{{objectID: "c1", serviceAccountEmail: "dtwiz-gcp@my-project.iam.gserviceaccount.com"}}
-	// 1 mon config + 1 connection + (1 SA * 2 steps) = 4
-	if got := uninstallStepCount([]string{"m1"}, conns, []string{"dtwiz-gcp@my-project.iam.gserviceaccount.com"}, "my-project"); got != 4 {
+	// 1 mon config + 1 connection + (1 current SA * 2 steps) + (0 legacy * 2) = 4
+	if got := uninstallStepCount([]string{"m1"}, conns, []string{"dtwiz-gcp@my-project.iam.gserviceaccount.com"}, nil, "my-project"); got != 4 {
 		t.Errorf("step count = %d, want 4", got)
 	}
 	// without a project, SA steps are skipped: 1 mon + 1 conn = 2
-	if got := uninstallStepCount([]string{"m1"}, conns, []string{"dtwiz-gcp@my-project.iam.gserviceaccount.com"}, ""); got != 2 {
+	if got := uninstallStepCount([]string{"m1"}, conns, []string{"dtwiz-gcp@my-project.iam.gserviceaccount.com"}, nil, ""); got != 2 {
 		t.Errorf("step count (no project) = %d, want 2", got)
 	}
 }
 
 func TestGCPGatherServiceAccounts(t *testing.T) {
 	conns := []connRef{{objectID: "c1", serviceAccountEmail: "custom@p.iam.gserviceaccount.com"}}
-	got := gcpGatherServiceAccounts(conns, "my-project")
-	// includes the connection-bound SA and the deterministic dtwiz SA
-	if len(got) != 2 {
-		t.Fatalf("expected 2 SA emails, got %v", got)
+	currentSAs, legacySAs := gcpGatherServiceAccounts(conns, "dtwiz-gcp-test", "my-project")
+	// current: connection-bound SA + deterministic from "dtwiz-gcp-test"
+	if len(currentSAs) != 2 {
+		t.Fatalf("expected 2 current SA emails, got %v", currentSAs)
 	}
-	wantDeterministic := gcpServiceAccountEmail(serviceAccountName, "my-project")
+	wantCurrentDeterministic := gcpServiceAccountEmail("dtwiz-gcp-test", "my-project")
 	found := false
-	for _, e := range got {
-		if e == wantDeterministic {
+	for _, e := range currentSAs {
+		if e == wantCurrentDeterministic {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("expected deterministic SA %q in %v", wantDeterministic, got)
+		t.Errorf("expected deterministic SA %q in current %v", wantCurrentDeterministic, currentSAs)
+	}
+	// legacy: deterministic from integrationPrefix (not in current set)
+	if len(legacySAs) != 1 {
+		t.Fatalf("expected 1 legacy SA email, got %v", legacySAs)
+	}
+	wantLegacy := gcpServiceAccountEmail(integrationPrefix, "my-project")
+	if legacySAs[0] != wantLegacy {
+		t.Errorf("legacy SA = %q, want %q", legacySAs[0], wantLegacy)
 	}
 }

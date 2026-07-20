@@ -29,26 +29,30 @@ func updateAzureWithRunner(
 	runner cmdRunner,
 	dtc dtclient,
 ) error {
-	var monConfigIDs []string
-	var conns []connRef
-	var subscriptionID, tenantID string
-	err := installer.RunConcurrently(
-		func() (err error) { monConfigIDs, err = dtc.findAllMonitoringConfigs(integrationName); return },
-		func() (err error) { conns, err = dtc.findAllConnections(integrationName); return },
-		func() (err error) { subscriptionID, tenantID, err = azureAccountInfo(runner); return },
-	)
+	subscriptionID, tenantID, err := azureAccountInfo(runner)
 	if err != nil {
 		return err
 	}
 
-	conn, err := selectUpdatableConnection(conns)
+	name := integrationNameForEnv(envURL)
+
+	var monConfigIDs []string
+	var conns []connRef
+	if err := installer.RunConcurrently(
+		func() (err error) { monConfigIDs, err = dtc.findAllMonitoringConfigs(integrationPrefix); return },
+		func() (err error) { conns, err = dtc.findAllConnections(integrationPrefix); return },
+	); err != nil {
+		return err
+	}
+
+	conn, err := selectUpdatableConnection(conns, name)
 	if err != nil {
 		return err
 	}
 
 	cfg := azureConfig{
-		ConnectionName:    integrationName,
-		ConfigurationName: integrationName,
+		ConnectionName:    name,
+		ConfigurationName: name,
 		EnvURL:            envURL,
 		PlatformToken:     platformToken,
 		TenantID:          tenantID,
@@ -61,6 +65,10 @@ func updateAzureWithRunner(
 
 	if proceed, err := installer.ShouldProceed(dryRun, "Update"); !proceed {
 		return err
+	}
+
+	if err := dtc.installExtension(); err != nil {
+		return fmt.Errorf("installing extension %s: %w", extensionName, err)
 	}
 
 	if err := reconcileMonitoring(cfg, monConfigIDs, dtc); err != nil {
@@ -76,7 +84,7 @@ func updateAzureWithRunner(
 }
 
 // selectUpdatableConnection requires exactly one connection with a bound client ID; partial or duplicate connections are rejected.
-func selectUpdatableConnection(conns []connRef) (connRef, error) {
+func selectUpdatableConnection(conns []connRef, name string) (connRef, error) {
 	var usable []connRef
 	for _, c := range conns {
 		if c.clientID != "" {
@@ -85,9 +93,9 @@ func selectUpdatableConnection(conns []connRef) (connRef, error) {
 	}
 	switch {
 	case len(usable) == 0:
-		return connRef{}, fmt.Errorf("no complete Azure connection named %q found: run `dtwiz install azure` to set one up (or `dtwiz uninstall azure` then install to repair a partial one)", integrationName)
+		return connRef{}, fmt.Errorf("no complete Azure connection named %q found: run `dtwiz install azure` to set one up (or `dtwiz uninstall azure` then install to repair a partial one)", name)
 	case len(usable) > 1:
-		return connRef{}, fmt.Errorf("found %d Azure connections named %q: run `dtwiz uninstall azure` then `dtwiz install azure` for a clean single integration", len(usable), integrationName)
+		return connRef{}, fmt.Errorf("found %d Azure connections named %q: run `dtwiz uninstall azure` then `dtwiz install azure` for a clean single integration", len(usable), name)
 	default:
 		return usable[0], nil
 	}

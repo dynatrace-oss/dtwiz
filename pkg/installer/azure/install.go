@@ -134,17 +134,19 @@ func installAzureWithRunner(
 		return err
 	}
 
-	existing, err := dtc.findAllConnections(integrationName)
+	name := integrationNameForEnv(envURL)
+
+	existing, err := dtc.findAllConnections(integrationPrefix)
 	if err != nil {
 		return fmt.Errorf("checking existing connection: %w", err)
 	}
 	if len(existing) > 0 {
 		// Complete connection found: reconcile monitoring config in place; don't recreate the SP (Entra "Constraints violated" hazard).
-		if _, err := selectUpdatableConnection(existing); err == nil {
+		if _, err := selectUpdatableConnection(existing, name); err == nil {
 			fmt.Println("\n  Note: prerequisites already exist — running update instead of a fresh install.")
 			return updateAzureWithRunner(envURL, platformToken, dryRun, startTime, runner, dtc)
 		}
-		return fmt.Errorf("azure connection '%s' already exists but is incomplete or duplicated: run `dtwiz uninstall azure` then `dtwiz install azure` for a clean setup", integrationName)
+		return fmt.Errorf("azure connection '%s' already exists but is incomplete or duplicated: run `dtwiz uninstall azure` then `dtwiz install azure` for a clean setup", name)
 	}
 	if err := requireSupportedAzVersion(); err != nil {
 		return err
@@ -154,8 +156,8 @@ func installAzureWithRunner(
 	azureCheckRBAC(runner, "/subscriptions/"+subscriptionID)
 
 	cfg := azureConfig{
-		ConnectionName:    integrationName,
-		ConfigurationName: integrationName,
+		ConnectionName:    name,
+		ConfigurationName: name,
 		EnvURL:            envURL,
 		PlatformToken:     platformToken,
 		TenantID:          tenantID,
@@ -261,6 +263,11 @@ func runInstallSteps(cfg azureConfig, runner cmdRunner, sleeper func(time.Durati
 		return fmt.Errorf("step 6: %w", err)
 	}
 	display.ColorOK.Println("  ✓ Connection updated")
+
+	if err := dtc.installExtension(); err != nil {
+		azurePartialFailureHint(cfg, completed)
+		return fmt.Errorf("installing extension %s: %w", extensionName, err)
+	}
 
 	fmt.Printf("  Step 7/%d: Create Azure monitoring configuration...\n", total)
 	if err := dtc.createMonitoring(cfg.ConfigurationName, connObjectID, cfg.ClientID, cfg.SubscriptionID); err != nil {

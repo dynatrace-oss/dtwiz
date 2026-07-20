@@ -72,6 +72,9 @@ func stubExecLookPath(t *testing.T) func() {
 // noopDTClient is used in tests that never reach the DT API calls.
 type noopDTClient struct{}
 
+func (noopDTClient) installExtension() error {
+	return fmt.Errorf("unexpected installExtension call")
+}
 func (noopDTClient) createConnection(string) (string, error) {
 	return "", fmt.Errorf("unexpected createConnection call")
 }
@@ -94,6 +97,8 @@ type fakeDTClient struct {
 	connObjectID     string
 	connErr          error
 	createConnCalled bool
+	installExtErr    error
+	callSeq          []string // ordered record of installExtension / createMonitoring / updateMonitoring calls
 	updateErr        error
 	monErr           error
 
@@ -130,6 +135,11 @@ func happyUninstallFakeDTClient() *fakeDTClient {
 	}
 }
 
+func (f *fakeDTClient) installExtension() error {
+	f.callSeq = append(f.callSeq, "installExtension")
+	return f.installExtErr
+}
+
 func (f *fakeDTClient) createConnection(string) (string, error) {
 	f.createConnCalled = true
 	return f.connObjectID, f.connErr
@@ -143,6 +153,7 @@ func (f *fakeDTClient) updateConnection(objectID, name, tenantID, clientID strin
 }
 func (f *fakeDTClient) createMonitoring(configName, connObjectID, clientID, subscriptionID string) error {
 	f.createMonCalled = true
+	f.callSeq = append(f.callSeq, "createMonitoring")
 	f.monCalledWith.configName = configName
 	f.monCalledWith.connObjectID = connObjectID
 	f.monCalledWith.clientID = clientID
@@ -150,6 +161,7 @@ func (f *fakeDTClient) createMonitoring(configName, connObjectID, clientID, subs
 	return f.monErr
 }
 func (f *fakeDTClient) updateMonitoring(configID, configName, connObjectID, clientID, subscriptionID string) error {
+	f.callSeq = append(f.callSeq, "updateMonitoring")
 	f.updateMonConfigIDs = append(f.updateMonConfigIDs, configID)
 	f.monCalledWith.configName = configName
 	f.monCalledWith.connObjectID = connObjectID
@@ -557,6 +569,31 @@ func TestAzureGetSPObjectID_EmptyIDAllAttemptsExhausted(t *testing.T) {
 }
 
 // ─── retryingDTClient ─────────────────────────────────────────────────────────
+
+// assertBefore checks that first appears before second in seq, failing the test if either is absent or out of order.
+func assertBefore(t *testing.T, seq []string, first, second string) {
+	t.Helper()
+	fi, si := -1, -1
+	for i, s := range seq {
+		if s == first && fi == -1 {
+			fi = i
+		}
+		if s == second && si == -1 {
+			si = i
+		}
+	}
+	if fi == -1 {
+		t.Errorf("call sequence: %q was never called; sequence: %v", first, seq)
+		return
+	}
+	if si == -1 {
+		t.Errorf("call sequence: %q was never called; sequence: %v", second, seq)
+		return
+	}
+	if fi > si {
+		t.Errorf("call sequence: want %q before %q, got order: %v", first, second, seq)
+	}
+}
 
 // retryingDTClient wraps fakeDTClient and delegates updateConnection to a custom
 // function, allowing tests to vary behaviour across successive calls.

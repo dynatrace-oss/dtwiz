@@ -196,6 +196,13 @@ func ExtractTenantID(environmentURL string) string {
 	return s
 }
 
+// MatchesIntegrationName reports whether s equals name exactly or is a
+// hyphen-delimited sub-name of it (i.e. starts with name+"-"). The hyphen
+// boundary prevents a tenant ID "abc" from accidentally matching "abc1".
+func MatchesIntegrationName(s, name string) bool {
+	return s == name || strings.HasPrefix(s, name+"-")
+}
+
 // RunCommand runs a named executable with the provided arguments, streaming its
 // stdout and stderr to the current process's stdout/stderr.  The working
 // directory is inherited from the current process.

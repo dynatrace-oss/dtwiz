@@ -92,6 +92,7 @@ func splitConnectionsByCompleteness(conns []connRef) (complete, incomplete []con
 }
 
 type dtclient interface {
+	installExtension() error
 	createConnection(name string) (objectID string, err error)
 	// dtServiceAccount returns the Dynatrace principal granted impersonation rights.
 	dtServiceAccount() (email string, err error)
@@ -115,6 +116,14 @@ func newSDKDTClient(envURL, platformToken string) (*sdkDTClient, error) {
 		return nil, err
 	}
 	return &sdkDTClient{ExtensionClient: ec}, nil
+}
+
+func (d *sdkDTClient) installExtension() error {
+	if _, err := d.LatestExtensionVersion(extensionName); err == nil {
+		logger.Debug("extension already installed", "extension", extensionName)
+		return nil
+	}
+	return d.InstallExtension(extensionName, "")
 }
 
 func (d *sdkDTClient) createConnection(name string) (string, error) {
@@ -211,7 +220,7 @@ func (d *sdkDTClient) findAllConnections(name string) ([]connRef, error) {
 	var refs []connRef
 	for _, item := range list.Items {
 		n, _ := item.Value["name"].(string)
-		if n != name {
+		if !installer.MatchesIntegrationName(n, name) {
 			continue
 		}
 		email := findServiceAccountEmail(item.Value)

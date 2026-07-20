@@ -46,6 +46,28 @@ func NewExtensionClient(envURL, platformToken string) (*ExtensionClient, error) 
 	}, nil
 }
 
+// InstallExtension activates a Dynatrace extension version. HTTP 409 is treated
+// as success (extension already installed) so install/update flows can safely
+// reconcile prerequisites. The SDK wraps 409 into a named error rather than
+// *httpclient.APIError, so both the status-code and the string check are required
+// to cover all SDK-surfaced forms of "already installed".
+func (e *ExtensionClient) InstallExtension(extensionName, version string) error {
+	logger.Debug("installing extension", "extension", extensionName, "version", version)
+	installed, err := e.Extension.InstallFromHub(context.Background(), extensionName, version)
+	if err != nil {
+		var apiErr *httpclient.APIError
+		alreadyInstalled := (errors.As(err, &apiErr) && apiErr.StatusCode == 409) ||
+			strings.Contains(strings.ToLower(err.Error()), "already installed")
+		if alreadyInstalled {
+			logger.Debug("extension already installed", "extension", extensionName, "version", version)
+			return nil
+		}
+		return fmt.Errorf("install extension %s@%s: %w", extensionName, version, err)
+	}
+	logger.Debug("extension installed", "extension", installed.ExtensionName, "version", installed.Version)
+	return nil
+}
+
 // DeleteConnection deletes a Settings object by ID; a 404 (already gone) is treated as success.
 func (e *ExtensionClient) DeleteConnection(objectID string) error {
 	obj, err := e.Settings.Get(context.Background(), objectID)
@@ -69,9 +91,16 @@ func (e *ExtensionClient) DeleteConnection(objectID string) error {
 
 // FindAllMonitoringConfigs returns the object IDs of every monitoring configuration
 // under extensionName whose "description" field equals name.
+// A 404 (extension not installed) is treated as an empty result. If the extension
+// is absent, there are no monitoring configs to find.
 func (e *ExtensionClient) FindAllMonitoringConfigs(extensionName, name string) ([]string, error) {
 	list, err := e.Extension.ListMonitoringConfigurations(context.Background(), extensionName, "", 0)
 	if err != nil {
+		msg := strings.ToLower(err.Error())
+		if strings.Contains(msg, "not found") || strings.Contains(msg, "404") {
+			logger.Debug("extension not installed, no monitoring configs", "extension", extensionName)
+			return nil, nil
+		}
 		return nil, fmt.Errorf("find monitoring configs: %w", err)
 	}
 	var ids []string
@@ -80,7 +109,7 @@ func (e *ExtensionClient) FindAllMonitoringConfigs(extensionName, name string) (
 		if err := json.Unmarshal(item.Value, &val); err != nil {
 			continue
 		}
-		if desc, _ := val["description"].(string); desc == name {
+		if desc, _ := val["description"].(string); MatchesIntegrationName(desc, name) {
 			logger.Debug("found monitoring config", "objectId", item.ObjectID, "name", name)
 			ids = append(ids, item.ObjectID)
 		}

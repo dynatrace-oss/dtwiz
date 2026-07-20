@@ -43,6 +43,7 @@ func TestUpdateAzureHappyPath_UpdatesInPlace(t *testing.T) {
 	if dtc.createMonCalled {
 		t.Error("createMonitoring must not be called when a config already exists")
 	}
+	assertBefore(t, dtc.callSeq, "installExtension", "updateMonitoring")
 	if dtc.deleteConnCalled {
 		t.Error("update must not delete the connection (auth chain is untouched)")
 	}
@@ -77,6 +78,26 @@ func TestUpdateAzureCreatesConfigWhenMissing(t *testing.T) {
 	}
 	if len(dtc.updateMonConfigIDs) != 0 {
 		t.Errorf("expected no updateMonitoring calls, got %v", dtc.updateMonConfigIDs)
+	}
+}
+
+func TestUpdateAzureExtensionFailureStopsBeforeMonitoringConfig(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	dtc := happyUninstallFakeDTClient()
+	dtc.installExtErr = fmt.Errorf("extension install failed")
+
+	err := captureStdoutErr(func() error {
+		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, updateAzRunner(t), dtc)
+	})
+	if err == nil {
+		t.Fatal("expected extension install error, got nil")
+	}
+	if len(dtc.updateMonConfigIDs) != 0 || dtc.createMonCalled {
+		t.Error("monitoring config must not be reconciled when extension installation fails")
 	}
 }
 
