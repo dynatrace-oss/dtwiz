@@ -2,20 +2,47 @@
 
 ## CHANGED Requirements
 
-### Naming
+### Requirement: Env-scoped resource naming
 
-All resources (Dynatrace connection, monitoring configuration, Azure App Registration) use a name derived from the Dynatrace environment URL: `dtwiz-azure-<tenant-id>`, where `<tenant-id>` is the first DNS label of the URL (e.g. `dtwiz-azure-fds1499d` for `https://fds1499d.apps.dynatracelabs.com`).
+All resources created by dtwiz (Dynatrace connection, monitoring configuration, Azure App Registration) SHALL use a name derived from the Dynatrace environment URL: `dtwiz-azure-<tenant-id>`, where `<tenant-id>` is the first DNS label of the URL (e.g. `dtwiz-azure-fds1499d` for `https://fds1499d.apps.dynatracelabs.com`).
 
-### Install (`azure-monitor-install`)
+#### Scenario: Derived name used for all new resources
 
-Before installing, discover connections matching the derived name. Exactly one complete (bound application ID) → delegate to update. All other states → abort with guidance to uninstall first. All seven steps use the derived name for the connection and monitoring configuration.
+- **GIVEN** `dtwiz install azure` runs against environment `https://fds1499d.apps.dynatracelabs.com`
+- **WHEN** resources are created
+- **THEN** the Dynatrace connection, Azure App Registration, and monitoring configuration are all named `dtwiz-azure-fds1499d`
 
-### Update (`azure-monitor-update`)
+### Requirement: Prefix-based discovery in install and update covers old and new names
 
-Account lookup runs before DT resource discovery so a login failure aborts early. Discover connections and monitoring configurations under the derived name. Require exactly one complete connection; abort with guidance to install (none found) or uninstall+reinstall (multiple found).
+Discovery in both `dtwiz install azure` and `dtwiz update azure` SHALL search for connections and monitoring configurations using the `dtwiz-azure` prefix, not the derived name. This ensures that connections created before env-scoped naming (named `dtwiz-azure`) are found and handled correctly alongside connections using the new env-scoped name.
 
-### Uninstall (`azure-monitor-uninstall`)
+#### Scenario: Pre-env-scoped-naming connection found by install
 
-Discover all connections and monitoring configurations matching the `dtwiz-azure*` prefix to cover both the old fixed name and new env-scoped names.
+- **GIVEN** a complete Dynatrace Azure connection named `dtwiz-azure` (created before this change) exists
+- **WHEN** `dtwiz install azure` runs
+- **THEN** the existing connection is found by the duplicate check
+- **AND** install delegates to the update flow instead of creating a new App Registration
 
-App Registration cleanup is split into **current** (connection-bound IDs + display-name lookup of `dtwiz-azure-<tenant-id>`, ownership-verified by the dtwiz federated credential fingerprint) and **legacy** (display-name lookup of `dtwiz-azure` only). Current failures are fatal; legacy failures are warn-only.
+#### Scenario: Pre-env-scoped-naming connection found by update
+
+- **GIVEN** a Dynatrace Azure connection named `dtwiz-azure` (created before this change) exists
+- **WHEN** `dtwiz update azure` runs
+- **THEN** the connection is found by discovery
+- **AND** the monitoring configuration is reconciled in place
+
+#### Scenario: Env-scoped connection found by install duplicate check
+
+- **GIVEN** a complete Dynatrace Azure connection named `dtwiz-azure-fds1499d` exists
+- **WHEN** `dtwiz install azure` runs against `https://fds1499d.apps.dynatracelabs.com`
+- **THEN** the existing connection is found
+- **AND** install delegates to the update flow
+
+### Requirement: Uninstall uses prefix to cover both naming generations
+
+Discovery in `dtwiz uninstall azure` SHALL use the `dtwiz-azure` prefix to find and remove connections and monitoring configurations regardless of whether they use the old fixed name or the new env-scoped name.
+
+#### Scenario: Old-style and new-style resources both removed by uninstall
+
+- **GIVEN** both a `dtwiz-azure` connection and a `dtwiz-azure-fds1499d` connection exist
+- **WHEN** `dtwiz uninstall azure` runs
+- **THEN** both connections and their associated monitoring configurations are removed

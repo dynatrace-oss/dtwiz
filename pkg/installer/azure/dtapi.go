@@ -19,7 +19,6 @@ const (
 	monitoringAPI      = extensionAPI + "/monitoring-configurations"
 	connectionSchemaID = "builtin:hyperscaler-authentication.connections.azure"
 	extensionName      = "com.dynatrace.extension.da-azure"
-	extensionVersion   = "1.0.7"
 
 	azureLocationEnumKey   = "dynatrace.datasource.azure:location"
 	azureFeatureSetEnumKey = "FeatureSetsType"
@@ -60,7 +59,7 @@ func (d *sdkDTClient) installExtension() error {
 		logger.Debug("extension already installed", "extension", extensionName)
 		return nil
 	}
-	return d.InstallExtension(extensionName, extensionVersion)
+	return d.InstallExtension(extensionName, "")
 }
 
 func (d *sdkDTClient) createConnection(name string) (string, error) {

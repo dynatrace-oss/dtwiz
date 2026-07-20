@@ -62,7 +62,6 @@ const (
 	dtPrincipalSchemaID = "builtin:hyperscaler-authentication.connections.gcp-dynatrace-principal"
 	connectionType      = "serviceAccountImpersonation"
 	extensionName       = "com.dynatrace.extension.da-gcp"
-	extensionVersion    = "1.0.5"
 	monitoringScope     = "integration-gcp"
 
 	gcpFeatureSetEnumKey = "FeatureSetsType"
@@ -124,7 +123,7 @@ func (d *sdkDTClient) installExtension() error {
 		logger.Debug("extension already installed", "extension", extensionName)
 		return nil
 	}
-	return d.InstallExtension(extensionName, extensionVersion)
+	return d.InstallExtension(extensionName, "")
 }
 
 func (d *sdkDTClient) createConnection(name string) (string, error) {

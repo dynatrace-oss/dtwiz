@@ -39,8 +39,8 @@ func updateAzureWithRunner(
 	var monConfigIDs []string
 	var conns []connRef
 	if err := installer.RunConcurrently(
-		func() (err error) { monConfigIDs, err = dtc.findAllMonitoringConfigs(name); return },
-		func() (err error) { conns, err = dtc.findAllConnections(name); return },
+		func() (err error) { monConfigIDs, err = dtc.findAllMonitoringConfigs(integrationPrefix); return },
+		func() (err error) { conns, err = dtc.findAllConnections(integrationPrefix); return },
 	); err != nil {
 		return err
 	}

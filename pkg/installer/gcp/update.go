@@ -32,8 +32,8 @@ func updateGCPWithRunner(
 	var conns []connRef
 	var projectID string
 	err := installer.RunConcurrently(
-		func() (err error) { monConfigIDs, err = dtc.findAllMonitoringConfigs(name); return },
-		func() (err error) { conns, err = dtc.findAllConnections(name); return },
+		func() (err error) { monConfigIDs, err = dtc.findAllMonitoringConfigs(integrationPrefix); return },
+		func() (err error) { conns, err = dtc.findAllConnections(integrationPrefix); return },
 		func() (err error) { projectID, _, err = gcpAccountInfo(runner); return },
 	)
 	if err != nil {

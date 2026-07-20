@@ -136,7 +136,7 @@ func installAzureWithRunner(
 
 	name := integrationNameForEnv(envURL)
 
-	existing, err := dtc.findAllConnections(name)
+	existing, err := dtc.findAllConnections(integrationPrefix)
 	if err != nil {
 		return fmt.Errorf("checking existing connection: %w", err)
 	}
