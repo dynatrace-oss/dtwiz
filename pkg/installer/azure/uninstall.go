@@ -117,7 +117,7 @@ func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc 
 		}
 	}
 
-	allClientIDs := append(currentClientIDs, legacyClientIDs...)
+	var allClientIDs = append(currentClientIDs, legacyClientIDs...)
 	if len(monConfigIDs) == 0 && len(conns) == 0 && len(allClientIDs) == 0 {
 		fmt.Println("  No Azure Monitor integration resources found; nothing to uninstall.")
 		return nil

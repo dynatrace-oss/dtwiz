@@ -99,7 +99,7 @@ func uninstallGCPWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc dt
 
 	currentName := integrationNameForEnv(envURL)
 	currentSAEmails, legacySAEmails := gcpGatherServiceAccounts(conns, currentName, projectID)
-	allSAEmails := append(currentSAEmails, legacySAEmails...)
+	var allSAEmails = append(currentSAEmails, legacySAEmails...)
 
 	if len(monConfigIDs) == 0 && len(conns) == 0 {
 		fmt.Println("  No Google Cloud integration resources found; nothing to uninstall.")
