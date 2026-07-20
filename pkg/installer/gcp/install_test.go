@@ -69,9 +69,7 @@ func TestGCPHappyPath(t *testing.T) {
 	if dtc.monCalledWith.connObjectID == "" {
 		t.Error("expected createMonitoring to be called")
 	}
-	if !dtc.installExtCalled {
-		t.Error("expected extension to be installed before createMonitoring")
-	}
+	assertBefore(t, dtc.callSeq, "installExtension", "createMonitoring")
 	if dtc.monCalledWith.projectID != "my-project" {
 		t.Errorf("createMonitoring projectID = %q, want my-project", dtc.monCalledWith.projectID)
 	}

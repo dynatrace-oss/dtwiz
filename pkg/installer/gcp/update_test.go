@@ -28,9 +28,7 @@ func TestGCPUpdateExistingConfig(t *testing.T) {
 	if len(dtc.updateMonConfigIDs) != 1 || dtc.updateMonConfigIDs[0] != "mon-1" {
 		t.Errorf("expected updateMonitoring for mon-1, got %v", dtc.updateMonConfigIDs)
 	}
-	if !dtc.installExtCalled {
-		t.Error("expected extension to be installed before updateMonitoring")
-	}
+	assertBefore(t, dtc.callSeq, "installExtension", "updateMonitoring")
 	if dtc.monCalledWith.projectID != "my-project" {
 		t.Errorf("projectID = %q, want my-project", dtc.monCalledWith.projectID)
 	}

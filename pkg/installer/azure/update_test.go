@@ -43,9 +43,7 @@ func TestUpdateAzureHappyPath_UpdatesInPlace(t *testing.T) {
 	if dtc.createMonCalled {
 		t.Error("createMonitoring must not be called when a config already exists")
 	}
-	if !dtc.installExtCalled {
-		t.Error("expected extension to be installed before updateMonitoring")
-	}
+	assertBefore(t, dtc.callSeq, "installExtension", "updateMonitoring")
 	if dtc.deleteConnCalled {
 		t.Error("update must not delete the connection (auth chain is untouched)")
 	}

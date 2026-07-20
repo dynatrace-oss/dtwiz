@@ -79,9 +79,7 @@ func TestAzureHappyPath(t *testing.T) {
 	if dtc.monCalledWith.connObjectID == "" {
 		t.Error("expected createMonitoring to be called")
 	}
-	if !dtc.installExtCalled {
-		t.Error("expected extension to be installed before createMonitoring")
-	}
+	assertBefore(t, dtc.callSeq, "installExtension", "createMonitoring")
 }
 
 func TestAzureInstallExtensionFailureStopsBeforeMonitoringConfig(t *testing.T) {
