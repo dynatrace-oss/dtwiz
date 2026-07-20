@@ -106,7 +106,7 @@ func uninstallGCPWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc dt
 		return nil
 	}
 
-	gcpUninstallPrintPreview(envURL, projectID, monConfigIDs, conns, allSAEmails, integrationPrefix, integrationPrefix)
+	gcpUninstallPrintPreview(envURL, projectID, monConfigIDs, conns, allSAEmails, integrationPrefix+"*", integrationPrefix+"*")
 
 	if proceed, err := installer.ShouldProceed(dryRun, "Uninstall"); !proceed {
 		return err

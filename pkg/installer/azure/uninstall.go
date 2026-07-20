@@ -123,7 +123,7 @@ func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc 
 		return nil
 	}
 
-	azureUninstallPrintPreview(envURL, monConfigIDs, conns, allClientIDs, currentName, currentName)
+	azureUninstallPrintPreview(envURL, monConfigIDs, conns, allClientIDs, integrationPrefix+"*", integrationPrefix+"*")
 
 	if proceed, err := installer.ShouldProceed(dryRun, "Uninstall"); !proceed {
 		return err

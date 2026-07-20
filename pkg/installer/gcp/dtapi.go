@@ -221,7 +221,7 @@ func (d *sdkDTClient) findAllConnections(name string) ([]connRef, error) {
 	var refs []connRef
 	for _, item := range list.Items {
 		n, _ := item.Value["name"].(string)
-		if !strings.HasPrefix(n, name) {
+		if !installer.MatchesIntegrationName(n, name) {
 			continue
 		}
 		email := findServiceAccountEmail(item.Value)

@@ -29,8 +29,7 @@ type azureConfig struct {
 
 const (
 	// integrationPrefix is the base name prefix for all dtwiz Azure resources.
-	// The actual integration name includes a subscription-derived suffix — use
-	// integrationNameForSubscription to build the full name.
+	// The full name includes the DT tenant ID suffix — use integrationNameForEnv.
 	integrationPrefix = "dtwiz-azure"
 
 	// fedCredName is the fixed name of the Entra federated credential within the App Registration.
