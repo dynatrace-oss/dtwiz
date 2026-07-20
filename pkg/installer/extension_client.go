@@ -91,9 +91,16 @@ func (e *ExtensionClient) DeleteConnection(objectID string) error {
 
 // FindAllMonitoringConfigs returns the object IDs of every monitoring configuration
 // under extensionName whose "description" field equals name.
+// A 404 (extension not installed) is treated as an empty result. If the extension
+// is absent, there are no monitoring configs to find.
 func (e *ExtensionClient) FindAllMonitoringConfigs(extensionName, name string) ([]string, error) {
 	list, err := e.Extension.ListMonitoringConfigurations(context.Background(), extensionName, "", 0)
 	if err != nil {
+		msg := strings.ToLower(err.Error())
+		if strings.Contains(msg, "not found") || strings.Contains(msg, "404") {
+			logger.Debug("extension not installed, no monitoring configs", "extension", extensionName)
+			return nil, nil
+		}
 		return nil, fmt.Errorf("find monitoring configs: %w", err)
 	}
 	var ids []string
