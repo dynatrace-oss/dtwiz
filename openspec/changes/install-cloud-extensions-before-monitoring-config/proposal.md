@@ -1,3 +1,5 @@
+# Proposal
+
 ## Why
 
 Azure and GCP monitoring configuration creation depends on the Dynatrace cloud data-acquisition extension being installed in the tenant. Tenants that have not yet activated the extension can fail during schema/version lookup or monitoring configuration creation even after the cloud-side authentication chain is set up correctly.

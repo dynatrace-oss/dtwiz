@@ -1,3 +1,5 @@
+# Design
+
 ## Context
 
 Azure and GCP monitoring configuration creation relies on tenant-local Dynatrace extension metadata and schemas. The existing cloud flows create or reconcile monitoring configurations, but tenants that have not activated the relevant data-acquisition extension can fail when dtwiz looks up extension versions or schemas.
