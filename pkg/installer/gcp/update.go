@@ -16,7 +16,7 @@ func UpdateGCP(envURL, platformToken string, dryRun bool, startTime time.Time) e
 	if err != nil {
 		return err
 	}
-	return updateGCPWithRunner(envURL, platformToken, dryRun, startTime, realRunner, dtc)
+	return updateGCPWithRunner(envURL, platformToken, dryRun, startTime, realRunner, time.Sleep, dtc)
 }
 
 func updateGCPWithRunner(
@@ -24,6 +24,7 @@ func updateGCPWithRunner(
 	dryRun bool,
 	startTime time.Time,
 	runner cmdRunner,
+	sleeper func(time.Duration),
 	dtc dtclient,
 ) error {
 	name := integrationNameForEnv(envURL)
@@ -69,7 +70,7 @@ func updateGCPWithRunner(
 	if freshlyInstalled {
 		logger.Debug("extension freshly installed (async), waiting for it to become active")
 		fmt.Println("  Extension freshly installed — waiting for it to become active...")
-		if waitErr := waitForExtensionActive(dtc, time.Sleep); waitErr != nil {
+		if waitErr := waitForExtensionActive(dtc, sleeper); waitErr != nil {
 			logger.Debug("extension did not become active in time, proceeding anyway", "error", waitErr)
 		} else {
 			display.ColorOK.Println("  ✓ Extension is active")

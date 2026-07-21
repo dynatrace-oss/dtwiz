@@ -196,7 +196,7 @@ func installGCPWithRunner(
 	// Complete connection found: reconcile monitoring config in place; don't recreate the SA/bindings.
 	if _, err := selectUpdatableConnection(existing, name); err == nil {
 		fmt.Println("\n  Note: prerequisites already exist — running update instead of a fresh install.")
-		return updateGCPWithRunner(envURL, platformToken, dryRun, startTime, runner, dtc)
+		return updateGCPWithRunner(envURL, platformToken, dryRun, startTime, runner, sleeper, dtc)
 	}
 	resumeConnID, err := gcpResumableConnection(existing, name)
 	if err != nil {

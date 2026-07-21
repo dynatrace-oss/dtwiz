@@ -20,7 +20,7 @@ func TestGCPUpdateExistingConfig(t *testing.T) {
 		findMonConfigID: "mon-1",
 	}
 	err := captureStdoutErr(func() error {
-		return updateGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, uninstallGcloudRunner("my-project"), dtc)
+		return updateGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, uninstallGcloudRunner("my-project"), noSleep, dtc)
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -45,7 +45,7 @@ func TestGCPUpdateCreatesWhenNoConfig(t *testing.T) {
 		// no monitoring config present
 	}
 	err := captureStdoutErr(func() error {
-		return updateGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, uninstallGcloudRunner("my-project"), dtc)
+		return updateGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, uninstallGcloudRunner("my-project"), noSleep, dtc)
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -67,7 +67,7 @@ func TestGCPUpdateExtensionFailureStopsBeforeMonitoringConfig(t *testing.T) {
 		installExtErr:   fmt.Errorf("extension install failed"),
 	}
 	err := captureStdoutErr(func() error {
-		return updateGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, uninstallGcloudRunner("my-project"), dtc)
+		return updateGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, uninstallGcloudRunner("my-project"), noSleep, dtc)
 	})
 	if err == nil {
 		t.Fatal("expected extension install error, got nil")
@@ -85,7 +85,7 @@ func TestGCPUpdateRejectsPartialConnection(t *testing.T) {
 		findConnRefs: []connRef{{objectID: "conn-1", serviceAccountEmail: ""}},
 	}
 	err := captureStdoutErr(func() error {
-		return updateGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, uninstallGcloudRunner("my-project"), dtc)
+		return updateGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, uninstallGcloudRunner("my-project"), noSleep, dtc)
 	})
 	if err == nil {
 		t.Fatal("expected error for partial connection, got nil")
@@ -103,12 +103,46 @@ func TestGCPUpdateDryRun(t *testing.T) {
 		findMonConfigID: "mon-1",
 	}
 	out := captureStdout(t, func() {
-		_ = updateGCPWithRunner("https://abc.live.dynatrace.com", "tok", true, time.Time{}, uninstallGcloudRunner("my-project"), dtc)
+		_ = updateGCPWithRunner("https://abc.live.dynatrace.com", "tok", true, time.Time{}, uninstallGcloudRunner("my-project"), noSleep, dtc)
 	})
 	if len(dtc.updateMonConfigIDs) != 0 || dtc.createMonCalled {
 		t.Error("dry-run must not change any monitoring config")
 	}
 	if !strings.Contains(out, "[dry-run]") {
 		t.Errorf("expected [dry-run] marker; got:\n%s", out)
+	}
+}
+
+func TestUpdateGCPFreshExtensionInstallWaitsBeforeReconcile(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	dtc := &fakeDTClient{
+		findConnRefs:    []connRef{{objectID: "conn-1", serviceAccountEmail: "dtwiz-gcp@my-project.iam.gserviceaccount.com"}},
+		findMonConfigID: "mon-1",
+		installExtFresh: true, // simulate 202 Accepted fresh install
+		extNotActive:    true, // force retries so the sleeper is called
+	}
+
+	slept := false
+	sleeper := func(time.Duration) { slept = true }
+
+	err := captureStdoutErr(func() error {
+		return updateGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, uninstallGcloudRunner("my-project"), sleeper, dtc)
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !slept {
+		t.Error("expected injected sleeper to be called while polling for extension active")
+	}
+	if dtc.isExtActiveCalls == 0 {
+		t.Error("expected waitForExtensionActive to poll isExtensionActive")
+	}
+	// update proceeds even when extension did not become active in time
+	if len(dtc.updateMonConfigIDs) != 1 {
+		t.Errorf("expected monitoring config reconciled, got %v", dtc.updateMonConfigIDs)
 	}
 }
