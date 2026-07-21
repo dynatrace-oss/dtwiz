@@ -62,7 +62,7 @@ func updateGCPWithRunner(
 		return err
 	}
 
-	if err := dtc.installExtension(); err != nil {
+	if _, err := dtc.installExtension(); err != nil {
 		return fmt.Errorf("installing extension %s: %w", extensionName, err)
 	}
 

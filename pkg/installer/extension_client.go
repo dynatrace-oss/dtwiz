@@ -191,6 +191,21 @@ func (e *ExtensionClient) FetchExtensionSchema(extensionName, version string) (*
 	return &schema, nil
 }
 
+// IsExtensionActive reports whether any installed version of extensionName has Active == true.
+// The DT hub install is asynchronous (202 Accepted); this is the readiness signal.
+func (e *ExtensionClient) IsExtensionActive(extensionName string) (bool, error) {
+	versionList, err := e.Extension.Get(context.Background(), extensionName)
+	if err != nil {
+		return false, fmt.Errorf("get extension versions: %w", err)
+	}
+	for _, item := range versionList.Items {
+		if item.Active {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // LatestExtensionVersion returns the highest semver version installed for extensionName.
 func (e *ExtensionClient) LatestExtensionVersion(extensionName string) (string, error) {
 	versionList, err := e.Extension.Get(context.Background(), extensionName)
