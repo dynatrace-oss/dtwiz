@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-07-21
+
+### Fixed
+
+- `install azure` / `update azure` / `install gcp` / `update gcp`: extension activation now polls until the extension is truly active before creating monitoring configuration; the Dynatrace hub install is asynchronous (202 Accepted), so monitoring config was sometimes created against an extension that hadn't finished activating yet
+- `install azure`: fix delegation when an existing connection is found — `install azure` now correctly delegates to `update azure`
+
 ## [1.0.0] - 2026-07-20
 
 ### Fixed
@@ -438,7 +445,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/dynatrace-oss/dtwiz/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.30...v1.0.0
 [0.2.30]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.29...v0.2.30
 [0.2.29]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.28...v0.2.29
