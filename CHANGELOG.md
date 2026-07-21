@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-07-21
+
 ### Fixed
 
 - `install azure` / `update azure` / `install gcp` / `update gcp`: extension activation now polls until the extension is truly active before creating monitoring configuration; the Dynatrace hub install is asynchronous (202 Accepted), so monitoring config was sometimes created against an extension that hadn't finished activating yet
