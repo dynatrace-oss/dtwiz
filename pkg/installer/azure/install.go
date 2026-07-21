@@ -144,7 +144,7 @@ func installAzureWithRunner(
 		// Complete connection found: reconcile monitoring config in place; don't recreate the SP (Entra "Constraints violated" hazard).
 		if _, err := selectUpdatableConnection(existing, name); err == nil {
 			fmt.Println("\n  Note: prerequisites already exist — running update instead of a fresh install.")
-			return updateAzureWithRunner(envURL, platformToken, dryRun, startTime, runner, dtc)
+			return updateAzureWithRunner(envURL, platformToken, dryRun, startTime, runner, sleeper, dtc)
 		}
 		return fmt.Errorf("azure connection '%s' already exists but is incomplete or duplicated: run `dtwiz uninstall azure` then `dtwiz install azure` for a clean setup", name)
 	}
@@ -264,15 +264,25 @@ func runInstallSteps(cfg azureConfig, runner cmdRunner, sleeper func(time.Durati
 	}
 	display.ColorOK.Println("  ✓ Connection updated")
 
-	if err := dtc.installExtension(); err != nil {
+	freshlyInstalled, err := dtc.installExtension()
+	if err != nil {
 		azurePartialFailureHint(cfg, completed)
 		return fmt.Errorf("installing extension %s: %w", extensionName, err)
+	}
+	if freshlyInstalled {
+		logger.Debug("extension freshly installed (async), waiting for it to become active")
+		fmt.Println("  Extension freshly installed — waiting for it to become active...")
+		if waitErr := waitForExtensionActive(dtc, sleeper); waitErr != nil {
+			logger.Debug("extension did not become active in time, proceeding anyway", "error", waitErr)
+		} else {
+			display.ColorOK.Println("  ✓ Extension is active")
+		}
 	}
 
 	fmt.Printf("  Step 7/%d: Create Azure monitoring configuration...\n", total)
 	if err := dtc.createMonitoring(cfg.ConfigurationName, connObjectID, cfg.ClientID, cfg.SubscriptionID); err != nil {
 		azurePartialFailureHint(cfg, completed)
-		return fmt.Errorf("step 7: %w", err)
+		return fmt.Errorf("step 7: failed to create monitoring configuration: %w", err)
 	}
 	display.ColorOK.Println("  ✓ Monitoring configuration created")
 
@@ -330,4 +340,8 @@ func updateConnectionWithRetry(dtc dtclient, connObjectID, connName, tenantID, c
 	}, func() error {
 		return dtc.updateConnection(connObjectID, connName, tenantID, clientID)
 	})
+}
+
+func waitForExtensionActive(dtc dtclient, sleeper func(time.Duration)) error {
+	return installer.WaitForExtensionActive(dtc.isExtensionActive, sleeper)
 }

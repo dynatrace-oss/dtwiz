@@ -72,8 +72,11 @@ func stubExecLookPath(t *testing.T) func() {
 // noopDTClient is used in tests that never reach the DT API calls.
 type noopDTClient struct{}
 
-func (noopDTClient) installExtension() error {
-	return fmt.Errorf("unexpected installExtension call")
+func (noopDTClient) installExtension() (bool, error) {
+	return false, fmt.Errorf("unexpected installExtension call")
+}
+func (noopDTClient) isExtensionActive() (bool, error) {
+	return false, fmt.Errorf("unexpected isExtensionActive call")
 }
 func (noopDTClient) createConnection(string) (string, error) {
 	return "", fmt.Errorf("unexpected createConnection call")
@@ -98,6 +101,9 @@ type fakeDTClient struct {
 	connErr          error
 	createConnCalled bool
 	installExtErr    error
+	installExtFresh  bool // when true, installExtension() signals a fresh hub install
+	extNotActive     bool // when true, isExtensionActive() always returns false
+	isExtActiveCalls int
 	callSeq          []string // ordered record of installExtension / createMonitoring / updateMonitoring calls
 	updateErr        error
 	monErr           error
@@ -135,9 +141,14 @@ func happyUninstallFakeDTClient() *fakeDTClient {
 	}
 }
 
-func (f *fakeDTClient) installExtension() error {
+func (f *fakeDTClient) installExtension() (bool, error) {
 	f.callSeq = append(f.callSeq, "installExtension")
-	return f.installExtErr
+	return f.installExtFresh, f.installExtErr
+}
+
+func (f *fakeDTClient) isExtensionActive() (bool, error) {
+	f.isExtActiveCalls++
+	return !f.extNotActive, nil
 }
 
 func (f *fakeDTClient) createConnection(string) (string, error) {

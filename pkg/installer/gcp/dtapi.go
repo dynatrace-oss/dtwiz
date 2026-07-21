@@ -92,7 +92,12 @@ func splitConnectionsByCompleteness(conns []connRef) (complete, incomplete []con
 }
 
 type dtclient interface {
-	installExtension() error
+	// installExtension ensures the extension is installed. Returns true if it was freshly
+	// installed (202 Accepted from hub), false if it was already present.
+	installExtension() (bool, error)
+	// isExtensionActive reports whether the extension has an Active version. Use after a
+	// fresh install to poll until the async hub activation completes.
+	isExtensionActive() (bool, error)
 	createConnection(name string) (objectID string, err error)
 	// dtServiceAccount returns the Dynatrace principal granted impersonation rights.
 	dtServiceAccount() (email string, err error)
@@ -118,12 +123,19 @@ func newSDKDTClient(envURL, platformToken string) (*sdkDTClient, error) {
 	return &sdkDTClient{ExtensionClient: ec}, nil
 }
 
-func (d *sdkDTClient) installExtension() error {
+func (d *sdkDTClient) installExtension() (bool, error) {
 	if _, err := d.LatestExtensionVersion(extensionName); err == nil {
 		logger.Debug("extension already installed", "extension", extensionName)
-		return nil
+		return false, nil
 	}
-	return d.InstallExtension(extensionName, "")
+	if err := d.InstallExtension(extensionName, ""); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (d *sdkDTClient) isExtensionActive() (bool, error) {
+	return d.IsExtensionActive(extensionName)
 }
 
 func (d *sdkDTClient) createConnection(name string) (string, error) {

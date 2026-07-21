@@ -196,7 +196,7 @@ func installGCPWithRunner(
 	// Complete connection found: reconcile monitoring config in place; don't recreate the SA/bindings.
 	if _, err := selectUpdatableConnection(existing, name); err == nil {
 		fmt.Println("\n  Note: prerequisites already exist — running update instead of a fresh install.")
-		return updateGCPWithRunner(envURL, platformToken, dryRun, startTime, runner, dtc)
+		return updateGCPWithRunner(envURL, platformToken, dryRun, startTime, runner, sleeper, dtc)
 	}
 	resumeConnID, err := gcpResumableConnection(existing, name)
 	if err != nil {
@@ -309,9 +309,19 @@ func runInstallSteps(cfg gcpConfig, runner cmdRunner, sleeper func(time.Duration
 	}
 	display.ColorOK.Println("  ✓ Connection updated")
 
-	if err := dtc.installExtension(); err != nil {
+	freshlyInstalled, err := dtc.installExtension()
+	if err != nil {
 		gcpPartialFailureHint(cfg, completed)
 		return fmt.Errorf("installing extension %s: %w", extensionName, err)
+	}
+	if freshlyInstalled {
+		logger.Debug("extension freshly installed (async), waiting for it to become active")
+		fmt.Println("  Extension freshly installed — waiting for it to become active...")
+		if waitErr := waitForExtensionActive(dtc, sleeper); waitErr != nil {
+			logger.Debug("extension did not become active in time, proceeding anyway", "error", waitErr)
+		} else {
+			display.ColorOK.Println("  ✓ Extension is active")
+		}
 	}
 
 	fmt.Printf("  Step 7/%d: Create GCP monitoring configuration...\n", total)
@@ -405,4 +415,8 @@ func updateConnectionWithRetry(dtc dtclient, connObjectID, connName, serviceAcco
 			"the GCP resources and connection were already created — wait a moment and re-run to finish linking", lastErr)
 	}
 	return lastErr
+}
+
+func waitForExtensionActive(dtc dtclient, sleeper func(time.Duration)) error {
+	return installer.WaitForExtensionActive(dtc.isExtensionActive, sleeper)
 }

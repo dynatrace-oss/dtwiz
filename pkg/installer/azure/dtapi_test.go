@@ -694,3 +694,89 @@ func TestSDKDeleteMonitoring_ServerError(t *testing.T) {
 		t.Fatal("expected error for 500, got nil")
 	}
 }
+
+// ─── installExtension ────────────────────────────────────────────────────────
+
+func TestSDKInstallExtension_AlreadyInstalled(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == extensionAPI {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"items":[{"version":"1.2.0"}]}`))
+			return
+		}
+		t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+	}))
+	defer srv.Close()
+
+	fresh, err := newTestSDKClient(t, srv.URL).installExtension()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fresh {
+		t.Error("expected fresh=false for already-installed extension")
+	}
+}
+
+func TestSDKInstallExtension_FreshInstall(t *testing.T) {
+	installCalled := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == extensionAPI:
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":404,"message":"Extension not found"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == extensionAPI:
+			installCalled = true
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"extensionName":"com.dynatrace.extension.da-azure","version":"1.2.0"}`))
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	fresh, err := newTestSDKClient(t, srv.URL).installExtension()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !fresh {
+		t.Error("expected fresh=true after hub install")
+	}
+	if !installCalled {
+		t.Error("expected InstallFromHub to be called")
+	}
+}
+
+// ─── isExtensionActive ───────────────────────────────────────────────────────
+
+func TestSDKIsExtensionActive_Active(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[{"version":"1.2.0","active":true}]}`))
+	}))
+	defer srv.Close()
+
+	active, err := newTestSDKClient(t, srv.URL).isExtensionActive()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !active {
+		t.Error("expected active=true when extension version has active:true")
+	}
+}
+
+func TestSDKIsExtensionActive_NotActive(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[{"version":"1.2.0"}]}`))
+	}))
+	defer srv.Close()
+
+	active, err := newTestSDKClient(t, srv.URL).isExtensionActive()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if active {
+		t.Error("expected active=false when active field is absent")
+	}
+}

@@ -19,7 +19,7 @@ func UpdateAzure(envURL, platformToken string, dryRun bool, startTime time.Time)
 	if err := requireSupportedAzVersion(); err != nil {
 		return err
 	}
-	return updateAzureWithRunner(envURL, platformToken, dryRun, startTime, realRunner, dtc)
+	return updateAzureWithRunner(envURL, platformToken, dryRun, startTime, realRunner, time.Sleep, dtc)
 }
 
 func updateAzureWithRunner(
@@ -27,6 +27,7 @@ func updateAzureWithRunner(
 	dryRun bool,
 	startTime time.Time,
 	runner cmdRunner,
+	sleeper func(time.Duration),
 	dtc dtclient,
 ) error {
 	subscriptionID, tenantID, err := azureAccountInfo(runner)
@@ -67,8 +68,18 @@ func updateAzureWithRunner(
 		return err
 	}
 
-	if err := dtc.installExtension(); err != nil {
+	freshlyInstalled, err := dtc.installExtension()
+	if err != nil {
 		return fmt.Errorf("installing extension %s: %w", extensionName, err)
+	}
+	if freshlyInstalled {
+		logger.Debug("extension freshly installed (async), waiting for it to become active")
+		fmt.Println("  Extension freshly installed — waiting for it to become active...")
+		if waitErr := waitForExtensionActive(dtc, sleeper); waitErr != nil {
+			logger.Debug("extension did not become active in time, proceeding anyway", "error", waitErr)
+		} else {
+			display.ColorOK.Println("  ✓ Extension is active")
+		}
 	}
 
 	if err := reconcileMonitoring(cfg, monConfigIDs, dtc); err != nil {

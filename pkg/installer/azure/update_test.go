@@ -31,7 +31,7 @@ func TestUpdateAzureHappyPath_UpdatesInPlace(t *testing.T) {
 	dtc := happyUninstallFakeDTClient() // conn with clientID + one monitoring config
 
 	err := captureStdoutErr(func() error {
-		return updateAzureWithRunner("https://abc.live.dynatrace.com", "dt0s16.fake.token", false, time.Time{}, updateAzRunner(t), dtc)
+		return updateAzureWithRunner("https://abc.live.dynatrace.com", "dt0s16.fake.token", false, time.Time{}, updateAzRunner(t), noSleep, dtc)
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -68,7 +68,7 @@ func TestUpdateAzureCreatesConfigWhenMissing(t *testing.T) {
 	}
 
 	err := captureStdoutErr(func() error {
-		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, updateAzRunner(t), dtc)
+		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, updateAzRunner(t), noSleep, dtc)
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -91,7 +91,7 @@ func TestUpdateAzureExtensionFailureStopsBeforeMonitoringConfig(t *testing.T) {
 	dtc.installExtErr = fmt.Errorf("extension install failed")
 
 	err := captureStdoutErr(func() error {
-		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, updateAzRunner(t), dtc)
+		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, updateAzRunner(t), noSleep, dtc)
 	})
 	if err == nil {
 		t.Fatal("expected extension install error, got nil")
@@ -114,7 +114,7 @@ func TestUpdateAzureReconcilesAllDuplicateConfigs(t *testing.T) {
 	}
 
 	err := captureStdoutErr(func() error {
-		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, updateAzRunner(t), dtc)
+		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, updateAzRunner(t), noSleep, dtc)
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -133,7 +133,7 @@ func TestUpdateAzureDryRun(t *testing.T) {
 	dtc := happyUninstallFakeDTClient()
 
 	out := captureStdout(t, func() {
-		if err := updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", true, time.Time{}, updateAzRunner(t), dtc); err != nil {
+		if err := updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", true, time.Time{}, updateAzRunner(t), noSleep, dtc); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -151,7 +151,7 @@ func TestUpdateAzurePreviewLeavesAuthUnchanged(t *testing.T) {
 
 	dtc := happyUninstallFakeDTClient()
 	out := captureStdout(t, func() {
-		_ = updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", true, time.Time{}, updateAzRunner(t), dtc)
+		_ = updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", true, time.Time{}, updateAzRunner(t), noSleep, dtc)
 	})
 
 	if !strings.Contains(out, "update Azure monitoring configuration") {
@@ -167,7 +167,7 @@ func TestUpdateAzureCancelled(t *testing.T) {
 
 	dtc := happyUninstallFakeDTClient()
 	err := captureStdoutErr(func() error {
-		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, updateAzRunner(t), dtc)
+		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, updateAzRunner(t), noSleep, dtc)
 	})
 	if !isErrInstallCancelled(err) {
 		t.Errorf("expected ErrInstallCancelled, got: %v", err)
@@ -205,7 +205,7 @@ func TestUpdateAzureNoUsableConnection(t *testing.T) {
 	}
 
 	err := captureStdoutErr(func() error {
-		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, updateAzRunner(t), dtc)
+		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, updateAzRunner(t), noSleep, dtc)
 	})
 	if err == nil {
 		t.Fatal("expected error when no complete connection exists, got nil")
@@ -230,7 +230,7 @@ func TestUpdateAzureMultipleConnections(t *testing.T) {
 	}
 
 	err := captureStdoutErr(func() error {
-		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, updateAzRunner(t), dtc)
+		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, updateAzRunner(t), noSleep, dtc)
 	})
 	if err == nil {
 		t.Fatal("expected error for ambiguous multiple connections, got nil")
@@ -245,7 +245,7 @@ func TestUpdateAzureFindMonitoringError(t *testing.T) {
 
 	dtc := &fakeDTClient{findMonErr: fmt.Errorf("monitoring API error")}
 	err := captureStdoutErr(func() error {
-		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, updateAzRunner(t), dtc)
+		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, updateAzRunner(t), noSleep, dtc)
 	})
 	if err == nil {
 		t.Fatal("expected error from findMonitoringConfig failure, got nil")
@@ -257,7 +257,7 @@ func TestUpdateAzureFindConnectionError(t *testing.T) {
 
 	dtc := &fakeDTClient{findConnErr: fmt.Errorf("connection API error")}
 	err := captureStdoutErr(func() error {
-		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, updateAzRunner(t), dtc)
+		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, updateAzRunner(t), noSleep, dtc)
 	})
 	if err == nil {
 		t.Fatal("expected error from findConnection failure, got nil")
@@ -275,7 +275,7 @@ func TestUpdateAzureAccountInfoFails(t *testing.T) {
 	}
 
 	err := captureStdoutErr(func() error {
-		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, happyUninstallFakeDTClient())
+		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, runner, noSleep, happyUninstallFakeDTClient())
 	})
 	if err == nil {
 		t.Fatal("expected error from account lookup failure, got nil")
@@ -295,7 +295,7 @@ func TestUpdateAzureMonitoringUpdateFails(t *testing.T) {
 	dtc.updateMonErr = fmt.Errorf("update monitoring: API error")
 
 	err := captureStdoutErr(func() error {
-		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, updateAzRunner(t), dtc)
+		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, updateAzRunner(t), noSleep, dtc)
 	})
 	if err == nil {
 		t.Fatal("expected error from monitoring update failure, got nil")
@@ -319,7 +319,7 @@ func TestUpdateAzureMonitoringCreateFails(t *testing.T) {
 	}
 
 	err := captureStdoutErr(func() error {
-		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, updateAzRunner(t), dtc)
+		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, updateAzRunner(t), noSleep, dtc)
 	})
 	if err == nil {
 		t.Fatal("expected error from createMonitoring failure, got nil")
@@ -341,7 +341,7 @@ func TestUpdateAzurePreviewShowsCreateStep(t *testing.T) {
 		findConnClientID: "client-id-000",
 	}
 	out := captureStdout(t, func() {
-		_ = updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", true, time.Time{}, updateAzRunner(t), dtc)
+		_ = updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", true, time.Time{}, updateAzRunner(t), noSleep, dtc)
 	})
 
 	if !strings.Contains(out, "create Azure monitoring configuration") {
@@ -357,6 +357,37 @@ func TestUpdateAzureEntryPoint_ClientInitError(t *testing.T) {
 	err := UpdateAzure("", "dt0s16.fake.token", false, time.Time{})
 	if err == nil {
 		t.Fatal("expected error for empty envURL, got nil")
+	}
+}
+
+func TestUpdateAzureFreshExtensionInstallWaitsBeforeReconcile(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	dtc := happyUninstallFakeDTClient()
+	dtc.installExtFresh = true // simulate 202 Accepted fresh install
+	dtc.extNotActive = true    // force retries so the sleeper is called
+
+	slept := false
+	sleeper := func(time.Duration) { slept = true }
+
+	err := captureStdoutErr(func() error {
+		return updateAzureWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, updateAzRunner(t), sleeper, dtc)
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !slept {
+		t.Error("expected injected sleeper to be called while polling for extension active")
+	}
+	if dtc.isExtActiveCalls == 0 {
+		t.Error("expected waitForExtensionActive to poll isExtensionActive")
+	}
+	// update proceeds even when extension did not become active in time
+	if len(dtc.updateMonConfigIDs) != 1 {
+		t.Errorf("expected monitoring config reconciled, got %v", dtc.updateMonConfigIDs)
 	}
 }
 
