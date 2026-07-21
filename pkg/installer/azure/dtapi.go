@@ -99,14 +99,7 @@ func (d *sdkDTClient) updateConnection(objectID, name, tenantID, clientID string
 }
 
 func (d *sdkDTClient) findAllConnections(name string) ([]connRef, error) {
-	// NOTE: the sibling GCP connections schema (builtin:hyperscaler-authentication.
-	// connections.gcp) was confirmed live to return zero results when filtered by
-	// scopes=environment, even for objects whose own "scope" field is literally
-	// "environment" — see pkg/installer/gcp/dtapi.go. That fix was tried here too by
-	// analogy but never independently confirmed against the Azure schema, so it's kept
-	// reverted to the working, verified behavior until someone reproduces the same bug
-	// against builtin:hyperscaler-authentication.connections.azure specifically.
-	list, err := d.Settings.ListObjects(context.Background(), connectionSchemaID, "environment", 0)
+	list, err := d.Settings.ListObjects(context.Background(), connectionSchemaID, "", 0)
 	if err != nil {
 		return nil, fmt.Errorf("find connections: %w", err)
 	}
