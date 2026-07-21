@@ -3,8 +3,107 @@ package cmd
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
+
+func TestCheckPlatformToken(t *testing.T) {
+	tests := []struct {
+		name        string
+		statusCode  int
+		wantErr     bool
+		wantContain string
+	}{
+		{"200 ok", http.StatusOK, false, ""},
+		{"401 unauthorized", http.StatusUnauthorized, true, "✗ Platform token: authentication failed"},
+		{"403 forbidden", http.StatusForbidden, true, "✗ Platform token: insufficient permissions"},
+		{"500 server error", http.StatusInternalServerError, true, "unexpected response 500"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost {
+					t.Errorf("method = %s, want POST", r.Method)
+				}
+				if r.URL.Path != "/platform/storage/query/v1/query:execute" {
+					t.Errorf("path = %s, want /platform/storage/query/v1/query:execute", r.URL.Path)
+				}
+				if got := r.Header.Get("Authorization"); got != "Bearer dt0s16.testtoken" {
+					t.Errorf("Authorization = %q, want %q", got, "Bearer dt0s16.testtoken")
+				}
+				w.WriteHeader(tt.statusCode)
+			}))
+			defer srv.Close()
+
+			orig := credentialHTTPClient
+			credentialHTTPClient = srv.Client()
+			defer func() { credentialHTTPClient = orig }()
+
+			err := checkPlatformToken(srv.URL, "dt0s16.testtoken")
+			if (err != nil) != tt.wantErr {
+				t.Errorf("checkPlatformToken() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantContain != "" && err != nil {
+				if tt.statusCode == http.StatusInternalServerError {
+					if !strings.Contains(err.Error(), tt.wantContain) {
+						t.Errorf("checkPlatformToken() error = %q, want it to contain %q", err.Error(), tt.wantContain)
+					}
+				} else if err.Error() != tt.wantContain {
+					t.Errorf("checkPlatformToken() error = %q, want %q", err.Error(), tt.wantContain)
+				}
+			}
+		})
+	}
+}
+
+func TestCheckAccessToken(t *testing.T) {
+	tests := []struct {
+		name        string
+		statusCode  int
+		wantErr     bool
+		wantContain string
+	}{
+		{"200 ok", http.StatusOK, false, ""},
+		{"401 unauthorized", http.StatusUnauthorized, true, "✗ Access token: authentication failed"},
+		{"403 forbidden", http.StatusForbidden, true, "✗ Access token: insufficient permissions"},
+		{"500 server error", http.StatusInternalServerError, true, "unexpected response 500"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost {
+					t.Errorf("method = %s, want POST", r.Method)
+				}
+				if r.URL.Path != "/api/v2/apiTokens/lookup" {
+					t.Errorf("path = %s, want /api/v2/apiTokens/lookup", r.URL.Path)
+				}
+				if got := r.Header.Get("Authorization"); got != "Api-Token dt0c01.testtoken" {
+					t.Errorf("Authorization = %q, want %q", got, "Api-Token dt0c01.testtoken")
+				}
+				w.WriteHeader(tt.statusCode)
+			}))
+			defer srv.Close()
+
+			orig := credentialHTTPClient
+			credentialHTTPClient = srv.Client()
+			defer func() { credentialHTTPClient = orig }()
+
+			err := checkAccessToken(srv.URL, "dt0c01.testtoken")
+			if (err != nil) != tt.wantErr {
+				t.Errorf("checkAccessToken() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantContain != "" && err != nil {
+				if tt.statusCode == http.StatusInternalServerError {
+					if !strings.Contains(err.Error(), tt.wantContain) {
+						t.Errorf("checkAccessToken() error = %q, want it to contain %q", err.Error(), tt.wantContain)
+					}
+				} else if err.Error() != tt.wantContain {
+					t.Errorf("checkAccessToken() error = %q, want %q", err.Error(), tt.wantContain)
+				}
+			}
+		})
+	}
+}
 
 func TestCheckClassicAccess(t *testing.T) {
 	tests := []struct {
