@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `install azure` / `update azure` / `install gcp` / `update gcp`: extension activation now polls until the extension is truly active before creating monitoring configuration; the Dynatrace hub install is asynchronous (202 Accepted), so monitoring config was sometimes created against an extension that hadn't finished activating yet
-- `install azure`: when an existing connection is found and the install delegates to `update azure`.
+ - `install azure`: fix delegation when an existing connection is found — `install azure` now correctly delegates to `update azure`
 
 ## [1.0.0] - 2026-07-20
 
