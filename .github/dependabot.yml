@@ -5,7 +5,7 @@ updates:
     schedule:
       interval: weekly
     labels:
-      - deps
+      - dependencies
     groups:
       all-go-deps:
         patterns:
@@ -15,7 +15,7 @@ updates:
     schedule:
       interval: weekly
     labels:
-      - deps
+      - dependencies
     groups:
       all-actions:
         patterns:
