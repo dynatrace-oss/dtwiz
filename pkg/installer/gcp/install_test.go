@@ -97,6 +97,50 @@ func TestGCPInstallExtensionFailureStopsBeforeMonitoringConfig(t *testing.T) {
 	}
 }
 
+func TestGCPFreshExtensionInstall_WaitsForActiveThenCreatesMonitoring(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	dtc := happyFakeDTClient()
+	dtc.installExtFresh = true // simulate 202 Accepted from hub
+
+	err := captureStdoutErr(func() error {
+		return installGCPWithRunner("https://abc.live.dynatrace.com", "dt0s16.fake.token", false, time.Time{}, happyGcloudRunner(nil), noSleep, dtc)
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if dtc.isExtActiveCalls == 0 {
+		t.Error("expected isExtensionActive to be polled after fresh install")
+	}
+	if dtc.monCalledWith.connObjectID == "" {
+		t.Error("expected createMonitoring to be called after extension became active")
+	}
+}
+
+func TestGCPFreshExtensionInstall_PollTimeoutProceeds(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	dtc := happyFakeDTClient()
+	dtc.installExtFresh = true
+	dtc.extNotActive = true // isExtensionActive always returns false; poll exhausts
+
+	err := captureStdoutErr(func() error {
+		return installGCPWithRunner("https://abc.live.dynatrace.com", "dt0s16.fake.token", false, time.Time{}, happyGcloudRunner(nil), noSleep, dtc)
+	})
+	if err != nil {
+		t.Fatalf("flow must continue past poll timeout: %v", err)
+	}
+	if dtc.monCalledWith.connObjectID == "" {
+		t.Error("createMonitoring must be called even when extension poll times out")
+	}
+}
+
 func TestGCPDryRun(t *testing.T) {
 	old := installer.AutoConfirm
 	installer.AutoConfirm = true

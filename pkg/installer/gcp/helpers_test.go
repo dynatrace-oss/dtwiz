@@ -92,14 +92,17 @@ func (noopDTClient) deleteMonitoring(string) error                     { return 
 
 // fakeDTClient records calls for assertion.
 type fakeDTClient struct {
-	connObjectID  string
-	connErr       error
-	dtSAEmail     string
-	dtSAErr       error
-	installExtErr error
-	callSeq       []string // ordered record of installExtension / createMonitoring / updateMonitoring calls
-	updateErr     error
-	monErr        error
+	connObjectID     string
+	connErr          error
+	dtSAEmail        string
+	dtSAErr          error
+	installExtErr    error
+	installExtFresh  bool // when true, installExtension() signals a fresh hub install
+	extNotActive     bool // when true, isExtensionActive() always returns false
+	isExtActiveCalls int
+	callSeq          []string // ordered record of installExtension / createMonitoring / updateMonitoring calls
+	updateErr        error
+	monErr           error
 
 	// uninstall
 	findConnObjectID string
@@ -140,11 +143,12 @@ func happyUninstallFakeDTClient() *fakeDTClient {
 
 func (f *fakeDTClient) installExtension() (bool, error) {
 	f.callSeq = append(f.callSeq, "installExtension")
-	return false, f.installExtErr // false = already installed; no wait loop in tests
+	return f.installExtFresh, f.installExtErr
 }
 
 func (f *fakeDTClient) isExtensionActive() (bool, error) {
-	return true, nil
+	f.isExtActiveCalls++
+	return !f.extNotActive, nil
 }
 
 func (f *fakeDTClient) createConnection(string) (string, error) {

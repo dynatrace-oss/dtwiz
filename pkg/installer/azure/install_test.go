@@ -106,6 +106,52 @@ func TestAzureInstallExtensionFailureStopsBeforeMonitoringConfig(t *testing.T) {
 	}
 }
 
+func TestAzureFreshExtensionInstall_WaitsForActiveThenCreatesMonitoring(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	dtc := happyFakeDTClient()
+	dtc.installExtFresh = true // simulate 202 Accepted from hub
+	fr := buildHappyPathAzRunner(t)
+
+	err := captureStdoutErr(func() error {
+		return installAzureWithRunner("https://abc.live.dynatrace.com", "dt0s16.fake.token", false, time.Time{}, fr.run, noSleep, dtc)
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if dtc.isExtActiveCalls == 0 {
+		t.Error("expected isExtensionActive to be polled after fresh install")
+	}
+	if dtc.monCalledWith.connObjectID == "" {
+		t.Error("expected createMonitoring to be called after extension became active")
+	}
+}
+
+func TestAzureFreshExtensionInstall_PollTimeoutProceeds(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+
+	dtc := happyFakeDTClient()
+	dtc.installExtFresh = true
+	dtc.extNotActive = true // isExtensionActive always returns false; poll exhausts
+	fr := buildHappyPathAzRunner(t)
+
+	err := captureStdoutErr(func() error {
+		return installAzureWithRunner("https://abc.live.dynatrace.com", "dt0s16.fake.token", false, time.Time{}, fr.run, noSleep, dtc)
+	})
+	if err != nil {
+		t.Fatalf("flow must continue past poll timeout: %v", err)
+	}
+	if dtc.monCalledWith.connObjectID == "" {
+		t.Error("createMonitoring must be called even when extension poll times out")
+	}
+}
+
 func TestAzureDryRun(t *testing.T) {
 	old := installer.AutoConfirm
 	installer.AutoConfirm = true
