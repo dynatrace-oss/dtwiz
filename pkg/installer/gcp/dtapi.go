@@ -149,9 +149,6 @@ func (d *sdkDTClient) createConnection(name string) (string, error) {
 // gcp-dynatrace-principal schema. The exact field name is environment-managed,
 // so the value is located by scanning for a Google service-account email.
 func (d *sdkDTClient) dtServiceAccount() (string, error) {
-	// Same quirk as findAllConnections: filtering by scopes=environment returns zero
-	// results for this schema even when the object is environment-scoped — drop the
-	// filter so the query param is omitted entirely.
 	list, err := d.Settings.ListObjects(context.Background(), dtPrincipalSchemaID, "", 0)
 	if err != nil {
 		return "", fmt.Errorf("resolve Dynatrace GCP principal: %w", err)
@@ -207,12 +204,6 @@ func (d *sdkDTClient) updateConnection(objectID, name, serviceAccountEmail strin
 }
 
 func (d *sdkDTClient) findAllConnections(name string) ([]connRef, error) {
-	// Confirmed live: filtering by scopes=environment returns zero results for this
-	// schema even for objects whose own "scope" field is literally "environment" —
-	// dropping the scopes filter (empty string omits the query param entirely, see
-	// PaginationParams.QueryParams) is what actually surfaces them. Do not "fix" this
-	// back to "environment"; that reintroduces the bug that made dtwiz think every
-	// existing connection was invisible.
 	list, err := d.Settings.ListObjects(context.Background(), connectionSchemaID, "", 0)
 	if err != nil {
 		return nil, fmt.Errorf("find connections: %w", err)

@@ -93,8 +93,8 @@ func TestSDKFindAllConnections_Found(t *testing.T) {
 		if r.URL.Query().Get("schemaIds") != connectionSchemaID {
 			t.Errorf("schemaIds query param missing or wrong: %q", r.URL.Query().Get("schemaIds"))
 		}
-		if got := r.URL.Query().Get("scopes"); got != "environment" {
-			t.Errorf("scopes query param = %q, want %q", got, "environment")
+		if _, present := r.URL.Query()["scopes"]; present {
+			t.Errorf("scopes query param must be omitted, got %q", r.URL.Query().Get("scopes"))
 		}
 		w.Header().Set("Content-Type", "application/json")
 		body := map[string]interface{}{
