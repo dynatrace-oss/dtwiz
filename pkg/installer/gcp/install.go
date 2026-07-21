@@ -362,11 +362,6 @@ const (
 	updateConnectionInitialDelay = 30 * time.Second
 	updateConnectionMaxAttempts  = 30
 	updateConnectionRetryDelay   = 5 * time.Second
-
-	// extensionActiveMaxAttempts x extensionActiveRetryDelay bounds how long dtwiz polls for a
-	// freshly hub-installed extension to become active (hub install is 202 Accepted = async).
-	extensionActiveMaxAttempts = 12
-	extensionActiveRetryDelay  = 5 * time.Second
 )
 
 // updateConnectionRetryable reports whether err is worth retrying. The live impersonation
@@ -422,23 +417,6 @@ func updateConnectionWithRetry(dtc dtclient, connObjectID, connName, serviceAcco
 	return lastErr
 }
 
-// waitForExtensionActive polls until the extension reports Active == true.
-// Hub installs are async (202 Accepted); Active flipping to true is the readiness signal.
 func waitForExtensionActive(dtc dtclient, sleeper func(time.Duration)) error {
-	return installer.Retry(sleeper, installer.RetryConfig{
-		MaxAttempts: extensionActiveMaxAttempts,
-		Delay:       func(int) time.Duration { return extensionActiveRetryDelay },
-		OnRetry: func(attempt int, _ time.Duration, _ error) {
-			logger.Debug("extension not yet active, polling", "attempt", attempt)
-		},
-	}, func() error {
-		active, err := dtc.isExtensionActive()
-		if err != nil {
-			return err
-		}
-		if !active {
-			return fmt.Errorf("extension not yet active")
-		}
-		return nil
-	})
+	return installer.WaitForExtensionActive(dtc.isExtensionActive, sleeper)
 }

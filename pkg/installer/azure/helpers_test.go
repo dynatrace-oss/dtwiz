@@ -97,16 +97,16 @@ func (noopDTClient) deleteMonitoring(string) error                     { return 
 
 // fakeDTClient records calls for assertion.
 type fakeDTClient struct {
-	connObjectID      string
-	connErr           error
-	createConnCalled  bool
-	installExtErr     error
-	installExtFresh   bool // when true, installExtension() signals a fresh hub install
-	extNotActive      bool // when true, isExtensionActive() always returns false
-	isExtActiveCalls  int
-	callSeq           []string // ordered record of installExtension / createMonitoring / updateMonitoring calls
-	updateErr         error
-	monErr            error
+	connObjectID     string
+	connErr          error
+	createConnCalled bool
+	installExtErr    error
+	installExtFresh  bool // when true, installExtension() signals a fresh hub install
+	extNotActive     bool // when true, isExtensionActive() always returns false
+	isExtActiveCalls int
+	callSeq          []string // ordered record of installExtension / createMonitoring / updateMonitoring calls
+	updateErr        error
+	monErr           error
 
 	// uninstall
 	findConnObjectID string

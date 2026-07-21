@@ -1,9 +1,40 @@
 package installer
 
 import (
+	"fmt"
 	"math/rand"
 	"time"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
+
+const (
+	// ExtensionActiveMaxAttempts x ExtensionActiveRetryDelay bounds how long dtwiz polls for a
+	// freshly hub-installed extension to become active (hub install is 202 Accepted = async).
+	ExtensionActiveMaxAttempts = 12
+	ExtensionActiveRetryDelay  = 5 * time.Second
+)
+
+// WaitForExtensionActive polls isActive until it returns true, using sleeper between attempts.
+// Hub installs are async (202 Accepted); Active flipping to true is the readiness signal.
+func WaitForExtensionActive(isActive func() (bool, error), sleeper func(time.Duration)) error {
+	return Retry(sleeper, RetryConfig{
+		MaxAttempts: ExtensionActiveMaxAttempts,
+		Delay:       func(int) time.Duration { return ExtensionActiveRetryDelay },
+		OnRetry: func(attempt int, _ time.Duration, _ error) {
+			logger.Debug("extension not yet active, polling", "attempt", attempt)
+		},
+	}, func() error {
+		active, err := isActive()
+		if err != nil {
+			return err
+		}
+		if !active {
+			return fmt.Errorf("extension not yet active")
+		}
+		return nil
+	})
+}
 
 // RetryConfig parameterizes Retry: how many times to try, how long to wait
 // between attempts, and which errors are worth retrying at all.

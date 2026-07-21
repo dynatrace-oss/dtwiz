@@ -62,8 +62,18 @@ func updateGCPWithRunner(
 		return err
 	}
 
-	if _, err := dtc.installExtension(); err != nil {
+	freshlyInstalled, err := dtc.installExtension()
+	if err != nil {
 		return fmt.Errorf("installing extension %s: %w", extensionName, err)
+	}
+	if freshlyInstalled {
+		logger.Debug("extension freshly installed (async), waiting for it to become active")
+		fmt.Println("  Extension freshly installed — waiting for it to become active...")
+		if waitErr := waitForExtensionActive(dtc, time.Sleep); waitErr != nil {
+			logger.Debug("extension did not become active in time, proceeding anyway", "error", waitErr)
+		} else {
+			display.ColorOK.Println("  ✓ Extension is active")
+		}
 	}
 
 	if err := reconcileMonitoring(cfg, monConfigIDs, dtc); err != nil {
