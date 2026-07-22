@@ -91,6 +91,16 @@ make install
 
 The `main` channel is rebuilt automatically on every push to `main` and is intended for testing unreleased changes. It is not recommended for production use.
 
+## Supported versions
+
+### OneAgent
+
+`dtwiz install oneagent` follows the system requirements defined by Dynatrace OneAgent. See [OneAgent requirements](https://docs.dynatrace.com/docs/ingest-from/dynatrace-oneagent/oa-requirements) for supported operating systems, architectures, and package manager prerequisites.
+
+### OpenTelemetry Collector
+
+`dtwiz install otel` and `dtwiz install otel-collector` deploy the [Dynatrace Distribution of the OpenTelemetry Collector](https://docs.dynatrace.com/docs/ingest-from/opentelemetry/collector). Refer to that page for supported collector versions and configuration options.
+
 ## Available commands
 
 | Command | Description |
