@@ -29,9 +29,12 @@ var releaseBaseURL = "https://github.com/dynatrace-oss/dtwiz/releases"
 
 // BundledDemoPath returns the fixed extraction path for the schnitzel demo app:
 // $HOME/.dtwiz/examples/schnitzel on macOS/Linux, %USERPROFILE%\.dtwiz\examples\schnitzel on Windows.
-func BundledDemoPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".dtwiz", "examples", demoDirName)
+func BundledDemoPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolving home directory: %w", err)
+	}
+	return filepath.Join(home, ".dtwiz", "examples", demoDirName), nil
 }
 
 // demoExamplesURL returns the download URL for the demo examples tarball.
@@ -50,7 +53,7 @@ func demoExamplesURL() string {
 func downloadDemoExamples(dst string) error {
 	url := demoExamplesURL()
 
-	resp, err := http.Get(url) //nolint:gosec // URL constructed from hardcoded base + binary version
+	resp, err := httpClient.Get(url) //nolint:gosec
 	if err != nil {
 		return fmt.Errorf("downloading demo examples: %w", err)
 	}
@@ -242,7 +245,11 @@ func installPythonWindows() error {
 
 // IsDemoRunning returns true when the schnitzel demo services are already running.
 func IsDemoRunning() bool {
-	demoPath := BundledDemoPath()
+	demoPath, err := BundledDemoPath()
+	if err != nil {
+		logger.Debug("IsDemoRunning: could not resolve demo path", "error", err)
+		return false
+	}
 	if _, err := os.Stat(demoPath); err != nil {
 		return false
 	}
@@ -258,7 +265,10 @@ func IsDemoRunning() bool {
 // 2. Install Python if missing
 // 3. Install OTel Collector + Python auto-instrumentation targeting the bundled schnitzel app
 func InstallDemo(envURL, token, platformTok string, dryRun bool) error {
-	demoPath := BundledDemoPath()
+	demoPath, err := BundledDemoPath()
+	if err != nil {
+		return err
+	}
 	_, statErr := os.Stat(demoPath)
 	demoExists := statErr == nil
 

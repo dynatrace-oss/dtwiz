@@ -180,7 +180,10 @@ func TestDemoExamplesURL(t *testing.T) {
 }
 
 func TestBundledDemoPath(t *testing.T) {
-	path := BundledDemoPath()
+	path, err := BundledDemoPath()
+	if err != nil {
+		t.Fatalf("BundledDemoPath returned error: %v", err)
+	}
 	if !filepath.IsAbs(path) {
 		t.Fatalf("expected absolute path, got: %s", path)
 	}

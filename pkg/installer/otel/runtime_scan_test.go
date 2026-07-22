@@ -603,7 +603,7 @@ func TestScanProjectDirs_NoDuplicates(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// CWD == bundled path: the same project would be visited by both scans.
+	// CWD == bundled path: the bundled scan is skipped, so the project is found exactly once via the CWD scan.
 	helpers.SetTestWorkingDir(t, bundled)
 
 	projects := scanProjectDirs([]string{"requirements.txt"}, nil)
