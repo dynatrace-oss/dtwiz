@@ -274,7 +274,6 @@ func TestInstallPythonWindows_WingetSucceedsButPythonUnavailable(t *testing.T) {
 	}
 }
 
-
 func TestDetectLinuxDistro(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("Linux-only test")
@@ -287,4 +286,3 @@ func TestDetectLinuxDistro(t *testing.T) {
 		t.Fatalf("unexpected distro value: %s", distro)
 	}
 }
-
