@@ -1,0 +1,3 @@
+examples:
+  - changed-files:
+      - any-glob-to-all-files: "examples/**"
