@@ -29,6 +29,7 @@ Alternatives considered:
 - **`go:embed`**: Demo files baked into every binary. Works offline after first extraction. Rejected because it adds demo overhead to all users, including those who never use the demo.
 - **GoReleaser archive + install script copy**: examples ship in the release archive and install scripts copy them to `~/.dtwiz/examples/`. Works for users who use the install script, but fails silently for users who download the binary manually. Also adds complexity to the install scripts on all platforms.
 - **Download the full release archive**: if `~/.dtwiz/examples/schnitzel/` is missing, download the full release archive and extract examples from it. Rejected in favor of a small dedicated asset (`dtwiz-examples.tar.gz`) that contains only the example apps.
+- **Write archive to disk then delete after extraction**: download `dtwiz-examples.tar.gz` to a temp file, extract it, then delete the archive. Rejected in favor of streaming the HTTP response body directly into the tar extractor — no temp file is ever written, so no cleanup step is needed.
 
 ### Examples location: `~/.dtwiz/examples/` over CWD
 

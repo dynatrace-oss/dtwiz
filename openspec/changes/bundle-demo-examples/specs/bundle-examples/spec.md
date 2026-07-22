@@ -31,12 +31,6 @@ The extraction path is:
 - **AND** extract it to `~/.dtwiz/examples/`
 - **AND** all example directories and their files SHALL be present after extraction
 
-#### Scenario: Archive is deleted after successful extraction
-
-- **WHEN** `dtwiz-examples.tar.gz` has been downloaded and extracted successfully
-- **THEN** the archive file SHALL be deleted
-- **AND** only the extracted `~/.dtwiz/examples/` directory SHALL remain on disk
-
 #### Scenario: Download is skipped when path already exists
 
 - **WHEN** `~/.dtwiz/examples/schnitzel/` already exists on disk
