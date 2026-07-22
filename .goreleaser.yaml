@@ -36,8 +36,9 @@ archives:
           - zip
 
 
-extra_files:
-  - glob: dtwiz-examples.tar.gz
+release:
+  extra_files:
+    - glob: dtwiz-examples.tar.gz
 
 checksum:
   name_template: 'checksums.txt'
