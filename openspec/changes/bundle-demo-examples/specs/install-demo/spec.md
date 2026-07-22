@@ -84,7 +84,7 @@ After confirming, `install demo` SHALL invoke the OTel Collector installation fo
 
 ### Requirement: Install demo option is hidden in setup when demo is already monitored
 
-When the user runs `dtwiz setup` and the schnitzel demo services are already actively running, the `[d] Install demo app` option SHALL NOT be shown. The presence of the `~/.dtwiz/examples/schnitzel/` directory alone is not sufficient — it may exist because the examples ship with the dtwiz release archive.
+When the user runs `dtwiz setup` and the schnitzel demo services are already actively running, the `[d] Install demo app` option SHALL NOT be shown. The presence of the `~/.dtwiz/examples/schnitzel/` directory alone is not sufficient: it may exist from a previous demo install or manual extraction even when the demo is not running.
 
 #### Scenario: Install demo option hidden when demo services are running
 

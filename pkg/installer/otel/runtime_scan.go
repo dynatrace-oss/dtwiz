@@ -257,22 +257,7 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 	if home, err := os.UserHomeDir(); err == nil {
 		bundledRoot := filepath.Join(home, ".dtwiz", "examples")
 		if _, err := os.Stat(bundledRoot); err == nil {
-			resolvedCWD, err := filepath.EvalSymlinks(workingDir)
-			if err != nil {
-				logger.Debug("scanProjectDirs: EvalSymlinks failed for CWD, using original path", "path", workingDir, "error", err)
-				resolvedCWD = workingDir
-			}
-			resolvedBundled, err := filepath.EvalSymlinks(bundledRoot)
-			if err != nil {
-				logger.Debug("scanProjectDirs: EvalSymlinks failed for bundled root, using original path", "path", bundledRoot, "error", err)
-				resolvedBundled = bundledRoot
-			}
-			sep := string(filepath.Separator)
-			cwdUnderBundled := strings.HasPrefix(strings.ToLower(resolvedCWD)+sep, strings.ToLower(resolvedBundled)+sep)
-			bundledUnderCWD := strings.HasPrefix(strings.ToLower(resolvedBundled)+sep, strings.ToLower(resolvedCWD)+sep)
-			if !cwdUnderBundled && !bundledUnderCWD {
-				walkCandidateDirs(bundledRoot, 0, dirMatches, shouldSkipDir)
-			}
+			walkCandidateDirs(bundledRoot, 0, dirMatches, shouldSkipDir)
 		}
 	}
 

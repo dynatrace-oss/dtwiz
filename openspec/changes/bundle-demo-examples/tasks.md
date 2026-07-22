@@ -8,8 +8,9 @@
 
 ## 2. Publish schnitzel examples as a release asset
 
-- [ ] 2.1 Update `.goreleaser.yaml` to package the `examples/` directory as `dtwiz-examples.tar.gz` and publish it as an additional release asset
+- [ ] 2.1 Update `.goreleaser.yaml` to package the `examples/` directory as `dtwiz-examples.tar.gz` under `dist/`, publish it as an additional release asset, and keep the generated tarball out of the working tree
 - [ ] 2.2 Verify the release asset builds cleanly with `goreleaser build --snapshot` and the archive contains the expected files
+- [ ] 2.3 Verify normal platform archives do not include `examples/` and install scripts do not copy examples eagerly
 
 ## 3. Rewrite demo.go to use release asset download
 

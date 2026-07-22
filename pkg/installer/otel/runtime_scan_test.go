@@ -619,6 +619,31 @@ func TestScanProjectDirs_NoDuplicates(t *testing.T) {
 	}
 }
 
+func TestScanProjectDirs_BundledExamplesFromHome(t *testing.T) {
+	home := fakeHome(t)
+	bundled := filepath.Join(home, ".dtwiz", "examples", "schnitzel")
+	if err := os.MkdirAll(bundled, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundled, "requirements.txt"), []byte("flask\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	helpers.SetTestWorkingDir(t, home)
+
+	projects := scanProjectDirs([]string{"requirements.txt"}, nil)
+
+	count := 0
+	for _, p := range projects {
+		if strings.HasSuffix(filepath.ToSlash(p.Path), "schnitzel") {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("expected schnitzel to appear exactly once when scanning from home; got %d occurrences in %v", count, projects)
+	}
+}
+
 func TestParseWinProcessOutput_Empty(t *testing.T) {
 	if got := parseWinProcessOutput(""); len(got) != 0 {
 		t.Errorf("expected empty result for empty input, got %v", got)

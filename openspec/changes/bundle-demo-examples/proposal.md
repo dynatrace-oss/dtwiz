@@ -7,9 +7,10 @@ The demo install flow downloads the schnitzel app from an external GitHub reposi
 ## What Changes
 
 - The `examples/schnitzel/` directory is added to the dtwiz repository under `examples/`
-- `.goreleaser.yaml` is updated to publish `dtwiz-examples.tar.gz` as an additional release asset
+- `.goreleaser.yaml` is updated to publish `dtwiz-examples.tar.gz` from GoReleaser's `dist/` directory as an additional release asset, so release cleanup removes the generated local tarball
 - When `~/.dtwiz/examples/schnitzel/` does not exist, `InstallDemo` downloads `dtwiz-examples.tar.gz` from the current dtwiz GitHub release and extracts it to `~/.dtwiz/examples/`
 - `InstallDemo` reads from `~/.dtwiz/examples/schnitzel/` directly and instruments it in place. There is no copy to the current working directory
+- Normal platform archives and install scripts do not include or copy demo files; users who do not run the demo do not receive examples
 - All third-party download logic is removed: `downloadAndExtractDemo`, `extractZip`, and `demoZipURL` are deleted and replaced with version-pinned release asset download
 - The `checkDemoExists` function is removed (no longer needed)
 
@@ -27,7 +28,7 @@ The demo install flow downloads the schnitzel app from an external GitHub reposi
 ## Impact
 
 - `examples/`: new directory containing the schnitzel app source files
-- `.goreleaser.yaml`: updated to publish `dtwiz-examples.tar.gz` as a release asset
+- `.goreleaser.yaml`: updated to publish `dtwiz-examples.tar.gz` from `dist/` as a release asset so the generated local tarball is cleaned up with release artifacts
 - `pkg/installer/otel/demo.go`: third-party download functions removed, `InstallDemo` rewritten to download from the dtwiz release asset and use the bundled path
 - No changes to `scripts/install.sh` or `scripts/install.ps1`
 - No changes to flags or auth
