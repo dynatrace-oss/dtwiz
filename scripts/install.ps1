@@ -169,6 +169,17 @@ try {
     Write-Host ""
     Write-Host "dtwiz ${Version} installed to ${Dest}"
 
+    # ── Install bundled examples ───────────────────────────────────────────────
+    $ExamplesSrc = Join-Path $TmpDir "examples"
+    if (Test-Path $ExamplesSrc) {
+        $ExamplesDest = Join-Path $env:USERPROFILE ".dtwiz\examples"
+        if (-not (Test-Path $ExamplesDest)) {
+            New-Item -ItemType Directory -Path $ExamplesDest -Force | Out-Null
+        }
+        Copy-Item -Path "$ExamplesSrc\*" -Destination $ExamplesDest -Recurse -Force
+        Write-Host "  Examples installed to $ExamplesDest"
+    }
+
     # ── Add to user PATH if needed ─────────────────────────────────────────────
     $UserPath = [Environment]::GetEnvironmentVariable("PATH", "User")
     $PathDirs = $UserPath -split ";"

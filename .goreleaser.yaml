@@ -33,6 +33,7 @@ archives:
         formats:
           - zip
 
+
 checksum:
   name_template: 'checksums.txt'
 

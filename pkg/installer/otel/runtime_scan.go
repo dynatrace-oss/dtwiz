@@ -253,6 +253,21 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 
 	walkCandidateDirs(workingDir, 0, dirMatches, shouldSkipDir)
 
+	// Also scan the bundled examples root (~/.dtwiz/examples) if it exists.
+	if home, err := os.UserHomeDir(); err == nil {
+		bundledRoot := filepath.Join(home, ".dtwiz", "examples")
+		if _, err := os.Stat(bundledRoot); err == nil {
+			resolvedCWD, _ := filepath.EvalSymlinks(workingDir)
+			resolvedBundled, _ := filepath.EvalSymlinks(bundledRoot)
+			sep := string(filepath.Separator)
+			cwdUnderBundled := strings.HasPrefix(resolvedCWD+sep, resolvedBundled+sep)
+			bundledUnderCWD := strings.HasPrefix(resolvedBundled+sep, resolvedCWD+sep)
+			if !cwdUnderBundled && !bundledUnderCWD {
+				walkCandidateDirs(bundledRoot, 0, dirMatches, shouldSkipDir)
+			}
+		}
+	}
+
 	subtreeCounts.Range(func(key, value any) bool {
 		logger.Debug("scan summary", "subdir", key.(string), "dirs_checked", value.(*atomic.Int64).Load())
 		return true

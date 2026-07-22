@@ -170,6 +170,14 @@ fi
 echo ""
 echo "dtwiz ${VERSION} installed to ${DEST}"
 
+# ── Install bundled examples ───────────────────────────────────────────────────
+if [ -d "${WORK_DIR}/examples" ]; then
+    EXAMPLES_DEST="${HOME}/.dtwiz/examples"
+    mkdir -p "$EXAMPLES_DEST"
+    cp -r "${WORK_DIR}/examples/." "$EXAMPLES_DEST/"
+    echo "  Examples installed to ${EXAMPLES_DEST}"
+fi
+
 # ── Add to PATH in shell profile if needed ─────────────────────────────────────
 case ":${PATH}:" in
     *":${INSTALL_DIR}:"*)

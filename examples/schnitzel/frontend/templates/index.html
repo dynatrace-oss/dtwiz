@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script type="text/javascript" src="https://js-cdn.dynatracelabs.com/jstag/1837f09f4dd/bf29515lbk/33ae6078ab64c7d4_complete.js" crossorigin="anonymous"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Schnitzel</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #f5e6ca 0%, #e8c97a 100%);
+        }
+        .card {
+            background: white; border-radius: 16px; padding: 3rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1); text-align: center;
+            max-width: 400px; width: 90%;
+        }
+        h1 { font-size: 2rem; color: #333; margin-bottom: 0.5rem; }
+        .emoji { font-size: 4rem; margin-bottom: 1rem; }
+        p { color: #666; margin-bottom: 1.5rem; }
+        button {
+            background: #d4880f; color: white; border: none;
+            padding: 14px 40px; font-size: 1.1rem; border-radius: 8px;
+            cursor: pointer; transition: background 0.2s, transform 0.1s;
+        }
+        button:hover { background: #b8750d; transform: scale(1.02); }
+        button:active { transform: scale(0.98); }
+        button:disabled { background: #ccc; cursor: not-allowed; transform: none; }
+        #result {
+            margin-top: 1.5rem; padding: 1rem; border-radius: 8px;
+            display: none; font-size: 0.95rem;
+        }
+        .success { background: #d4edda; color: #155724; display: block !important; }
+        .error { background: #f8d7da; color: #721c24; display: block !important; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="emoji">🍽️</div>
+        <h1>Schnitzel Service</h1>
+        <p>Hungry? Order a freshly made Wiener Schnitzel!</p>
+        <button id="orderBtn" onclick="orderSchnitzel()">Order Schnitzel 🥩</button>
+        <div id="result"></div>
+    </div>
+    <script>
+        async function orderSchnitzel() {
+            const btn = document.getElementById('orderBtn');
+            const result = document.getElementById('result');
+            btn.disabled = true;
+            btn.textContent = 'Ordering...';
+            result.className = '';
+            result.style.display = 'none';
+            try {
+                const resp = await fetch('/order', { method: 'POST' });
+                const data = await resp.json();
+                if (data.status === 'success') {
+                    result.className = 'success';
+                    result.innerHTML = `<strong>Order placed!</strong><br>
+                        Order #${data.order.order_id}<br>
+                        Delivery ETA: ${data.delivery.eta}`;
+                } else {
+                    throw new Error(data.message || 'Order failed');
+                }
+            } catch (e) {
+                result.className = 'error';
+                result.innerHTML = `<strong>Error:</strong> ${e.message}`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Order Schnitzel 🥩';
+            }
+        }
+    </script>
+</body>
+</html>

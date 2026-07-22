@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -84,6 +85,9 @@ var setupCmd = &cobra.Command{
 			return nil
 		}
 
+		_, schnitzelStatErr := os.Stat(otel.BundledDemoPath())
+		schnitzelPresent := schnitzelStatErr == nil
+
 		for i, r := range actionable {
 			fmt.Printf("  %s  %s\n", display.ColorHeader.Sprintf("[%d]", i+1), r.Title)
 		}
@@ -93,7 +97,7 @@ var setupCmd = &cobra.Command{
 				fmt.Printf("  %s  %s\n", display.ColorDefault.Sprint(" · "), display.ColorDefault.Sprint(r.Title))
 			}
 		}
-		if featureflags.IsEnabled(featureflags.Experimental) && !demoRunning {
+		if !schnitzelPresent && !demoRunning {
 			fmt.Println()
 			fmt.Printf("  %s  %s\n", display.ColorDefault.Sprint("[d]"), display.ColorDefault.Sprint("Install demo app (schnitzel)"))
 		}
@@ -120,7 +124,7 @@ var setupCmd = &cobra.Command{
 			return uninstallCmd.Help()
 		}
 
-		if input == "d" && featureflags.IsEnabled(featureflags.Experimental) {
+		if input == "d" && !schnitzelPresent {
 			fmt.Println()
 
 			envURL, accessTok, platformTok, err := getDtEnvironment()
