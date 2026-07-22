@@ -135,10 +135,13 @@ func checkAccessToken(envURL, token string) error {
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, resp.Body)
 
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+	if resp.StatusCode == 401 {
 		return fmt.Errorf("✗ Access token: authentication failed")
 	}
-	if resp.StatusCode/100 != 2 {
+	if resp.StatusCode == 403 {
+		return fmt.Errorf("✗ Access token: insufficient permissions")
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("✗ Access token: unexpected response %d from %s", resp.StatusCode, lookupURL)
 	}
 	return nil
@@ -200,10 +203,13 @@ func checkPlatformToken(envURL, token string) error {
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, resp.Body)
 
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+	if resp.StatusCode == 401 {
 		return fmt.Errorf("✗ Platform token: authentication failed")
 	}
-	if resp.StatusCode/100 != 2 {
+	if resp.StatusCode == 403 {
+		return fmt.Errorf("✗ Platform token: insufficient permissions")
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("✗ Platform token: unexpected response %d from %s", resp.StatusCode, queryURL)
 	}
 	return nil
