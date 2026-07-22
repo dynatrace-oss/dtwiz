@@ -23,9 +23,9 @@ const (
 	wingetPythonPackage = "Python.Python.3.14"
 )
 
-// releaseAssetBaseURL is the base URL for dtwiz release assets.
+// releaseBaseURL is the base URL for dtwiz GitHub releases.
 // Overridden in tests to point at a local httptest.Server.
-var releaseAssetBaseURL = "https://github.com/dynatrace-oss/dtwiz/releases/download"
+var releaseBaseURL = "https://github.com/dynatrace-oss/dtwiz/releases"
 
 // BundledDemoPath returns the fixed extraction path for the schnitzel demo app:
 // $HOME/.dtwiz/examples/schnitzel on macOS/Linux, %USERPROFILE%\.dtwiz\examples\schnitzel on Windows.
@@ -34,11 +34,21 @@ func BundledDemoPath() string {
 	return filepath.Join(home, ".dtwiz", "examples", demoDirName)
 }
 
+// demoExamplesURL returns the download URL for the demo examples tarball.
+// Dev and pre-release builds (version contains "-" or equals "dev") resolve to
+// the latest stable release; proper releases use the exact version tag.
+func demoExamplesURL() string {
+	ver := version.Version
+	if ver == "dev" || strings.Contains(ver, "-") {
+		return releaseBaseURL + "/latest/download/dtwiz-examples.tar.gz"
+	}
+	return fmt.Sprintf("%s/download/v%s/dtwiz-examples.tar.gz", releaseBaseURL, ver)
+}
+
 // downloadDemoExamples downloads the version-pinned dtwiz-examples.tar.gz release
 // asset and extracts it so that schnitzel ends up at dst.
 func downloadDemoExamples(dst string) error {
-	ver := version.Version
-	url := fmt.Sprintf("%s/v%s/dtwiz-examples.tar.gz", releaseAssetBaseURL, ver)
+	url := demoExamplesURL()
 
 	resp, err := http.Get(url) //nolint:gosec // URL constructed from hardcoded base + binary version
 	if err != nil {
@@ -264,7 +274,7 @@ func InstallDemo(envURL, token, platformTok string, dryRun bool) error {
 
 	step := 1
 	if !demoExists {
-		fmt.Printf("  %d) Download schnitzel from dtwiz release asset\n", step)
+		fmt.Printf("  %d) Download schnitzel → %s\n", step, demoPath)
 		step++
 	}
 	if pythonCmd != nil {

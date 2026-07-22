@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/version"
 	"github.com/dynatrace-oss/dtwiz/test/helpers"
 )
 
@@ -153,6 +154,31 @@ func createPythonDemoTestCommand(t *testing.T, dir, name, output string, exitCod
 	}
 }
 
+func TestDemoExamplesURL(t *testing.T) {
+	origBase := releaseBaseURL
+	releaseBaseURL = "https://example.com/releases"
+	defer func() { releaseBaseURL = origBase }()
+
+	origVer := version.Version
+	defer func() { version.Version = origVer }()
+
+	tests := []struct {
+		ver  string
+		want string
+	}{
+		{"1.2.3", "https://example.com/releases/download/v1.2.3/dtwiz-examples.tar.gz"},
+		{"dev", "https://example.com/releases/latest/download/dtwiz-examples.tar.gz"},
+		{"1.2.4-next", "https://example.com/releases/latest/download/dtwiz-examples.tar.gz"},
+	}
+	for _, tc := range tests {
+		version.Version = tc.ver
+		got := demoExamplesURL()
+		if got != tc.want {
+			t.Errorf("version %q: got %q, want %q", tc.ver, got, tc.want)
+		}
+	}
+}
+
 func TestBundledDemoPath(t *testing.T) {
 	path := BundledDemoPath()
 	if !filepath.IsAbs(path) {
@@ -191,9 +217,9 @@ func TestDownloadDemoExamples(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	orig := releaseAssetBaseURL
-	releaseAssetBaseURL = srv.URL
-	defer func() { releaseAssetBaseURL = orig }()
+	orig := releaseBaseURL
+	releaseBaseURL = srv.URL
+	defer func() { releaseBaseURL = orig }()
 
 	// dst mimics BundledDemoPath() but inside a temp dir.
 	base := t.TempDir()
@@ -242,9 +268,9 @@ func TestDownloadDemoExamples_NonOKStatus(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	orig := releaseAssetBaseURL
-	releaseAssetBaseURL = srv.URL
-	defer func() { releaseAssetBaseURL = orig }()
+	orig := releaseBaseURL
+	releaseBaseURL = srv.URL
+	defer func() { releaseBaseURL = orig }()
 
 	dst := filepath.Join(t.TempDir(), "examples", "schnitzel")
 	err := downloadDemoExamples(dst)
