@@ -287,3 +287,4 @@ func TestDetectLinuxDistro(t *testing.T) {
 		t.Fatalf("unexpected distro value: %s", distro)
 	}
 }
+
