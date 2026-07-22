@@ -2,6 +2,7 @@ package display
 
 import (
 	"os"
+	"runtime"
 
 	"golang.org/x/term"
 )
@@ -26,6 +27,12 @@ func stdoutSupportsHyperlinks() bool {
 	}
 	// AWS CloudShell doesn't render OSC 8 hyperlinks.
 	if os.Getenv("AWS_EXECUTION_ENV") == "CloudShell" {
+		return false
+	}
+	// On Windows, only Windows Terminal supports OSC 8 hyperlinks. ConHost
+	// (the classic PowerShell/cmd host) renders them as raw escape characters.
+	// Windows Terminal sets WT_SESSION; without it we fall back to plain text.
+	if runtime.GOOS == "windows" && os.Getenv("WT_SESSION") == "" {
 		return false
 	}
 	return true

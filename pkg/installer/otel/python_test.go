@@ -654,6 +654,16 @@ if [ "$1" = "-m" ] && [ "$2" = "venv" ] && [ "$3" = "--help" ]; then
   echo "usage: venv"
   exit 0
 fi
+if [ "$1" = "-m" ] && [ "$2" = "venv" ] && [ -n "$3" ]; then
+  /bin/mkdir -p "$3/bin"
+  if [ "${DTWIZ_TEST_FAIL_VENV_PIP:-0}" = "1" ]; then
+    printf '#!/bin/sh\nif [ "$1" = "-m" ] && [ "$2" = "pip" ]; then echo "No pip in venv" >&2; exit 1; fi\nexit 0\n' > "$3/bin/python3"
+  else
+    printf "#!/bin/sh\nexit 0\n" > "$3/bin/python3"
+  fi
+  /bin/chmod +x "$3/bin/python3"
+  exit 0
+fi
 echo "unexpected args: $@" >&2
 exit 1
 `, 0o755)

@@ -57,38 +57,39 @@ The `InstallOtelPython()` function SHALL validate prerequisites before proceedin
 
 ### Requirement: Python auto-install in the demo flow
 
-`dtwiz install demo` (`InstallDemo()`) SHALL attempt to install Python automatically when it is not found on PATH, using the platform package manager. This is implemented via `pythonInstallPlan()` in `pkg/installer/demo.go` and is separate from the `InstallOtelPython()` pre-flight check above.
+`dtwiz install demo` SHALL attempt to install all required Python prerequisites automatically when any of them are missing, using the platform package manager. Prerequisites are: a Python 3 interpreter, pip, and a working venv that includes pip. This is separate from the `InstallOtelPython()` pre-flight check above, which never auto-installs.
 
-#### Scenario: Python 3 not in PATH — macOS with Homebrew
+#### Scenario: Prerequisites missing — macOS with Homebrew
 
-- **WHEN** neither `python3` nor `python` is found in PATH on macOS
+- **WHEN** any Python prerequisite (python3, pip, or pip-in-venv) is missing on macOS
 - **AND** `brew` is available
 - **THEN** the demo installer SHALL include `brew install python3` in the plan preview and execute it
 
-#### Scenario: Python 3 not in PATH — macOS without Homebrew
+#### Scenario: Prerequisites missing — macOS without Homebrew
 
-- **WHEN** neither `python3` nor `python` is found in PATH on macOS
+- **WHEN** any Python prerequisite is missing on macOS
 - **AND** `brew` is not available
 - **THEN** the demo installer SHALL exit with: `Python 3 is required but not found. Install Homebrew first: https://brew.sh, then re-run this command`
 
-#### Scenario: Python 3 not in PATH — Debian/Ubuntu Linux
+#### Scenario: Prerequisites missing — Debian/Ubuntu Linux
 
-- **WHEN** neither `python3` nor `python` is found in PATH
+- **WHEN** any Python prerequisite is missing
 - **AND** `/etc/os-release` indicates a Debian/Ubuntu-based distro
-- **THEN** the demo installer SHALL run `sudo apt-get install -y python3`
+- **THEN** the demo installer SHALL run `sudo apt-get install -y python3 python3-pip python3-venv`
+- **NOTE** `python3-venv` is required because on Debian/Ubuntu, `python3-venv` is a separate package and without it virtualenvs are created without pip even if pip is available globally
 
-#### Scenario: Python 3 not in PATH — RHEL/Fedora/CentOS Linux
+#### Scenario: Prerequisites missing — RHEL/Fedora/CentOS Linux
 
-- **WHEN** neither `python3` nor `python` is found in PATH
-- **AND** `/etc/os-release` indicates a RHEL/Fedora/CentOS-based distro
-- **THEN** the demo installer SHALL run `sudo dnf install -y python3`
+- **WHEN** any Python prerequisite is missing
+- **AND** `/etc/os-release` indicates a RHEL/Fedora/CentOS-based distro (or distro is unrecognised)
+- **THEN** the demo installer SHALL run `sudo dnf install -y python3 python3-pip python3-venv`
 
-#### Scenario: Python 3 not in PATH — Windows
+#### Scenario: Prerequisites missing — Windows
 
-- **WHEN** neither `python3` nor `python` is found in PATH on Windows
+- **WHEN** any Python prerequisite is missing on Windows
 - **THEN** the demo installer SHALL run `winget install Python.Python.3`
 
-#### Scenario: Python already present
+#### Scenario: All prerequisites already present
 
-- **WHEN** `python3` or `python` (Python 3.x) is found in PATH
-- **THEN** `pythonInstallPlan()` SHALL return nil and no install step is added to the plan
+- **WHEN** a Python 3 interpreter is on PATH, pip is available globally, and a fresh virtualenv includes pip
+- **THEN** no install step is added to the plan and the demo proceeds directly to OTel setup
