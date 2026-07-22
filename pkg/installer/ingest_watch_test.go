@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/fatih/color"
 )
 
 // nodesResp builds a dqlResponse for the smartscapeNodes query (type + count fields).
@@ -410,5 +412,299 @@ func TestPollAllCloudFilter_EscapesAccountID(t *testing.T) {
 	want := `| filter aws.account.id == "\"; drop everything" `
 	if got != want {
 		t.Errorf("filter clause = %q, want %q", got, want)
+	}
+}
+
+// ── dqlFromLiteral ─────────────────────────────────────────────────────────
+
+func TestDqlFromLiteral_RelativeExpression(t *testing.T) {
+	// DQL relative expressions contain parentheses and must not be quoted.
+	for _, in := range []string{"now()-1h", "now()-5m", "now()"} {
+		if got := dqlFromLiteral(in); got != in {
+			t.Errorf("dqlFromLiteral(%q) = %q, want unchanged", in, got)
+		}
+	}
+}
+
+func TestDqlFromLiteral_AbsoluteTimestamp(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"2024-01-15T10:30:00Z", `"2024-01-15T10:30:00Z"`},
+		{"2024-06-01T00:00:00+02:00", `"2024-06-01T00:00:00+02:00"`},
+	}
+	for _, tc := range cases {
+		if got := dqlFromLiteral(tc.in); got != tc.want {
+			t.Errorf("dqlFromLiteral(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// ── parseLogs ──────────────────────────────────────────────────────────────
+
+// logsResp builds a dqlResponse for the logs query (loglevel + count fields).
+func logsResp(rows ...struct {
+	level string
+	count int
+}) *dqlResponse {
+	resp := &dqlResponse{}
+	for _, row := range rows {
+		resp.Result.Records = append(resp.Result.Records, map[string]interface{}{
+			"loglevel": row.level,
+			"count":    float64(row.count),
+		})
+	}
+	return resp
+}
+
+func TestParseLogs_NilResponse(t *testing.T) {
+	sec := parseLogs(nil)
+	if sec.Count != 0 || sec.Details != "" {
+		t.Errorf("nil response must yield empty section, got count=%d details=%q", sec.Count, sec.Details)
+	}
+}
+
+func TestParseLogs_EmptyRecords(t *testing.T) {
+	sec := parseLogs(&dqlResponse{})
+	if sec.Count != 0 {
+		t.Errorf("empty records must yield Count=0, got %d", sec.Count)
+	}
+}
+
+func TestParseLogs_SingleLevel(t *testing.T) {
+	resp := logsResp(struct {
+		level string
+		count int
+	}{"info", 42})
+	sec := parseLogs(resp)
+	if sec.Count != 42 {
+		t.Errorf("Count = %d, want 42", sec.Count)
+	}
+	if !strings.Contains(sec.Details, "42 info") {
+		t.Errorf("Details = %q, want '42 info'", sec.Details)
+	}
+}
+
+func TestParseLogs_AllLevelsBreakdown(t *testing.T) {
+	resp := logsResp(
+		struct {
+			level string
+			count int
+		}{"info", 100},
+		struct {
+			level string
+			count int
+		}{"warn", 20},
+		struct {
+			level string
+			count int
+		}{"error", 5},
+	)
+	sec := parseLogs(resp)
+	if sec.Count != 125 {
+		t.Errorf("total count = %d, want 125", sec.Count)
+	}
+	for _, want := range []string{"100 info", "20 warn", "5 error"} {
+		if !strings.Contains(sec.Details, want) {
+			t.Errorf("Details = %q, missing %q", sec.Details, want)
+		}
+	}
+}
+
+func TestParseLogs_UnknownLevelCountedNotShown(t *testing.T) {
+	// "debug" and empty-level records count toward the total but must not
+	// appear in Details (only info/warn/error are surfaced).
+	resp := logsResp(
+		struct {
+			level string
+			count int
+		}{"info", 10},
+		struct {
+			level string
+			count int
+		}{"debug", 50},
+		struct {
+			level string
+			count int
+		}{"", 5},
+	)
+	sec := parseLogs(resp)
+	if sec.Count != 65 {
+		t.Errorf("all levels must count toward total, got %d want 65", sec.Count)
+	}
+	if strings.Contains(sec.Details, "debug") || strings.Contains(sec.Details, "none") {
+		t.Errorf("unknown levels must not appear in Details: %q", sec.Details)
+	}
+}
+
+func TestParseLogs_ZeroCountLevelOmittedFromDetails(t *testing.T) {
+	resp := logsResp(
+		struct {
+			level string
+			count int
+		}{"info", 0},
+		struct {
+			level string
+			count int
+		}{"error", 3},
+	)
+	sec := parseLogs(resp)
+	if sec.Count != 3 {
+		t.Errorf("Count = %d, want 3", sec.Count)
+	}
+	if strings.Contains(sec.Details, "info") {
+		t.Errorf("zero-count level must not appear in Details: %q", sec.Details)
+	}
+	if !strings.Contains(sec.Details, "3 error") {
+		t.Errorf("Details = %q, want '3 error'", sec.Details)
+	}
+}
+
+func TestParseLogs_CaseNormalized(t *testing.T) {
+	// DQL may return levels in uppercase; they must normalize for matching.
+	resp := logsResp(
+		struct {
+			level string
+			count int
+		}{"INFO", 7},
+		struct {
+			level string
+			count int
+		}{"WARN", 3},
+	)
+	sec := parseLogs(resp)
+	if sec.Count != 10 {
+		t.Errorf("Count = %d, want 10", sec.Count)
+	}
+	if !strings.Contains(sec.Details, "7 info") {
+		t.Errorf("Details = %q, want '7 info'", sec.Details)
+	}
+	if !strings.Contains(sec.Details, "3 warn") {
+		t.Errorf("Details = %q, want '3 warn'", sec.Details)
+	}
+}
+
+// ── parseRequests ──────────────────────────────────────────────────────────
+
+func TestParseRequests_NilResponse(t *testing.T) {
+	sec := parseRequests(nil)
+	if sec.Count != 0 || sec.Details != "" {
+		t.Errorf("nil response must yield empty section, got count=%d details=%q", sec.Count, sec.Details)
+	}
+}
+
+func TestParseRequests_EmptyRecords(t *testing.T) {
+	sec := parseRequests(&dqlResponse{})
+	if sec.Count != 0 {
+		t.Errorf("empty records must yield Count=0, got %d", sec.Count)
+	}
+}
+
+func TestParseRequests_SuccessAndFailed(t *testing.T) {
+	resp := &dqlResponse{}
+	resp.Result.Records = []map[string]interface{}{
+		{"success": float64(95), "failed": float64(5)},
+	}
+	sec := parseRequests(resp)
+	if sec.Count != 100 {
+		t.Errorf("Count = %d, want 100", sec.Count)
+	}
+	if !strings.Contains(sec.Details, "95 successful") {
+		t.Errorf("Details = %q, missing '95 successful'", sec.Details)
+	}
+	if !strings.Contains(sec.Details, "5 failed") {
+		t.Errorf("Details = %q, missing '5 failed'", sec.Details)
+	}
+}
+
+func TestParseRequests_AllSuccessful(t *testing.T) {
+	resp := &dqlResponse{}
+	resp.Result.Records = []map[string]interface{}{
+		{"success": float64(50), "failed": float64(0)},
+	}
+	sec := parseRequests(resp)
+	if sec.Count != 50 {
+		t.Errorf("Count = %d, want 50", sec.Count)
+	}
+	if !strings.Contains(sec.Details, "0 failed") {
+		t.Errorf("Details = %q, want '0 failed'", sec.Details)
+	}
+}
+
+func TestParseRequests_ZeroTotalNoDetails(t *testing.T) {
+	resp := &dqlResponse{}
+	resp.Result.Records = []map[string]interface{}{
+		{"success": float64(0), "failed": float64(0)},
+	}
+	sec := parseRequests(resp)
+	if sec.Count != 0 {
+		t.Errorf("Count = %d, want 0", sec.Count)
+	}
+	if sec.Details != "" {
+		t.Errorf("Details should be empty for zero total, got %q", sec.Details)
+	}
+}
+
+// ── renderSection (Status field) ──────────────────────────────────────────
+
+func TestRenderSection_ShowsCountWhenPositive(t *testing.T) {
+	var buf strings.Builder
+	noop := color.New()
+	linkFn := func(_, label string) string { return label }
+	sec := watchSection{Count: 5, Details: "5 info"}
+	renderSection(&buf, "Logs", sec, "https://example.com", noop, noop, noop, linkFn)
+	out := buf.String()
+	if !strings.Contains(out, "(5)") {
+		t.Errorf("expected count '(5)' in output, got: %q", out)
+	}
+	if strings.Contains(out, "waiting") {
+		t.Errorf("'waiting...' must not appear when count > 0, got: %q", out)
+	}
+}
+
+func TestRenderSection_ShowsStatusDuringPhaseTransition(t *testing.T) {
+	// When Count == 0 but Status is set (probe just fired or metrics catching up),
+	// the status text must be shown instead of "waiting...".
+	var buf strings.Builder
+	noop := color.New()
+	linkFn := func(_, label string) string { return label }
+	sec := watchSection{Count: 0, Status: "Logs ingested"}
+	renderSection(&buf, "Logs", sec, "https://example.com", noop, noop, noop, linkFn)
+	out := buf.String()
+	if !strings.Contains(out, "Logs ingested") {
+		t.Errorf("expected Status text in output, got: %q", out)
+	}
+	if strings.Contains(out, "waiting") {
+		t.Errorf("'waiting...' must not appear when Status is set, got: %q", out)
+	}
+}
+
+func TestRenderSection_StatusBranchUsesLink(t *testing.T) {
+	// The deep link must be applied to the section title in the Status branch,
+	// matching the behaviour of the Count > 0 branch.
+	var buf strings.Builder
+	noop := color.New()
+	var capturedURL string
+	linkFn := func(url, label string) string {
+		capturedURL = url
+		return label
+	}
+	sec := watchSection{Count: 0, Status: "Logs ingested", Link: "/ui/apps/dynatrace.logs/"}
+	renderSection(&buf, "Logs", sec, "https://example.com", noop, noop, noop, linkFn)
+	if capturedURL != "https://example.com/ui/apps/dynatrace.logs/" {
+		t.Errorf("linkFn called with %q, want full deep-link URL", capturedURL)
+	}
+}
+
+func TestRenderSection_ShowsWaitingWhenNoCountOrStatus(t *testing.T) {
+	var buf strings.Builder
+	noop := color.New()
+	linkFn := func(_, label string) string { return label }
+	sec := watchSection{}
+	renderSection(&buf, "Logs", sec, "https://example.com", noop, noop, noop, linkFn)
+	out := buf.String()
+	if !strings.Contains(out, "waiting") {
+		t.Errorf("expected 'waiting...' when no count and no status, got: %q", out)
 	}
 }
