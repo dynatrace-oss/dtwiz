@@ -95,6 +95,8 @@ func describeDemoInstallCmd(cmd []string) string {
 				}
 			}
 			return strings.Join(pkgs, ", ") + " via " + part
+		case "winget":
+			return "Python 3 via winget"
 		}
 	}
 	return strings.Join(cmd, " ")

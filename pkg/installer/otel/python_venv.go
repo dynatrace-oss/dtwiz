@@ -111,7 +111,10 @@ func probeVenvPip(pythonBin string) bool {
 	for _, pyName := range []string{"python3", "python"} {
 		pyPath := filepath.Join(tmpDir, "bin", pyName)
 		if _, statErr := os.Stat(pyPath); statErr != nil {
-			continue
+			pyPath = filepath.Join(tmpDir, "Scripts", pyName+".exe")
+			if _, statErr2 := os.Stat(pyPath); statErr2 != nil {
+				continue
+			}
 		}
 		ok := exec.Command(pyPath, "-m", "pip", "--version").Run() == nil
 		logger.Debug("venv pip probe result", "python", pyPath, "ok", ok)
