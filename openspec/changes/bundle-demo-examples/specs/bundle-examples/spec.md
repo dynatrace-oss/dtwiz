@@ -26,7 +26,7 @@ The extraction path is:
 #### Scenario: Download creates the expected directory structure
 
 - **WHEN** `~/.dtwiz/examples/schnitzel/` does not exist
-- **AND** a release build runs the demo command
+- **AND** the binary is a release build
 - **THEN** the binary SHALL download `dtwiz-examples.tar.gz` from the release asset URL for the current version
 - **AND** extract it to `~/.dtwiz/examples/`
 - **AND** all example directories and their files SHALL be present after extraction
@@ -34,7 +34,7 @@ The extraction path is:
 #### Scenario: Development build uses latest release asset
 
 - **WHEN** `~/.dtwiz/examples/schnitzel/` does not exist
-- **AND** a development or snapshot build runs the demo command
+- **AND** the binary is a development or snapshot build
 - **THEN** the binary SHALL download `dtwiz-examples.tar.gz` from the latest release asset URL
 - **AND** extract it to `~/.dtwiz/examples/`
 
