@@ -6,8 +6,7 @@ project_name: dtwiz
 before:
   hooks:
     - go mod tidy
-    - mkdir -p dist
-    - tar -czf dist/dtwiz-examples.tar.gz examples/
+    - tar -czf dtwiz-examples.tar.gz examples/
 
 builds:
   - env:
@@ -38,7 +37,7 @@ archives:
 
 release:
   extra_files:
-    - glob: dist/dtwiz-examples.tar.gz
+    - glob: dtwiz-examples.tar.gz
 
 checksum:
   name_template: 'checksums.txt'
