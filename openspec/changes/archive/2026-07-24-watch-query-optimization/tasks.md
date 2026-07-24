@@ -1,4 +1,6 @@
-# 1. Implementation
+# Tasks
+
+## 1. Implementation
 
 - [x] 1.1 Add `watchTimeout = 10 * time.Minute` constant alongside `watchPollInterval` in `pkg/installer/ingest_watch.go`
 - [x] 1.2 Add `watchPhase` type and `watchPhaseProbe` / `watchPhaseMetrics` constants
@@ -9,7 +11,7 @@
 - [x] 1.7 Implement timeout block in main select loop: check `elapsed >= watchTimeout`, print prompt inline, read from `inputCh`, increment `prevLines`, call `ticker.Reset`, drain `ticker.C` and `inputCh`
 - [x] 1.8 Update `pollAll` signature to accept `qs *watchQueryState`; implement two-phase logic for Logs (probe → summarize) and Requests (probe → summarize) with phase transition and `Status` assignment
 
-# 2. Spec
+## 2. Spec
 
 - [x] 2.1 Update `openspec/specs/ingest-watch/spec.md`: add CHANGED requirements for timeout, two-phase Logs, two-phase Requests
 - [x] 2.2 Create `openspec/changes/watch-query-optimization/specs/ingest-watch/spec.md` with the change-scoped delta
