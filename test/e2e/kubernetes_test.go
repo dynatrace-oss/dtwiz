@@ -30,7 +30,6 @@ func countDynakubes(t *testing.T) int {
 	return len(strings.Split(trimmed, "\n"))
 }
 
-
 // TestKubernetesLifecycle exercises the full Dynatrace Operator lifecycle
 // against a real Kubernetes cluster and a real Dynatrace tenant: install
 // (Helm chart + DynaKube CR, wait for pods to become ready) → uninstall
