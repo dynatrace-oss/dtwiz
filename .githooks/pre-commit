@@ -1,0 +1,12 @@
+#!/bin/sh
+# pre-commit hook — blocks commits if code is not formatted.
+# Fix with: make fmt
+
+diff=$(golangci-lint fmt --diff ./... 2>&1)
+if [ -n "$diff" ]; then
+  printf '\033[31m✗ Code is not formatted. Run: make fmt\033[0m\n' >&2
+  printf '%s\n' "$diff" >&2
+  exit 1
+fi
+
+exit 0
