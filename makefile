@@ -9,6 +9,7 @@ BINARY := dtwiz
 GO     := go
 VERSION ?= dev
 MD_LINT_CLI_IMAGE := "ghcr.io/igorshubovych/markdownlint-cli:v0.31.1"
+CONTAINER_RUNTIME := $(shell command -v podman 2>/dev/null || command -v docker 2>/dev/null)
 
 build:
 	$(GO) build -ldflags "-X github.com/dynatrace-oss/dtwiz/pkg/version.Version=$(VERSION)" -o $(BINARY) .
@@ -86,10 +87,12 @@ clean:
 	rm -f $(BINARY)
 
 markdownlint:
-	docker run -v $(CURDIR):/workdir --rm  $(MD_LINT_CLI_IMAGE)  "**/*.md"
+	@test -n "$(CONTAINER_RUNTIME)" || { echo "Error: neither docker nor podman found in PATH"; exit 1; }
+	$(CONTAINER_RUNTIME) run -v $(CURDIR):/workdir --rm  $(MD_LINT_CLI_IMAGE)  "**/*.md"
 
 markdownlint-fix:
-	docker run -v $(CURDIR):/workdir --rm  $(MD_LINT_CLI_IMAGE)  "**/*.md" --fix
+	@test -n "$(CONTAINER_RUNTIME)" || { echo "Error: neither docker nor podman found in PATH"; exit 1; }
+	$(CONTAINER_RUNTIME) run -v $(CURDIR):/workdir --rm  $(MD_LINT_CLI_IMAGE)  "**/*.md" --fix
 
 setup:
 	git config --local core.hooksPath .githooks
