@@ -1,6 +1,7 @@
 package installer
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -19,13 +20,41 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
-const watchPollInterval = 5 * time.Second
+const (
+	watchPollInterval = 5 * time.Second
+	watchTimeout      = 10 * time.Minute
+)
+
+// watchPhase controls the DQL query strategy used for a given signal.
+type watchPhase uint8
+
+const (
+	// watchPhaseProbe uses a cheap limit-1 query to detect first data arrival.
+	watchPhaseProbe watchPhase = iota
+	// watchPhaseMetrics switches to aggregated metrics queries once data is present.
+	watchPhaseMetrics
+)
+
+// watchQueryState tracks the per-signal DQL query phase across poll cycles.
+type watchQueryState struct {
+	logs     watchPhase
+	requests watchPhase
+}
+
+// watchInput holds a line read from stdin by the input goroutine.
+type watchInput struct {
+	line string
+	err  error
+}
 
 // watchSection holds the display data for one section of the watch output.
 type watchSection struct {
 	Name    string
 	Count   int
 	Details string // formatted detail line (e.g. service names, type breakdown)
+	// Status is shown when Count == 0 but data was first seen (phase transition).
+	// Used while the metrics pipeline catches up after the first data arrives.
+	Status string
 	// Secondary is an extra dim line rendered under the section, regardless
 	// of Count. Used to surface side-signals (e.g. platform-log metrics that
 	// arrive before Smartscape topology builds up).
@@ -110,23 +139,27 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsA
 	}
 
 	var prevLines int
-	var statusMsg string // latest message from statusCh (empty = no background task)
+	var statusMsg string
 
-	// Listen for Enter key in a goroutine to let the user stop watching.
-	stopCh := make(chan struct{}, 1)
+	// inputCh receives one entry per newline-terminated line typed by the user.
+	// Declared as nil for non-TTY — a nil channel in a select case is never chosen.
+	var inputCh chan watchInput
 	if isTTY {
+		inputCh = make(chan watchInput, 1)
 		go func() {
-			buf := make([]byte, 1)
+			reader := bufio.NewReader(os.Stdin)
 			for {
-				_, err := os.Stdin.Read(buf)
-				if err != nil || buf[0] == '\n' || buf[0] == '\r' {
-					stopCh <- struct{}{}
+				line, err := reader.ReadString('\n')
+				line = strings.TrimRight(line, "\r\n")
+				inputCh <- watchInput{line: line, err: err}
+				if err != nil {
 					return
 				}
 			}
 		}()
 	}
 
+	qs := watchQueryState{}
 	ticker := time.NewTicker(watchPollInterval)
 	defer ticker.Stop()
 
@@ -135,7 +168,11 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsA
 		if !first {
 			select {
 			case <-ticker.C:
-			case <-stopCh:
+			case inp := <-inputCh:
+				if inp.err != nil {
+					return
+				}
+				// Any Enter press during normal watching stops the loop.
 				return
 			}
 		}
@@ -159,7 +196,34 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsA
 			}
 		}
 
-		state := pollAll(queryURL, pToken, fromClause, awsAccountID)
+		// After 10 minutes, prompt the user to decide whether to continue.
+		if elapsed >= watchTimeout {
+			if !isTTY {
+				return
+			}
+			dim.Printf(" Continue watching? [Y/n] ")
+			resp := <-inputCh
+			if resp.err != nil || strings.HasPrefix(strings.ToLower(resp.line), "n") {
+				return
+			}
+			watchStart = time.Now()
+			elapsed = 0
+			prevLines++ // account for the prompt line so the next render overwrites cleanly
+			ticker.Reset(watchPollInterval)
+			// Drain stale tick (Go docs recommend draining after Reset) and any
+			// residual input buffered during the prompt (e.g. double-Enter) so
+			// the next select iteration doesn't immediately stop the loop.
+			select {
+			case <-ticker.C:
+			default:
+			}
+			select {
+			case <-inputCh:
+			default:
+			}
+		}
+
+		state := pollAll(queryURL, pToken, fromClause, awsAccountID, &qs)
 
 		var buf strings.Builder
 
@@ -224,6 +288,13 @@ func renderSection(buf *strings.Builder, name string, sec watchSection, appsURL 
 		if sec.Details != "" {
 			fmt.Fprintf(buf, "   %s\n", sec.Details)
 		}
+	} else if sec.Status != "" {
+		title := name
+		if sec.Link != "" {
+			title = linkFn(appsURL+sec.Link, name)
+		}
+		highlight.Fprintf(buf, " %s\n", title)
+		dim.Fprintf(buf, "   %s\n", sec.Status)
 	} else {
 		highlight.Fprintf(buf, " %s\n", name)
 		dim.Fprintf(buf, "   waiting...\n")
@@ -252,7 +323,6 @@ func renderRelationships(buf *strings.Builder, sec watchSection, appsURL string,
 	buf.WriteString("\n")
 }
 
-// pollAll executes all DQL queries in parallel and returns the aggregated state.
 // dqlFromLiteral formats a fromClause for use in DQL queries.
 // DQL relative expressions (containing parentheses, e.g. "now()-1h") must not
 // be quoted; RFC3339 absolute timestamps must be quoted.
@@ -272,7 +342,9 @@ var dqlStringEscaper = strings.NewReplacer(`\`, `\\`, `"`, `\"`)
 
 func dqlEscapeString(s string) string { return dqlStringEscaper.Replace(s) }
 
-func pollAll(queryURL, token string, fromClause string, awsAccountID string) watchState {
+// pollAll executes all DQL queries in parallel and returns the aggregated state.
+// qs tracks per-signal query phases and is updated in-place as phases advance.
+func pollAll(queryURL, token, fromClause, awsAccountID string, qs *watchQueryState) watchState {
 	var state watchState
 
 	type result struct {
@@ -286,9 +358,27 @@ func pollAll(queryURL, token string, fromClause string, awsAccountID string) wat
 		"services":      fmt.Sprintf(`smartscapeNodes SERVICE, from:%s | fields name | limit 100`, from),
 		"nodes":         fmt.Sprintf(`smartscapeNodes "*", from:%s | summarize count=count(), by:{type} | limit 200`, from),
 		"relationships": fmt.Sprintf(`smartscapeEdges "*", from:%s | summarize count=count(), by:{type}`, from),
-		"logs":          fmt.Sprintf(`fetch logs, from:%s | summarize count=count(), by:{loglevel}`, from),
-		"requests":      fmt.Sprintf(`fetch spans, from:%s | filter request.is_root_span == true | summarize failed=countIf(request.is_failed == true), success=countIf(request.is_failed != true)`, from),
 		"exceptions":    fmt.Sprintf(`fetch spans, from:%s | expand events = span.events | filter events[type] == "exception" | summarize count=count()`, from),
+	}
+
+	// Logs: probe phase uses a cheap limit-1 fetch to detect first arrival;
+	// metrics phase runs the full summarize — but only after we know logs exist,
+	// so we never pay the full-scan cost on an empty dataset.
+	switch qs.logs {
+	case watchPhaseProbe:
+		queries["logs"] = fmt.Sprintf(`fetch logs, from:%s | limit 1`, from)
+	case watchPhaseMetrics:
+		queries["logs"] = fmt.Sprintf(`fetch logs, from:%s | summarize count=count(), by:{loglevel}`, from)
+	}
+
+	// Requests: probe phase uses a cheap limit-1 span fetch to detect first
+	// arrival; metrics phase runs the full summarize — but only after we know
+	// spans exist, so we never pay the full-scan cost on an empty dataset.
+	switch qs.requests {
+	case watchPhaseProbe:
+		queries["requests"] = fmt.Sprintf(`fetch spans, from:%s | filter request.is_root_span == true | limit 1`, from)
+	case watchPhaseMetrics:
+		queries["requests"] = fmt.Sprintf(`fetch spans, from:%s | filter request.is_root_span == true | summarize failed=countIf(request.is_failed == true), success=countIf(request.is_failed != true)`, from)
 	}
 
 	// Cloud-platform signals (metric registrations + da-* integration logs) are
@@ -324,10 +414,39 @@ func pollAll(queryURL, token string, fromClause string, awsAccountID string) wat
 	state.Cloud.Secondary = parseCloudPlatformSignals(results["cloud_metrics"], results["cloud_logs"])
 	// Relationships
 	state.Relationships = parseRelationships(results["relationships"])
-	// Logs
-	state.Logs = parseLogs(results["logs"])
-	// Requests
-	state.Requests = parseRequests(results["requests"])
+
+	// Logs: probe detects first arrival and advances to metrics phase;
+	// metrics phase shows the level breakdown once the pipeline catches up.
+	switch qs.logs {
+	case watchPhaseProbe:
+		if results["logs"] != nil && len(results["logs"].Result.Records) > 0 {
+			qs.logs = watchPhaseMetrics
+			state.Logs = watchSection{Link: "/ui/apps/dynatrace.logs/", Status: "Logs ingested"}
+		}
+	case watchPhaseMetrics:
+		state.Logs = parseLogs(results["logs"])
+		if state.Logs.Count == 0 {
+			// Metrics pipeline hasn't aggregated yet; hold the ingested status.
+			state.Logs.Status = "Logs ingested"
+		}
+	}
+
+	// Requests: probe detects first span and advances to metrics phase;
+	// metrics phase shows success/failed counts once the pipeline catches up.
+	switch qs.requests {
+	case watchPhaseProbe:
+		if results["requests"] != nil && len(results["requests"].Result.Records) > 0 {
+			qs.requests = watchPhaseMetrics
+			state.Requests = watchSection{Link: "/ui/apps/dynatrace.distributedtracing/explorer", Status: "Requests ingested"}
+		}
+	case watchPhaseMetrics:
+		state.Requests = parseRequests(results["requests"])
+		if state.Requests.Count == 0 {
+			// Metrics pipeline hasn't aggregated yet; hold the ingested status.
+			state.Requests.Status = "Requests ingested"
+		}
+	}
+
 	// Exceptions
 	state.Exceptions = parseExceptions(results["exceptions"])
 
