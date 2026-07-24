@@ -40,4 +40,11 @@ if [ "$ERRORS" -gt 0 ]; then
   exit 1
 fi
 
+# ── lint ──────────────────────────────────────────────────────────────────────
+printf 'Running make lint...\n' >&2
+if ! make lint >&2; then
+  printf '\033[31mPush rejected: lint failed. Fix the issues above and try again.\033[0m\n' >&2
+  exit 1
+fi
+
 exit 0
