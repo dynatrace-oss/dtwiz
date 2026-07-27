@@ -162,19 +162,25 @@ func TestDemoExamplesURL(t *testing.T) {
 	origVer := version.Version
 	defer func() { version.Version = origVer }()
 
+	origTag := version.SnapshotTag
+	defer func() { version.SnapshotTag = origTag }()
+
 	tests := []struct {
-		ver  string
-		want string
+		ver         string
+		snapshotTag string
+		want        string
 	}{
-		{"1.2.3", "https://example.com/releases/download/v1.2.3/dtwiz-examples.tar.gz"},
-		{"dev", "https://example.com/releases/latest/download/dtwiz-examples.tar.gz"},
-		{"1.2.4-next", "https://example.com/releases/latest/download/dtwiz-examples.tar.gz"},
+		{"1.2.3", "", "https://example.com/releases/download/v1.2.3/dtwiz-examples.tar.gz"},
+		{"dev", "", "https://example.com/releases/latest/download/dtwiz-examples.tar.gz"},
+		{"1.2.4-next", "", "https://example.com/releases/latest/download/dtwiz-examples.tar.gz"},
+		{"1.2.4-next", "snapshot-feat-foo", "https://example.com/releases/download/snapshot-feat-foo/dtwiz-examples.tar.gz"},
 	}
 	for _, tc := range tests {
 		version.Version = tc.ver
+		version.SnapshotTag = tc.snapshotTag
 		got := demoExamplesURL()
 		if got != tc.want {
-			t.Errorf("version %q: got %q, want %q", tc.ver, got, tc.want)
+			t.Errorf("version %q snapshotTag %q: got %q, want %q", tc.ver, tc.snapshotTag, got, tc.want)
 		}
 	}
 }

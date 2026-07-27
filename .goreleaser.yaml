@@ -19,7 +19,7 @@ builds:
       - amd64
       - arm64
     ldflags:
-      - -s -w -X github.com/dynatrace-oss/dtwiz/pkg/version.Version={{.Version}}
+      - -s -w -X github.com/dynatrace-oss/dtwiz/pkg/version.Version={{.Version}} -X github.com/dynatrace-oss/dtwiz/pkg/version.SnapshotTag={{ default "" .Env.GORELEASER_SNAPSHOT_TAG }}
 
 archives:
   - formats:

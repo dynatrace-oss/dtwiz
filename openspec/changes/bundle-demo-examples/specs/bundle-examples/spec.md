@@ -16,7 +16,7 @@ The `examples/` directory SHALL be packaged as `dtwiz-examples.tar.gz` and publi
 
 ### Requirement: Examples are downloaded to a fixed location on demand
 
-When `~/.dtwiz/examples/schnitzel/` does not exist, the binary SHALL download `dtwiz-examples.tar.gz` from a dtwiz GitHub release and extract it to `~/.dtwiz/examples/` before proceeding. Release builds SHALL build the download URL from the binary's built-in version string. Development and snapshot builds MAY use the latest release asset when no matching release asset exists.
+When `~/.dtwiz/examples/schnitzel/` does not exist, the binary SHALL download `dtwiz-examples.tar.gz` from a dtwiz GitHub release and extract it to `~/.dtwiz/examples/` before proceeding. Release builds build the download URL from the binary's built-in version string. Snapshot builds published by CI have a `SnapshotTag` injected at build time and use the corresponding snapshot pre-release URL. Local dev builds (no `SnapshotTag`) fall back to the latest stable release asset.
 
 The extraction path is:
 
@@ -31,11 +31,18 @@ The extraction path is:
 - **AND** extract it to `~/.dtwiz/examples/`
 - **AND** all example directories and their files SHALL be present after extraction
 
-#### Scenario: Development build uses latest release asset
+#### Scenario: Snapshot build uses its own pre-release asset
 
 - **WHEN** `~/.dtwiz/examples/schnitzel/` does not exist
-- **AND** the binary is a development or snapshot build
-- **THEN** the binary SHALL download `dtwiz-examples.tar.gz` from the latest release asset URL
+- **AND** the binary is a snapshot build with `SnapshotTag` set
+- **THEN** the binary SHALL download `dtwiz-examples.tar.gz` from the snapshot pre-release URL
+- **AND** extract it to `~/.dtwiz/examples/`
+
+#### Scenario: Local dev build uses latest stable release asset
+
+- **WHEN** `~/.dtwiz/examples/schnitzel/` does not exist
+- **AND** the binary is a local dev build with no `SnapshotTag`
+- **THEN** the binary SHALL download `dtwiz-examples.tar.gz` from the latest stable release asset URL
 - **AND** extract it to `~/.dtwiz/examples/`
 
 #### Scenario: Download is skipped when path already exists

@@ -63,6 +63,7 @@ jobs:
           args: release --snapshot --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_SNAPSHOT_TAG: ${{ steps.tag.outputs.tag }}
 
       - name: Capture snapshot version
         if: steps.semver.outputs.found == 'true'
@@ -89,7 +90,8 @@ jobs:
             dist/dtwiz_*_darwin_*.tar.gz \
             dist/dtwiz_*_windows_*.zip \
             dist/version.txt \
-            dist/checksums.txt
+            dist/checksums.txt \
+            dtwiz-examples.tar.gz
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
