@@ -133,7 +133,7 @@ func (p *PythonInstrumentationPlan) PrintPlanSteps() {
 	}
 }
 
-func (p *PythonInstrumentationPlan) Execute() {
+func (p *PythonInstrumentationPlan) Execute() error {
 	proj := p.Project
 	envVars := p.EnvVars
 
@@ -155,11 +155,11 @@ func (p *PythonInstrumentationPlan) Execute() {
 			if err != nil {
 				fmt.Println("failed.")
 				fmt.Printf("    %v\n", err)
-				return
+				return fmt.Errorf("removing stale virtualenv: %w", err)
 			}
 			if !removed {
 				fmt.Println("  Cancelled: Python auto-instrumentation needs a working virtualenv to install packages and start OTLP ingest reliably.")
-				return
+				return fmt.Errorf("virtualenv removal cancelled")
 			}
 		}
 		fmt.Print("  Creating virtualenv... ")
@@ -167,7 +167,7 @@ func (p *PythonInstrumentationPlan) Execute() {
 		if err != nil {
 			fmt.Println("failed.")
 			fmt.Printf("    %v\n", err)
-			return
+			return err
 		}
 		venvDir := filepath.Join(proj.Path, ".venv")
 		logger.Debug("creating virtualenv", "python", pythonPath, "venv_dir", venvDir)
@@ -177,13 +177,13 @@ func (p *PythonInstrumentationPlan) Execute() {
 		if err != nil {
 			fmt.Println("failed.")
 			os.Stdout.Write(out)
-			return
+			return fmt.Errorf("creating virtualenv: %w", err)
 		}
 		fmt.Println("done.")
 		venvPip = detectProjectPip(proj.Path)
 		if venvPip == nil {
 			fmt.Println("    Could not find pip in new virtualenv.")
-			return
+			return fmt.Errorf("pip not found in new virtualenv")
 		}
 		pythonBin = resolveVenvBinary(proj.Path, "python")
 		if pythonBin == "" {
@@ -196,7 +196,7 @@ func (p *PythonInstrumentationPlan) Execute() {
 	if err != nil {
 		fmt.Println("failed.")
 		fmt.Printf("    %v\n", err)
-		return
+		return fmt.Errorf("installing project dependencies: %w", err)
 	}
 	if installed != "" {
 		fmt.Printf("done (%s).\n", installed)
@@ -208,7 +208,7 @@ func (p *PythonInstrumentationPlan) Execute() {
 	if err := installPackages(venvPip, otelPythonPackages); err != nil {
 		fmt.Println("failed.")
 		fmt.Printf("    %v\n", err)
-		return
+		return fmt.Errorf("installing OTel packages: %w", err)
 	}
 	fmt.Println("done.")
 
@@ -220,7 +220,7 @@ func (p *PythonInstrumentationPlan) Execute() {
 	if err := runOtelBootstrap(venvPython); err != nil {
 		fmt.Println("failed.")
 		fmt.Printf("    %v\n", err)
-		return
+		return fmt.Errorf("running opentelemetry-bootstrap: %w", err)
 	}
 	fmt.Println("done.")
 
@@ -228,7 +228,7 @@ func (p *PythonInstrumentationPlan) Execute() {
 	if err := ensureFrameworkInstrumentations(venvPython, venvPip); err != nil {
 		fmt.Println("failed.")
 		fmt.Printf("    %v\n", err)
-		return
+		return fmt.Errorf("verifying framework instrumentations: %w", err)
 	}
 	fmt.Println("done.")
 
@@ -281,9 +281,13 @@ func (p *PythonInstrumentationPlan) Execute() {
 	if len(startedServices) == 0 {
 		fmt.Println()
 		fmt.Println("  No services are running — check the logs above for errors.")
-		return
+		return fmt.Errorf("no services started — all processes failed to start")
+	}
+	if len(startedServices) < len(procs) {
+		return fmt.Errorf("%d of %d service(s) failed to start — check the logs above for errors", len(procs)-len(startedServices), len(procs))
 	}
 
+	return nil
 }
 
 func InstallOtelPython(envURL, token, platformToken, serviceName, projectPath string, dryRun bool) error {
@@ -347,7 +351,5 @@ func InstallOtelPython(envURL, token, platformToken, serviceName, projectPath st
 	plan.EnvVars = envVars
 
 	fmt.Printf("\n  ── Python auto-instrumentation ──\n\n")
-	plan.Execute()
-
-	return nil
+	return plan.Execute()
 }

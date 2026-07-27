@@ -20,7 +20,7 @@ import (
 type InstrumentationPlan interface {
 	Runtime() string
 	PrintPlanSteps()
-	Execute()
+	Execute() error
 }
 
 type runtimeInfo struct {
@@ -394,7 +394,9 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 
 	if plan != nil {
 		fmt.Printf("\n  ── %s auto-instrumentation ──\n\n", plan.Runtime())
-		plan.Execute()
+		if err := plan.Execute(); err != nil {
+			return err
+		}
 	}
 
 	return nil

@@ -327,7 +327,7 @@ func runBuildScript(projPath string) error {
 	return runNpm(projPath, "run", "build")
 }
 
-func (p *NodeInstrumentationPlan) Execute() {
+func (p *NodeInstrumentationPlan) Execute() error {
 	proj := p.Project
 
 	// Ensure project dependencies are installed before any build step.
@@ -336,7 +336,7 @@ func (p *NodeInstrumentationPlan) Execute() {
 	if err := installNodeProjectDeps(proj.Path); err != nil {
 		fmt.Println("failed.")
 		fmt.Printf("    %v\n", err)
-		return
+		return fmt.Errorf("installing project dependencies: %w", err)
 	}
 	fmt.Println("done.")
 
@@ -350,18 +350,18 @@ func (p *NodeInstrumentationPlan) Execute() {
 			if err := runBuildScript(proj.Path); err != nil {
 				fmt.Println("failed.")
 				fmt.Printf("    %v\n", err)
-				return
+				return fmt.Errorf("building Nuxt project: %w", err)
 			}
 			fmt.Println("done.")
 			// Re-verify the build produced the expected output.
 			if _, err := os.Stat(nitroEntry); err != nil {
 				fmt.Printf("    Build completed but %s was not produced.\n", nitroEntry)
 				fmt.Println("    Check the build output above for errors.")
-				return
+				return fmt.Errorf("Nuxt build did not produce %s", nitroEntry)
 			}
 		} else if err != nil {
 			fmt.Printf("  Cannot access %s: %v\n", nitroEntry, err)
-			return
+			return fmt.Errorf("accessing Nuxt build output: %w", err)
 		}
 		logger.Debug("nuxt build output found", "path", nitroEntry)
 	}
@@ -375,18 +375,18 @@ func (p *NodeInstrumentationPlan) Execute() {
 			if err := runBuildScript(proj.Path); err != nil {
 				fmt.Println("failed.")
 				fmt.Printf("    %v\n", err)
-				return
+				return fmt.Errorf("building Next.js project: %w", err)
 			}
 			fmt.Println("done.")
 			// Re-verify the build produced the expected output.
 			if _, err := os.Stat(nextBuildDir); err != nil {
 				fmt.Printf("    Build completed but .next/ was not produced.\n")
 				fmt.Println("    Check the build output above for errors.")
-				return
+				return fmt.Errorf("Next.js build did not produce .next/")
 			}
 		} else if err != nil {
 			fmt.Printf("  Cannot access %s: %v\n", nextBuildDir, err)
-			return
+			return fmt.Errorf("accessing Next.js build output: %w", err)
 		}
 		logger.Debug("next.js build output found", "path", nextBuildDir)
 	}
@@ -401,7 +401,7 @@ func (p *NodeInstrumentationPlan) Execute() {
 	if err := createOtelDir(p); err != nil {
 		fmt.Println("failed.")
 		fmt.Printf("    %v\n", err)
-		return
+		return fmt.Errorf("creating .otel/ directory: %w", err)
 	}
 	fmt.Println("done.")
 
@@ -417,7 +417,7 @@ func (p *NodeInstrumentationPlan) Execute() {
 		if err := os.WriteFile(scriptPath, []byte(content), 0600); err != nil {
 			fmt.Println("failed.")
 			fmt.Printf("    %v\n", err)
-			return
+			return fmt.Errorf("writing %s: %w", scriptName, err)
 		}
 		fmt.Println("done.")
 	}
@@ -430,7 +430,7 @@ func (p *NodeInstrumentationPlan) Execute() {
 		if err := os.WriteFile(scriptPath, []byte(content), 0600); err != nil {
 			fmt.Println("failed.")
 			fmt.Printf("    %v\n", err)
-			return
+			return fmt.Errorf("writing %s: %w", scriptName, err)
 		}
 		fmt.Println("done.")
 	}
@@ -439,7 +439,7 @@ func (p *NodeInstrumentationPlan) Execute() {
 	if err := installOtelNodeDeps(p.OtelDir); err != nil {
 		fmt.Println("failed.")
 		fmt.Printf("    %v\n", err)
-		return
+		return fmt.Errorf("installing OTel packages: %w", err)
 	}
 	fmt.Println("done.")
 
@@ -510,11 +510,15 @@ func (p *NodeInstrumentationPlan) Execute() {
 	if len(startedServices) == 0 {
 		fmt.Println()
 		fmt.Println("  No services are running — check the logs above for errors.")
-		return
+		return fmt.Errorf("no services started — all processes failed to start")
+	}
+	if len(startedServices) < len(procs) {
+		return fmt.Errorf("%d of %d service(s) failed to start — check the logs above for errors", len(procs)-len(startedServices), len(procs))
 	}
 
 	fmt.Println()
 	fmt.Println("  Waiting for traffic — send requests to your services to generate traces and metrics.")
+	return nil
 }
 
 // launchEntrypoint starts a managed process for a single entrypoint.
@@ -618,7 +622,5 @@ func InstallOtelNode(envURL, token, platformToken, serviceName, projectPath stri
 	plan.EnvVars = envVars
 
 	fmt.Printf("\n  ── Node.js auto-instrumentation ──\n\n")
-	plan.Execute()
-
-	return nil
+	return plan.Execute()
 }

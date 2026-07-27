@@ -243,6 +243,10 @@ func selectCollector(instances []collectorInstance) (*collectorInstance, error) 
 // prompts the user to select one (or all when multiple are available).
 // Returns installer.ErrInstallCancelled when the user cancels or enters invalid input.
 func selectCollectorForUninstall(instances []collectorInstance) ([]collectorInstance, error) {
+	if installer.AutoConfirm {
+		return instances, nil
+	}
+
 	fmt.Println()
 	display.ColorMuted.Println("  Note: Only Dynatrace OTel Collectors are shown here.")
 	display.ColorMuted.Println("        Regular (non-Dynatrace) OTel Collectors are not managed by this command.")

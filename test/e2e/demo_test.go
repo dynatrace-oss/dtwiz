@@ -8,19 +8,26 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
 	"github.com/dynatrace-oss/dtwiz/test/helpers"
+	"github.com/dynatrace-oss/dtwiz/test/integration"
+	"github.com/dynatrace-oss/dtwiz/test/integration/grail"
 )
 
 // TestInstallDemo (tasks 8.1 + 8.2): with ~/.dtwiz/examples/schnitzel/ absent,
 // verifies that:
 //   - the dry-run plan includes a download step referencing the demo path
-//   - a real install downloads the release asset and creates the directory
+//   - a real install downloads the release asset, starts the demo services,
+//     and delivers traces to the tenant
 //
+// Requires TEST_DT_ENVIRONMENT and TEST_DT_PLATFORM_TOKEN.
 // Skipped when the demo dir already exists or Python is not available.
 func TestInstallDemo(t *testing.T) {
+	env := integration.SetupIntegration(t)
+
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	t.Setenv("USERPROFILE", tmp)
@@ -47,7 +54,7 @@ func TestInstallDemo(t *testing.T) {
 	// 8.1: dry-run plan must include the download step.
 	t.Run("dry-run plan includes download step", func(t *testing.T) {
 		output := helpers.CaptureStdout(t, func() {
-			_ = otel.InstallDemo("https://fake.live.dynatrace.com", "tok", "ptok", true)
+			_ = otel.InstallDemo(env.EnvURL, env.ClassicToken, env.PlatformToken, true)
 		})
 		if !strings.Contains(output, "Download schnitzel") {
 			t.Fatalf("expected download step in plan, got:\n%s", output)
@@ -60,18 +67,37 @@ func TestInstallDemo(t *testing.T) {
 		}
 	})
 
-	// 8.2: real install downloads the release asset and creates the directory.
-	// OTel setup is expected to fail with fake credentials; we only assert on
-	// the file-system state that must be true before that step begins.
-	t.Run("downloads and creates demo dir", func(t *testing.T) {
+	// 8.2: real install must download the release asset, start the demo services,
+	// and deliver traces to the tenant.
+	t.Run("installs demo and delivers traces to tenant", func(t *testing.T) {
 		installer.AutoConfirm = true
 		t.Cleanup(func() { installer.AutoConfirm = false })
-		_ = otel.InstallDemo("https://fake.live.dynatrace.com", "tok", "ptok", false)
+		// Stop any lingering OTel processes from previous runs before starting
+		// fresh (avoids "Address already in use" on schnitzel's hardcoded ports).
+		// AutoConfirm is already true, so UninstallOtelCollector runs without prompts.
+		_ = otel.UninstallOtelCollector(false)
+		// Register the same cleanup so the processes started by THIS run are
+		// stopped after the test, keeping ports free for the next run.
+		t.Cleanup(func() {
+			installer.AutoConfirm = true
+			_ = otel.UninstallOtelCollector(false)
+			installer.AutoConfirm = false
+		})
+		if err := otel.InstallDemo(env.EnvURL, env.ClassicToken, env.PlatformToken, false); err != nil {
+			t.Fatalf("InstallDemo: %v", err)
+		}
 
 		readme := filepath.Join(demoPath, "README.md")
 		if _, err := os.Stat(readme); err != nil {
 			t.Fatalf("expected %s to exist after download: %v", readme, err)
 		}
+
+		t.Logf("waiting for traces from schnitzel-frontend in Grail")
+		traces := grail.RequireTraces(t, env.Client, "schnitzel-frontend",
+			grail.WithTimeout(180*time.Second),
+			grail.WithInterval(20*time.Second),
+		)
+		t.Logf("found %d trace(s) for schnitzel-frontend", len(traces))
 	})
 }
 

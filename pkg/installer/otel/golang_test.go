@@ -138,7 +138,7 @@ func TestGoInstrumentationPlan_Execute(t *testing.T) {
 	}
 
 	output := helpers.CaptureStdout(t, func() {
-		plan.Execute()
+		_ = plan.Execute()
 	})
 
 	checks := []string{"cd /tmp/go-svc", "go get go.opentelemetry.io/otel", "export OTEL_SERVICE_NAME=\"go-svc\"", "Initialize the OTel SDK in your main() function."}

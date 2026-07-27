@@ -369,7 +369,7 @@ func TestPythonInstrumentationPlan_ExecuteFailsWithoutPythonForVenvCreation(t *t
 	}
 
 	output := helpers.CaptureStdout(t, func() {
-		plan.Execute()
+		_ = plan.Execute()
 	})
 
 	checks := []string{"Creating virtualenv... failed.", "Python 3 interpreter not found"}

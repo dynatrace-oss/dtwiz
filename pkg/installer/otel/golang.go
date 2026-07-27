@@ -114,7 +114,7 @@ func (p *GoInstrumentationPlan) PrintPlanSteps() {
 	}
 }
 
-func (p *GoInstrumentationPlan) Execute() {
+func (p *GoInstrumentationPlan) Execute() error {
 	fmt.Println()
 	fmt.Printf("  cd %s\n", p.Project.Path)
 	fmt.Println()
@@ -131,4 +131,5 @@ func (p *GoInstrumentationPlan) Execute() {
 	fmt.Println()
 	fmt.Println("  Initialize the OTel SDK in your main() function.")
 	fmt.Println("  See: https://opentelemetry.io/docs/languages/go/getting-started/")
+	return nil
 }

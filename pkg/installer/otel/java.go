@@ -226,7 +226,7 @@ func buildJavaInstrumentationPlan(proj detectedProject, apiURL, token, envURL st
 	}
 }
 
-func (p *JavaInstrumentationPlan) Execute() {
+func (p *JavaInstrumentationPlan) Execute() error {
 	if len(p.SubModules) > 0 {
 		if len(p.Project.RunningProcessIDs) > 0 {
 			fmt.Print("  Stopping running processes... ")
@@ -235,14 +235,15 @@ func (p *JavaInstrumentationPlan) Execute() {
 		}
 		if err := p.executeMultiModule(); err != nil {
 			logger.Debug("multi-module execution failed", "error", err)
+			return err
 		}
-		return
+		return nil
 	}
 
 	agentPath, err := downloadJavaAgent()
 	if err != nil {
 		display.PrintStatusLine("error", fmt.Sprintf("failed to download agent: %v", err), display.ColorError)
-		return
+		return fmt.Errorf("downloading Java agent: %w", err)
 	}
 
 	if len(p.Project.RunningProcessIDs) > 0 {
@@ -259,11 +260,11 @@ func (p *JavaInstrumentationPlan) Execute() {
 		if len(entrypoints) == 0 {
 			logger.Debug("no entrypoints found at execute time", "project", p.Project.Path)
 			display.PrintStatusLine("error", noEntrypointMessage(p.Project.Path), display.ColorError)
-			return
+			return fmt.Errorf("no runnable entrypoint detected in %s", p.Project.Path)
 		}
 		ep = promptEntrypointSelection(entrypoints)
 		if ep == nil {
-			return
+			return fmt.Errorf("entrypoint selection cancelled")
 		}
 	}
 
@@ -274,7 +275,7 @@ func (p *JavaInstrumentationPlan) Execute() {
 	logFile, err := os.Create(logPath)
 	if err != nil {
 		display.PrintStatusLine("error", fmt.Sprintf("failed to create log file: %v", err), display.ColorError)
-		return
+		return fmt.Errorf("creating log file: %w", err)
 	}
 
 	logger.Debug("launching instrumented java process", "cmd", displayCmd, "dir", p.Project.Path)
@@ -283,17 +284,18 @@ func (p *JavaInstrumentationPlan) Execute() {
 	proc, err := StartManagedProcess(svcName, svcName+".log", "", cmd, logFile)
 	if err != nil {
 		display.PrintStatusLine("error", fmt.Sprintf("failed to start process: %v", err), display.ColorError)
-		return
+		return fmt.Errorf("starting process: %w", err)
 	}
 	proc.portDetector = func(pid int) string { return detectJavaListeningPort(pid, p.Project.Path) }
 
 	aliveNames, _ := PrintProcessSummary([]*ManagedProcess{proc}, processSettleDelay)
 	if len(aliveNames) == 0 {
 		display.PrintStatusLine("error", "No services are running — check the logs above for errors.", display.ColorError)
-		return
+		return fmt.Errorf("no services started — process failed to start")
 	}
 
 	updateOtelCollectorIfPresent(p.EnvURL, p.Token, false)
+	return nil
 }
 
 // InstallOtelJava is the main entry point for the `dtwiz install otel-java` command.
