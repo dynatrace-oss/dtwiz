@@ -357,7 +357,7 @@ func (p *NodeInstrumentationPlan) Execute() error {
 			if _, err := os.Stat(nitroEntry); err != nil {
 				fmt.Printf("    Build completed but %s was not produced.\n", nitroEntry)
 				fmt.Println("    Check the build output above for errors.")
-				return fmt.Errorf("Nuxt build did not produce %s", nitroEntry)
+				return fmt.Errorf("nuxt build did not produce %s", nitroEntry)
 			}
 		} else if err != nil {
 			fmt.Printf("  Cannot access %s: %v\n", nitroEntry, err)
@@ -382,7 +382,7 @@ func (p *NodeInstrumentationPlan) Execute() error {
 			if _, err := os.Stat(nextBuildDir); err != nil {
 				fmt.Printf("    Build completed but .next/ was not produced.\n")
 				fmt.Println("    Check the build output above for errors.")
-				return fmt.Errorf("Next.js build did not produce .next/")
+				return fmt.Errorf("next.js build did not produce .next/")
 			}
 		} else if err != nil {
 			fmt.Printf("  Cannot access %s: %v\n", nextBuildDir, err)
