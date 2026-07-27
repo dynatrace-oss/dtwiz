@@ -100,7 +100,6 @@ func helmOperatorArgs(helmMajor int, disableCSI bool) []string {
 	args := []string{
 		"install", "dynatrace-operator",
 		dynatraceOperatorOCI,
-		"--version", dynatraceOperatorVersion,
 		"--create-namespace",
 		"--namespace", "dynatrace",
 		rollbackFlag,
@@ -123,7 +122,6 @@ func helmOperatorUpgradeArgs(helmMajor int, disableCSI bool) []string {
 	args := []string{
 		"upgrade", "dynatrace-operator",
 		dynatraceOperatorOCI,
-		"--version", dynatraceOperatorVersion,
 		"--namespace", "dynatrace",
 		rollbackFlag,
 		"--timeout", "10m",

@@ -27,8 +27,6 @@ const (
 	dynakubeEECTag           = "1.337.60.20260603-063549"
 	dynakubeCodeModulesImage = "public.ecr.aws/dynatrace/dynatrace-codemodules:1.337.60.20260603-063549"
 
-	// dynatraceOperatorVersion is the operator chart version pinned by dtwiz.
-	dynatraceOperatorVersion = "1.10.0-rc.0"
 	// dynatraceOperatorOCI is the OCI chart reference hosted on public.ecr.aws.
 	dynatraceOperatorOCI = "oci://public.ecr.aws/dynatrace/dynatrace-operator"
 )
