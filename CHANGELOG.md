@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-27
+
+### Added
+
+- `install otel`: demo app (`schnitzel`) is now bundled as a versioned release asset (`dtwiz-examples.tar.gz`) and downloaded as a `.tar.gz` instead of a ZIP; extracted to `~/.dtwiz/examples/schnitzel` so the demo is available system-wide regardless of the working directory; dev and pre-release builds resolve to the latest stable release asset automatically
+- `install otel`: Python virtual-environment prerequisite validation — checks that `python3` and `venv` are available before attempting demo setup; surfaces actionable error messages when prerequisites are missing
+
+### Changed
+
+- `install kubernetes`: Dynatrace Operator version pin removed — Helm now resolves the latest published chart version at install time
+- `install otel` (watch): ingest watch now uses a two-phase DQL query strategy — a cheap limit-1 probe detects first data arrival, then switches to aggregated metrics queries; a 10-minute overall watch timeout is enforced to avoid indefinite blocking
+- Token validation: 401 (authentication failed) and 403 (insufficient permissions) responses now produce distinct error messages for both access tokens and platform tokens
+
 ## [1.0.1] - 2026-07-21
 
 ### Fixed
@@ -445,7 +458,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/dynatrace-oss/dtwiz/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.30...v1.0.0
 [0.2.30]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.29...v0.2.30
