@@ -22,13 +22,16 @@ The demo install flow currently fetches the schnitzel app from `github.com/diete
 
 ### Release asset download over `go:embed` or third-party download
 
-Publishing all examples together as `dtwiz-examples.tar.gz` and downloading it on demand keeps the binary small for all users. Users who never run the demo get no extra weight. The download only happens when `~/.dtwiz/examples/schnitzel/` is absent. The URL is built from the binary's built-in version string, so the downloaded files always match the running version. Schnitzel is one example inside the archive; future examples can be added to the same asset without changing the download mechanism.
+Publishing all examples together as `dtwiz-examples.tar.gz` and downloading it on demand keeps the binary small for all users. Users who never run the demo get no extra weight. The download only happens when `~/.dtwiz/examples/schnitzel/` is absent. Release builds use the binary's built-in version string to select the matching release asset. Development and snapshot builds use the latest release asset because they do not necessarily have a matching published GitHub release. Schnitzel is one example inside the archive; future examples can be added to the same asset without changing the download mechanism.
+
+The release process creates `dtwiz-examples.tar.gz` under GoReleaser's `dist/` directory and publishes it as a release extra file. Keeping the generated tarball under `dist/` keeps it out of the working tree and lets normal release artifact cleanup remove it.
 
 Alternatives considered:
 
 - **`go:embed`**: Demo files baked into every binary. Works offline after first extraction. Rejected because it adds demo overhead to all users, including those who never use the demo.
 - **GoReleaser archive + install script copy**: examples ship in the release archive and install scripts copy them to `~/.dtwiz/examples/`. Works for users who use the install script, but fails silently for users who download the binary manually. Also adds complexity to the install scripts on all platforms.
 - **Download the full release archive**: if `~/.dtwiz/examples/schnitzel/` is missing, download the full release archive and extract examples from it. Rejected in favor of a small dedicated asset (`dtwiz-examples.tar.gz`) that contains only the example apps.
+- **Write archive to disk then delete after extraction**: download `dtwiz-examples.tar.gz` to a temp file, extract it, then delete the archive. Rejected in favor of streaming the HTTP response body directly into the tar extractor — no temp file is ever written, so no cleanup step is needed.
 
 ### Examples location: `~/.dtwiz/examples/` over CWD
 
@@ -50,6 +53,7 @@ Alternatives considered:
 ## Risks / Trade-offs
 
 - **Binary size**: no change. Demo files are not embedded in the binary. They are downloaded only when needed.
+- **Installer archive size**: no change for normal platform archives. Demo files are not included in OS-specific install archives or copied by install scripts.
 - **Network requirement when path is absent**: downloading the release asset requires a network call if `~/.dtwiz/examples/schnitzel/` is missing. This is not a new limitation: the demo already requires network access for OTel Collector setup and Dynatrace ingestion.
-- **Stale examples after upgrade**: if a user upgrades dtwiz and the old `~/.dtwiz/examples/schnitzel/` already exists, it will not be automatically refreshed. The new binary will download the updated asset only when the path is absent. For now this is acceptable; version checking is out of scope.
+- **Stale examples after upgrade**: if a user upgrades dtwiz and the old `~/.dtwiz/examples/schnitzel/` already exists, it will not be automatically refreshed. The new binary will download the updated asset only when the path is absent. Users can remove the directory and re-run `dtwiz install demo` to fetch a fresh copy. For now this is acceptable; version checking is out of scope.
 - **User edits to downloaded files**: if a user modifies `~/.dtwiz/examples/schnitzel/`, those changes persist. A re-download only happens when the path is absent. This is the intended behavior.

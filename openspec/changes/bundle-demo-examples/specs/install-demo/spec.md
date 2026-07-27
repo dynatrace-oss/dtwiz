@@ -84,18 +84,18 @@ After confirming, `install demo` SHALL invoke the OTel Collector installation fo
 
 ### Requirement: Install demo option is hidden in setup when demo is already monitored
 
-When the user runs `dtwiz setup` and the schnitzel project is already detected in the project list (via the bundled scan root), the `[d] Install demo app` option SHALL NOT be shown. The user can manage the demo instrumentation by selecting schnitzel from the regular project list.
+When the user runs `dtwiz setup` and the schnitzel demo services are already actively running, the `[d] Install demo app` option SHALL NOT be shown. The presence of the `~/.dtwiz/examples/schnitzel/` directory alone is not sufficient: it may exist from a previous demo install or manual extraction even when the demo is not running.
 
-#### Scenario: Install demo option hidden when schnitzel already in project list
+#### Scenario: Install demo option hidden when demo services are running
 
-- **WHEN** `~/.dtwiz/examples/schnitzel/` is detected as a project in the scan results
+- **WHEN** Python processes from `~/.dtwiz/examples/schnitzel/` are actively running
 - **THEN** the `[d] Install demo app` option SHALL NOT appear in the setup menu
-- **AND** schnitzel SHALL be selectable from the regular numbered project list
 
-#### Scenario: Install demo option shown when schnitzel not yet set up
+#### Scenario: Install demo option shown when demo not yet running
 
-- **WHEN** `~/.dtwiz/examples/schnitzel/` is NOT detected as a project in the scan results
+- **WHEN** no Python processes from `~/.dtwiz/examples/schnitzel/` are running
 - **THEN** the `[d] Install demo app` option SHALL appear in the setup menu
+- **AND** this applies regardless of whether `~/.dtwiz/examples/schnitzel/` already exists on disk
 
 ---
 

@@ -1,6 +1,7 @@
 package recommender_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
@@ -148,6 +149,19 @@ func TestFormatRecommendations_Empty(t *testing.T) {
 	result := recommender.FormatRecommendations(nil)
 	if result == "" {
 		t.Error("FormatRecommendations(nil) should not return empty string")
+	}
+}
+
+func TestFormatRecommendations_AlwaysShowsDemoOption(t *testing.T) {
+	system := &analyzer.SystemInfo{
+		Platform:         analyzer.PlatformLinux,
+		ContainerRuntime: analyzer.ContainerRuntimeNone,
+		Orchestrator:     analyzer.OrchestratorNone,
+	}
+	recs := recommender.GenerateRecommendations(system)
+	result := recommender.FormatRecommendations(recs)
+	if !strings.Contains(result, "[d]") {
+		t.Error("FormatRecommendations should always include the [d] demo option regardless of feature flags")
 	}
 }
 

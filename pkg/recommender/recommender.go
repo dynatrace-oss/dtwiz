@@ -241,8 +241,6 @@ func FormatRecommendations(recs []Recommendation) string {
 		}
 	}
 	sb.WriteString("\n")
-	if featureflags.IsEnabled(featureflags.Experimental) {
-		sb.WriteString(fmt.Sprintf("  %s  %s\n", recMuted.Sprint("[d]"), recMuted.Sprint("Install demo app (schnitzel)")))
-	}
+	sb.WriteString(fmt.Sprintf("  %s  %s\n", recMuted.Sprint("[d]"), recMuted.Sprint("Install demo app (schnitzel)")))
 	return strings.TrimRight(sb.String(), "\n")
 }

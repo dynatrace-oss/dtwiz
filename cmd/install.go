@@ -370,14 +370,10 @@ var installGCPCmd = &cobra.Command{
 }
 
 var installDemoCmd = &cobra.Command{
-	Use:    "demo",
-	Short:  "Install the schnitzel demo app and set up Dynatrace OTel monitoring",
-	Args:   cobra.NoArgs,
-	Hidden: true,
+	Use:   "demo",
+	Short: "Install the schnitzel demo app and set up Dynatrace OTel monitoring",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if !featureflags.IsEnabled(featureflags.Experimental) {
-			return fmt.Errorf("demo installation is an experimental feature; enable it with --experimental or DTWIZ_EXPERIMENTAL=true")
-		}
 		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
 			return err

@@ -1,6 +1,11 @@
 package otel
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -8,26 +13,9 @@ import (
 	"testing"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/version"
 	"github.com/dynatrace-oss/dtwiz/test/helpers"
 )
-
-func TestCheckDemoExists(t *testing.T) {
-	// Ensure schnitzel dir doesn't exist in test working dir
-	_ = os.RemoveAll(demoDirName)
-	if checkDemoExists() {
-		t.Fatal("expected checkDemoExists() = false when dir does not exist")
-	}
-
-	// Create the dir and check again
-	if err := os.MkdirAll(demoDirName, 0755); err != nil {
-		t.Fatalf("setup: %v", err)
-	}
-	defer os.RemoveAll(demoDirName)
-
-	if !checkDemoExists() {
-		t.Fatal("expected checkDemoExists() = true when dir exists")
-	}
-}
 
 func TestConfirmProceedAutoConfirm(t *testing.T) {
 	orig := installer.AutoConfirm
@@ -163,6 +151,155 @@ func createPythonDemoTestCommand(t *testing.T, dir, name, output string, exitCod
 	}
 	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
 		t.Fatalf("create test command: %v", err)
+	}
+}
+
+func TestDemoExamplesURL(t *testing.T) {
+	origBase := releaseBaseURL
+	releaseBaseURL = "https://example.com/releases"
+	defer func() { releaseBaseURL = origBase }()
+
+	origVer := version.Version
+	defer func() { version.Version = origVer }()
+
+	tests := []struct {
+		ver  string
+		want string
+	}{
+		{"1.2.3", "https://example.com/releases/download/v1.2.3/dtwiz-examples.tar.gz"},
+		{"dev", "https://example.com/releases/latest/download/dtwiz-examples.tar.gz"},
+		{"1.2.4-next", "https://example.com/releases/latest/download/dtwiz-examples.tar.gz"},
+	}
+	for _, tc := range tests {
+		version.Version = tc.ver
+		got := demoExamplesURL()
+		if got != tc.want {
+			t.Errorf("version %q: got %q, want %q", tc.ver, got, tc.want)
+		}
+	}
+}
+
+func TestBundledDemoPath(t *testing.T) {
+	path, err := BundledDemoPath()
+	if err != nil {
+		t.Fatalf("BundledDemoPath returned error: %v", err)
+	}
+	if !filepath.IsAbs(path) {
+		t.Fatalf("expected absolute path, got: %s", path)
+	}
+	if filepath.Base(path) != demoDirName {
+		t.Fatalf("expected path to end with %q, got: %s", demoDirName, path)
+	}
+}
+
+func TestDownloadDemoExamples(t *testing.T) {
+	// Build a fixture tar.gz containing examples/schnitzel/README.md.
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gw)
+
+	content := []byte("readme")
+	hdr := &tar.Header{
+		Typeflag: tar.TypeReg,
+		Name:     "examples/schnitzel/README.md",
+		Mode:     0644,
+		Size:     int64(len(content)),
+	}
+	if err := tw.WriteHeader(hdr); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	tw.Close()
+	gw.Close()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/gzip")
+		w.Write(buf.Bytes()) //nolint:errcheck
+	}))
+	defer srv.Close()
+
+	orig := releaseBaseURL
+	releaseBaseURL = srv.URL
+	defer func() { releaseBaseURL = orig }()
+
+	// dst mimics BundledDemoPath() but inside a temp dir.
+	base := t.TempDir()
+	dst := filepath.Join(base, "examples", "schnitzel")
+
+	if err := downloadDemoExamples(dst); err != nil {
+		t.Fatalf("downloadDemoExamples: %v", err)
+	}
+
+	target := filepath.Join(dst, "README.md")
+	if _, err := os.Stat(target); err != nil {
+		t.Fatalf("expected %s to exist after extraction: %v", target, err)
+	}
+}
+
+func TestExtractTarGz_PathTraversal(t *testing.T) {
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gw)
+
+	content := []byte("evil")
+	hdr := &tar.Header{
+		Typeflag: tar.TypeReg,
+		Name:     "../../evil.txt",
+		Mode:     0644,
+		Size:     int64(len(content)),
+	}
+	_ = tw.WriteHeader(hdr)
+	_, _ = tw.Write(content)
+	tw.Close()
+	gw.Close()
+
+	dest := t.TempDir()
+	err := extractTarGz(&buf, dest)
+	if err == nil {
+		t.Fatal("expected error for path traversal entry")
+	}
+	if !strings.Contains(err.Error(), "illegal path") {
+		t.Fatalf("error should mention illegal path, got: %v", err)
+	}
+}
+
+func TestDownloadDemoExamples_NonOKStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	orig := releaseBaseURL
+	releaseBaseURL = srv.URL
+	defer func() { releaseBaseURL = orig }()
+
+	dst := filepath.Join(t.TempDir(), "examples", "schnitzel")
+	err := downloadDemoExamples(dst)
+	if err == nil {
+		t.Fatal("expected error for non-200 HTTP response")
+	}
+	if !strings.Contains(err.Error(), "404") {
+		t.Fatalf("error should include status code, got: %v", err)
+	}
+}
+
+func TestInstallPythonWindows_WingetSucceedsButPythonUnavailable(t *testing.T) {
+	dir := t.TempDir()
+	createPythonDemoTestCommand(t, dir, "winget", "winget install ok", 0)
+	t.Setenv("PATH", dir)
+
+	err := installPythonWindows()
+	if err == nil {
+		t.Fatal("expected error when winget succeeds but Python is still unavailable")
+	}
+	if !strings.Contains(err.Error(), "could not install Python 3 via winget") {
+		t.Fatalf("error should mention failed Python install, got: %v", err)
+	}
+	// winget exited 0 — the error should not include a winget root cause.
+	if strings.Contains(err.Error(), "winget install ok") {
+		t.Fatalf("error should not wrap winget output when winget exited 0, got: %v", err)
 	}
 }
 

@@ -1,7 +1,8 @@
 package otel
 
 import (
-	"archive/zip"
+	"archive/tar"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,17 +15,107 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
+	"github.com/dynatrace-oss/dtwiz/pkg/version"
 )
 
 const (
-	demoZipURL          = "https://github.com/dietermayrhofer/schnitzel/archive/refs/heads/master.zip"
 	demoDirName         = "schnitzel"
 	wingetPythonPackage = "Python.Python.3.14"
 )
 
-func checkDemoExists() bool {
-	_, err := os.Stat(demoDirName)
-	return err == nil
+// releaseBaseURL is the base URL for dtwiz GitHub releases.
+// Overridden in tests to point at a local httptest.Server.
+var releaseBaseURL = "https://github.com/dynatrace-oss/dtwiz/releases"
+
+// BundledDemoPath returns the fixed extraction path for the schnitzel demo app:
+// $HOME/.dtwiz/examples/schnitzel on macOS/Linux, %USERPROFILE%\.dtwiz\examples\schnitzel on Windows.
+func BundledDemoPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolving home directory: %w", err)
+	}
+	return filepath.Join(home, ".dtwiz", "examples", demoDirName), nil
+}
+
+// demoExamplesURL returns the download URL for the demo examples tarball.
+// Dev and pre-release builds (version contains "-" or equals "dev") resolve to
+// the latest stable release; proper releases use the exact version tag.
+func demoExamplesURL() string {
+	ver := version.Version
+	if ver == "dev" || strings.Contains(ver, "-") {
+		return releaseBaseURL + "/latest/download/dtwiz-examples.tar.gz"
+	}
+	return fmt.Sprintf("%s/download/v%s/dtwiz-examples.tar.gz", releaseBaseURL, ver)
+}
+
+// downloadDemoExamples downloads the version-pinned dtwiz-examples.tar.gz release
+// asset and extracts it so that schnitzel ends up at dst.
+func downloadDemoExamples(dst string) error {
+	url := demoExamplesURL()
+
+	resp, err := httpClient.Get(url) //nolint:gosec
+	if err != nil {
+		return fmt.Errorf("downloading demo examples: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("downloading demo examples: HTTP %d from %s", resp.StatusCode, url)
+	}
+
+	// Tarball contains examples/schnitzel/...; extract to ~/.dtwiz/ so
+	// ~/.dtwiz/examples/schnitzel/ == dst.
+	extractTo := filepath.Dir(filepath.Dir(dst))
+	if err := os.MkdirAll(extractTo, 0755); err != nil {
+		return fmt.Errorf("creating %s: %w", extractTo, err)
+	}
+	return extractTarGz(resp.Body, extractTo)
+}
+
+func extractTarGz(r io.Reader, destDir string) error {
+	gzr, err := gzip.NewReader(r)
+	if err != nil {
+		return fmt.Errorf("opening gzip stream: %w", err)
+	}
+	defer gzr.Close()
+
+	tr := tar.NewReader(gzr)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("reading tar: %w", err)
+		}
+
+		target := filepath.Join(destDir, filepath.FromSlash(hdr.Name)) //nolint:gosec
+		// Prevent path traversal.
+		if !strings.HasPrefix(filepath.Clean(target)+string(os.PathSeparator),
+			filepath.Clean(destDir)+string(os.PathSeparator)) {
+			return fmt.Errorf("illegal path in archive: %s", hdr.Name)
+		}
+
+		switch hdr.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(target, 0755); err != nil {
+				return err
+			}
+		case tar.TypeReg:
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				return err
+			}
+			f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, hdr.FileInfo().Mode())
+			if err != nil {
+				return err
+			}
+			if _, err := io.Copy(f, tr); err != nil { //nolint:gosec
+				f.Close()
+				return err
+			}
+			f.Close()
+		}
+	}
+	return nil
 }
 
 // pythonInstallPlan returns the command (name + args) needed to install Python 3
@@ -102,6 +193,21 @@ func describeDemoInstallCmd(cmd []string) string {
 	return strings.Join(cmd, " ")
 }
 
+func detectLinuxDistro() string {
+	data, err := os.ReadFile("/etc/os-release")
+	if err != nil {
+		return "rhel"
+	}
+	content := strings.ToLower(string(data))
+	if strings.Contains(content, "ubuntu") {
+		return "ubuntu"
+	}
+	if strings.Contains(content, "debian") {
+		return "debian"
+	}
+	return "rhel"
+}
+
 // installPythonWindows installs Python 3 on Windows via winget. The exit code
 // is ignored — winget returns non-zero for already-installed packages; DetectPython
 // is the true success signal.
@@ -137,119 +243,17 @@ func installPythonWindows() error {
 	return fmt.Errorf("could not install Python 3 via winget; %s", manualPythonInstructions) //nolint:staticcheck // ST1005: keep brand capitalization
 }
 
-func detectLinuxDistro() string {
-	data, err := os.ReadFile("/etc/os-release")
-	if err != nil {
-		return "rhel"
-	}
-	content := strings.ToLower(string(data))
-	if strings.Contains(content, "ubuntu") {
-		return "ubuntu"
-	}
-	if strings.Contains(content, "debian") {
-		return "debian"
-	}
-	return "rhel"
-}
-
-// downloadAndExtractDemo downloads the schnitzel ZIP and extracts it atomically
-// (to a temp dir first, then renames) to ./schnitzel/.
-func downloadAndExtractDemo() error {
-	resp, err := http.Get(demoZipURL)
-	if err != nil {
-		return fmt.Errorf("downloading demo: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("downloading demo: unexpected HTTP %d from %s", resp.StatusCode, demoZipURL)
-	}
-
-	tmpFile, err := os.CreateTemp("", "schnitzel-*.zip")
-	if err != nil {
-		return fmt.Errorf("creating temp file: %w", err)
-	}
-	defer os.Remove(tmpFile.Name())
-
-	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
-		tmpFile.Close()
-		return fmt.Errorf("writing zip: %w", err)
-	}
-	tmpFile.Close()
-
-	tmpDir, err := os.MkdirTemp("", "schnitzel-extract-*")
-	if err != nil {
-		return fmt.Errorf("creating temp dir: %w", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	if err := extractZip(tmpFile.Name(), tmpDir); err != nil {
-		return fmt.Errorf("extracting zip: %w", err)
-	}
-
-	// Find the extracted top-level dir (e.g. schnitzel-master)
-	entries, err := os.ReadDir(tmpDir)
-	if err != nil || len(entries) == 0 {
-		return fmt.Errorf("unexpected zip structure: no top-level directory found")
-	}
-	extracted := filepath.Join(tmpDir, entries[0].Name())
-
-	if err := os.Rename(extracted, demoDirName); err != nil {
-		return fmt.Errorf("moving demo to %s: %w", demoDirName, err)
-	}
-	return nil
-}
-
-func extractZip(zipPath, destDir string) error {
-	r, err := zip.OpenReader(zipPath)
-	if err != nil {
-		return err
-	}
-	defer r.Close()
-
-	for _, f := range r.File {
-		target := filepath.Join(destDir, f.Name) //nolint:gosec
-		// Prevent zip-slip
-		if !strings.HasPrefix(filepath.Clean(target)+string(os.PathSeparator), filepath.Clean(destDir)+string(os.PathSeparator)) {
-			return fmt.Errorf("illegal file path in zip: %s", f.Name)
-		}
-		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(target, 0755); err != nil {
-				return err
-			}
-			continue
-		}
-		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-			return err
-		}
-		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, f.Mode())
-		if err != nil {
-			return err
-		}
-		rc, err := f.Open()
-		if err != nil {
-			out.Close()
-			return err
-		}
-		_, copyErr := io.Copy(out, rc) //nolint:gosec
-		rc.Close()
-		out.Close()
-		if copyErr != nil {
-			return copyErr
-		}
-	}
-	return nil
-}
-
 // IsDemoRunning returns true when the schnitzel demo services are already running.
 func IsDemoRunning() bool {
-	if !checkDemoExists() {
-		return false
-	}
-	absDemoDir, err := filepath.Abs(demoDirName)
+	demoPath, err := BundledDemoPath()
 	if err != nil {
+		logger.Debug("IsDemoRunning: could not resolve demo path", "error", err)
 		return false
 	}
-	running := len(matchingProcessIDs(absDemoDir, detectPythonProcesses())) > 0
+	if _, err := os.Stat(demoPath); err != nil {
+		return false
+	}
+	running := len(matchingProcessIDs(demoPath, detectPythonProcesses())) > 0
 	if running {
 		logger.Debug("IsDemoRunning: demo already running, not showing demo")
 	}
@@ -257,11 +261,17 @@ func IsDemoRunning() bool {
 }
 
 // InstallDemo orchestrates the schnitzel demo installation:
-// 1. Download & extract schnitzel (if not already present)
-// 2. Install missing Python prerequisites (python3, pip, venv) if needed
-// 3. Install OTel Collector + Python auto-instrumentation targeting ./schnitzel
+// 1. Download schnitzel from dtwiz release asset (if not already present)
+// 2. Install Python if missing
+// 3. Install OTel Collector + Python auto-instrumentation targeting the bundled schnitzel app
 func InstallDemo(envURL, token, platformTok string, dryRun bool) error {
-	demoExists := checkDemoExists()
+	demoPath, err := BundledDemoPath()
+	if err != nil {
+		return err
+	}
+	_, statErr := os.Stat(demoPath)
+	demoExists := statErr == nil
+
 	pythonCmd, err := pythonInstallPlan()
 	if err != nil {
 		return err
@@ -274,7 +284,7 @@ func InstallDemo(envURL, token, platformTok string, dryRun bool) error {
 
 	step := 1
 	if !demoExists {
-		fmt.Printf("  %d) Download schnitzel demo app to ./%s/\n", step, demoDirName)
+		fmt.Printf("  %d) Download schnitzel → %s\n", step, demoPath)
 		step++
 	}
 	if pythonCmd != nil {
@@ -301,15 +311,12 @@ func InstallDemo(envURL, token, platformTok string, dryRun bool) error {
 	}
 	fmt.Println()
 
-	// Step 1: Download demo
 	if !demoExists {
-		fmt.Printf("  Downloading schnitzel demo app...\n")
-		if err := downloadAndExtractDemo(); err != nil {
+		fmt.Println("  Downloading schnitzel demo app...")
+		if err := downloadDemoExamples(demoPath); err != nil {
 			return err
 		}
-		fmt.Printf("  Demo extracted to ./%s/\n", demoDirName)
-	} else {
-		fmt.Printf("  Demo directory ./%s/ already exists, skipping download.\n", demoDirName)
+		fmt.Println("  Demo downloaded.")
 	}
 
 	// Step 2: Install missing Python prerequisites if needed
@@ -327,11 +334,6 @@ func InstallDemo(envURL, token, platformTok string, dryRun bool) error {
 		fmt.Println("  Python dependencies installed.")
 	}
 
-	// Step 3+4: OTel Collector + Python instrumentation
-	absDemoDir, err := filepath.Abs(demoDirName)
-	if err != nil {
-		return fmt.Errorf("resolving demo directory path: %w", err)
-	}
 	installer.AutoConfirm = true
-	return InstallOtelCollectorWithProject(envURL, token, platformTok, absDemoDir, dryRun)
+	return InstallOtelCollectorWithProject(envURL, token, platformTok, demoPath, dryRun)
 }

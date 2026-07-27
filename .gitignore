@@ -43,6 +43,7 @@ config.yaml
 
 # Build artifacts
 *.log
+dtwiz-examples.tar.gz
 .integrationtests.env
 completions/
 

@@ -552,6 +552,98 @@ func TestScanProjectDirs_WideParallelTree(t *testing.T) {
 	}
 }
 
+// fakeHome redirects os.UserHomeDir() to a temp dir for the duration of the
+// test by setting both $HOME (Unix) and $USERPROFILE (Windows).
+func fakeHome(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+	return dir
+}
+
+// TestScanProjectDirs_BundledExamples verifies that a Python project marker
+// placed inside ~/.dtwiz/examples/schnitzel/ is found even when CWD is
+// a completely different directory.
+func TestScanProjectDirs_BundledExamples(t *testing.T) {
+	home := fakeHome(t)
+	bundled := filepath.Join(home, ".dtwiz", "examples", "schnitzel")
+	if err := os.MkdirAll(bundled, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundled, "requirements.txt"), []byte("flask\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cwd := t.TempDir()
+	helpers.SetTestWorkingDir(t, cwd)
+
+	projects := scanProjectDirs([]string{"requirements.txt"}, nil)
+
+	found := false
+	for _, p := range projects {
+		if strings.HasSuffix(filepath.ToSlash(p.Path), "schnitzel") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected bundled schnitzel project to be found; got %v", projects)
+	}
+}
+
+// TestScanProjectDirs_NoDuplicates ensures that a project appearing in both
+// CWD and the bundled examples root is reported exactly once.
+func TestScanProjectDirs_NoDuplicates(t *testing.T) {
+	home := fakeHome(t)
+	bundled := filepath.Join(home, ".dtwiz", "examples", "schnitzel")
+	if err := os.MkdirAll(bundled, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundled, "requirements.txt"), []byte("flask\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// CWD == bundled path: the bundled scan is skipped, so the project is found exactly once via the CWD scan.
+	helpers.SetTestWorkingDir(t, bundled)
+
+	projects := scanProjectDirs([]string{"requirements.txt"}, nil)
+
+	count := 0
+	for _, p := range projects {
+		if strings.HasSuffix(filepath.ToSlash(p.Path), "schnitzel") {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("expected schnitzel to appear exactly once; got %d occurrences in %v", count, projects)
+	}
+}
+
+func TestScanProjectDirs_BundledExamplesFromHome(t *testing.T) {
+	home := fakeHome(t)
+	bundled := filepath.Join(home, ".dtwiz", "examples", "schnitzel")
+	if err := os.MkdirAll(bundled, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundled, "requirements.txt"), []byte("flask\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	helpers.SetTestWorkingDir(t, home)
+
+	projects := scanProjectDirs([]string{"requirements.txt"}, nil)
+
+	count := 0
+	for _, p := range projects {
+		if strings.HasSuffix(filepath.ToSlash(p.Path), "schnitzel") {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("expected schnitzel to appear exactly once when scanning from home; got %d occurrences in %v", count, projects)
+	}
+}
+
 func TestParseWinProcessOutput_Empty(t *testing.T) {
 	if got := parseWinProcessOutput(""); len(got) != 0 {
 		t.Errorf("expected empty result for empty input, got %v", got)
