@@ -677,11 +677,11 @@ func formatPIDs(procs []runningCollector) string {
 
 // startOtelCollector starts the collector as a background process.
 // It waits briefly to detect immediate startup failures; if the process is
-// still running after the check it is detached (the parent does not Wait on it).
+// still running after the check, a goroutine continues to monitor it via cmd.Wait().
 // The returned channel receives the exit error (or nil) if the process later dies.
 func startOtelCollector(binaryPath, configPath string) (<-chan error, error) {
 	logPath := filepath.Join(filepath.Dir(configPath), "dynatrace-otel-collector.log")
-	logFile, err := os.Create(logPath)
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("creating collector log file: %w", err)
 	}
@@ -712,9 +712,7 @@ func startOtelCollector(binaryPath, configPath string) (<-chan error, error) {
 		if err != nil {
 			return nil, fmt.Errorf("OTel Collector exited immediately: %w", err)
 		}
-		fmt.Println("  Collector exited.")
-		close(crashed)
-		return crashed, nil
+		return nil, fmt.Errorf("OTel Collector exited immediately with no error (check %s for details)", logPath)
 	case <-time.After(3 * time.Second):
 		fmt.Printf("  %s is running in the background (PID %d). Detaching...\n", filepath.Base(binaryPath), pid)
 	}

@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
 	"github.com/dynatrace-oss/dtwiz/test/integration"
 	"github.com/dynatrace-oss/dtwiz/test/integration/grail"
@@ -29,9 +28,6 @@ type otelCase struct {
 
 func TestOTelAutoInstrumentation(t *testing.T) {
 	integration.Parallelize(t)
-
-	installer.AutoConfirm = true
-	t.Cleanup(func() { installer.AutoConfirm = false })
 
 	cases := []otelCase{
 		{

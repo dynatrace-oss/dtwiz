@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
 	"github.com/dynatrace-oss/dtwiz/test/helpers"
 	"github.com/dynatrace-oss/dtwiz/test/integration"
@@ -53,9 +52,13 @@ func TestInstallDemo(t *testing.T) {
 
 	// 8.1: dry-run plan must include the download step.
 	t.Run("dry-run plan includes download step", func(t *testing.T) {
+		var dryRunErr error
 		output := helpers.CaptureStdout(t, func() {
-			_ = otel.InstallDemo(env.EnvURL, env.ClassicToken, env.PlatformToken, true)
+			dryRunErr = otel.InstallDemo(env.EnvURL, env.ClassicToken, env.PlatformToken, true)
 		})
+		if dryRunErr != nil {
+			t.Fatalf("InstallDemo dry-run: %v", dryRunErr)
+		}
 		if !strings.Contains(output, "Download schnitzel") {
 			t.Fatalf("expected download step in plan, got:\n%s", output)
 		}
@@ -70,18 +73,13 @@ func TestInstallDemo(t *testing.T) {
 	// 8.2: real install must download the release asset, start the demo services,
 	// and deliver traces to the tenant.
 	t.Run("installs demo and delivers traces to tenant", func(t *testing.T) {
-		installer.AutoConfirm = true
-		t.Cleanup(func() { installer.AutoConfirm = false })
 		// Stop any lingering OTel processes from previous runs before starting
 		// fresh (avoids "Address already in use" on schnitzel's hardcoded ports).
-		// AutoConfirm is already true, so UninstallOtelCollector runs without prompts.
 		_ = otel.UninstallOtelCollector(false)
 		// Register the same cleanup so the processes started by THIS run are
 		// stopped after the test, keeping ports free for the next run.
 		t.Cleanup(func() {
-			installer.AutoConfirm = true
 			_ = otel.UninstallOtelCollector(false)
-			installer.AutoConfirm = false
 		})
 		if err := otel.InstallDemo(env.EnvURL, env.ClassicToken, env.PlatformToken, false); err != nil {
 			t.Fatalf("InstallDemo: %v", err)
@@ -127,9 +125,13 @@ func TestInstallDemo_DryRun_WithDemoDir(t *testing.T) {
 		})
 	}
 
+	var dryRunErr error
 	output := helpers.CaptureStdout(t, func() {
-		_ = otel.InstallDemo("https://fake.live.dynatrace.com", "tok", "ptok", true)
+		dryRunErr = otel.InstallDemo("https://fake.live.dynatrace.com", "tok", "ptok", true)
 	})
+	if dryRunErr != nil {
+		t.Fatalf("InstallDemo dry-run: %v", dryRunErr)
+	}
 
 	if strings.Contains(output, "Download schnitzel") {
 		t.Fatalf("download step must be absent from plan when demo dir exists, got:\n%s", output)
