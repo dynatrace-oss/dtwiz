@@ -77,11 +77,11 @@ The dtwiz binary and normal OS-specific install archives SHALL NOT contain any e
 - **THEN** only the dtwiz binary and normal release archive contents SHALL be installed
 - **AND** `~/.dtwiz/examples/` SHALL NOT be created by the install script
 
-#### Scenario: Local release asset artifact is cleaned up with release artifacts
+#### Scenario: Local release asset artifact is kept out of version control
 
 - **WHEN** the release process creates `dtwiz-examples.tar.gz` for publication
-- **THEN** the file SHALL be created under GoReleaser's release artifact directory
-- **AND** the file SHALL be kept out of the repository working tree
+- **THEN** the file SHALL be created in the repository working directory by a GoReleaser `before` hook
+- **AND** the file SHALL be listed in `.gitignore` so it is never committed to the repository
 
 #### Scenario: Demo works after upgrading by replacing the binary
 

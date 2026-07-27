@@ -680,7 +680,7 @@ func formatPIDs(procs []runningCollector) string {
 // still running after the check it is detached (the parent does not Wait on it).
 // The returned channel receives the exit error (or nil) if the process later dies.
 func startOtelCollector(binaryPath, configPath string) (<-chan error, error) {
-	logPath := filepath.Join(filepath.Dir(binaryPath), "dynatrace-otel-collector.log")
+	logPath := filepath.Join(filepath.Dir(configPath), "dynatrace-otel-collector.log")
 	logFile, err := os.Create(logPath)
 	if err != nil {
 		return nil, fmt.Errorf("creating collector log file: %w", err)

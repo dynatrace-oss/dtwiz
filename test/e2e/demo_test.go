@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
 	"github.com/dynatrace-oss/dtwiz/test/helpers"
 )
@@ -20,7 +21,9 @@ import (
 //
 // Skipped when the demo dir already exists or Python is not available.
 func TestInstallDemo(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 
 	if _, err := exec.LookPath("python3"); err != nil {
 		if _, err2 := exec.LookPath("python"); err2 != nil {
@@ -61,6 +64,8 @@ func TestInstallDemo(t *testing.T) {
 	// OTel setup is expected to fail with fake credentials; we only assert on
 	// the file-system state that must be true before that step begins.
 	t.Run("downloads and creates demo dir", func(t *testing.T) {
+		installer.AutoConfirm = true
+		t.Cleanup(func() { installer.AutoConfirm = false })
 		_ = otel.InstallDemo("https://fake.live.dynatrace.com", "tok", "ptok", false)
 
 		readme := filepath.Join(demoPath, "README.md")
@@ -74,7 +79,9 @@ func TestInstallDemo(t *testing.T) {
 // ~/.dtwiz/examples/schnitzel/ already present the dry-run plan must omit the
 // download step.
 func TestInstallDemo_DryRun_WithDemoDir(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 
 	demoPath, err := otel.BundledDemoPath()
 	if err != nil {
