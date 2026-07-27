@@ -47,9 +47,9 @@
 
 ## 8. Integration tests
 
-- [ ] 8.1 With `~/.dtwiz/examples/schnitzel/` absent, run `dtwiz install demo --dry-run` and verify the plan output includes the download step referencing the current version's release asset URL
-- [ ] 8.2 With `~/.dtwiz/examples/schnitzel/` absent, run `dtwiz install demo` and verify the directory is created with the expected files before OTel setup begins
-- [ ] 8.3 With `~/.dtwiz/examples/schnitzel/` already present, run `dtwiz install demo --dry-run` and verify the download step is omitted from the plan
+- [x] 8.1 With `~/.dtwiz/examples/schnitzel/` absent, run `dtwiz install demo --dry-run` and verify the plan output includes the download step referencing the current version's release asset URL
+- [x] 8.2 With `~/.dtwiz/examples/schnitzel/` absent, run `dtwiz install demo` and verify the directory is created with the expected files before OTel setup begins
+- [x] 8.3 With `~/.dtwiz/examples/schnitzel/` already present, run `dtwiz install demo --dry-run` and verify the download step is omitted from the plan
 
 ## 9. Verification
 

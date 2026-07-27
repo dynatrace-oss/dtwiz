@@ -20,6 +20,8 @@ import (
 //
 // Skipped when the demo dir already exists or Python is not available.
 func TestInstallDemo(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
 	if _, err := exec.LookPath("python3"); err != nil {
 		if _, err2 := exec.LookPath("python"); err2 != nil {
 			t.Skip("python3/python not found in PATH")
@@ -72,6 +74,8 @@ func TestInstallDemo(t *testing.T) {
 // ~/.dtwiz/examples/schnitzel/ already present the dry-run plan must omit the
 // download step.
 func TestInstallDemo_DryRun_WithDemoDir(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
 	demoPath, err := otel.BundledDemoPath()
 	if err != nil {
 		t.Fatalf("BundledDemoPath: %v", err)
