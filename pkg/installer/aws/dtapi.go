@@ -3,10 +3,13 @@ package aws
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/dynatrace-oss/dtctl/sdk/api/extension"
+	"github.com/dynatrace-oss/dtctl/sdk/httpclient"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
@@ -37,14 +40,36 @@ func newSDKDTClient(envURL, platformToken string) (*sdkDTClient, error) {
 }
 
 func (d *sdkDTClient) installExtension() (bool, error) {
-	if _, err := d.LatestExtensionVersion(extensionName); err == nil {
+	_, err := d.LatestExtensionVersion(extensionName)
+	if err == nil {
 		logger.Debug("extension already installed", "extension", extensionName)
 		return false, nil
+	}
+	if !isExtensionNotFoundErr(err) {
+		return false, fmt.Errorf("checking installed extension version: %w", err)
 	}
 	if err := d.InstallExtension(extensionName, ""); err != nil {
 		return false, err
 	}
 	return true, nil
+}
+
+// isExtensionNotFoundErr reports whether err is a 404 "extension not installed"
+// response. The SDK discards the typed *httpclient.APIError for its own 404
+// handling, so as a fallback we match its exact, fixed error message instead
+// of a generic "not found" substring.
+func isExtensionNotFoundErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, httpclient.ErrNotFound) {
+		return true
+	}
+	var apiErr *httpclient.APIError
+	if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+		return true
+	}
+	return strings.Contains(err.Error(), fmt.Sprintf("extension %q not found", extensionName))
 }
 
 func (d *sdkDTClient) isExtensionActive() (bool, error) {
@@ -67,8 +92,7 @@ type awsMonitoringConfigValue struct {
 func (d *sdkDTClient) findExistingMonitoringConfig(accountID string) (string, error) {
 	list, err := d.Extension.ListMonitoringConfigurations(context.Background(), extensionName, "", 0)
 	if err != nil {
-		msg := strings.ToLower(err.Error())
-		if strings.Contains(msg, "not found") || strings.Contains(msg, "404") {
+		if isExtensionNotFoundErr(err) {
 			return "", nil
 		}
 		return "", fmt.Errorf("listing monitoring configs: %w", err)

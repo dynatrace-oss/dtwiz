@@ -183,7 +183,7 @@ func installAWSWithClient(envURL, token string, dryRun bool, startTime string, d
 		EventSources:       "aws.health",
 		UseCMK:             "FALSE",
 	}
-	deployArgs := buildDeployArgs(cfg, "/tmp/da-aws-activation.yaml")
+	deployArgs := buildDeployArgs(cfg, "<temp-file>")
 
 	fmt.Println()
 	fmt.Printf("  %s\n", sep)

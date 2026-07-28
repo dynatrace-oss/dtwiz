@@ -11,11 +11,13 @@ The AWS CloudFormation integration predated the shared `installer.ExtensionClien
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Make AWS structurally identical to Azure and GCP (same package layout, same client abstraction, same cmd wiring).
 - Fix the missing `enableMonitoringConfig` step so installed stacks actually emit data.
 - Keep the `aws_lambda.go` helpers accessible without introducing an import cycle.
 
 **Non-Goals:**
+
 - Changing user-visible behavior, flags, or output.
 - Removing `pkg/extensions` (it may be used in future).
 
@@ -36,6 +38,7 @@ The `dtclient` interface is consumed by `installAWSWithClient` and `uninstallAWS
 ### 4. `enableMonitoringConfig` via GET+PUT round-trip
 
 The dtctl SDK's `UpdateMonitoringConfiguration` replaces the entire config, so a full GET first is required. `enableMonitoringConfig`:
+
 1. GETs the monitoring configuration by objectId.
 2. Unmarshals the `scope` and `value` fields.
 3. Sets `value["enabled"] = true`.
