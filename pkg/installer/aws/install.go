@@ -25,8 +25,9 @@ func maskTokenArgs(args []string) []string {
 			if strings.HasPrefix(a, p) {
 				val := a[len(p):]
 				if len(val) > 10 {
-					out[i] = p + val[:10] + "***"
+					val = val[:10]
 				}
+				out[i] = p + val + "***"
 				break
 			}
 		}

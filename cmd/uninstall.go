@@ -70,7 +70,13 @@ var uninstallAWSCmd = &cobra.Command{
 		if _, err := validateCredentials(envURL, "", platformTok); err != nil {
 			return err
 		}
-		return awspkg.UninstallAWS(envURL, platformTok, uninstallDryRun)
+		if err := awspkg.UninstallAWS(envURL, platformTok, uninstallDryRun); err != nil {
+			if errors.Is(err, installer.ErrInstallCancelled) {
+				return nil
+			}
+			return err
+		}
+		return nil
 	},
 }
 
