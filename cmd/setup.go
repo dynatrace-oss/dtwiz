@@ -12,6 +12,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	awspkg "github.com/dynatrace-oss/dtwiz/pkg/installer/aws"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/azure"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/gcp"
 	k8s "github.com/dynatrace-oss/dtwiz/pkg/installer/kubernetes"
@@ -189,7 +190,7 @@ var setupCmd = &cobra.Command{
 		case recommender.MethodOtelUpdate:
 			installErr = otel.UpdateOtelConfigInteractive(envURL, classicTok, platformTok, setupDryRun)
 		case recommender.MethodAWS:
-			installErr = installer.InstallAWS(c.Platform, envURL, platformTok, setupDryRun, StartTime.UTC().Format(installer.IngestTimeFormat))
+			installErr = awspkg.InstallAWS(envURL, platformTok, setupDryRun, StartTime.UTC().Format(installer.IngestTimeFormat))
 		case recommender.MethodAzure:
 			installErr = azure.InstallAzure(envURL, platformTok, setupDryRun, StartTime)
 		case recommender.MethodAzureUpdate:

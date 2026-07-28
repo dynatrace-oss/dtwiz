@@ -8,6 +8,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	awspkg "github.com/dynatrace-oss/dtwiz/pkg/installer/aws"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/azure"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/gcp"
 	k8s "github.com/dynatrace-oss/dtwiz/pkg/installer/kubernetes"
@@ -62,19 +63,14 @@ var uninstallAWSCmd = &cobra.Command{
 	Short: "Remove the Dynatrace AWS CloudFormation stack and monitoring configuration",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		envURL, accessTok, platformTok, err := getDtEnvironment()
+		envURL, _, platformTok, err := getDtEnvironment()
 		if err != nil {
 			return err
 		}
-		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
-		if err != nil {
+		if _, err := validateCredentials(envURL, "", platformTok); err != nil {
 			return err
 		}
-		c, err := setupClientFromCreds(envURL, classicTok, platformTok)
-		if err != nil {
-			return err
-		}
-		return installer.UninstallAWS(c.Platform, envURL, uninstallDryRun)
+		return awspkg.UninstallAWS(envURL, platformTok, uninstallDryRun)
 	},
 }
 

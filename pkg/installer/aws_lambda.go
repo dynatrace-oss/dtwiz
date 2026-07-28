@@ -76,7 +76,7 @@ func archToDTArch(arch string) string {
 
 // getLambdaRegion returns the current AWS region from env vars or aws configure.
 func getLambdaRegion() (string, error) {
-	_, region, err := getAWSCallerInfo()
+	_, region, err := GetAWSCallerInfo()
 	if err != nil {
 		return "", err
 	}
@@ -684,7 +684,7 @@ func InstallAWSLambda(envURL, token string, dryRun, confirm bool) error {
 	}
 	fmt.Println()
 
-	if !isAWSCLIInstalled() {
+	if !IsAWSCLIInstalled() {
 		return fmt.Errorf("AWS CLI not found — install it from https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html")
 	}
 
@@ -809,7 +809,7 @@ func UninstallAWSLambda(dryRun bool) error {
 	display.ColorMessage.Println("  Dynatrace AWS Lambda — Remove Instrumentation")
 	fmt.Println()
 
-	if !isAWSCLIInstalled() {
+	if !IsAWSCLIInstalled() {
 		return fmt.Errorf("AWS CLI not found — install it from https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html")
 	}
 
