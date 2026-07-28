@@ -156,12 +156,10 @@ func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) 
 		deadline := time.Now().Add(portPollTimeout)
 		for time.Now().Before(deadline) {
 			var mu sync.Mutex
-			portsFound := 0
 			remaining := 0
 			var wg sync.WaitGroup
 			for i, p := range procs {
 				if ports[i] != "" {
-					portsFound++
 					continue
 				}
 				exited, _ := p.WaitResult()
@@ -177,12 +175,17 @@ func PrintProcessSummary(procs []*ManagedProcess, settleDuration time.Duration) 
 					if port != "" {
 						mu.Lock()
 						ports[idx] = port
-						portsFound++
 						mu.Unlock()
 					}
 				}(i, p)
 			}
 			wg.Wait()
+			portsFound := 0
+			for _, port := range ports {
+				if port != "" {
+					portsFound++
+				}
+			}
 			logger.Debug("poll iteration complete", "remaining", remaining, "ports_found", portsFound)
 			if remaining == 0 || portsFound == started {
 				logger.Debug("port detection done", "reason", map[bool]string{true: "all exited", false: "all ports found"}[remaining == 0])

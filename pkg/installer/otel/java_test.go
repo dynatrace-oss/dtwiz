@@ -259,7 +259,7 @@ func TestJavaInstrumentationPlan_Execute(t *testing.T) {
 	}
 
 	helpers.CaptureStdout(t, func() {
-		plan.Execute()
+		_ = plan.Execute()
 	})
 }
 
@@ -311,7 +311,7 @@ func TestJavaInstrumentationPlan_Execute_MultiModuleDispatch(t *testing.T) {
 	}
 
 	helpers.CaptureStdout(t, func() {
-		plan.Execute()
+		_ = plan.Execute()
 	})
 	output := colorBuf.String()
 

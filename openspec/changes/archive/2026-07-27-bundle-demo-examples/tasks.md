@@ -47,12 +47,22 @@
 
 ## 8. Integration tests
 
-- [ ] 8.1 With `~/.dtwiz/examples/schnitzel/` absent, run `dtwiz install demo --dry-run` and verify the plan output includes the download step referencing the current version's release asset URL
-- [ ] 8.2 With `~/.dtwiz/examples/schnitzel/` absent, run `dtwiz install demo` and verify the directory is created with the expected files before OTel setup begins
-- [ ] 8.3 With `~/.dtwiz/examples/schnitzel/` already present, run `dtwiz install demo --dry-run` and verify the download step is omitted from the plan
+- [x] 8.1 With `~/.dtwiz/examples/schnitzel/` absent, run `dtwiz install demo --dry-run` and verify the plan output includes the download step referencing the current version's release asset URL
+- [x] 8.2 With `~/.dtwiz/examples/schnitzel/` absent, run `dtwiz install demo` and verify the directory is created with the expected files before OTel setup begins
+- [x] 8.3 With `~/.dtwiz/examples/schnitzel/` already present, run `dtwiz install demo --dry-run` and verify the download step is omitted from the plan
 
 ## 9. Verification
 
 - [x] 9.1 Run `make build` and confirm the binary builds cleanly
 - [x] 9.2 Run `make lint` and confirm no new lint issues
 - [x] 9.3 Run `make test` and confirm all tests pass
+
+## 10. Snapshot/preview workflow support
+
+- [x] 10.1 Add `SnapshotTag` variable to `pkg/version/version.go`, set to `""` by default
+- [x] 10.2 Update `.goreleaser.yaml` ldflags to inject `SnapshotTag` from `GORELEASER_SNAPSHOT_TAG` env var
+- [x] 10.3 Update `demoExamplesURL()` in `demo.go` to use the snapshot release URL when `version.SnapshotTag != ""`
+- [x] 10.4 Update `TestDemoExamplesURL` to cover the `SnapshotTag != ""` case
+- [x] 10.5 Update `preview.yml` goreleaser step to pass `GORELEASER_SNAPSHOT_TAG` so the built binary resolves the correct snapshot release URL
+- [x] 10.6 Update `preview.yml` publish step to include `dtwiz-examples.tar.gz` as a release asset
+- [x] 10.7 Update `release.yml` to set `GORELEASER_SNAPSHOT_TAG: ""` so the env var is always defined for goreleaser templates

@@ -22,7 +22,7 @@ The demo install flow currently fetches the schnitzel app from `github.com/diete
 
 ### Release asset download over `go:embed` or third-party download
 
-Publishing all examples together as `dtwiz-examples.tar.gz` and downloading it on demand keeps the binary small for all users. Users who never run the demo get no extra weight. The download only happens when `~/.dtwiz/examples/schnitzel/` is absent. Release builds use the binary's built-in version string to select the matching release asset. Development and snapshot builds use the latest release asset because they do not necessarily have a matching published GitHub release. Schnitzel is one example inside the archive; future examples can be added to the same asset without changing the download mechanism.
+Publishing all examples together as `dtwiz-examples.tar.gz` and downloading it on demand keeps the binary small for all users. Users who never run the demo get no extra weight. The download only happens when `~/.dtwiz/examples/schnitzel/` is absent. Release builds use the binary's built-in version string to select the matching release asset. Snapshot builds published by CI have a `SnapshotTag` injected at build time via ldflags and use their own snapshot pre-release URL. Local dev builds with no `SnapshotTag` use the latest stable release asset. Schnitzel is one example inside the archive; future examples can be added to the same asset without changing the download mechanism.
 
 The release process creates `dtwiz-examples.tar.gz` under GoReleaser's `dist/` directory and publishes it as a release extra file. Keeping the generated tarball under `dist/` keeps it out of the working tree and lets normal release artifact cleanup remove it.
 

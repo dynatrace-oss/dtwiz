@@ -38,9 +38,13 @@ func BundledDemoPath() (string, error) {
 }
 
 // demoExamplesURL returns the download URL for the demo examples tarball.
-// Dev and pre-release builds (version contains "-" or equals "dev") resolve to
-// the latest stable release; proper releases use the exact version tag.
+// Snapshot builds use their own pre-release tag (injected at build time).
+// Dev and other pre-release builds (version contains "-" or equals "dev") fall
+// back to the latest stable release; proper releases use the exact version tag.
 func demoExamplesURL() string {
+	if version.SnapshotTag != "" {
+		return fmt.Sprintf("%s/download/%s/dtwiz-examples.tar.gz", releaseBaseURL, version.SnapshotTag)
+	}
 	ver := version.Version
 	if ver == "dev" || strings.Contains(ver, "-") {
 		return releaseBaseURL + "/latest/download/dtwiz-examples.tar.gz"
