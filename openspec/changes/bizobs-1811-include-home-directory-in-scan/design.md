@@ -12,7 +12,7 @@ The install entry point is `InstallOtelCollectorWithProject` (`otel.go:253`). Wh
 
 **Goals:**
 
-- Let a user running `install otel` from a directory that does not cover home opt into also scanning their home directory, via a single interactive prompt.
+- Let a user running `install otel` from a directory outside the home tree opt into also scanning their home directory, via a single interactive prompt.
 - Make the prompt fire exactly once per invocation, before any parallel scanning.
 - Keep the working-directory-only behavior available (`c`) and give a clean full-command abort (`n`).
 - Preserve the always-on `~/.dtwiz/examples/` scan unchanged.
@@ -20,7 +20,7 @@ The install entry point is `InstallOtelCollectorWithProject` (`otel.go:253`). Wh
 
 **Non-Goals:**
 
-- Optimizing the redundant walk when `cwd` is under `home` and the user picks `Y` (the `home` walk re-descends into the `cwd` subtree). Dedup already prevents duplicate results; the extra walk is accepted.
+- Prompting or adding home when `cwd` is already within the home tree. If the user is somewhere under `~`, we scan the working directory only and never add home as a second root.
 - Adding a persistent flag or env var to preselect the choice. Only the interactive prompt plus the existing `AutoConfirm`/TTY signals drive the default.
 - Changing scan behavior for the explicit `--project` path (no scan, no prompt).
 - Changing uninstall-side scanning.
@@ -55,11 +55,14 @@ InstallOtelCollectorWithProject
 
 Compute `cwd = os.Getwd()` and `home = os.UserHomeDir()` once.
 
+The prompt fires only when `cwd` and `home` are in **disjoint trees**. If either is an ancestor of the other (inclusive), the working-directory walk is sufficient and there is nothing to add:
+
 - `cwd == home` → **no prompt**, `roots = [cwd]` (home is already the working dir).
 - `home` is a descendant of `cwd` (i.e. `cwd` is an ancestor of `home`) → **no prompt**, `roots = [cwd]` (the working-dir walk already covers home).
-- otherwise (`cwd` under `home`, or an unrelated tree) → **prompt** `Y/c/n`.
+- `cwd` is a descendant of `home` (`cwd` is within the home tree, e.g. `~/projects/foo`) → **no prompt**, `roots = [cwd]`. We do **not** add home as a second root, since the user is already working inside their home tree.
+- otherwise (disjoint trees, e.g. `/opt/app`, `/tmp/work`) → **prompt** `Y/c/n`.
 
-Ancestor detection uses cleaned, symlink-resolved absolute paths and a path-segment comparison (not raw string prefix, to avoid `/home/foobar` matching `/home/foo`).
+Ancestor/descendant detection uses cleaned, symlink-resolved absolute paths and a path-segment comparison (not raw string prefix, to avoid `/home/foobar` matching `/home/foo`).
 
 ### Decision: Prompt outcomes and non-interactive default
 
@@ -75,7 +78,7 @@ When `installer.AutoConfirm` is set, or stdin is not a TTY, the prompt is not sh
 
 ## Risks / Trade-offs
 
-- **Redundant walk when `cwd` is under `home` and user picks `Y`** → the `home` walk re-descends into the `cwd` subtree. Mitigation: existing `matchedProjects` dedup keeps results correct; extra walk time accepted as out of scope.
+- **Roots overlap only via bundled examples** → since home is added only when disjoint from `cwd`, the two roots never overlap; the sole residual overlap is the always-on `~/.dtwiz/examples/` root (under home). Mitigation: existing `matchedProjects` dedup keeps results correct.
 - **Scanning a large home directory is slow/noisy** → mitigation: the existing large-scan progress notice (`largeScanThreshold`) and the macOS/Windows system-dir excludes already apply to every root, including `home`.
-- **Non-interactive default `Y` walks all of home in CI/pipelines** → mitigation: this only affects `install otel` without `--project`; automated flows that target a specific project should pass `--project`, which skips scanning entirely.
-- **Relaxing the "never traverse ancestors" guarantee** → this is an intentional spec change (see spec delta); it only happens on explicit opt-in (or the documented non-interactive default), never silently mid-scan.
+- **Non-interactive default `Y` walks all of home in CI/pipelines** → mitigation: this only affects `install otel` run from outside the home tree without `--project`; automated flows that target a specific project should pass `--project`, which skips scanning entirely.
+- **Adding home as a separate root expands scan scope** → the working directory's ancestors are still never traversed; home is a disjoint additional root, scanned only on explicit opt-in (or the documented non-interactive default), never silently mid-scan.
