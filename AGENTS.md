@@ -92,8 +92,7 @@ Credentials resolved from: `--environment` flag → `DT_ENVIRONMENT` env var; `-
 
 ## Key design rules
 
-- **Zero-config defaults:** OneAgent full-stack mode, K8s `cloudNativeFullStack`, AWS all services + all regions.
-- **Prefer dtctl/SDK over custom code:** Before implementing a Dynatrace API call or integration helper from scratch, check whether the Dynatrace SDK or `dtctl` already provides the capability. Use the MCP tools (`mcp_dynatrace-app_sdk_search`, `mcp_dynatrace-app_sdk_get_doc`) to search the SDK. Prefer library calls over raw HTTP requests to avoid reimplementing auth, pagination, retries, and error handling.
+- **Prefer dtctl/SDK over custom code:** Before implementing a Dynatrace API call or integration helper from scratch, check whether the Dynatrace SDK or `dtctl` already provides the capability. Prefer library calls over raw HTTP requests to avoid reimplementing auth, pagination, retries, and error handling.
 
 ## CLI conventions
 
