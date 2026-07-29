@@ -156,6 +156,7 @@ func TestRegisterFlags_FlagAppearsInFlagSet(t *testing.T) {
 	f := fs.Lookup("all-runtimes")
 	if f == nil {
 		t.Fatal("expected --all-runtimes to be registered")
+		return
 	}
 	if f.DefValue != "false" {
 		t.Errorf("expected default false, got %s", f.DefValue)

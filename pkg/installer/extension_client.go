@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"sort"
 	"strconv"
@@ -44,6 +45,45 @@ func NewExtensionClient(envURL, platformToken string) (*ExtensionClient, error) 
 		Settings:  settings.NewHandler(c),
 		Extension: extension.NewHandler(c),
 	}, nil
+}
+
+// EnsureInstalled installs extensionName if it isn't already, returning true if it
+// was freshly installed. Any error other than "not installed" (a genuine API or
+// network failure) is returned immediately instead of being treated as absence.
+func (e *ExtensionClient) EnsureInstalled(extensionName string) (bool, error) {
+	_, err := e.LatestExtensionVersion(extensionName)
+	if err == nil {
+		logger.Debug("extension already installed", "extension", extensionName)
+		return false, nil
+	}
+	if !IsExtensionNotFound(err, extensionName) {
+		return false, fmt.Errorf("checking installed extension version: %w", err)
+	}
+	if err := e.InstallExtension(extensionName, ""); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// IsExtensionNotFound reports whether err means extensionName is not installed (404),
+// as opposed to a real API or network error. The dtctl SDK discards the typed
+// *httpclient.APIError for its own 404 handling and returns a plain fmt.Errorf instead
+// (see dtctl/sdk/api/extension.go Get/ListMonitoringConfigurations), so errors.Is/
+// errors.As cannot detect it there. The typed checks are kept in case a future SDK
+// version preserves wrapping; the string check matches the SDK's exact, fixed
+// message format rather than a generic "not found" substring.
+func IsExtensionNotFound(err error, extensionName string) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, httpclient.ErrNotFound) {
+		return true
+	}
+	var apiErr *httpclient.APIError
+	if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+		return true
+	}
+	return strings.Contains(err.Error(), fmt.Sprintf("extension %q not found", extensionName))
 }
 
 // InstallExtension activates a Dynatrace extension version. HTTP 409 is treated
