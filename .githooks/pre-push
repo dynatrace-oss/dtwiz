@@ -1,0 +1,50 @@
+#!/bin/sh
+# pre-push hook — hard-blocks pushes containing commits with invalid messages.
+# Validates all commits being pushed that are not yet on the remote.
+#
+# Install: make setup
+
+HOOK_DIR="$(dirname "$0")"
+ERRORS=0
+
+while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
+  # Skip branch deletions
+  if [ "$local_sha" = "0000000000000000000000000000000000000000" ]; then
+    continue
+  fi
+
+  # Determine the commit range to validate
+  if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+    # New branch: validate commits not yet on any remote
+    commits=$(git log "$local_sha" --not --remotes --format="%H")
+  else
+    commits=$(git log "$remote_sha..$local_sha" --format="%H")
+  fi
+
+  for commit in $commits; do
+    tmp=$(mktemp)
+    git log --format="%B" -n 1 "$commit" > "$tmp"
+    short=$(printf '%s' "$commit" | cut -c1-7)
+    if ! output=$("$HOOK_DIR/validate-msg" "$tmp" 2>&1); then
+      printf '\033[31m✗ %s — invalid commit message:\033[0m\n' "$short" >&2
+      printf '%s\n' "$output" >&2
+      printf '\n' >&2
+      ERRORS=$((ERRORS + 1))
+    fi
+    rm -f "$tmp"
+  done
+done
+
+if [ "$ERRORS" -gt 0 ]; then
+  printf '\033[31mPush rejected: %d commit(s) with invalid message(s). Fix with: git rebase -i\033[0m\n' "$ERRORS" >&2
+  exit 1
+fi
+
+# ── lint ──────────────────────────────────────────────────────────────────────
+printf 'Running make lint...\n' >&2
+if ! make lint >&2; then
+  printf '\033[31mPush rejected: lint failed. Fix the issues above and try again.\033[0m\n' >&2
+  exit 1
+fi
+
+exit 0

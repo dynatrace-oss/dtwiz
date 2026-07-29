@@ -1,109 +1,15 @@
 #!/bin/sh
-# commit-msg hook — validates commit messages follow Conventional Commits format.
-# Rules mirror @commitlint/config-conventional. Ticket numbers are banned from commit subjects.
+# commit-msg hook — warns if commit message doesn't follow Conventional Commits format.
+# Non-blocking: the commit proceeds regardless. Hard enforcement happens in pre-push.
 #
 # Install: make setup
 
-COMMIT_MSG_FILE="$1"
+HOOK_DIR="$(dirname "$0")"
 
-# Strip comment lines (git inserts them after the message)
-MSG=$(grep -v '^#' "$COMMIT_MSG_FILE")
-
-# Skip empty commits
-if [ -z "$(printf '%s' "$MSG" | tr -d '[:space:]')" ]; then
-  exit 0
-fi
-
-# First line is the header
-HEADER=$(printf '%s\n' "$MSG" | head -n 1)
-
-# Skip release commits produced by release tooling: chore(release): ...
-case "$HEADER" in
-  "chore(release):"*) exit 0 ;;
-esac
-
-# ── helpers ────────────────────────────────────────────────────────────────────
-red()  { printf '\033[31m%s\033[0m\n' "$*" >&2; }
-hint() { printf '  %s\n' "$*" >&2; }
-
-ERRORS=0
-fail() { red "✗ $*"; ERRORS=$((ERRORS + 1)); }
-
-# ── rule: header-max-length (100) ─────────────────────────────────────────────
-HEADER_LEN=$(printf '%s' "$HEADER" | wc -c | tr -d ' ')
-if [ "$HEADER_LEN" -gt 100 ]; then
-  fail "header exceeds 100 characters (current length: $HEADER_LEN)"
-fi
-
-# ── rule: header must match <type>(<scope>): <subject> ────────────────────────
-if ! printf '%s' "$HEADER" | grep -qE '^[a-z]+(\([^)]+\))?: .+'; then
-  fail "commit message must follow format: <type>(<scope>): <subject>"
-  hint "examples:"
-  hint "  feat: add new feature"
-  hint "  fix(auth): correct token validation"
-  hint "  docs(readme): update installation steps"
-else
-  # Extract type (everything before an optional '(scope)' and ':')
-  TYPE=$(printf '%s' "$HEADER" | sed -E 's/^([a-z]+).*/\1/')
-
-  # ── rule: type-enum ──────────────────────────────────────────────────────────
-  case "$TYPE" in
-    feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert) ;;
-    *)
-      fail "type '$TYPE' is not allowed"
-      hint "allowed types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
-      ;;
-  esac
-
-  # Extract subject (everything after the first ': ')
-  SUBJECT=$(printf '%s' "$HEADER" | sed -E 's/^[^:]+: //')
-
-  # ── rule: subject-empty ──────────────────────────────────────────────────────
-  if [ -z "$(printf '%s' "$SUBJECT" | tr -d '[:space:]')" ]; then
-    fail "subject may not be empty"
-  else
-    # ── rule: subject-case — must not start with an upper-case letter ──────────
-    FIRST_CHAR=$(printf '%s' "$SUBJECT" | cut -c1)
-    case "$FIRST_CHAR" in
-      [[:upper:]]) fail "subject '$SUBJECT' must not start with an upper-case letter" ;;
-    esac
-
-    # ── rule: subject-full-stop — must not end with '.' ───────────────────────
-    LAST_CHAR=$(printf '%s' "$SUBJECT" | rev | cut -c1)
-    if [ "$LAST_CHAR" = "." ]; then
-      fail "subject '$SUBJECT' must not end with a period"
-    fi
-  fi
-fi
-
-# ── rule: no ticket numbers (e.g. ABC-1234) anywhere in the header ────────────
-if printf '%s' "$HEADER" | grep -qE '[A-Z]{2,10}-[0-9]+'; then
-  fail "commit message must not contain ticket numbers (e.g. ABC-1234)"
-  hint "keep commit messages free of ticket numbers"
-fi
-
-# ── rule: body-max-line-length (100) — lines 3+ ───────────────────────────────
-LINE_NUM=0
-while IFS= read -r line; do
-  LINE_NUM=$((LINE_NUM + 1))
-  # Skip header and the mandatory blank separator line
-  [ "$LINE_NUM" -le 2 ] && continue
-  # Skip comment lines that git may have left in
-  case "$line" in \#*) continue ;; esac
-  LINE_LEN=$(printf '%s' "$line" | wc -c | tr -d ' ')
-  if [ "$LINE_LEN" -gt 100 ]; then
-    fail "body line $LINE_NUM exceeds 100 characters (current length: $LINE_LEN)"
-  fi
-done < "$COMMIT_MSG_FILE"
-
-# ── summary ───────────────────────────────────────────────────────────────────
-if [ "$ERRORS" -gt 0 ]; then
+if ! output=$("$HOOK_DIR/validate-msg" "$1" 2>&1); then
+  printf '\033[33m⚠ Warning: commit message issues (push will be blocked if not fixed):\033[0m\n' >&2
+  printf '%s\n' "$output" >&2
   printf '\n' >&2
-  red "Commit message validation failed ($ERRORS error(s))."
-  hint "Follow Conventional Commits: https://www.conventionalcommits.org"
-  hint "Format: <type>(<scope>): <subject>"
-  hint "Types:  feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
-  exit 1
 fi
 
 exit 0

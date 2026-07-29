@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"golang.org/x/sys/windows/registry"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 // RefreshWindowsPath appends any user registry PATH entries missing from the

@@ -1,0 +1,20 @@
+#!/bin/sh
+# pre-commit hook — blocks commits if code is not formatted.
+# Fix with: make fmt
+
+# Expand PATH for non-interactive shells (Homebrew, Go-installed tools)
+export PATH="$(go env GOPATH)/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+if ! command -v golangci-lint > /dev/null 2>&1; then
+  printf '\033[31m✗ golangci-lint not found. Install it: https://golangci-lint.run/welcome/install/\033[0m\n' >&2
+  exit 1
+fi
+
+diff=$(golangci-lint fmt --diff ./... 2>&1)
+if [ -n "$diff" ]; then
+  printf '\033[31m✗ Code is not formatted. Run: make fmt\033[0m\n' >&2
+  printf '%s\n' "$diff" >&2
+  exit 1
+fi
+
+exit 0

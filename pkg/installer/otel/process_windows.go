@@ -7,8 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"golang.org/x/sys/windows"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 // pythonLeafPID finds the leaf python process matching the given entrypoint.

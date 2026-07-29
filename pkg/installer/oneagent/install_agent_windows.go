@@ -7,9 +7,10 @@ import (
 	"strings"
 	"unsafe"
 
+	"golang.org/x/sys/windows"
+
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
-	"golang.org/x/sys/windows"
 )
 
 var (
