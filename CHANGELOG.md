@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `install otel`: when run from a directory outside your home tree, dtwiz now asks whether to also scan your home directory for projects (`Y` = this directory and home, `c` = this directory only, `n` = cancel). The prompt is skipped when the working directory already sits in the same lineage as home; non-interactive runs (`--yes` or a non-TTY) default to scanning both.
+
 ## [1.1.0] - 2026-07-27
 
 ### Added

@@ -26,8 +26,8 @@ var nodeProjectMarkers = []string{
 	".node-version",
 }
 
-func detectNodeProjects() []ScannedProject {
-	projects := scanProjectDirs(nodeProjectMarkers, []string{"node_modules"})
+func detectNodeProjects(roots []string) []ScannedProject {
+	projects := scanProjectDirs(nodeProjectMarkers, []string{"node_modules"}, roots)
 
 	// Expand monorepo workspaces: for each project with a "workspaces" field,
 	// resolve workspace directories and add them as individual projects.

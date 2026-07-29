@@ -18,7 +18,7 @@ func TestDetectGoProjects_Found(t *testing.T) {
 	}
 
 	helpers.SetTestWorkingDir(t, dir)
-	projects := detectGoProjects()
+	projects := detectGoProjects(defaultScanRoots())
 	found := false
 	for _, p := range projects {
 		if p.Path == dir || p.Path == realDir {
@@ -38,7 +38,7 @@ func TestDetectGoProjects_None(t *testing.T) {
 	realDir, _ := filepath.EvalSymlinks(dir)
 
 	helpers.SetTestWorkingDir(t, dir)
-	projects := detectGoProjects()
+	projects := detectGoProjects(defaultScanRoots())
 	for _, p := range projects {
 		if p.Path == dir || p.Path == realDir {
 			t.Errorf("unexpected Go project at %s with no go.mod", dir)

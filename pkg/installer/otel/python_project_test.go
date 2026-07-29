@@ -232,7 +232,7 @@ func TestDetectPythonProjects_FindsCWD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Lstat expected path %q: %v", expected, err)
 	}
-	projects := detectPythonProjects()
+	projects := detectPythonProjects(defaultScanRoots())
 	found := false
 	for _, p := range projects {
 		info, err := os.Lstat(p.Path)
@@ -264,7 +264,7 @@ func TestDetectPythonProjects_FindsSubDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Lstat expected subdir path %q: %v", expectedSub, err)
 	}
-	projects := detectPythonProjects()
+	projects := detectPythonProjects(defaultScanRoots())
 	found := false
 	for _, p := range projects {
 		info, err := os.Lstat(p.Path)

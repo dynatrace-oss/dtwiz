@@ -27,7 +27,7 @@ type runtimeInfo struct {
 	name    string
 	binName string
 	enabled bool
-	detect  func() []detectedProject
+	detect  func(roots []string) []detectedProject
 }
 
 type detectedProject struct {
@@ -60,20 +60,20 @@ func detectMatchedProjects(runtime string, projectFn func() []ScannedProject, pr
 	return detectedProjectsFromScan(runtime, projects)
 }
 
-func detectPythonRuntimeProjects() []detectedProject {
-	return detectMatchedProjects("Python", detectPythonProjects, detectPythonProcesses)
+func detectPythonRuntimeProjects(roots []string) []detectedProject {
+	return detectMatchedProjects("Python", func() []ScannedProject { return detectPythonProjects(roots) }, detectPythonProcesses)
 }
 
-func detectJavaRuntimeProjects() []detectedProject {
-	return detectMatchedProjects("Java", detectJavaProjects, detectJavaProcesses)
+func detectJavaRuntimeProjects(roots []string) []detectedProject {
+	return detectMatchedProjects("Java", func() []ScannedProject { return detectJavaProjects(roots) }, detectJavaProcesses)
 }
 
-func detectNodeRuntimeProjects() []detectedProject {
-	return detectMatchedProjects("Node.js", detectNodeProjects, detectNodeProcesses)
+func detectNodeRuntimeProjects(roots []string) []detectedProject {
+	return detectMatchedProjects("Node.js", func() []ScannedProject { return detectNodeProjects(roots) }, detectNodeProcesses)
 }
 
-func detectGoRuntimeProjects() []detectedProject {
-	projects := detectGoProjects()
+func detectGoRuntimeProjects(roots []string) []detectedProject {
+	projects := detectGoProjects(roots)
 	detected := make([]detectedProject, 0, len(projects))
 	for _, project := range projects {
 		detected = append(detected, detectedProject{
@@ -87,7 +87,7 @@ func detectGoRuntimeProjects() []detectedProject {
 
 // detectAllProjects filters runtimes to those with a usable binary and scans
 // for projects in parallel across all enabled runtimes.
-func detectAllProjects(runtimes []runtimeInfo) []detectedProject {
+func detectAllProjects(runtimes []runtimeInfo, roots []string) []detectedProject {
 	type result struct {
 		projects []detectedProject
 	}
@@ -136,7 +136,7 @@ func detectAllProjects(runtimes []runtimeInfo) []detectedProject {
 		wg.Add(1)
 		go func(idx int, rt runtimeInfo) {
 			defer wg.Done()
-			results[idx] = result{projects: rt.detect()}
+			results[idx] = result{projects: rt.detect(roots)}
 		}(i, rt)
 	}
 	wg.Wait()
@@ -310,7 +310,11 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		proj := detectedProject{ScannedProject: projects[0], Runtime: runtime}
 		plan = createRuntimePlan(proj, cp.apiURL, token, envURL, platformToken)
 	} else {
-		projects := detectAllProjects(runtimes)
+		roots, err := selectScanRoots()
+		if err != nil {
+			return err
+		}
+		projects := detectAllProjects(runtimes, roots)
 		if len(projects) == 0 {
 			fmt.Println("  No projects detected.")
 			cont, err := installer.ConfirmProceed("  Continue installation?")

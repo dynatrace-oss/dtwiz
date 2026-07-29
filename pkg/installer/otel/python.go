@@ -90,7 +90,10 @@ func detectPythonPlanWithConfirmedRuntime(projectPath, apiURL, token string) *Py
 		return buildPythonInstrumentationPlan(projects[0], apiURL, token, "", "")
 	}
 
-	projects, processes := runInParallel(detectPythonProjects, detectPythonProcesses)
+	projects, processes := runInParallel(
+		func() []ScannedProject { return detectPythonProjects(defaultScanRoots()) },
+		detectPythonProcesses,
+	)
 	matchProcessesToProjects(projects, processes)
 
 	if len(projects) == 0 {
