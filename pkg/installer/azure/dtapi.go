@@ -60,14 +60,7 @@ func newSDKDTClient(envURL, platformToken string) (*sdkDTClient, error) {
 }
 
 func (d *sdkDTClient) installExtension() (bool, error) {
-	if _, err := d.LatestExtensionVersion(extensionName); err == nil {
-		logger.Debug("extension already installed", "extension", extensionName)
-		return false, nil
-	}
-	if err := d.InstallExtension(extensionName, ""); err != nil {
-		return false, err
-	}
-	return true, nil
+	return d.EnsureInstalled(extensionName)
 }
 
 func (d *sdkDTClient) isExtensionActive() (bool, error) {

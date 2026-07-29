@@ -14,23 +14,16 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
-// maskTokenArgs returns a copy of args with token values truncated to their
-// first 10 characters followed by "***".
-func maskTokenArgs(args []string) []string {
-	tokenPrefixes := []string{"pDtApiToken=", "pDtIngestToken="}
+// maskTokenArgs returns a copy of args with every occurrence of the given
+// secret tokens replaced by "***", for safe display in the command preview.
+func maskTokenArgs(args []string, tokens ...string) []string {
 	out := make([]string, len(args))
-	copy(out, args)
-	for i, a := range out {
-		for _, p := range tokenPrefixes {
-			if strings.HasPrefix(a, p) {
-				val := a[len(p):]
-				if len(val) > 10 {
-					val = val[:10]
-				}
-				out[i] = p + val + "***"
-				break
-			}
+	for i, arg := range args {
+		masked := arg
+		for _, token := range tokens {
+			masked = installer.MaskSecret(masked, token)
 		}
+		out[i] = masked
 	}
 	return out
 }
@@ -190,7 +183,7 @@ func installAWSWithClient(envURL, token string, dryRun bool, startTime string, d
 	fmt.Printf("  %s\n", sep)
 	display.ColorMessage.Println("  Command to be executed:")
 	fmt.Printf("  %s\n", sep)
-	fmt.Printf("    aws %s\n", formatDeployCmd(maskTokenArgs(deployArgs)))
+	fmt.Printf("    aws %s\n", formatDeployCmd(maskTokenArgs(deployArgs, cfg.SettingsToken, cfg.IngestToken)))
 	fmt.Printf("  %s\n\n", sep)
 
 	if proceed, err := installer.ShouldProceed(dryRun, "Installation"); !proceed {
