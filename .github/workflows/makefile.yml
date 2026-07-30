@@ -3,6 +3,10 @@ name: Linting
 
 on:
   pull_request:
+    paths:
+      - "**/*.md"
+      - ".markdownlint.yml"
+      - ".github/workflows/makefile.yml"
   workflow_dispatch:
 
 jobs:
@@ -14,4 +18,4 @@ jobs:
         with:
           submodules: true
       - name: MarkdownLint-Cli
-        run: make markdownlint
+        run: make markdownlint CONTAINER_RUNTIME=docker
