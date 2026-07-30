@@ -2,6 +2,7 @@
 
 - [ ] 0.2 Validate the PM-provided `host-metrics.yaml` reference config's `hostmetrics` scrapers with the same Dynatrace OTel Collector version dtwiz installs on Linux, macOS, and Windows. Run both config validation (for example the collector's validate/config-check command, if available) and a startup smoke test so receiver runtime failures are caught, not only YAML/schema errors.
 - [ ] 0.3 During the smoke test, confirm what metrics are actually collected on each OS and record any receiver errors or unsupported scrapers. `journald` runtime behavior on macOS/Windows is out of scope for this check since it is gated off entirely on those platforms.
+- [ ] 0.4 When a new Dynatrace OTel Collector distribution is released, check its [manifest.yaml](https://github.com/Dynatrace/dynatrace-otel-collector/blob/main/manifest.yaml) for `windowseventlogreceiver` (Windows) and `macosunifiedloggingreceiver` (macOS). When either appears, extend the template and add platform coverage for host logs on that OS.
 
 ## 1. Combined collector template
 
@@ -18,7 +19,7 @@
 - [ ] 2.3 Extend `findFreePort` probing to also cover the new `HealthCheckPort`, alongside the existing grpc/http/metrics ports, so a dtwiz collector can run alongside an existing one without a port conflict.
 - [ ] 2.4 Gate the whole capability behind `featureflags.IsEnabled(featureflags.Experimental)` (design Decision 5), the same convention used for `install docker` / `update otel`. When disabled, `generateOtelConfig` SHALL render exactly the pre-change app-only config (no host pipelines, no `hostmetrics`/`journald`/`health_check` receivers or extensions); when enabled, render the full combined config from section 1.
 
-## 3. Install flow and foreign-collector conflict detection
+## 3. Install flow
 
 - [ ] 3.1 In `pkg/installer/otel/otel.go`, replace the "follow the docs to activate host monitoring" info box (lines ~276-284) with messaging that host monitoring is enabled automatically.
 - [ ] 3.2 Add a one-line notice that some host metrics/logs may require elevated privileges to be collected in full, phrased per platform: root or `systemd-journal` group on Linux, Administrator/Debug privilege on Windows, and a note that some per-process metrics (e.g. process disk IO) are unavailable on macOS regardless of privilege level.

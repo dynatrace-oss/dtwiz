@@ -33,13 +33,6 @@ The generated configuration SHALL include host log collection only on platforms 
 - **WHEN** the configuration is generated
 - **THEN** it SHALL include the `journald` receiver and a logs pipeline that forwards host logs to Dynatrace through the `resource_detection` processor
 
-#### Scenario: macOS and Windows collect metrics only
-
-- **GIVEN** the target platform is macOS or Windows
-- **WHEN** the configuration is generated
-- **THEN** it SHALL include host metrics collection
-- **AND** it SHALL NOT include the `journald` receiver, a host logs pipeline, or any other host-log receiver in its place
-
 ### Requirement: Preview and confirmation before applying
 
 The combined configuration SHALL be shown to the user before it is written, consistent with the existing collector install preview.

@@ -19,7 +19,7 @@
 
 ### Modified Capabilities
 
-<!-- No existing spec captures the base collector install; uninstall/update specs are unaffected because the managed collector location and exporter are unchanged. -->
+- `install otel` install output: the info box that currently refers users to external docs to activate host monitoring manually is replaced with a notice that host monitoring is enabled automatically.
 
 ## Impact
 
