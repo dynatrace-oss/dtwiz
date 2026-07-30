@@ -1,6 +1,7 @@
 package otel
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -165,69 +166,163 @@ func showConfigDiff(origData, updatedData []byte) {
 	}
 }
 
-// mergeDynatraceExporter deep-merges the Dynatrace exporter definition into
-// the `exporters` key of the provided config map.  It also appends
-// `otlp_http/dynatrace` to the exporters list of every existing pipeline.
-func mergeDynatraceExporter(cfg map[string]interface{}, apiURL, token string) {
-	// Ensure exporters key exists.
-	exporters, ok := cfg["exporters"].(map[string]interface{})
-	if !ok {
-		exporters = make(map[string]interface{})
-		cfg["exporters"] = exporters
+// nodeMappingGet returns the value node for key in a YAML mapping node,
+// or nil if not found.
+func nodeMappingGet(m *yaml.Node, key string) *yaml.Node {
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value == key {
+			return m.Content[i+1]
+		}
 	}
+	return nil
+}
 
-	exporters["otlp_http/dynatrace"] = map[string]interface{}{
-		"endpoint": dtOTLPEndpoint(apiURL),
-		"headers": map[string]interface{}{
-			"Authorization": installer.AuthHeader(token),
+// nodeMappingSet sets the value for key in a YAML mapping node.
+// If the key already exists its value is replaced in-place, preserving the
+// original key node (and any line comment on it).  Otherwise a new key-value
+// pair is appended, preserving insertion order.
+func nodeMappingSet(m *yaml.Node, key string, val *yaml.Node) {
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value == key {
+			m.Content[i+1] = val
+			return
+		}
+	}
+	m.Content = append(m.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Value: key, Tag: "!!str"},
+		val,
+	)
+}
+
+// ensureMappingNode returns the existing mapping value for key in parent,
+// creating and inserting an empty mapping node when absent.
+func ensureMappingNode(parent *yaml.Node, key string) *yaml.Node {
+	if n := nodeMappingGet(parent, key); n != nil && n.Kind == yaml.MappingNode {
+		return n
+	}
+	n := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	nodeMappingSet(parent, key, n)
+	return n
+}
+
+// buildDTExporterNode returns the yaml.Node subtree for the
+// otlp_http/dynatrace exporter definition.
+func buildDTExporterNode(apiURL, token string) *yaml.Node {
+	return &yaml.Node{
+		Kind: yaml.MappingNode,
+		Tag:  "!!map",
+		Content: []*yaml.Node{
+			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "endpoint"},
+			{Kind: yaml.ScalarNode, Tag: "!!str", Value: dtOTLPEndpoint(apiURL)},
+			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "headers"},
+			{
+				Kind: yaml.MappingNode,
+				Tag:  "!!map",
+				Content: []*yaml.Node{
+					{Kind: yaml.ScalarNode, Tag: "!!str", Value: "Authorization"},
+					{Kind: yaml.ScalarNode, Tag: "!!str", Value: installer.AuthHeader(token), Style: yaml.DoubleQuotedStyle},
+				},
+			},
 		},
-	}
-
-	// Append to existing pipeline exporters.
-	service, ok := cfg["service"].(map[string]interface{})
-	if !ok {
-		return
-	}
-	pipelines, ok := service["pipelines"].(map[string]interface{})
-	if !ok {
-		return
-	}
-	for pipelineName, pipelineVal := range pipelines {
-		pipeline, ok := pipelineVal.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		existing, _ := pipeline["exporters"].([]interface{})
-		// Don't add duplicates.
-		alreadyPresent := false
-		for _, e := range existing {
-			if e == "otlp_http/dynatrace" {
-				alreadyPresent = true
-				break
-			}
-		}
-		if !alreadyPresent {
-			logger.Debug("adding Dynatrace exporter to pipeline", "pipeline", pipelineName)
-			pipeline["exporters"] = append(existing, "otlp_http/dynatrace")
-			pipelines[pipelineName] = pipeline
-		} else {
-			logger.Debug("Dynatrace exporter already present in pipeline", "pipeline", pipelineName)
-		}
 	}
 }
 
-// mergeExporterIntoYAML unmarshals data, injects the Dynatrace exporter via
-// mergeDynatraceExporter, and returns the re-marshalled YAML.
+// appendExporterToPipeline appends "otlp_http/dynatrace" to the exporters list
+// of a single pipeline mapping node.  The existing flow/block style of the
+// sequence is preserved.  It is a no-op if the exporter is already listed.
+func appendExporterToPipeline(pipeline *yaml.Node, name string) {
+	const dtKey = "otlp_http/dynatrace"
+	exportersNode := nodeMappingGet(pipeline, "exporters")
+	if exportersNode == nil {
+		nodeMappingSet(pipeline, "exporters", &yaml.Node{
+			Kind:  yaml.SequenceNode,
+			Tag:   "!!seq",
+			Style: yaml.FlowStyle,
+			Content: []*yaml.Node{
+				{Kind: yaml.ScalarNode, Tag: "!!str", Value: dtKey},
+			},
+		})
+		logger.Debug("adding Dynatrace exporter to pipeline", "pipeline", name)
+		return
+	}
+	if exportersNode.Kind != yaml.SequenceNode {
+		return
+	}
+	for _, item := range exportersNode.Content {
+		if item.Value == dtKey {
+			logger.Debug("Dynatrace exporter already present in pipeline", "pipeline", name)
+			return
+		}
+	}
+	logger.Debug("adding Dynatrace exporter to pipeline", "pipeline", name)
+	exportersNode.Content = append(exportersNode.Content, &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Tag:   "!!str",
+		Value: dtKey,
+	})
+}
+
+// mergeDynatraceExporter injects the otlp_http/dynatrace exporter into the
+// root yaml.Node of an OTel Collector config and appends it to every existing
+// pipeline's exporters list.  Comments, key order, and sequence style are
+// preserved because the yaml.Node tree is edited in place rather than
+// unmarshalled into a plain map.
+func mergeDynatraceExporter(root *yaml.Node, apiURL, token string) {
+	exporters := ensureMappingNode(root, "exporters")
+	nodeMappingSet(exporters, "otlp_http/dynatrace", buildDTExporterNode(apiURL, token))
+
+	service := nodeMappingGet(root, "service")
+	if service == nil || service.Kind != yaml.MappingNode {
+		return
+	}
+	pipelines := nodeMappingGet(service, "pipelines")
+	if pipelines == nil || pipelines.Kind != yaml.MappingNode {
+		return
+	}
+	for i := 0; i+1 < len(pipelines.Content); i += 2 {
+		pipeline := pipelines.Content[i+1]
+		if pipeline.Kind != yaml.MappingNode {
+			continue
+		}
+		appendExporterToPipeline(pipeline, pipelines.Content[i].Value)
+	}
+}
+
+// mergeExporterIntoYAML parses data as a yaml.Node tree, injects the
+// Dynatrace exporter via mergeDynatraceExporter, and re-serialises the result.
+// Unlike a plain Unmarshal→Marshal roundtrip, this preserves YAML comments,
+// key insertion order, and flow/block sequence style.
 func mergeExporterIntoYAML(data []byte, apiURL, token string) ([]byte, error) {
-	var cfg map[string]interface{}
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return nil, fmt.Errorf("parsing YAML: %w", err)
 	}
-	if cfg == nil {
-		cfg = make(map[string]interface{})
+
+	var root *yaml.Node
+	switch {
+	case doc.Kind == yaml.DocumentNode && len(doc.Content) > 0:
+		root = doc.Content[0]
+		if root.Kind != yaml.MappingNode {
+			return nil, fmt.Errorf("YAML root must be a mapping, got kind %d", root.Kind)
+		}
+	default:
+		// Empty or null document — start with a fresh block mapping.
+		root = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 	}
-	mergeDynatraceExporter(cfg, apiURL, token)
-	return yaml.Marshal(cfg)
+	// An inline empty map ("{}") must become a block mapping once we add keys.
+	if root.Style == yaml.FlowStyle {
+		root.Style = 0
+	}
+
+	mergeDynatraceExporter(root, apiURL, token)
+
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(root); err != nil {
+		return nil, fmt.Errorf("marshalling updated YAML: %w", err)
+	}
+	return buf.Bytes(), nil
 }
 
 // writeConfig writes updatedData to configPath and returns the result.
