@@ -4,6 +4,7 @@ package otel
 
 import (
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -44,6 +45,7 @@ func detectServicesOnPorts(ports []string) []connectedService {
 	// Network address lines start with "n": "n<local>-><remote>".
 	seenPIDs := map[int]bool{}
 	var orderedPIDs []int
+	pidPort := map[int]string{} // first collector port seen per PID
 	curPID := 0
 
 	for _, line := range strings.Split(string(out), "\n") {
@@ -74,6 +76,9 @@ func detectServicesOnPorts(ports []string) []connectedService {
 				seenPIDs[curPID] = true
 				orderedPIDs = append(orderedPIDs, curPID)
 			}
+			if _, ok := pidPort[curPID]; !ok {
+				pidPort[curPID] = remotePort
+			}
 		}
 	}
 
@@ -84,14 +89,38 @@ func detectServicesOnPorts(ports []string) []connectedService {
 			continue
 		}
 		result = append(result, connectedService{
-			pid:     pid,
-			name:    serviceDisplayName(cmd),
-			command: cmd,
-			workDir: lookupProcessWorkingDirectory(pid),
+			pid:           pid,
+			name:          serviceDisplayName(cmd),
+			command:       cmd,
+			workDir:       lookupProcessWorkingDirectory(pid),
+			collectorPort: pidPort[pid],
+			listenPorts:   detectListenPorts(pid),
 		})
 	}
 	logger.Debug("detectServicesOnPorts", "ports", ports, "found", len(result))
 	return result
+}
+
+// detectListenPorts returns the TCP ports that the given process is listening on.
+func detectListenPorts(pid int) []string {
+	out, err := exec.Command("lsof", "-p", strconv.Itoa(pid), "-i", "TCP", "-sTCP:LISTEN", "-nP", "-Fn").Output()
+	if err != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var ports []string
+	for _, line := range strings.Split(string(out), "\n") {
+		if !strings.HasPrefix(line, "n") {
+			continue
+		}
+		port := portAfterLastColon(line[1:])
+		if port != "" && port != "*" && !seen[port] {
+			seen[port] = true
+			ports = append(ports, port)
+		}
+	}
+	sort.Strings(ports)
+	return ports
 }
 
 // portAfterLastColon extracts the port/service portion after the last colon in

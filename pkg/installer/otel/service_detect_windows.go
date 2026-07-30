@@ -5,6 +5,7 @@ package otel
 import (
 	"fmt"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -35,6 +36,7 @@ func detectServicesOnPorts(ports []string) []connectedService {
 
 	seenPIDs := map[int]bool{}
 	var orderedPIDs []int
+	pidPort := map[int]string{} // first collector port seen per PID
 
 	for _, line := range strings.Split(string(out), "\n") {
 		fields := strings.Fields(strings.TrimSpace(line))
@@ -62,6 +64,9 @@ func detectServicesOnPorts(ports []string) []connectedService {
 			seenPIDs[pid] = true
 			orderedPIDs = append(orderedPIDs, pid)
 		}
+		if _, ok := pidPort[pid]; !ok {
+			pidPort[pid] = remotePort
+		}
 	}
 
 	var result []connectedService
@@ -71,13 +76,42 @@ func detectServicesOnPorts(ports []string) []connectedService {
 			continue
 		}
 		result = append(result, connectedService{
-			pid:     pid,
-			name:    serviceDisplayName(cmd),
-			command: cmd,
+			pid:           pid,
+			name:          serviceDisplayName(cmd),
+			command:       cmd,
+			collectorPort: pidPort[pid],
+			listenPorts:   detectListenPorts(pid),
 		})
 	}
 	logger.Debug("detectServicesOnPorts", "ports", ports, "found", len(result))
 	return result
+}
+
+// detectListenPorts returns the TCP ports that the given process is listening on.
+func detectListenPorts(pid int) []string {
+	out, err := exec.Command("netstat", "-ano").Output()
+	if err != nil {
+		return nil
+	}
+	pidStr := strconv.Itoa(pid)
+	seen := map[string]bool{}
+	var ports []string
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) < 5 {
+			continue
+		}
+		if fields[0] != "TCP" || fields[3] != "LISTENING" || fields[4] != pidStr {
+			continue
+		}
+		port := portAfterLastColon(fields[1])
+		if port != "" && !seen[port] {
+			seen[port] = true
+			ports = append(ports, port)
+		}
+	}
+	sort.Strings(ports)
+	return ports
 }
 
 // portAfterLastColon extracts the port portion after the last colon.
