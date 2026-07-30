@@ -23,59 +23,6 @@
 - **WHEN** the combined configuration is generated
 - **THEN** host and application pipelines SHALL export to the same Dynatrace `/api/v2/otlp` endpoint using the same authorization header
 
-### Requirement: dtwiz never writes to a third-party collector's configuration
-
-`install otel` SHALL only ever write to its own managed collector configuration. It SHALL NOT modify, merge into, or otherwise write to the configuration of any other OTel Collector running on the host, regardless of the outcome of conflict detection.
-
-#### Scenario: Combined config in the managed collector
-
-- **GIVEN** no other OTel Collector is running on the host
-- **WHEN** `install otel` completes
-- **THEN** exactly one dtwiz-managed collector SHALL run, carrying both host and application pipelines
-
-#### Scenario: dtwiz's own collector coexists with a foreign collector
-
-- **GIVEN** a non-dtwiz OTel Collector is already running on the host
-- **WHEN** `install otel` deploys host monitoring
-- **THEN** dtwiz SHALL deploy or update only its own managed collector
-- **AND** it SHALL NOT read the foreign collector's configuration for any purpose other than the conflict check described below, and SHALL NOT write to it under any circumstance
-- **AND** it SHALL select non-conflicting ports, including the health check port, so both collectors run and start up successfully at the same time
-
-### Requirement: Same-tenant host monitoring conflicts are detected and surfaced before proceeding
-
-Before deploying host monitoring, `install otel` SHALL check whether another running OTel Collector already collects host metrics for the same Dynatrace tenant, using only read access to that collector's configuration file. Detection SHALL never trigger a write to the foreign configuration.
-
-#### Scenario: No conflict when the foreign collector has no host metrics
-
-- **GIVEN** another OTel Collector is running on the host
-- **AND** its configuration does not define a `hostmetrics` receiver
-- **WHEN** `install otel` deploys host monitoring
-- **THEN** dtwiz SHALL proceed without warning the user of a conflict
-
-#### Scenario: No conflict when the foreign collector targets a different tenant
-
-- **GIVEN** another OTel Collector is running on the host with a `hostmetrics` receiver already configured
-- **AND** its exporter targets a different Dynatrace tenant than the one `install otel` is configuring
-- **WHEN** `install otel` deploys host monitoring
-- **THEN** dtwiz SHALL proceed without warning the user of a conflict
-
-#### Scenario: Conflict detected for the same tenant
-
-- **GIVEN** another OTel Collector is running on the host with a `hostmetrics` receiver already configured
-- **AND** its exporter targets the same Dynatrace tenant that `install otel` is configuring
-- **WHEN** `install otel` deploys host monitoring
-- **THEN** dtwiz SHALL warn the user that host metrics may be duplicated
-- **AND** it SHALL let the user choose to skip host monitoring for this run or proceed anyway with dtwiz's own collector
-- **AND** it SHALL mention `update otel` as the existing command for consolidating onto the foreign collector directly, without attempting that consolidation itself
-
-#### Scenario: Tenant cannot be determined
-
-- **GIVEN** another OTel Collector is running on the host with a `hostmetrics` receiver already configured
-- **AND** its exporter endpoint cannot be resolved to a tenant from the static configuration file (for example, because it references an environment variable)
-- **WHEN** `install otel` deploys host monitoring
-- **THEN** dtwiz SHALL note that the conflict check was inconclusive
-- **AND** it SHALL proceed with its own managed collector by default, without a blocking prompt
-
 ### Requirement: Platform-aware host signal selection
 
 The generated configuration SHALL include host log collection only on platforms where the required receiver is available, and SHALL collect host metrics on all supported platforms.
@@ -119,3 +66,26 @@ When host monitoring may be incomplete due to insufficient privileges or platfor
 - **GIVEN** host monitoring requires elevated privileges for some scrapers or `journald` on the current platform
 - **WHEN** `install otel` configures host monitoring
 - **THEN** the output SHALL note that some host metrics or logs may require elevated privileges to be collected, worded appropriately for the current platform
+
+### Requirement: Host monitoring is gated behind the experimental flag until fully implemented and tested
+
+`install otel` SHALL only generate host monitoring pipelines and show the privilege notice when the `--experimental` flag or `DTWIZ_EXPERIMENTAL=true` environment variable is enabled, following the same convention used for `install docker` and `update otel`. When the flag is not enabled, `install otel` SHALL behave exactly as it did before this change.
+
+#### Scenario: Host monitoring disabled by default
+
+- **GIVEN** `--experimental` is not set and `DTWIZ_EXPERIMENTAL` is not `true`
+- **WHEN** `install otel` generates the managed collector configuration
+- **THEN** the configuration SHALL contain only the application pipelines that existed before this change
+- **AND** it SHALL NOT include `hostmetrics`, `journald`, or `health_check` receivers/extensions, host pipelines, or a privilege notice
+
+#### Scenario: Host monitoring enabled via the experimental flag
+
+- **GIVEN** `--experimental` is passed or `DTWIZ_EXPERIMENTAL=true` is set
+- **WHEN** `install otel` runs
+- **THEN** dtwiz SHALL configure host monitoring as described in the requirements above
+
+#### Scenario: Discoverability notice when disabled
+
+- **GIVEN** `--experimental` is not set and `DTWIZ_EXPERIMENTAL` is not `true`
+- **WHEN** `install otel` completes
+- **THEN** the output SHALL include a one-line notice that host monitoring can be enabled with `--experimental` or `DTWIZ_EXPERIMENTAL=true`
