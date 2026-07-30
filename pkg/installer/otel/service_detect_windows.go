@@ -1,0 +1,99 @@
+//go:build windows
+
+package otel
+
+import (
+	"fmt"
+	"os/exec"
+	"strconv"
+	"strings"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
+)
+
+// detectServicesOnPorts returns processes that have established TCP connections
+// TO any of the given ports.  Uses netstat -ano and PowerShell for process names.
+func detectServicesOnPorts(ports []string) []connectedService {
+	if len(ports) == 0 {
+		return nil
+	}
+
+	portSet := make(map[string]bool, len(ports))
+	for _, p := range ports {
+		portSet[p] = true
+	}
+
+	out, err := exec.Command("netstat", "-ano").Output()
+	if err != nil {
+		logger.Debug("netstat failed", "err", err)
+		return nil
+	}
+
+	// netstat -ano output (Windows):
+	// Proto  Local Address      Foreign Address    State        PID
+	// TCP    127.0.0.1:52341    127.0.0.1:4317     ESTABLISHED  12301
+
+	seenPIDs := map[int]bool{}
+	var orderedPIDs []int
+
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) < 5 {
+			continue
+		}
+		if fields[0] != "TCP" || fields[3] != "ESTABLISHED" {
+			continue
+		}
+		remoteAddr := fields[2]
+		remotePort := portAfterLastColon(remoteAddr)
+		if !portSet[remotePort] {
+			continue
+		}
+		localAddr := fields[1]
+		localPort := portAfterLastColon(localAddr)
+		if portSet[localPort] {
+			continue // collector's own entry
+		}
+		pid, err := strconv.Atoi(fields[4])
+		if err != nil || pid <= 0 {
+			continue
+		}
+		if !seenPIDs[pid] {
+			seenPIDs[pid] = true
+			orderedPIDs = append(orderedPIDs, pid)
+		}
+	}
+
+	var result []connectedService
+	for _, pid := range orderedPIDs {
+		cmd := processFullArgs(pid)
+		if cmd == "" {
+			continue
+		}
+		result = append(result, connectedService{
+			pid:     pid,
+			name:    serviceDisplayName(cmd),
+			command: cmd,
+		})
+	}
+	logger.Debug("detectServicesOnPorts", "ports", ports, "found", len(result))
+	return result
+}
+
+// portAfterLastColon extracts the port portion after the last colon.
+func portAfterLastColon(addr string) string {
+	idx := strings.LastIndex(addr, ":")
+	if idx < 0 {
+		return ""
+	}
+	return addr[idx+1:]
+}
+
+// terminateService terminates the process using taskkill.
+func terminateService(svc connectedService) error {
+	out, err := exec.Command("taskkill", "/PID", strconv.Itoa(svc.pid), "/F").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
