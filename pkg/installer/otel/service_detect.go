@@ -14,10 +14,12 @@ import (
 // connectedService is an application process that has an active TCP connection
 // to the OTel Collector's OTLP receiver ports.
 type connectedService struct {
-	pid     int
-	name    string // short display name (binary basename)
-	command string // full command line
-	workDir string // working directory at detection time
+	pid           int
+	name          string   // short display name (binary basename)
+	command       string   // full command line
+	workDir       string   // working directory at detection time
+	collectorPort string   // OTLP receiver port this service sends to (e.g. "4317" or "4318")
+	listenPorts   []string // TCP ports this process itself listens on (e.g. ["8080", "8001"])
 }
 
 // receiverPortsFromConfig parses the collector YAML config and returns the
@@ -114,9 +116,16 @@ func isInterpreter(name string) bool {
 
 // printConnectedServices prints the list of detected connected services.
 func printConnectedServices(svcs []connectedService) {
-	display.ColorBold.Printf("  Services connected to this collector (%d):\n", len(svcs))
+	display.ColorBold.Printf("  Application services connected to this collector (%d):\n", len(svcs))
 	for _, svc := range svcs {
-		fmt.Printf("    • PID %-6d  %s\n", svc.pid, display.ColorDefault.Sprint(svc.name))
+		portHint := ""
+		if svc.collectorPort != "" {
+			portHint = "  " + display.ColorMuted.Sprint("(→ port "+svc.collectorPort+")")
+		}
+		fmt.Printf("    • PID %-6d  %s%s\n", svc.pid, display.ColorDefault.Sprint(svc.name), portHint)
+		if len(svc.listenPorts) > 0 {
+			display.ColorMuted.Printf("              listening on: %s\n", strings.Join(svc.listenPorts, ", "))
+		}
 		if svc.command != "" {
 			display.ColorMuted.Printf("              %s\n", truncateStr(svc.command, 80))
 		}
@@ -133,7 +142,11 @@ func restartConnectedServices(svcs []connectedService) {
 
 	display.ColorBold.Printf("  Restarting %d connected service(s):\n", len(svcs))
 	for _, svc := range svcs {
-		fmt.Printf("    • PID %-6d  %s  ", svc.pid, svc.name)
+		portLabel := ""
+		if len(svc.listenPorts) > 0 {
+			portLabel = " (ports: " + strings.Join(svc.listenPorts, ", ") + ")"
+		}
+		fmt.Printf("    • PID %-6d  %s%s  ", svc.pid, svc.name, display.ColorMuted.Sprint(portLabel))
 		if err := terminateService(svc); err != nil {
 			fmt.Println(display.ColorError.Sprint("failed: " + err.Error()))
 			logger.Debug("terminateService failed", "pid", svc.pid, "name", svc.name, "err", err)
