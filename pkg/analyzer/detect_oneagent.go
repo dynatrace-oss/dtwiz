@@ -4,13 +4,17 @@ package analyzer
 
 import "os"
 
+// systemdRunDir is the directory whose presence indicates that systemd is the
+// running init system (see sd_booted(3)). Overridable in tests.
+var systemdRunDir = "/run/systemd/system"
+
 // systemdAvailable reports whether systemd is the running init system.
-// /run/systemd/system exists as a directory only when systemd is booted
-// (see sd_booted(3)). In containers such as GitHub Codespaces, systemctl
-// is a compatibility shim that exits 0 for any invocation, so its exit
-// code must not be trusted unless systemd is actually running.
+// In containers (devcontainer images, GitHub Codespaces, plain docker runs of
+// those images), systemctl is often a compatibility shim that exits 0 for any
+// invocation, so its exit code must not be trusted unless systemd is actually
+// running.
 func systemdAvailable() bool {
-	fi, err := os.Stat("/run/systemd/system")
+	fi, err := os.Stat(systemdRunDir)
 	return err == nil && fi.IsDir()
 }
 
