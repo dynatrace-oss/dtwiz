@@ -4,7 +4,7 @@
 
 ### Requirement: Host monitoring is configured during OTel Collector install
 
-`install otel` SHALL configure the managed OTel Collector to collect host-level signals in addition to application signals, using the Dynatrace Host Monitoring reference configuration. Host monitoring SHALL be enabled by default without an additional flag.
+`install otel` SHALL configure the managed OTel Collector to collect host-level signals in addition to application signals, using the Dynatrace Host Monitoring reference configuration.
 
 #### Scenario: Host metrics pipeline added to managed collector
 
@@ -27,13 +27,20 @@
 
 ### Requirement: Platform-aware host signal selection
 
-The generated configuration SHALL include host log collection only on platforms where the required receiver is available, and SHALL collect host metrics on all supported platforms.
+The generated configuration SHALL include host metrics and a host logs pipeline on all supported platforms. The `journald` receiver SHALL be included in the logs pipeline on Linux only; on macOS and Windows all references to `journald` SHALL be omitted from the pipeline.
 
 #### Scenario: Linux collects metrics and journald logs
 
 - **GIVEN** the target platform is Linux
 - **WHEN** the configuration is generated
 - **THEN** it SHALL include the `journald` receiver and a logs pipeline that forwards host logs to Dynatrace through the `resource_detection` processor
+
+#### Scenario: macOS and Windows collect metrics and logs without journald
+
+- **GIVEN** the target platform is macOS or Windows
+- **WHEN** the configuration is generated
+- **THEN** it SHALL include a logs pipeline forwarding logs to Dynatrace through the `resource_detection` processor
+- **AND** it SHALL NOT include the `journald` receiver or any reference to it in the pipeline
 
 ### Requirement: Preview and confirmation before applying
 
