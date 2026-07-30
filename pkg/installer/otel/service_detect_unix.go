@@ -12,7 +12,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
-// detectServicesOnPorts returns processes that have established TCP connections
+// detectServicesOnPorts returns processes that have active TCP connections
 // TO any of the given ports (i.e. clients of the collector's receivers).
 // Uses lsof(1), which is available on macOS and most Linux distributions.
 func detectServicesOnPorts(ports []string) []connectedService {
@@ -25,13 +25,16 @@ func detectServicesOnPorts(ports []string) []connectedService {
 		portSet[p] = true
 	}
 
-	// lsof -i TCP:<p1> [-i TCP:<p2>] -sTCP:ESTABLISHED -nP -Fn
+	// lsof -i TCP:<p1> [-i TCP:<p2>] -nP -Fn
+	// No TCP state filter: HTTP OTLP exporters close the connection after each
+	// batch, so -sTCP:ESTABLISHED would miss them between exports.  LISTEN
+	// sockets are excluded below because they lack the "->" separator.
 	// -n: no hostname resolution, -P: no port-name translation, -Fn: output fields
-	args := make([]string, 0, len(ports)*2+4)
+	args := make([]string, 0, len(ports)*2+3)
 	for _, p := range ports {
 		args = append(args, "-i", "TCP:"+p)
 	}
-	args = append(args, "-sTCP:ESTABLISHED", "-nP", "-Fn")
+	args = append(args, "-nP", "-Fn")
 
 	out, err := exec.Command("lsof", args...).Output()
 	if err != nil {
@@ -39,6 +42,7 @@ func detectServicesOnPorts(ports []string) []connectedService {
 		logger.Debug("lsof found no connected services", "ports", ports, "err", err)
 		return nil
 	}
+	logger.Debug("lsof raw output for connected-service scan", "out", string(out))
 
 	// Parse lsof -Fn output.  Each process section starts with a "p<PID>" line
 	// followed by file-descriptor lines starting with "f", "n", etc.

@@ -43,7 +43,10 @@ func detectServicesOnPorts(ports []string) []connectedService {
 		if len(fields) < 5 {
 			continue
 		}
-		if fields[0] != "TCP" || fields[3] != "ESTABLISHED" {
+		// Accept any active state (ESTABLISHED, TIME_WAIT, CLOSE_WAIT, etc.) so
+		// HTTP OTLP exporters that close the connection after each batch are still
+		// detected.  Skip LISTENING — those are the collector's own sockets.
+		if fields[0] != "TCP" || fields[3] == "LISTENING" {
 			continue
 		}
 		remoteAddr := fields[2]
@@ -54,7 +57,7 @@ func detectServicesOnPorts(ports []string) []connectedService {
 		localAddr := fields[1]
 		localPort := portAfterLastColon(localAddr)
 		if portSet[localPort] {
-			continue // collector's own entry
+			continue // collector's own accepted connection entry
 		}
 		pid, err := strconv.Atoi(fields[4])
 		if err != nil || pid <= 0 {
