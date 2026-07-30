@@ -61,6 +61,6 @@ End-to-end verification of all flows.
 
 - [x] 5.1 Run `make test` — all existing tests must pass
 - [x] 5.2 Run `make lint` — no new lint issues
-- [ ] 5.3 Manual verification: `dtwiz install aws-lambda --dry-run` shows preview without changes
-- [ ] 5.4 Manual verification: `dtwiz install aws --dry-run` shows both CloudFormation and Lambda previews
-- [ ] 5.5 Manual verification: `dtwiz uninstall aws-lambda --dry-run` shows cleanup preview
+- [x] 5.3 Manual verification: `dtwiz install aws-lambda --dry-run` shows preview without changes
+- [x] 5.4 Manual verification: `dtwiz install aws --dry-run` shows both CloudFormation and Lambda previews
+- [x] 5.5 Manual verification: `dtwiz uninstall aws-lambda --dry-run` shows cleanup preview
