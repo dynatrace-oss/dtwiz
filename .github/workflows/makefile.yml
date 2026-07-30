@@ -6,6 +6,7 @@ on:
     paths:
       - "**/*.md"
       - ".markdownlint.yml"
+      - "makefile"
       - ".github/workflows/makefile.yml"
   workflow_dispatch:
 
