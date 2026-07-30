@@ -42,92 +42,110 @@ func TestGenerateExporterSnippet(t *testing.T) {
 	}
 }
 
-func TestMergeDynatraceExporter_EmptyConfig(t *testing.T) {
-	cfg := map[string]interface{}{}
-	mergeDynatraceExporter(cfg, "https://env.dt.com", "tok")
-
-	exporters, ok := cfg["exporters"].(map[string]interface{})
-	if !ok {
-		t.Fatal("exporters key missing or wrong type")
+// mustParseRoot unmarshals YAML and returns the root mapping node.
+func mustParseRoot(t *testing.T, data []byte) *yaml.Node {
+	t.Helper()
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("yaml.Unmarshal: %v", err)
 	}
-	dt, ok := exporters["otlp_http/dynatrace"].(map[string]interface{})
-	if !ok {
-		t.Fatal("otlp_http/dynatrace exporter missing")
+	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
+		t.Fatalf("expected document node, got kind %d", doc.Kind)
 	}
-	if dt["endpoint"] != "https://env.dt.com/api/v2/otlp" {
-		t.Errorf("unexpected endpoint: %v", dt["endpoint"])
-	}
+	return doc.Content[0]
 }
 
-// mustPipelineExporters returns the exporters slice for a named pipeline,
-// failing the test if the path or type assertion does not hold.
-func mustPipelineExporters(t *testing.T, cfg map[string]interface{}, pipelineName string) []interface{} {
+// mustPipelineExporters returns the exporters sequence node for a named pipeline.
+func mustPipelineExporters(t *testing.T, root *yaml.Node, pipelineName string) *yaml.Node {
 	t.Helper()
-	svc, ok := cfg["service"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("cfg[\"service\"] missing or wrong type")
+	svc := nodeMappingGet(root, "service")
+	if svc == nil {
+		t.Fatal(`"service" key missing`)
 	}
-	pipelines, ok := svc["pipelines"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("cfg[\"service\"][\"pipelines\"] missing or wrong type")
+	pipelines := nodeMappingGet(svc, "pipelines")
+	if pipelines == nil {
+		t.Fatal(`"service.pipelines" key missing`)
 	}
-	pipeline, ok := pipelines[pipelineName].(map[string]interface{})
-	if !ok {
-		t.Fatalf("pipeline %q not found or wrong type", pipelineName)
+	pipeline := nodeMappingGet(pipelines, pipelineName)
+	if pipeline == nil {
+		t.Fatalf("pipeline %q not found", pipelineName)
 	}
-	exporters, ok := pipeline["exporters"].([]interface{})
-	if !ok {
-		t.Fatalf("pipeline %q has no exporters slice", pipelineName)
+	exporters := nodeMappingGet(pipeline, "exporters")
+	if exporters == nil || exporters.Kind != yaml.SequenceNode {
+		t.Fatalf("pipeline %q has no exporters sequence", pipelineName)
 	}
 	return exporters
 }
 
-func TestMergeDynatraceExporter_AppendsToPipelines(t *testing.T) {
-	cfg := map[string]interface{}{
-		"service": map[string]interface{}{
-			"pipelines": map[string]interface{}{
-				"traces": map[string]interface{}{
-					"exporters": []interface{}{"logging"},
-				},
-			},
-		},
+func TestMergeDynatraceExporter_EmptyConfig(t *testing.T) {
+	out, err := mergeExporterIntoYAML([]byte("{}"), "https://env.dt.com", "tok")
+	if err != nil {
+		t.Fatal(err)
 	}
-	mergeDynatraceExporter(cfg, "https://env.dt.com", "tok")
+	root := mustParseRoot(t, out)
 
-	exporters := mustPipelineExporters(t, cfg, "traces")
-	if len(exporters) != 2 {
-		t.Fatalf("expected 2 exporters, got %d: %v", len(exporters), exporters)
+	exporters := nodeMappingGet(root, "exporters")
+	if exporters == nil {
+		t.Fatal("exporters key missing")
 	}
-	if exporters[1] != "otlp_http/dynatrace" {
-		t.Errorf("expected otlp_http/dynatrace appended last, got %v", exporters[1])
+	dt := nodeMappingGet(exporters, "otlp_http/dynatrace")
+	if dt == nil {
+		t.Fatal("otlp_http/dynatrace exporter missing")
+	}
+	endpoint := nodeMappingGet(dt, "endpoint")
+	if endpoint == nil || endpoint.Value != "https://env.dt.com/api/v2/otlp" {
+		t.Errorf("unexpected endpoint: %v", endpoint)
+	}
+}
+
+func TestMergeDynatraceExporter_AppendsToPipelines(t *testing.T) {
+	input := `service:
+  pipelines:
+    traces:
+      exporters: [logging]
+`
+	out, err := mergeExporterIntoYAML([]byte(input), "https://env.dt.com", "tok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := mustParseRoot(t, out)
+	exporters := mustPipelineExporters(t, root, "traces")
+
+	if len(exporters.Content) != 2 {
+		t.Fatalf("expected 2 exporters, got %d: %v", len(exporters.Content), exporters.Content)
+	}
+	if exporters.Content[1].Value != "otlp_http/dynatrace" {
+		t.Errorf("expected otlp_http/dynatrace appended last, got %v", exporters.Content[1].Value)
 	}
 }
 
 func TestMergeDynatraceExporter_NoDuplicates(t *testing.T) {
-	cfg := map[string]interface{}{
-		"service": map[string]interface{}{
-			"pipelines": map[string]interface{}{
-				"traces": map[string]interface{}{
-					"exporters": []interface{}{"otlp_http/dynatrace"},
-				},
-			},
-		},
+	input := `service:
+  pipelines:
+    traces:
+      exporters: [otlp_http/dynatrace]
+`
+	out, err := mergeExporterIntoYAML([]byte(input), "https://env.dt.com", "tok")
+	if err != nil {
+		t.Fatal(err)
 	}
-	mergeDynatraceExporter(cfg, "https://env.dt.com", "tok")
+	root := mustParseRoot(t, out)
+	exporters := mustPipelineExporters(t, root, "traces")
 
-	if exporters := mustPipelineExporters(t, cfg, "traces"); len(exporters) != 1 {
-		t.Errorf("expected 1 exporter (no duplicate), got %d: %v", len(exporters), exporters)
+	if len(exporters.Content) != 1 {
+		t.Errorf("expected 1 exporter (no duplicate), got %d: %v", len(exporters.Content), exporters.Content)
 	}
 }
 
 func TestMergeDynatraceExporter_NoServiceSection(t *testing.T) {
-	cfg := map[string]interface{}{
-		"receivers": map[string]interface{}{"otlp": nil},
+	input := "receivers:\n  otlp: {}\n"
+	out, err := mergeExporterIntoYAML([]byte(input), "https://env.dt.com", "tok")
+	if err != nil {
+		t.Fatal(err)
 	}
-	// Should not panic when service section is absent.
-	mergeDynatraceExporter(cfg, "https://env.dt.com", "tok")
-
-	if _, ok := cfg["exporters"]; !ok {
+	root := mustParseRoot(t, out)
+	// Should not panic; exporters key must still be created.
+	if nodeMappingGet(root, "exporters") == nil {
 		t.Error("exporters key should still be created even without service section")
 	}
 }
@@ -324,55 +342,111 @@ func TestShowConfigDiff_WithChanges(t *testing.T) {
 }
 
 func TestMergeDynatraceExporter_InvalidPipelineValue(t *testing.T) {
-	// Pipeline value is a non-map type — should be skipped without panic.
-	cfg := map[string]interface{}{
-		"service": map[string]interface{}{
-			"pipelines": map[string]interface{}{
-				"traces": "not-a-map",
-			},
-		},
+	// Pipeline value is a scalar string — should be skipped without panic.
+	input := "service:\n  pipelines:\n    traces: not-a-map\n"
+	out, err := mergeExporterIntoYAML([]byte(input), "https://env.dt.com", "tok")
+	if err != nil {
+		t.Fatal(err)
 	}
-	mergeDynatraceExporter(cfg, "https://env.dt.com", "tok")
-
-	exporters, ok := cfg["exporters"].(map[string]interface{})
-	if !ok {
+	root := mustParseRoot(t, out)
+	if nodeMappingGet(root, "exporters") == nil {
 		t.Fatal("exporters key missing")
 	}
-	if _, ok := exporters["otlp_http/dynatrace"]; !ok {
+	if nodeMappingGet(nodeMappingGet(root, "exporters"), "otlp_http/dynatrace") == nil {
 		t.Error("otlp_http/dynatrace exporter missing")
 	}
 }
 
 func TestMergeDynatraceExporter_NoPipelinesKey(t *testing.T) {
-	cfg := map[string]interface{}{
-		"service": map[string]interface{}{
-			"extensions": []interface{}{"health_check"},
-		},
-	}
 	// Should not panic when service has no pipelines key.
-	mergeDynatraceExporter(cfg, "https://env.dt.com", "tok")
-
-	if _, ok := cfg["exporters"]; !ok {
+	input := "service:\n  extensions: [health_check]\n"
+	out, err := mergeExporterIntoYAML([]byte(input), "https://env.dt.com", "tok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := mustParseRoot(t, out)
+	if nodeMappingGet(root, "exporters") == nil {
 		t.Error("exporters key should be created even without pipelines")
 	}
 }
 
 func TestMergeDynatraceExporter_PipelineWithNoExporters(t *testing.T) {
 	// Pipeline exists but has no exporters list yet.
-	cfg := map[string]interface{}{
-		"service": map[string]interface{}{
-			"pipelines": map[string]interface{}{
-				"traces": map[string]interface{}{
-					"receivers": []interface{}{"otlp"},
-				},
-			},
-		},
+	input := "service:\n  pipelines:\n    traces:\n      receivers: [otlp]\n"
+	out, err := mergeExporterIntoYAML([]byte(input), "https://env.dt.com", "tok")
+	if err != nil {
+		t.Fatal(err)
 	}
-	mergeDynatraceExporter(cfg, "https://env.dt.com", "tok")
+	root := mustParseRoot(t, out)
+	exporters := mustPipelineExporters(t, root, "traces")
+	if len(exporters.Content) != 1 || exporters.Content[0].Value != "otlp_http/dynatrace" {
+		t.Errorf("unexpected exporters: %v", exporters.Content)
+	}
+}
 
-	exporters := mustPipelineExporters(t, cfg, "traces")
-	if len(exporters) != 1 || exporters[0] != "otlp_http/dynatrace" {
-		t.Errorf("unexpected exporters: %v", exporters)
+func TestMergeExporterIntoYAML_PreservesComments(t *testing.T) {
+	input := `# Dynatrace OTel Collector configuration
+# Docs: https://docs.dynatrace.com/docs/ingest-from/opentelemetry/collector/configuration
+receivers:
+  otlp: {}
+`
+	out, err := mergeExporterIntoYAML([]byte(input), "https://env.dt.com", "tok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	outStr := string(out)
+	if !strings.Contains(outStr, "# Dynatrace OTel Collector configuration") {
+		t.Errorf("header comment was stripped:\n%s", outStr)
+	}
+	if !strings.Contains(outStr, "# Docs:") {
+		t.Errorf("docs comment was stripped:\n%s", outStr)
+	}
+}
+
+func TestMergeExporterIntoYAML_PreservesKeyOrder(t *testing.T) {
+	input := `receivers:
+  otlp: {}
+processors:
+  cumulativetodelta: {}
+exporters:
+  otlp_http:
+    endpoint: https://example.com/api/v2/otlp
+service:
+  pipelines:
+    traces:
+      exporters: [otlp_http]
+`
+	out, err := mergeExporterIntoYAML([]byte(input), "https://env.dt.com", "tok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	outStr := string(out)
+	idxReceivers := strings.Index(outStr, "receivers:")
+	idxProcessors := strings.Index(outStr, "processors:")
+	idxExporters := strings.Index(outStr, "exporters:")
+	idxService := strings.Index(outStr, "service:")
+	if !(idxReceivers < idxProcessors && idxProcessors < idxExporters && idxExporters < idxService) {
+		t.Errorf("key order not preserved:\n%s", outStr)
+	}
+}
+
+func TestMergeExporterIntoYAML_PreservesFlowStyle(t *testing.T) {
+	input := `service:
+  pipelines:
+    traces:
+      exporters: [otlp_http]
+`
+	out, err := mergeExporterIntoYAML([]byte(input), "https://env.dt.com", "tok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	outStr := string(out)
+	// Flow-style sequence must remain: [otlp_http, otlp_http/dynatrace]
+	if !strings.Contains(outStr, "[") {
+		t.Errorf("flow style was not preserved:\n%s", outStr)
+	}
+	if strings.Contains(outStr, "\n    - ") {
+		t.Errorf("block-style sequence found; expected flow style:\n%s", outStr)
 	}
 }
 
