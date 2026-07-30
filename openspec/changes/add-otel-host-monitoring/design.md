@@ -1,3 +1,5 @@
+# OTel Host Monitoring Design
+
 ## Context
 
 `install otel` deploys a single dtwiz-managed Dynatrace OTel Collector at `~/opentelemetry/` with a config rendered from [otel.tmpl](../../../pkg/installer/otel/otel.tmpl). That config is an application gateway only: an `otlp` receiver, a `cumulativetodelta` processor, and an `otlp_http` exporter to `/api/v2/otlp`. The collector is started as a detached background process ([startOtelCollector](../../../pkg/installer/otel/collector.go)), then a round-trip verification log is sent through it and confirmed via DQL.
@@ -82,4 +84,3 @@ Why: this change is substantial, untested-in-the-wild surface: cross-platform `h
 - **Extension format staleness:** the `transform` and `filter` rules must match what the Host Monitoring extension expects, and the reference config may evolve over time. Mitigation: mirror the pinned reference config in the template and note its source URL and version in a comment.
 - **Cross-platform coverage:** macOS and Windows have no host-log pipeline at all in this change (not a reduced or substitute one), since `journald` has no equivalent enabled here. This is a distribution limitation, not a scoping choice: the Dynatrace OTel Collector distribution dtwiz downloads does not currently bundle `windowseventlogreceiver` or `macosunifiedloggingreceiver` (see Decision 3), and dtwiz has no way to add a receiver to a binary it only downloads. Mitigation: metrics-only is explicit and documented; it is not a regression, since nothing is collected host-side today. Revisit if a future Dynatrace distribution release bundles either receiver.
 - **Rollback:** `uninstall otel` already removes the managed collector and config, so no additional rollback path is required.
-

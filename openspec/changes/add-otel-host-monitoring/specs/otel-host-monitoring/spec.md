@@ -1,3 +1,5 @@
+# OTel Host Monitoring Spec
+
 ## ADDED Requirements
 
 ### Requirement: Host monitoring is configured during OTel Collector install

@@ -1,3 +1,5 @@
+# OTel Host Monitoring Tasks
+
 ## 0. Cross-platform reference config validation
 
 - [ ] 0.2 Validate the PM-provided `host-metrics.yaml` reference config's `hostmetrics` scrapers with the same Dynatrace OTel Collector version dtwiz installs on Linux, macOS, and Windows. Run both config validation (for example the collector's validate/config-check command, if available) and a startup smoke test so receiver runtime failures are caught, not only YAML/schema errors.

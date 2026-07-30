@@ -1,3 +1,5 @@
+# OTel Host Monitoring
+
 ## Why
 
 `dtwiz install otel` deploys a Dynatrace OTel Collector that only receives OTLP from instrumented applications. It collects no host-level signals. Today the flow just prints a docs link telling users to wire up host monitoring by hand ([otel.go:276-284](../../../pkg/installer/otel/otel.go)). To honor the core principle "if we detect it, we enable monitoring for it," the same collector should also collect host metrics and logs and ship them in the shape the Dynatrace **OpenTelemetry Host Monitoring** extension expects, with zero extra steps.
