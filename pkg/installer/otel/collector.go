@@ -670,9 +670,8 @@ func generateOtelConfig(apiURL, token string) (string, error) {
 }
 
 // printConfigPreview prints the OTel Collector config preview.
-// By default it shows the first headLines lines — enough to see the collector's
-// listening endpoints — with a note to run with --debug for the full contents.
-// With --debug, the full config is printed.
+// Default: head (up to OTLP receiver endpoints) + "..." + pipelines section.
+// With --debug: full config.
 func (cp *collectorPlan) printConfigPreview(sep string) {
 	const headLines = 20
 
@@ -684,18 +683,51 @@ func (cp *collectorPlan) printConfigPreview(sep string) {
 	display.ColorMessage.Printf("  %s:\n", label)
 	fmt.Printf("  %s\n", sep)
 
-	shown := lines
-	if !logger.IsDebug() && len(lines) > headLines {
-		shown = lines[:headLines]
-	}
-	for _, line := range shown {
-		fmt.Printf("    %s\n", line)
-	}
-	if len(shown) < len(lines) {
-		fmt.Printf("    # ... (%d more lines) — run with --debug to see the full config\n", len(lines)-len(shown))
+	if logger.IsDebug() {
+		for _, line := range lines {
+			fmt.Printf("    %s\n", line)
+		}
+	} else {
+		headEnd := configHeadEnd(lines, headLines)
+		pipeStart := pipelinesSectionStart(lines)
+		for _, line := range lines[:headEnd] {
+			fmt.Printf("    %s\n", line)
+		}
+		switch {
+		case pipeStart > headEnd:
+			fmt.Printf("    # ... (%d lines) — run with --debug to see full %s\n", pipeStart-headEnd, label)
+			for _, line := range lines[pipeStart:] {
+				fmt.Printf("    %s\n", line)
+			}
+		case len(lines) > headEnd:
+			fmt.Printf("    # ... (%d more lines) — run with --debug to see full %s\n", len(lines)-headEnd, label)
+		}
 	}
 
 	fmt.Printf("  %s\n", sep)
+}
+
+// configHeadEnd returns the index at which the head section should stop.
+// It cuts just before the first hostmetrics receiver block so that scraper
+// details are hidden in the ellipsis. Falls back to min(headLines, len(lines)).
+func configHeadEnd(lines []string, headLines int) int {
+	limit := min(headLines, len(lines))
+	for i := range limit {
+		if strings.HasPrefix(strings.TrimLeft(lines[i], " "), "hostmetrics/") {
+			return i
+		}
+	}
+	return limit
+}
+
+// pipelinesSectionStart returns the index of the "  pipelines:" line, or -1 if not found.
+func pipelinesSectionStart(lines []string) int {
+	for i, line := range lines {
+		if strings.TrimRight(line, " ") == "  pipelines:" {
+			return i
+		}
+	}
+	return -1
 }
 
 // runningCollector holds info about a detected running OTel Collector process.
