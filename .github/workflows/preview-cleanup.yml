@@ -10,30 +10,35 @@ jobs:
   cleanup:
     runs-on: ubuntu-latest
     if: |
-      (github.event_name == 'pull_request' || github.event.ref_type == 'branch') &&
-      github.event.pull_request.head.ref != 'main' &&
-      github.event.ref != 'main'
+      (github.event_name == 'pull_request' && github.event.pull_request.head.ref != 'main') ||
+      (github.event_name == 'delete' && github.event.ref_type == 'branch' && github.event.ref != 'main')
     permissions:
       contents: write
     steps:
       - name: Derive branch name
         id: branch
+        env:
+          BRANCH: ${{ github.event.ref || github.event.pull_request.head.ref }}
         run: |
-          if [ "${{ github.event_name }}" = "delete" ]; then
-            BRANCH="${{ github.event.ref }}"
-          else
-            BRANCH="${{ github.event.pull_request.head.ref }}"
-          fi
+          # Match the tag naming used by the preview workflow.
           TAG="snapshot-$(echo "$BRANCH" | tr '/' '-')"
-          ENCODED_TAG="$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$TAG")"
+
+          # Encode reserved characters before using the tag in a GitHub API path.
+          ENCODED_TAG="$(jq -rn --arg tag "$TAG" '$tag | @uri')"
+
+          # Publish values for the cleanup step.
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "encoded_tag=$ENCODED_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Delete preview release and tag
         run: |
-          gh release delete "${{ steps.branch.outputs.tag }}" --yes || true
-          gh api -X DELETE "repos/${{ github.repository }}/git/refs/tags/${{ steps.branch.outputs.encoded_tag }}" || true
+          if gh release view "${{ steps.branch.outputs.tag }}" > /dev/null 2>&1; then
+            gh release delete "${{ steps.branch.outputs.tag }}" --yes
+          fi
+          if gh api "repos/${{ github.repository }}/git/ref/tags/${{ steps.branch.outputs.encoded_tag }}" > /dev/null 2>&1; then
+            gh api -X DELETE "repos/${{ github.repository }}/git/refs/tags/${{ steps.branch.outputs.encoded_tag }}"
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
