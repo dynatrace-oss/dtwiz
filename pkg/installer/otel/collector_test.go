@@ -326,3 +326,75 @@ func TestGenerateOtelConfig_TokenMaskedInPreview(t *testing.T) {
 		t.Error("masked preview must contain '***' placeholder")
 	}
 }
+
+func TestConfigHeadEnd(t *testing.T) {
+	tests := []struct {
+		name      string
+		lines     []string
+		headLines int
+		want      int
+	}{
+		{
+			name:      "cuts before hostmetrics line",
+			lines:     []string{"receivers:", "  otlp: {}", "  hostmetrics/10s:", "    scrapers: {}"},
+			headLines: 20,
+			want:      2,
+		},
+		{
+			name:      "no hostmetrics falls back to headLines",
+			lines:     []string{"receivers:", "  otlp: {}", "exporters:", "  otlp_http: {}"},
+			headLines: 2,
+			want:      2,
+		},
+		{
+			name:      "lines shorter than headLines returns len(lines)",
+			lines:     []string{"receivers:", "  otlp: {}"},
+			headLines: 20,
+			want:      2,
+		},
+		{
+			name:      "hostmetrics at index 0 returns 0 (empty head)",
+			lines:     []string{"  hostmetrics/10s:", "    scrapers: {}"},
+			headLines: 20,
+			want:      0,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := configHeadEnd(tc.lines, tc.headLines); got != tc.want {
+				t.Errorf("configHeadEnd() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestPipelinesSectionStart(t *testing.T) {
+	tests := []struct {
+		name  string
+		lines []string
+		want  int
+	}{
+		{
+			name:  "finds pipelines at correct indent",
+			lines: []string{"service:", "  telemetry: {}", "  pipelines:", "    traces: {}"},
+			want:  2,
+		},
+		{
+			name:  "returns -1 when not found",
+			lines: []string{"service:", "  telemetry: {}"},
+			want:  -1,
+		},
+		{
+			name:  "ignores pipelines at wrong indent",
+			lines: []string{"service:", "    pipelines:", "  pipelines:"},
+			want:  2,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := pipelinesSectionStart(tc.lines); got != tc.want {
+				t.Errorf("pipelinesSectionStart() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
