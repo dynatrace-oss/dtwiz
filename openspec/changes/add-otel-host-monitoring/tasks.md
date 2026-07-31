@@ -9,8 +9,8 @@
 
 - [x] 1.1 Extend `pkg/installer/otel/otel.tmpl` with the host-metrics reference receivers (`hostmetrics/10s`, `hostmetrics/5m`, `hostmetrics/1h`), processors (`filter`, `resource_detection`, `transform`, `filter/delete-metrics`), and the `health_check` extension, mirroring the pinned reference config; add a source-URL comment.
 - [x] 1.2 Rename the existing app metrics pipeline to `metrics/apps` (otlp to cumulative_to_delta to otlp_http) and add a `metrics/host` pipeline (hostmetrics to filter to resource_detection to transform to filter/delete-metrics to cumulative_to_delta to otlp_http) sharing the single `otlp_http` exporter.
-- [x] 1.3 Add a `logs/host` pipeline (otlp and, on Linux, journald to resource_detection to otlp_http) on all platforms; keep app traces and logs pipelines intact.
-- [x] 1.4 Add an `IncludeJournald bool` field to `otelConfigData` in `pkg/installer/otel/collector.go` and gate only the `journald` receiver definition and its reference in the `logs/host` pipeline behind that field, so the two can never drift out of sync. The pipeline itself is always emitted.
+- [x] 1.3 Add a `logs/host` pipeline (Linux only: journald to resource_detection to otlp_http); keep the existing `logs` pipeline (otlp) intact on all platforms. `logs/host` does not receive from `otlp` so OTLP logs are never duplicated.
+- [x] 1.4 Add an `IncludeJournald bool` field to `otelConfigData` in `pkg/installer/otel/collector.go` and gate both the `journald` receiver definition and the `logs/host` pipeline behind that field, so the two can never drift out of sync. On non-Linux both are omitted entirely.
 - [x] 1.5 Add a `HealthCheckPort` field to `otelConfigData` and template the `health_check` extension endpoint as `0.0.0.0:{{ .HealthCheckPort }}` instead of the reference config's fixed `13133`.
 
 ## 2. Config generation
@@ -23,19 +23,19 @@
 ## 3. Install flow
 
 - [x] 3.1 In `pkg/installer/otel/otel.go`, replace the "follow the docs to activate host monitoring" info box (lines ~276-284) with messaging that host monitoring is enabled automatically.
-- [x] 3.2 Add a one-line notice that some host metrics/logs may require elevated privileges to be collected in full, phrased per platform: root or `systemd-journal` group on Linux (also required for `process.disk.io`, which is dropped without privileged access), Administrator/Debug privilege on Windows, and a note on macOS that `system.processes.created` and `process.disk.io` are unavailable regardless of privilege level and will not appear in Dynatrace.
-- [x] 3.3 When the experimental flag (2.4) is disabled, print a single-line notice that host monitoring can be enabled with `--experimental` or `DTWIZ_EXPERIMENTAL=true`, instead of silently omitting it.
+- [x] 3.2 Add a privilege/limitation notice phrased per platform: on Linux and Windows, show it only when the process is not already elevated (suppressed when running as root/Administrator since no action is needed); on macOS, always show it because `system.processes.created` and `process.disk.io` are permanently unavailable regardless of privilege level.
+- [x] 3.3 When the experimental flag (2.4) is disabled, display an informational box directing the user to the OpenTelemetry Host Monitoring documentation to activate host monitoring manually.
 
 ## 4. Preview, dry-run, verification
 
-- [x] 4.1 Confirm `printConfigPreview` shows the first 20 lines of the combined config (collector listening endpoints) with the token masked, a truncation note directing users to `--debug` for the full output, and a single `Apply? [Y/n]` prompt. Confirm that passing `--debug` shows the full config verbatim.
+- [x] 4.1 Confirm `printConfigPreview` shows a head+tail summary with the token masked: the first lines up to (but not including) any `hostmetrics` scraper block (receiver endpoints), then a truncation note with the hidden line count directing users to `--debug`, then the `service.pipelines` block. Passing `--debug` shows the full config verbatim. A single `Apply? [Y/n]` prompt follows.
 - [x] 4.2 Confirm `--dry-run` renders the combined config and makes no filesystem/process changes.
 - [x] 4.3 Confirm the existing OTLP round-trip verification still runs unchanged against the shared otlp receiver / otlp_http exporter.
 
 ## 5. Tests
 
 - [x] 5.1 Add golden-file/unit tests in `pkg/installer/otel/collector_test.go` (or `otel_test.go`) asserting the rendered Linux config contains the host receivers, all five processors in order, `metrics/host` and `logs/host` pipelines, and preserved app pipelines.
-- [x] 5.2 Add a test asserting the macOS/Windows render includes host metrics and the `logs/host` pipeline but excludes the `journald` receiver. Assert this by unmarshalling the rendered YAML and checking the `receivers` and `service.pipelines` maps directly, not by checking that the substring `journald` is absent, so a receiver-defined-but-unreferenced (or referenced-but-undefined) mismatch between the two guards is caught.
+- [x] 5.2 Add a test asserting the combined render always includes a `logs/host` pipeline (all platforms) and that the `journald` receiver and its reference in `logs/host` are both present on Linux or both absent on non-Linux — never mismatched. Assert this by unmarshalling the rendered YAML and checking the `receivers` and `service.pipelines` maps directly.
 - [x] 5.3 Add a test asserting the generated config unmarshals as valid YAML and that the token is masked in the preview.
 - [x] 5.4 Add tests mirroring `TestInstallDockerCmd_HiddenByDefault` / `TestUpdateOtelCmd_HiddenByDefault` asserting: `generateOtelConfig` produces the app-only config by default, and the combined config only when `--experimental` or `DTWIZ_EXPERIMENTAL=true` is set.
 

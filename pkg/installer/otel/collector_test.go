@@ -234,7 +234,7 @@ func TestGenerateOtelConfig_Combined_EnvVar(t *testing.T) {
 	}
 }
 
-// TestGenerateOtelConfig_Linux_IncludesJournald asserts the journald receiver and
+// TestGenerateOtelConfig_JournaldConsistency asserts the journald receiver and
 // its reference in logs/host are both present or both absent — never just one.
 // This test simulates Linux behaviour by inspecting the rendered YAML struct directly.
 func TestGenerateOtelConfig_JournaldConsistency(t *testing.T) {

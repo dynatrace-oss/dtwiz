@@ -27,20 +27,21 @@
 
 ### Requirement: Platform-aware host signal selection
 
-The generated configuration SHALL include host metrics and a host logs pipeline on all supported platforms. The `journald` receiver SHALL be included in the logs pipeline on Linux only; on macOS and Windows all references to `journald` SHALL be omitted from the pipeline.
+The generated configuration SHALL include host metrics on all supported platforms. A `logs/host` pipeline collecting journald logs through the `resource_detection` processor SHALL be included on Linux only; on macOS and Windows no host log pipeline is added. Application logs reach Dynatrace on all platforms through the existing `logs` pipeline fed by the `otlp` receiver.
 
 #### Scenario: Linux collects metrics and journald logs
 
 - **GIVEN** the target platform is Linux
 - **WHEN** the configuration is generated
-- **THEN** it SHALL include the `journald` receiver and a logs pipeline that forwards host logs to Dynatrace through the `resource_detection` processor
+- **THEN** it SHALL include the `journald` receiver and a `logs/host` pipeline forwarding journald logs to Dynatrace through the `resource_detection` processor
+- **AND** the `logs` pipeline fed by the `otlp` receiver SHALL remain present for application logs
 
-#### Scenario: macOS and Windows collect metrics and logs without journald
+#### Scenario: macOS and Windows collect metrics only, no host logs pipeline
 
 - **GIVEN** the target platform is macOS or Windows
 - **WHEN** the configuration is generated
-- **THEN** it SHALL include a logs pipeline forwarding logs to Dynatrace through the `resource_detection` processor
-- **AND** it SHALL NOT include the `journald` receiver or any reference to it in the pipeline
+- **THEN** it SHALL NOT include the `journald` receiver or a `logs/host` pipeline
+- **AND** the `logs` pipeline fed by the `otlp` receiver SHALL remain present for application logs
 
 ### Requirement: Preview and confirmation before applying
 
@@ -49,7 +50,7 @@ The combined configuration SHALL be shown to the user before it is written, cons
 #### Scenario: Combined config previewed with masked secrets
 
 - **WHEN** `install otel` reaches the preview step
-- **THEN** the full combined configuration SHALL be printed inline with the ingest token masked
+- **THEN** a summary of the configuration SHALL be printed inline with the ingest token masked: the receiver endpoint lines at the top and the service pipelines block at the bottom, with a note indicating how many lines are hidden and directing the user to `--debug` for the full output
 - **AND** the user SHALL be asked a single confirmation prompt defaulting to yes before any file is written
 
 #### Scenario: Dry-run makes no changes
@@ -61,13 +62,27 @@ The combined configuration SHALL be shown to the user before it is written, cons
 
 ### Requirement: Privilege and platform limitations are surfaced
 
-When host monitoring may be incomplete due to insufficient privileges or platform-specific gaps, dtwiz SHALL inform the user rather than imply full coverage. The privilege mechanism differs by platform, so the notice SHALL NOT be phrased as a Linux-only concern.
+When host monitoring may be incomplete due to insufficient privileges or platform-specific gaps, dtwiz SHALL inform the user rather than imply full coverage. The notice is platform-specific and elevation-aware: on Linux and Windows it is suppressed when the process is already running with sufficient privileges, since no action is needed; on macOS it is always shown because the gaps (`system.processes.created`, `process.disk.io`) are permanent regardless of privilege level.
 
-#### Scenario: Unprivileged host monitoring notice
+#### Scenario: Unprivileged notice on Linux
 
-- **GIVEN** host monitoring requires elevated privileges for some scrapers or `journald` on the current platform
+- **GIVEN** the target platform is Linux
+- **AND** the process is not running with root or equivalent privileges
 - **WHEN** `install otel` configures host monitoring
-- **THEN** the output SHALL note that some host metrics or logs may require elevated privileges to be collected, worded appropriately for the current platform
+- **THEN** the output SHALL note that full host metrics and logs require elevated privileges
+
+#### Scenario: Unprivileged notice on Windows
+
+- **GIVEN** the target platform is Windows
+- **AND** the process is not running with Administrator privileges
+- **WHEN** `install otel` configures host monitoring
+- **THEN** the output SHALL note that some per-process metrics require Administrator or Debug privilege
+
+#### Scenario: macOS platform limitation notice
+
+- **GIVEN** the target platform is macOS
+- **WHEN** `install otel` configures host monitoring
+- **THEN** the output SHALL note that `system.processes.created` and `process.disk.io` are unavailable on macOS regardless of privilege level
 
 ### Requirement: Host monitoring is gated behind the experimental flag until fully implemented and tested
 
@@ -89,5 +104,5 @@ When host monitoring may be incomplete due to insufficient privileges or platfor
 #### Scenario: Discoverability notice when disabled
 
 - **GIVEN** `--experimental` is not set and `DTWIZ_EXPERIMENTAL` is not `true`
-- **WHEN** `install otel` completes
-- **THEN** the output SHALL include a one-line notice that host monitoring can be enabled with `--experimental` or `DTWIZ_EXPERIMENTAL=true`
+- **WHEN** `install otel` runs
+- **THEN** the output SHALL display an informational box directing the user to the OpenTelemetry Host Monitoring documentation to activate host monitoring manually
