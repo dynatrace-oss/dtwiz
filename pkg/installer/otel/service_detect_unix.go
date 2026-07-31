@@ -3,11 +3,16 @@
 package otel
 
 import (
+	"errors"
+	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
@@ -99,15 +104,84 @@ func detectServicesOnPorts(ports []string) []connectedService {
 			workDir:       lookupProcessWorkingDirectory(pid),
 			collectorPort: pidPort[pid],
 			listenPorts:   detectListenPorts(pid),
+			env:           readProcessEnv(pid),
 		})
 	}
 	logger.Debug("detectServicesOnPorts", "ports", ports, "found", len(result))
 	return result
 }
 
-// detectListenPorts returns the TCP ports that the given process is listening on.
+// readProcessEnv returns the process environment via ps eww as "KEY=VAL" strings, or nil if unavailable.
+func readProcessEnv(pid int) []string {
+	out, err := exec.Command("ps", "eww", "-p", strconv.Itoa(pid), "-o", "command=").Output()
+	if err != nil {
+		return nil
+	}
+	return envSuffix(strings.TrimSpace(string(out)))
+}
+
+// detectInstrumentedServices finds OTel-instrumented processes exporting to the
+// given tenant IDs or local collector ports, via a single ps axeww env scan.
+func detectInstrumentedServices(tenantIDs, ports []string) []connectedService {
+	if len(tenantIDs) == 0 && len(ports) == 0 {
+		return nil
+	}
+	tenantSet := make(map[string]bool, len(tenantIDs))
+	for _, t := range tenantIDs {
+		tenantSet[t] = true
+	}
+	portSet := make(map[string]bool, len(ports))
+	for _, p := range ports {
+		portSet[p] = true
+	}
+
+	// BSD-style axe flags required: -A/-e silently drops the environment from output.
+	out, err := exec.Command("ps", "axeww", "-o", "pid=,command=").Output()
+	if err != nil {
+		logger.Debug("ps env scan failed", "err", err)
+		return nil
+	}
+
+	var result []connectedService
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		fields := strings.SplitN(line, " ", 2)
+		pid, err := strconv.Atoi(fields[0])
+		if err != nil || len(fields) < 2 {
+			continue
+		}
+		rest := fields[1]
+
+		endpoint := otlpEndpointFromEnv(rest)
+		if endpoint == "" {
+			continue
+		}
+		if !endpointMatchesCollector(endpoint, tenantSet, portSet) {
+			continue
+		}
+
+		cmd := stripEnvSuffix(rest)
+		result = append(result, connectedService{
+			pid:         pid,
+			name:        serviceDisplayName(cmd),
+			command:     cmd,
+			workDir:     lookupProcessWorkingDirectory(pid),
+			listenPorts: detectListenPorts(pid),
+			exportsTo:   endpoint,
+			env:         envSuffix(rest),
+		})
+	}
+	logger.Debug("detectInstrumentedServices", "tenants", tenantIDs, "found", len(result))
+	return result
+}
+
+// detectListenPorts returns the TCP ports the process is listening on.
+// -a ANDs the -p and -i filters; without it lsof ORs them and floods results.
 func detectListenPorts(pid int) []string {
-	out, err := exec.Command("lsof", "-p", strconv.Itoa(pid), "-i", "TCP", "-sTCP:LISTEN", "-nP", "-Fn").Output()
+	out, err := exec.Command("lsof", "-a", "-p", strconv.Itoa(pid), "-i", "TCP", "-sTCP:LISTEN", "-nP", "-Fn").Output()
 	if err != nil {
 		return nil
 	}
@@ -137,9 +211,77 @@ func portAfterLastColon(addr string) string {
 	return addr[idx+1:]
 }
 
-// terminateService sends SIGTERM to the process.  If the process is managed by
-// a supervisor (systemd, launchd, etc.), the supervisor will restart it
-// automatically; otherwise the process simply exits.
-func terminateService(svc connectedService) error {
-	return syscall.Kill(svc.pid, syscall.SIGTERM)
+// stopService sends SIGTERM, polls ~5s for exit, then escalates to SIGKILL.
+func stopService(pid int) error {
+	if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
+		if errors.Is(err, syscall.ESRCH) {
+			return nil // already gone
+		}
+		return err
+	}
+	for range 50 { // ~5s
+		if syscall.Kill(pid, 0) != nil {
+			return nil // exited
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	// Still alive — force kill and give it a moment to release ports.
+	_ = syscall.Kill(pid, syscall.SIGKILL)
+	for range 20 { // ~2s
+		if syscall.Kill(pid, 0) != nil {
+			return nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return fmt.Errorf("process %d did not exit after SIGKILL", pid)
+}
+
+// relaunchService restarts the service detached (new session) from its captured
+// command, workdir, and env; output goes to a log file in the workdir.
+func relaunchService(svc connectedService) (int, error) {
+	argv := strings.Fields(svc.command)
+	if len(argv) == 0 {
+		return 0, fmt.Errorf("no command recorded")
+	}
+
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Dir = svc.workDir
+	if len(svc.env) > 0 {
+		cmd.Env = svc.env
+	}
+	// New session: detach from dtwiz's process group and terminal.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+
+	if logFile := serviceLogFile(svc); logFile != nil {
+		cmd.Stdout = logFile
+		cmd.Stderr = logFile
+		defer logFile.Close()
+	}
+
+	if err := cmd.Start(); err != nil {
+		return 0, err
+	}
+	pid := cmd.Process.Pid
+	// Release so the child is reparented and not left as a zombie.
+	_ = cmd.Process.Release()
+	return pid, nil
+}
+
+// serviceLogFile opens a log file in the service's workDir (or temp dir), returning nil on failure.
+func serviceLogFile(svc connectedService) *os.File {
+	dir := svc.workDir
+	if dir == "" {
+		dir = os.TempDir()
+	}
+	safe := strings.NewReplacer("/", "-", " ", "-", string(os.PathSeparator), "-").Replace(svc.name)
+	if safe == "" {
+		safe = strconv.Itoa(svc.pid)
+	}
+	path := filepath.Join(dir, "dtwiz-"+safe+".log")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		logger.Debug("service log file open failed", "path", path, "err", err)
+		return nil
+	}
+	return f
 }

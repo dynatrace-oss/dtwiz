@@ -540,8 +540,12 @@ func updateOtelConfig(configPath string, runningProcs []otelProcessInfo, envURL,
 		display.ColorDefault.Println("  No running collector found — config will be updated on disk only.")
 	}
 
-	// Detect application services currently connected to the collector.
-	connectedSvcs := detectConnectedServices(origData)
+	// Detect app services; exclude the collector's own PID(s).
+	excludePIDs := make(map[int]bool, len(runningProcs))
+	for _, p := range runningProcs {
+		excludePIDs[p.pid] = true
+	}
+	connectedSvcs := detectConnectedServices(origData, excludePIDs)
 	if len(connectedSvcs) > 0 {
 		fmt.Println()
 		printConnectedServices(connectedSvcs)
