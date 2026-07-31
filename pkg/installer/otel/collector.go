@@ -22,7 +22,10 @@ import (
 	"text/template"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
+	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
@@ -32,11 +35,14 @@ var otelConfigTemplateText string
 
 // otelConfigData holds the values substituted into otel.tmpl.
 type otelConfigData struct {
-	Endpoint    string
-	AuthHeader  string
-	MetricsPort int
-	GRPCPort    int
-	HTTPPort    int
+	Endpoint        string
+	AuthHeader      string
+	MetricsPort     int
+	GRPCPort        int
+	HTTPPort        int
+	HostMonitoring  bool
+	IncludeJournald bool
+	HealthCheckPort int
 }
 
 // findFreePort returns the lowest port >= startPort on which localhost is not
@@ -612,8 +618,10 @@ func termLink(label, url string) string {
 }
 
 // generateOtelConfig renders otel.tmpl and returns a collector configuration YAML string.
-// It probes for a free port starting at 8888 for the collector's Prometheus metrics
-// endpoint so that multiple collectors can run on the same host without conflicting.
+// It probes for free ports starting at the canonical defaults so multiple collectors can
+// run on the same host without conflicting.
+// When the Experimental feature flag is enabled, the combined host+app config is rendered;
+// otherwise the app-only config is rendered (identical to the pre-host-monitoring output).
 func generateOtelConfig(apiURL, token string) (string, error) {
 	tmpl, err := template.New("otel").Parse(otelConfigTemplateText)
 	if err != nil {
@@ -628,30 +636,65 @@ func generateOtelConfig(apiURL, token string) (string, error) {
 	if metricsPort == grpcPort || metricsPort == httpPort {
 		metricsPort = findFreePort(httpPort + 1)
 	}
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, otelConfigData{
+
+	data := otelConfigData{
 		Endpoint:    strings.TrimRight(apiURL, "/"),
 		AuthHeader:  installer.AuthHeader(token),
 		MetricsPort: metricsPort,
 		GRPCPort:    grpcPort,
 		HTTPPort:    httpPort,
-	}); err != nil {
+	}
+
+	if featureflags.IsEnabled(featureflags.Experimental) {
+		healthCheckPort := findFreePort(13133)
+		for healthCheckPort == grpcPort || healthCheckPort == httpPort || healthCheckPort == metricsPort {
+			healthCheckPort = findFreePort(healthCheckPort + 1)
+		}
+		data.HostMonitoring = true
+		data.IncludeJournald = runtime.GOOS == "linux"
+		data.HealthCheckPort = healthCheckPort
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
 		return "", fmt.Errorf("rendering otel template: %w", err)
 	}
-	return buf.String(), nil
+
+	rendered := buf.String()
+	var parsed any
+	if err := yaml.Unmarshal([]byte(rendered), &parsed); err != nil {
+		return "", fmt.Errorf("rendered otel config is not valid YAML: %w", err)
+	}
+
+	return rendered, nil
 }
 
-// printConfigPreview prints the OTel Collector config in the separator+title
-// style consistent with the AWS and Kubernetes install previews.
+// printConfigPreview prints the OTel Collector config preview.
+// By default it shows the first headLines lines — enough to see the collector's
+// listening endpoints — with a note to run with --debug for the full contents.
+// With --debug, the full config is printed.
 func (cp *collectorPlan) printConfigPreview(sep string) {
+	const headLines = 20
+
 	label := filepath.Base(cp.configPath)
+	lines := strings.Split(strings.TrimRight(cp.configPreview, "\n"), "\n")
+
 	fmt.Println()
 	fmt.Printf("  %s\n", sep)
 	display.ColorMessage.Printf("  %s:\n", label)
 	fmt.Printf("  %s\n", sep)
-	for _, line := range strings.Split(strings.TrimRight(cp.configPreview, "\n"), "\n") {
+
+	shown := lines
+	if !logger.IsDebug() && len(lines) > headLines {
+		shown = lines[:headLines]
+	}
+	for _, line := range shown {
 		fmt.Printf("    %s\n", line)
 	}
+	if len(shown) < len(lines) {
+		fmt.Printf("    # ... (%d more lines) — run with --debug to see the full config\n", len(lines)-len(shown))
+	}
+
 	fmt.Printf("  %s\n", sep)
 }
 

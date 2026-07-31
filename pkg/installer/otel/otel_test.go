@@ -11,7 +11,55 @@ import (
 	"github.com/fatih/color"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 )
+
+// captureInstallOutput runs InstallOtelCollector with dryRun=true and
+// AutoConfirm=true (to bypass the "Continue?" prompt when no projects are
+// found) and returns everything written to stdout+color.Output.
+// isElevated controls the stub returned by isElevatedFn for the duration.
+func captureInstallOutput(t *testing.T, isElevated bool) string {
+	t.Helper()
+
+	// Redirect stdout + color.Output so we capture both fmt.* and display.Color* output.
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	oldStdout := os.Stdout
+	oldColorOut := color.Output
+	os.Stdout = w
+	color.Output = w
+	t.Cleanup(func() {
+		os.Stdout = oldStdout
+		color.Output = oldColorOut
+	})
+
+	// Override elevation check.
+	origFn := isElevatedFn
+	isElevatedFn = func() bool { return isElevated }
+	t.Cleanup(func() { isElevatedFn = origFn })
+
+	// AutoConfirm skips the "Continue installation?" prompt that appears when
+	// no projects are found in the temp dir.
+	origAC := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = origAC })
+
+	// CWD → isolated temp dir so no projects are detected.
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatalf("os.Chdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	// dryRun=true prevents any download or process execution.
+	_ = InstallOtelCollector("https://env.example.com", "mytoken", "", true)
+
+	w.Close()
+	out, _ := io.ReadAll(r)
+	return string(out)
+}
 
 func setTestStdin(t *testing.T, input string) {
 	t.Helper()
@@ -517,4 +565,108 @@ func TestCreateRuntimePlan(t *testing.T) {
 			t.Fatalf("expected nil plan, got %T", plan)
 		}
 	})
+}
+
+// ── Host-monitoring install-flow messaging tests ──────────────────────────────
+
+// TestInstallOtelCollector_Experimental_ShowsHostMonitoringHeader verifies that
+// enabling the experimental flag causes the combined header ("service and host
+// monitoring") to be printed, not the standard info box.
+func TestInstallOtelCollector_Experimental_ShowsHostMonitoringHeader(t *testing.T) {
+	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
+
+	output := captureInstallOutput(t, true /* elevated */)
+
+	// The experimental path prints this exact sentence; the standard path never does.
+	const experimentalHeader = "service and host monitoring"
+	if !strings.Contains(output, experimentalHeader) {
+		t.Errorf("expected %q in output when --experimental is set:\n%s", experimentalHeader, output)
+	}
+}
+
+// TestInstallOtelCollector_Standard_ShowsInfoBox verifies that without the
+// experimental flag the static info-box is shown and the "service and host
+// monitoring" combined header (experimental-only) is absent.
+func TestInstallOtelCollector_Standard_ShowsInfoBox(t *testing.T) {
+	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
+	t.Setenv("DTWIZ_EXPERIMENTAL", "")
+
+	output := captureInstallOutput(t, true /* elevated */)
+
+	// The experimental combined header must NOT appear.
+	const experimentalHeader = "service and host monitoring"
+	if strings.Contains(output, experimentalHeader) {
+		t.Errorf("unexpected %q in output when --experimental is not set:\n%s", experimentalHeader, output)
+	}
+	// The info box always contains "service monitoring".
+	if !strings.Contains(output, "service monitoring") {
+		t.Errorf("expected 'service monitoring' info-box in output when --experimental is not set:\n%s", output)
+	}
+}
+
+// TestInstallOtelCollector_Experimental_Linux_ElevationNotice_NotElevated verifies
+// that on Linux, when the process is not elevated, an advisory about root /
+// systemd-journal is printed.
+func TestInstallOtelCollector_Experimental_Linux_ElevationNotice_NotElevated(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux-only test")
+	}
+	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
+
+	output := captureInstallOutput(t, false /* not elevated */)
+
+	if !strings.Contains(output, "systemd-journal") {
+		t.Errorf("expected Linux elevation notice (systemd-journal) when not elevated:\n%s", output)
+	}
+}
+
+// TestInstallOtelCollector_Experimental_Linux_NoNoticeWhenElevated verifies that
+// on Linux, when the process is already elevated, no advisory is printed.
+func TestInstallOtelCollector_Experimental_Linux_NoNoticeWhenElevated(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux-only test")
+	}
+	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
+
+	output := captureInstallOutput(t, true /* elevated */)
+
+	if strings.Contains(output, "systemd-journal") {
+		t.Errorf("unexpected Linux elevation notice when process is already elevated:\n%s", output)
+	}
+}
+
+// TestInstallOtelCollector_Experimental_Windows_ElevationNotice_NotElevated verifies
+// that on Windows, when the process is not elevated, an advisory about Administrator
+// privilege is printed.
+func TestInstallOtelCollector_Experimental_Windows_ElevationNotice_NotElevated(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows-only test")
+	}
+	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
+
+	output := captureInstallOutput(t, false /* not elevated */)
+
+	if !strings.Contains(output, "Administrator") {
+		t.Errorf("expected Windows elevation notice (Administrator) when not elevated:\n%s", output)
+	}
+}
+
+// TestInstallOtelCollector_Experimental_Darwin_AlwaysShowsUnavailableNotice verifies
+// that on macOS the advisory about system.processes.created / process.disk.io being
+// unavailable is printed regardless of privilege level.
+func TestInstallOtelCollector_Experimental_Darwin_AlwaysShowsUnavailableNotice(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("Darwin-only test")
+	}
+	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
+
+	for _, elevated := range []bool{true, false} {
+		elevated := elevated
+		t.Run(map[bool]string{true: "elevated", false: "not-elevated"}[elevated], func(t *testing.T) {
+			output := captureInstallOutput(t, elevated)
+			if !strings.Contains(output, "macOS") {
+				t.Errorf("expected macOS unavailability notice in output (elevated=%v):\n%s", elevated, output)
+			}
+		})
+	}
 }

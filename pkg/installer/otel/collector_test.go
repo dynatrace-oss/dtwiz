@@ -4,9 +4,15 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 )
 
 func TestOtelCollectorInstallDir(t *testing.T) {
@@ -78,6 +84,9 @@ func TestDetectConfigFromArgs(t *testing.T) {
 }
 
 func TestGenerateOtelConfig_ContainsMetricsPort(t *testing.T) {
+	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
+	t.Setenv("DTWIZ_EXPERIMENTAL", "")
+
 	cfg, err := generateOtelConfig("https://env.example.com", "mytoken")
 	if err != nil {
 		t.Fatalf("generateOtelConfig: %v", err)
@@ -87,5 +96,233 @@ func TestGenerateOtelConfig_ContainsMetricsPort(t *testing.T) {
 	}
 	if !strings.Contains(cfg, "readers:") {
 		t.Errorf("generated config missing readers section:\n%s", cfg)
+	}
+}
+
+// otelConfigYAML is a minimal map type for inspecting the rendered config.
+type otelConfigYAML struct {
+	Extensions map[string]any `yaml:"extensions"`
+	Receivers  map[string]any `yaml:"receivers"`
+	Processors map[string]any `yaml:"processors"`
+	Service    struct {
+		Extensions []string `yaml:"extensions"`
+		Pipelines  map[string]struct {
+			Receivers  []string `yaml:"receivers"`
+			Processors []string `yaml:"processors"`
+			Exporters  []string `yaml:"exporters"`
+		} `yaml:"pipelines"`
+	} `yaml:"service"`
+}
+
+func parseOtelConfig(t *testing.T, cfg string) otelConfigYAML {
+	t.Helper()
+	var parsed otelConfigYAML
+	if err := yaml.Unmarshal([]byte(cfg), &parsed); err != nil {
+		t.Fatalf("rendered config is not valid YAML: %v\n---\n%s", err, cfg)
+	}
+	return parsed
+}
+
+// TestGenerateOtelConfig_AppOnly_Default asserts that without the experimental flag
+// the config is app-only: no hostmetrics/journald/health_check, pipeline named "metrics".
+func TestGenerateOtelConfig_AppOnly_Default(t *testing.T) {
+	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
+	t.Setenv("DTWIZ_EXPERIMENTAL", "")
+
+	cfg, err := generateOtelConfig("https://env.example.com", "mytoken")
+	if err != nil {
+		t.Fatalf("generateOtelConfig: %v", err)
+	}
+	parsed := parseOtelConfig(t, cfg)
+
+	if _, ok := parsed.Receivers["hostmetrics/10s"]; ok {
+		t.Error("app-only config must not contain hostmetrics/10s receiver")
+	}
+	if _, ok := parsed.Receivers["journald"]; ok {
+		t.Error("app-only config must not contain journald receiver")
+	}
+	if _, ok := parsed.Extensions["health_check"]; ok {
+		t.Error("app-only config must not contain health_check extension")
+	}
+	if _, ok := parsed.Service.Pipelines["metrics/host"]; ok {
+		t.Error("app-only config must not contain metrics/host pipeline")
+	}
+	if _, ok := parsed.Service.Pipelines["logs/host"]; ok {
+		t.Error("app-only config must not contain logs/host pipeline")
+	}
+	if _, ok := parsed.Service.Pipelines["metrics"]; !ok {
+		t.Error("app-only config must contain metrics pipeline")
+	}
+}
+
+// TestGenerateOtelConfig_AppOnly_EnvEnabled asserts that with the experimental flag
+// the combined config includes host receivers, all five processors in order,
+// metrics/host and logs/host pipelines, and the app pipelines.
+func TestGenerateOtelConfig_Combined_ExperimentalEnabled(t *testing.T) {
+	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
+
+	cfg, err := generateOtelConfig("https://env.example.com", "mytoken")
+	if err != nil {
+		t.Fatalf("generateOtelConfig: %v", err)
+	}
+	parsed := parseOtelConfig(t, cfg)
+
+	// Host receivers present.
+	for _, recv := range []string{"hostmetrics/10s", "hostmetrics/5m", "hostmetrics/1h"} {
+		if _, ok := parsed.Receivers[recv]; !ok {
+			t.Errorf("combined config missing receiver %q", recv)
+		}
+	}
+
+	// health_check extension present.
+	if _, ok := parsed.Extensions["health_check"]; !ok {
+		t.Error("combined config missing health_check extension")
+	}
+
+	// metrics/host pipeline with processors in correct order.
+	hostPipeline, ok := parsed.Service.Pipelines["metrics/host"]
+	if !ok {
+		t.Fatal("combined config missing metrics/host pipeline")
+	}
+	wantProcessors := []string{"filter", "resource_detection", "transform", "filter/delete-metrics", "cumulative_to_delta"}
+	if len(hostPipeline.Processors) != len(wantProcessors) {
+		t.Errorf("metrics/host processors: got %v, want %v", hostPipeline.Processors, wantProcessors)
+	} else {
+		for i, p := range wantProcessors {
+			if hostPipeline.Processors[i] != p {
+				t.Errorf("metrics/host processors[%d]: got %q, want %q", i, hostPipeline.Processors[i], p)
+			}
+		}
+	}
+
+	// logs/host pipeline is only emitted on Linux (journald required).
+	if runtime.GOOS == "linux" {
+		if _, ok := parsed.Service.Pipelines["logs/host"]; !ok {
+			t.Error("combined config missing logs/host pipeline on Linux")
+		}
+	} else {
+		if _, ok := parsed.Service.Pipelines["logs/host"]; ok {
+			t.Error("combined config must not contain logs/host pipeline on non-Linux (no journald)")
+		}
+	}
+
+	// app pipelines still present.
+	if _, ok := parsed.Service.Pipelines["metrics/apps"]; !ok {
+		t.Error("combined config missing metrics/apps pipeline")
+	}
+	if _, ok := parsed.Service.Pipelines["traces"]; !ok {
+		t.Error("combined config missing traces pipeline")
+	}
+	if _, ok := parsed.Service.Pipelines["logs"]; !ok {
+		t.Error("combined config missing logs pipeline")
+	}
+}
+
+// TestGenerateOtelConfig_Combined_EnvVar asserts experimental can be enabled via env var.
+func TestGenerateOtelConfig_Combined_EnvVar(t *testing.T) {
+	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
+	t.Setenv("DTWIZ_EXPERIMENTAL", "true")
+
+	cfg, err := generateOtelConfig("https://env.example.com", "mytoken")
+	if err != nil {
+		t.Fatalf("generateOtelConfig: %v", err)
+	}
+	parsed := parseOtelConfig(t, cfg)
+
+	if _, ok := parsed.Service.Pipelines["metrics/host"]; !ok {
+		t.Error("expected metrics/host pipeline when DTWIZ_EXPERIMENTAL=true")
+	}
+}
+
+// TestGenerateOtelConfig_Linux_IncludesJournald asserts the journald receiver and
+// its reference in logs/host are both present or both absent — never just one.
+// This test simulates Linux behaviour by inspecting the rendered YAML struct directly.
+func TestGenerateOtelConfig_JournaldConsistency(t *testing.T) {
+	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
+
+	cfg, err := generateOtelConfig("https://env.example.com", "mytoken")
+	if err != nil {
+		t.Fatalf("generateOtelConfig: %v", err)
+	}
+	parsed := parseOtelConfig(t, cfg)
+
+	_, receiverDefined := parsed.Receivers["journald"]
+	logsHost, logsHostExists := parsed.Service.Pipelines["logs/host"]
+	var pipelineReferences bool
+	if logsHostExists {
+		for _, r := range logsHost.Receivers {
+			if r == "journald" {
+				pipelineReferences = true
+				break
+			}
+		}
+	}
+
+	// Both present or both absent — never a mismatch.
+	if receiverDefined != pipelineReferences {
+		t.Errorf("journald receiver defined=%v but pipeline reference=%v — guards must stay in sync",
+			receiverDefined, pipelineReferences)
+	}
+}
+
+// TestGenerateOtelConfig_ValidYAML asserts the rendered config parses as valid YAML.
+func TestGenerateOtelConfig_ValidYAML(t *testing.T) {
+	for _, experimental := range []bool{false, true} {
+		experimental := experimental
+		name := "app-only"
+		if experimental {
+			name = "combined"
+		}
+		t.Run(name, func(t *testing.T) {
+			if experimental {
+				featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
+			} else {
+				featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
+				t.Setenv("DTWIZ_EXPERIMENTAL", "")
+			}
+			cfg, err := generateOtelConfig("https://env.example.com", "mytoken")
+			if err != nil {
+				t.Fatalf("generateOtelConfig: %v", err)
+			}
+			var parsed any
+			if err := yaml.Unmarshal([]byte(cfg), &parsed); err != nil {
+				t.Errorf("rendered config is not valid YAML: %v\n---\n%s", err, cfg)
+			}
+		})
+	}
+}
+
+// TestGenerateOtelConfig_PreviewTruncation asserts that the generated config is long
+// enough to be truncated in the default (non-verbose) preview for the experimental path.
+func TestGenerateOtelConfig_PreviewTruncation(t *testing.T) {
+	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
+
+	cfg, err := generateOtelConfig("https://env.example.com", "mytoken")
+	if err != nil {
+		t.Fatalf("generateOtelConfig: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(cfg, "\n"), "\n")
+	if len(lines) <= 20 {
+		t.Errorf("experimental config has %d lines, expected more than 20 so truncation is exercised", len(lines))
+	}
+}
+
+// TestGenerateOtelConfig_TokenMaskedInPreview asserts the token is masked in the preview.
+func TestGenerateOtelConfig_TokenMaskedInPreview(t *testing.T) {
+	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
+	t.Setenv("DTWIZ_EXPERIMENTAL", "")
+
+	const token = "dt0s16.supersecrettoken"
+	cfg, err := generateOtelConfig("https://env.example.com", token)
+	if err != nil {
+		t.Fatalf("generateOtelConfig: %v", err)
+	}
+
+	preview := installer.MaskSecret(cfg, token)
+	if strings.Contains(preview, token) {
+		t.Error("token must be masked in the config preview")
+	}
+	if !strings.Contains(preview, "***") {
+		t.Error("masked preview must contain '***' placeholder")
 	}
 }

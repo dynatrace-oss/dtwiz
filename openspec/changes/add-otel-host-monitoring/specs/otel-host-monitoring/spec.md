@@ -11,7 +11,7 @@
 - **GIVEN** a user runs `install otel`
 - **WHEN** dtwiz generates the managed collector configuration
 - **THEN** the configuration SHALL include tiered `hostmetrics` receivers (10s, 5m, and 1h collection intervals)
-- **AND** it SHALL include a metrics pipeline that routes those receivers through the `filter`, `resource_detection`, `transform`, `filter/delete-metrics`, and `cumulativetodelta` processors to the Dynatrace `otlp_http` exporter
+- **AND** it SHALL include a metrics pipeline that routes those receivers through the `filter`, `resource_detection`, `transform`, `filter/delete-metrics`, and `cumulative_to_delta` processors to the Dynatrace `otlp_http` exporter
 
 #### Scenario: Existing application pipelines are preserved
 
