@@ -1,0 +1,127 @@
+name: Preview Retention
+
+on:
+  schedule:
+    - cron: '0 12 * * 0'
+  workflow_dispatch:
+    inputs:
+      retention_days:
+        description: Delete snapshots older than this many days
+        required: true
+        default: '14'
+        type: string
+      dry_run:
+        description: Report stale snapshots without deleting them
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: preview-retention
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Delete stale preview releases and tags
+        uses: actions/github-script@v8
+        env:
+          RETENTION_DAYS: ${{ inputs.retention_days || '14' }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        with:
+          script: |
+            const retentionDays = Number(process.env.RETENTION_DAYS);
+            if (!Number.isInteger(retentionDays) || retentionDays < 1) {
+              throw new Error('retention_days must be a positive integer');
+            }
+
+            const dryRun = process.env.DRY_RUN === 'true';
+            const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+            const { owner, repo } = context.repo;
+            const snapshots = new Map();
+
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner,
+              repo,
+              per_page: 100,
+            });
+            for (const release of releases) {
+              if (!release.tag_name.startsWith('snapshot-')) continue;
+              let reason;
+              const titlePrefix = 'Snapshot: ';
+              if (release.name?.startsWith(titlePrefix)) {
+                const branch = release.name.slice(titlePrefix.length);
+                try {
+                  await github.rest.repos.getBranch({ owner, repo, branch });
+                } catch (error) {
+                  if (error.status !== 404) throw error;
+                  reason = `branch ${branch} no longer exists`;
+                }
+              }
+              snapshots.set(release.tag_name, {
+                releaseId: release.id,
+                reason,
+                timestamp: new Date(release.published_at || release.created_at),
+              });
+            }
+
+            const refs = await github.paginate(github.rest.git.listMatchingRefs, {
+              owner,
+              repo,
+              ref: 'tags/snapshot-',
+              per_page: 100,
+            });
+            for (const ref of refs) {
+              const tag = ref.ref.replace('refs/tags/', '');
+              const snapshot = snapshots.get(tag);
+              if (snapshot) {
+                snapshot.hasTag = true;
+                continue;
+              }
+
+              let timestamp;
+              if (ref.object.type === 'tag') {
+                const response = await github.rest.git.getTag({ owner, repo, tag_sha: ref.object.sha });
+                timestamp = new Date(response.data.tagger.date);
+              } else {
+                const response = await github.rest.repos.getCommit({ owner, repo, ref: ref.object.sha });
+                timestamp = new Date(
+                  response.data.commit.committer.date || response.data.commit.author.date,
+                );
+              }
+              snapshots.set(tag, { hasTag: true, timestamp });
+            }
+
+            const stale = [...snapshots.entries()]
+              .filter(([, snapshot]) => {
+                if (snapshot.reason) return true;
+                if (snapshot.timestamp >= cutoff) return false;
+                snapshot.reason = `older than ${retentionDays} days`;
+                return true;
+              })
+              .sort((left, right) => left[1].timestamp - right[1].timestamp);
+
+            core.info(
+              `${dryRun ? 'Would delete' : 'Deleting'} ${stale.length} snapshot(s) eligible for cleanup`,
+            );
+            for (const [tag, snapshot] of stale) {
+              core.info(`${tag}: ${snapshot.reason} (${snapshot.timestamp.toISOString()})`);
+              if (dryRun) continue;
+
+              if (snapshot.releaseId) {
+                await github.rest.repos.deleteRelease({ owner, repo, release_id: snapshot.releaseId });
+              }
+              if (snapshot.hasTag) {
+                await github.rest.git.deleteRef({ owner, repo, ref: `tags/${tag}` });
+              }
+            }
+
+            await core.summary
+              .addHeading('Preview retention')
+              .addRaw(
+                `${dryRun ? 'Found' : 'Deleted'} ${stale.length} snapshot(s) eligible for cleanup.`,
+              )
+              .write();
