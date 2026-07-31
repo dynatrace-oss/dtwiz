@@ -29,8 +29,8 @@ jobs:
       - name: Delete stale preview releases and tags
         uses: actions/github-script@v8
         env:
-          RETENTION_DAYS: ${{ inputs.retention_days || '14' }}
-          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+          RETENTION_DAYS: ${{ github.event.inputs.retention_days || '14' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
         with:
           script: |
             const retentionDays = Number(process.env.RETENTION_DAYS);
