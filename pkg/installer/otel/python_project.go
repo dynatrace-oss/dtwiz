@@ -18,8 +18,8 @@ var pythonProjectMarkers = []string{
 	"manage.py",
 }
 
-func detectPythonProjects() []ScannedProject {
-	return scanProjectDirs(pythonProjectMarkers, nil)
+func detectPythonProjects(roots []string) []ScannedProject {
+	return scanProjectDirs(pythonProjectMarkers, nil, roots)
 }
 
 func detectPythonProcesses() []DetectedProcess {
@@ -33,7 +33,10 @@ func detectPythonProcesses() []DetectedProcess {
 // Returns nil only when the underlying process scan fails; returns an empty (non-nil)
 // slice when the scan succeeds but no processes match any project directory.
 func detectProjectPythonProcesses() []DetectedProcess {
-	projects, candidates := runInParallel(detectPythonProjects, detectPythonProcesses)
+	projects, candidates := runInParallel(
+		func() []ScannedProject { return detectPythonProjects(defaultScanRoots()) },
+		detectPythonProcesses,
+	)
 	if candidates == nil {
 		return nil // process scan failed; caller treats nil as error
 	}

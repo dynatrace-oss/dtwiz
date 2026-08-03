@@ -84,7 +84,7 @@ func TestDetectJavaProjects_Maven(t *testing.T) {
 	}
 
 	helpers.SetTestWorkingDir(t, dir)
-	projects := detectJavaProjects()
+	projects := detectJavaProjects(defaultScanRoots())
 	if len(projects) == 0 {
 		t.Fatal("expected at least one Java project, got none")
 	}
@@ -110,7 +110,7 @@ func TestDetectJavaProjects_Gradle(t *testing.T) {
 	}
 
 	helpers.SetTestWorkingDir(t, dir)
-	projects := detectJavaProjects()
+	projects := detectJavaProjects(defaultScanRoots())
 	if len(projects) == 0 {
 		t.Fatal("expected at least one Java project, got none")
 	}
@@ -139,7 +139,7 @@ func TestDetectJavaProjects_None(t *testing.T) {
 	realDir, _ := filepath.EvalSymlinks(dir)
 
 	helpers.SetTestWorkingDir(t, dir)
-	projects := detectJavaProjects()
+	projects := detectJavaProjects(defaultScanRoots())
 	for _, p := range projects {
 		if p.Path == dir || p.Path == realDir {
 			t.Errorf("unexpected project at %s with no Java markers", dir)

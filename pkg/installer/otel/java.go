@@ -36,8 +36,8 @@ var javaProjectMarkers = []string{
 	".mvn",
 }
 
-func detectJavaProjects() []ScannedProject {
-	return scanProjectDirs(javaProjectMarkers, nil)
+func detectJavaProjects(roots []string) []ScannedProject {
+	return scanProjectDirs(javaProjectMarkers, nil, roots)
 }
 
 func detectJavaProcesses() []DetectedProcess {
@@ -48,8 +48,11 @@ func detectJavaProcesses() []DetectedProcess {
 
 // scanJavaProjects scans for Java projects, enriches process data, and matches
 // running processes to their projects. Returns the list of detected projects.
-func scanJavaProjects() []ScannedProject {
-	projects, processes := runInParallel(detectJavaProjects, detectJavaProcesses)
+func scanJavaProjects(roots []string) []ScannedProject {
+	projects, processes := runInParallel(
+		func() []ScannedProject { return detectJavaProjects(roots) },
+		detectJavaProcesses,
+	)
 	processes = enrichProcessesWithJPS(processes)
 	matchProcessesToProjects(projects, processes)
 	return projects
@@ -166,7 +169,7 @@ func DetectJavaPlan(envURL, token string) *JavaInstrumentationPlan {
 		return nil
 	}
 
-	projects := scanJavaProjects()
+	projects := scanJavaProjects(defaultScanRoots())
 	if len(projects) == 0 {
 		logger.Debug("no Java projects detected, skipping Java instrumentation")
 		return nil
@@ -325,7 +328,7 @@ func InstallOtelJava(envURL, token, serviceName, projectPath string, dryRun bool
 			proj = ScannedProject{Path: filepath.Dir(cleanProjectPath)}
 		}
 	} else {
-		projects := scanJavaProjects()
+		projects := scanJavaProjects(defaultScanRoots())
 		logger.Debug("detected java projects", "count", len(projects))
 		if len(projects) == 0 {
 			display.PrintStatusLine("error", "no Java projects detected", display.ColorError)

@@ -328,7 +328,7 @@ func TestDetectAllProjects_SkipsDisabled(t *testing.T) {
 		{name: "Node.js", binName: "node", enabled: false, detect: detectNodeRuntimeProjects},
 		{name: "Go", binName: "go", enabled: false, detect: detectGoRuntimeProjects},
 	}
-	projects := detectAllProjects(runtimes)
+	projects := detectAllProjects(runtimes, defaultScanRoots())
 	if len(projects) != 0 {
 		t.Errorf("expected 0 projects when all runtimes are disabled, got %d: %v", len(projects), projects)
 	}
@@ -350,7 +350,7 @@ func TestDetectAllProjects_SkipsPythonStub(t *testing.T) {
 	runtimes := []runtimeInfo{
 		{name: "Python", binName: "python3", enabled: true, detect: detectPythonRuntimeProjects},
 	}
-	projects := detectAllProjects(runtimes)
+	projects := detectAllProjects(runtimes, defaultScanRoots())
 	if len(projects) != 0 {
 		t.Errorf("expected Python to be skipped when stub produces no version output, got %d project(s)", len(projects))
 	}
@@ -375,7 +375,7 @@ func TestDetectAllProjects_IncludesWhenUnlocked(t *testing.T) {
 	runtimes := []runtimeInfo{
 		{name: "Go", binName: "go", enabled: true, detect: detectGoRuntimeProjects},
 	}
-	projects := detectAllProjects(runtimes)
+	projects := detectAllProjects(runtimes, defaultScanRoots())
 	found := false
 	for _, p := range projects {
 		if p.Path == dir || p.Path == realDir {

@@ -16,7 +16,7 @@ func TestDetectNodeProjects_Found(t *testing.T) {
 	}
 
 	helpers.SetTestWorkingDir(t, dir)
-	projects := detectNodeProjects()
+	projects := detectNodeProjects(defaultScanRoots())
 	found := false
 	for _, p := range projects {
 		if p.Path == dir || p.Path == realDir {
@@ -44,7 +44,7 @@ func TestDetectNodeProjects_ExcludesNodeModules(t *testing.T) {
 	}
 
 	helpers.SetTestWorkingDir(t, dir)
-	projects := detectNodeProjects()
+	projects := detectNodeProjects(defaultScanRoots())
 	for _, p := range projects {
 		if filepath.Base(filepath.Dir(p.Path)) == "node_modules" {
 			t.Errorf("node_modules project should be excluded, found: %s", p.Path)
@@ -213,7 +213,7 @@ func TestDetectNodeProjects_Monorepo(t *testing.T) {
 	}
 
 	helpers.SetTestWorkingDir(t, dir)
-	projects := detectNodeProjects()
+	projects := detectNodeProjects(defaultScanRoots())
 
 	// Should include the root and both workspace packages.
 	paths := make(map[string]bool)

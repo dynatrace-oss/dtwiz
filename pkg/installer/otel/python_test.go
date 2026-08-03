@@ -161,7 +161,7 @@ func TestDetectPythonProjects_Found(t *testing.T) {
 	}
 
 	helpers.SetTestWorkingDir(t, dir)
-	projects := detectPythonProjects()
+	projects := detectPythonProjects(defaultScanRoots())
 	found := false
 	for _, p := range projects {
 		if p.Path == dir || p.Path == realDir {
@@ -184,7 +184,7 @@ func TestDetectPythonProjects_AllMarkers(t *testing.T) {
 			}
 
 			helpers.SetTestWorkingDir(t, dir)
-			projects := detectPythonProjects()
+			projects := detectPythonProjects(defaultScanRoots())
 			found := false
 			for _, p := range projects {
 				if p.Path == dir || p.Path == realDir {

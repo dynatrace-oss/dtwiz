@@ -94,7 +94,10 @@ func DetectNodePlan(apiURL, token string) (*NodeInstrumentationPlan, bool) {
 		return nil, false
 	}
 
-	projects, processes := runInParallel(detectNodeProjects, detectNodeProcesses)
+	projects, processes := runInParallel(
+		func() []ScannedProject { return detectNodeProjects(defaultScanRoots()) },
+		detectNodeProcesses,
+	)
 	matchProcessesToProjects(projects, processes)
 
 	if len(projects) == 0 {

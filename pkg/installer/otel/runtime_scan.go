@@ -179,7 +179,140 @@ const largeScanThreshold = 10000
 // Shared across runtimes so the progress notice prints at most once per session.
 var globalScanCount atomic.Int64
 
-func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
+// defaultScanRoots returns the working directory as the sole scan root. Used by
+// callers that do not go through the interactive root selection (the per-runtime
+// install commands and process-correlation paths), preserving cwd-only scanning.
+func defaultScanRoots() []string {
+	wd, err := os.Getwd()
+	if err != nil {
+		logger.Debug("could not determine working directory for scan", "error", err)
+		return nil
+	}
+	return []string{wd}
+}
+
+type scanChoice int
+
+const (
+	scanChoiceBoth    scanChoice = iota // scan working directory + home
+	scanChoiceCwdOnly                   // scan working directory only
+	scanChoiceAbort                     // cancel the command
+)
+
+// selectScanRoots decides which directories the `install otel` scan should walk.
+// When the working directory lies outside the home tree it prompts the user with
+// a three-way choice; otherwise (same lineage as home) it scans the working
+// directory only. Returns installer.ErrInstallCancelled when the user aborts.
+func selectScanRoots() ([]string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("determining working directory: %w", err)
+	}
+
+	home, homeErr := os.UserHomeDir()
+	if homeErr != nil {
+		logger.Debug("could not resolve home directory; scanning working directory only", "error", homeErr)
+		return []string{cwd}, nil
+	}
+
+	// Same lineage as home (cwd == home, home under cwd, or cwd under home):
+	// the working-directory walk is sufficient, so no prompt and no extra root.
+	if pathsInSameLineage(cwd, home) {
+		return []string{cwd}, nil
+	}
+
+	// Disjoint trees: offer to also scan home. Non-interactive runs default to
+	// scanning both without blocking.
+	if installer.AutoConfirm || !stdinIsTTY() {
+		return []string{cwd, home}, nil
+	}
+
+	switch promptHomeScanChoice(cwd, home) {
+	case scanChoiceCwdOnly:
+		return []string{cwd}, nil
+	case scanChoiceAbort:
+		return nil, installer.ErrInstallCancelled
+	default: // scanChoiceBoth
+		return []string{cwd, home}, nil
+	}
+}
+
+func promptHomeScanChoice(cwd, home string) scanChoice {
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Println()
+		fmt.Printf("  You're running from %s, outside your home directory.\n", cwd)
+		fmt.Printf("  Also scan your home directory (%s) for projects?\n", home)
+		fmt.Println("  [Y] this directory and home  (default)")
+		fmt.Println("  [c] this directory only")
+		fmt.Println("  [n] cancel")
+		fmt.Print("  Choose [Y/c/n]: ")
+
+		answer, readErr := reader.ReadString('\n')
+		switch strings.ToLower(strings.TrimSpace(answer)) {
+		case "", "y", "yes":
+			return scanChoiceBoth
+		case "c":
+			return scanChoiceCwdOnly
+		case "n", "no":
+			return scanChoiceAbort
+		}
+		if readErr != nil {
+			return scanChoiceAbort
+		}
+		fmt.Println("  Please enter Y, c, or n.")
+	}
+}
+
+// stdinIsTTY reports whether stdin is an interactive terminal. When it is not
+// (piped input, CI), the scan prompt is skipped in favour of the default.
+func stdinIsTTY() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
+}
+
+// pathsInSameLineage reports whether a and b are equal or one is an ancestor of
+// the other, after resolving symlinks. Comparison is segment-wise (via
+// filepath.Rel), so "/home/foo" and "/home/foobar" are correctly unrelated.
+func pathsInSameLineage(a, b string) bool {
+	ra := resolvePath(a)
+	rb := resolvePath(b)
+	if ra == rb {
+		return true
+	}
+	return isDescendant(ra, rb) || isDescendant(rb, ra)
+}
+
+func resolvePath(p string) string {
+	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+		return resolved
+	}
+	if abs, err := filepath.Abs(p); err == nil {
+		return abs
+	}
+	return filepath.Clean(p)
+}
+
+// isDescendant reports whether child is strictly nested under parent.
+func isDescendant(child, parent string) bool {
+	rel, err := filepath.Rel(parent, child)
+	if err != nil {
+		return false
+	}
+	if rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return false
+	}
+	return true
+}
+
+func scanProjectDirs(markers []string, excludeNames []string, roots []string) []ScannedProject {
+	if len(roots) == 0 {
+		return nil
+	}
+
 	excludedDirNames := make(map[string]bool, len(excludeNames))
 	for _, name := range excludeNames {
 		excludedDirNames[name] = true
@@ -189,10 +322,9 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 		return strings.HasPrefix(name, ".") || strings.HasPrefix(name, "$") || excludedDirNames[name] || ignoredProjectDirNames[name]
 	}
 
-	workingDir, err := os.Getwd()
-	if err != nil {
-		return nil
-	}
+	// The first root is the working directory; progress and relative-path
+	// bookkeeping key off it.
+	workingDir := roots[0]
 
 	markerSet := make(map[string]struct{}, len(markers))
 	for _, m := range markers {
@@ -251,7 +383,9 @@ func scanProjectDirs(markers []string, excludeNames []string) []ScannedProject {
 		return true
 	}
 
-	walkCandidateDirs(workingDir, 0, dirMatches, shouldSkipDir)
+	for _, root := range roots {
+		walkCandidateDirs(root, 0, dirMatches, shouldSkipDir)
+	}
 
 	// Also scan the bundled examples root (~/.dtwiz/examples) if it exists.
 	if home, err := os.UserHomeDir(); err == nil {

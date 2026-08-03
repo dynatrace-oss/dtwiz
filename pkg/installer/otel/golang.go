@@ -38,8 +38,8 @@ func extractGoModuleName(goModPath string) string {
 	return ""
 }
 
-func detectGoProjects() []GoProject {
-	scanned := scanProjectDirs([]string{"go.mod"}, nil)
+func detectGoProjects(roots []string) []GoProject {
+	scanned := scanProjectDirs([]string{"go.mod"}, nil, roots)
 	projects := make([]GoProject, 0, len(scanned))
 	for _, s := range scanned {
 		moduleName := extractGoModuleName(filepath.Join(s.Path, "go.mod"))
@@ -65,7 +65,9 @@ func DetectGoPlan(apiURL, token string) *GoInstrumentationPlan {
 		return nil
 	}
 
-	projects, processes := runInParallel(detectGoProjects, func() []DetectedProcess {
+	projects, processes := runInParallel(func() []GoProject {
+		return detectGoProjects(defaultScanRoots())
+	}, func() []DetectedProcess {
 		return detectProcesses("go", nil)
 	})
 	if len(projects) == 0 {

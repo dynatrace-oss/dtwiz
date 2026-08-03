@@ -136,7 +136,7 @@ func TestScanProjectDirs_CWD(t *testing.T) {
 	}
 
 	helpers.SetTestWorkingDir(t, dir)
-	projects := scanProjectDirs([]string{"go.mod"}, nil)
+	projects := scanProjectDirs([]string{"go.mod"}, nil, defaultScanRoots())
 	found := false
 	for _, p := range projects {
 		if p.Path == dir || p.Path == realDir {
@@ -164,7 +164,7 @@ func TestScanProjectDirs_SubDir(t *testing.T) {
 	}
 
 	helpers.SetTestWorkingDir(t, dir)
-	projects := scanProjectDirs([]string{"package.json"}, nil)
+	projects := scanProjectDirs([]string{"package.json"}, nil, defaultScanRoots())
 	realSubDir, _ := filepath.EvalSymlinks(subDir)
 	found := false
 	for _, p := range projects {
@@ -189,7 +189,7 @@ func TestScanProjectDirs_ExcludeDirs(t *testing.T) {
 	}
 
 	helpers.SetTestWorkingDir(t, dir)
-	projects := scanProjectDirs([]string{"package.json"}, []string{"node_modules"})
+	projects := scanProjectDirs([]string{"package.json"}, []string{"node_modules"}, defaultScanRoots())
 	for _, p := range projects {
 		if strings.Contains(p.Path, "node_modules") {
 			t.Errorf("excluded dir appeared in results: %s", p.Path)
@@ -209,7 +209,7 @@ func TestScanProjectDirs_MultipleMarkers(t *testing.T) {
 	}
 
 	helpers.SetTestWorkingDir(t, dir)
-	projects := scanProjectDirs([]string{"pom.xml", "build.gradle"}, nil)
+	projects := scanProjectDirs([]string{"pom.xml", "build.gradle"}, nil, defaultScanRoots())
 	found := false
 	for _, p := range projects {
 		if p.Path == dir || p.Path == realDir {
@@ -228,7 +228,7 @@ func TestScanProjectDirs_NoMarkers(t *testing.T) {
 	dir := t.TempDir()
 
 	helpers.SetTestWorkingDir(t, dir)
-	projects := scanProjectDirs([]string{"go.mod"}, nil)
+	projects := scanProjectDirs([]string{"go.mod"}, nil, defaultScanRoots())
 	realDir, _ := filepath.EvalSymlinks(dir)
 	for _, p := range projects {
 		if p.Path == dir || p.Path == realDir {
@@ -257,7 +257,7 @@ func TestScanProjectDirs_NoiseDirs(t *testing.T) {
 	}
 
 	helpers.SetTestWorkingDir(t, dir)
-	projects := scanProjectDirs([]string{"go.mod"}, nil)
+	projects := scanProjectDirs([]string{"go.mod"}, nil, defaultScanRoots())
 
 	for _, p := range projects {
 		if strings.Contains(p.Path, "vendor") {
@@ -287,7 +287,7 @@ func TestScanProjectDirs_DotDirSkipped(t *testing.T) {
 	}
 
 	helpers.SetTestWorkingDir(t, dir)
-	projects := scanProjectDirs([]string{"go.mod"}, nil)
+	projects := scanProjectDirs([]string{"go.mod"}, nil, defaultScanRoots())
 	for _, p := range projects {
 		if strings.Contains(p.Path, ".hidden") {
 			t.Errorf("dot-prefixed directory should be skipped, but found: %s", p.Path)
@@ -313,7 +313,7 @@ func TestScanProjectDirs_MonorepoGrouping(t *testing.T) {
 	}
 
 	helpers.SetTestWorkingDir(t, root)
-	projects := scanProjectDirs([]string{"go.mod"}, nil)
+	projects := scanProjectDirs([]string{"go.mod"}, nil, defaultScanRoots())
 
 	paths := make(map[string]bool, len(projects))
 	for _, p := range projects {
@@ -339,7 +339,7 @@ func TestScanProjectDirs_DeepNesting(t *testing.T) {
 	}
 
 	helpers.SetTestWorkingDir(t, root)
-	projects := scanProjectDirs([]string{"go.mod"}, nil)
+	projects := scanProjectDirs([]string{"go.mod"}, nil, defaultScanRoots())
 
 	want := filepath.Join("a", "b", "c", "d")
 	found := false
@@ -376,7 +376,7 @@ func TestScanProjectDirs_SubtreePruning(t *testing.T) {
 	}
 
 	helpers.SetTestWorkingDir(t, root)
-	projects := scanProjectDirs([]string{"go.mod"}, nil)
+	projects := scanProjectDirs([]string{"go.mod"}, nil, defaultScanRoots())
 
 	count := 0
 	for _, p := range projects {
@@ -411,7 +411,7 @@ func TestScanProjectDirs_RootMatchStillDescends(t *testing.T) {
 	realNested, _ := filepath.EvalSymlinks(nested)
 
 	helpers.SetTestWorkingDir(t, root)
-	projects := scanProjectDirs([]string{"go.mod"}, nil)
+	projects := scanProjectDirs([]string{"go.mod"}, nil, defaultScanRoots())
 
 	foundRoot, foundNested := false, false
 	for _, p := range projects {
@@ -447,7 +447,7 @@ func TestScanProjectDirs_ParentNotScanned(t *testing.T) {
 	}
 
 	helpers.SetTestWorkingDir(t, cwd)
-	projects := scanProjectDirs([]string{"go.mod"}, nil)
+	projects := scanProjectDirs([]string{"go.mod"}, nil, defaultScanRoots())
 
 	if len(projects) != 0 {
 		t.Errorf("expected no projects from cwd with no markers, got %v", projects)
@@ -489,7 +489,7 @@ func TestScanProjectDirs_WindowsSystemDirSkipped(t *testing.T) {
 	}
 
 	helpers.SetTestWorkingDir(t, dir)
-	for _, p := range scanProjectDirs([]string{"go.mod"}, nil) {
+	for _, p := range scanProjectDirs([]string{"go.mod"}, nil, defaultScanRoots()) {
 		if strings.Contains(p.Path, "System32") {
 			t.Errorf("Windows system dir 'System32' must be skipped, got %s", p.Path)
 		}
@@ -509,7 +509,7 @@ func TestScanProjectDirs_DevDirFound(t *testing.T) {
 
 	helpers.SetTestWorkingDir(t, dir)
 	found := false
-	for _, p := range scanProjectDirs([]string{"go.mod"}, nil) {
+	for _, p := range scanProjectDirs([]string{"go.mod"}, nil, defaultScanRoots()) {
 		if strings.HasSuffix(filepath.ToSlash(p.Path), "/dev") {
 			found = true
 		}
@@ -539,7 +539,7 @@ func TestScanProjectDirs_WideParallelTree(t *testing.T) {
 	}
 
 	helpers.SetTestWorkingDir(t, root)
-	projects := scanProjectDirs([]string{"go.mod"}, nil)
+	projects := scanProjectDirs([]string{"go.mod"}, nil, defaultScanRoots())
 
 	found := make(map[string]bool, siblings)
 	for _, p := range projects {
@@ -578,7 +578,7 @@ func TestScanProjectDirs_BundledExamples(t *testing.T) {
 	cwd := t.TempDir()
 	helpers.SetTestWorkingDir(t, cwd)
 
-	projects := scanProjectDirs([]string{"requirements.txt"}, nil)
+	projects := scanProjectDirs([]string{"requirements.txt"}, nil, defaultScanRoots())
 
 	found := false
 	for _, p := range projects {
@@ -606,7 +606,7 @@ func TestScanProjectDirs_NoDuplicates(t *testing.T) {
 	// CWD == bundled path: the bundled scan is skipped, so the project is found exactly once via the CWD scan.
 	helpers.SetTestWorkingDir(t, bundled)
 
-	projects := scanProjectDirs([]string{"requirements.txt"}, nil)
+	projects := scanProjectDirs([]string{"requirements.txt"}, nil, defaultScanRoots())
 
 	count := 0
 	for _, p := range projects {
@@ -631,7 +631,7 @@ func TestScanProjectDirs_BundledExamplesFromHome(t *testing.T) {
 
 	helpers.SetTestWorkingDir(t, home)
 
-	projects := scanProjectDirs([]string{"requirements.txt"}, nil)
+	projects := scanProjectDirs([]string{"requirements.txt"}, nil, defaultScanRoots())
 
 	count := 0
 	for _, p := range projects {
