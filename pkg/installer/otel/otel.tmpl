@@ -248,12 +248,6 @@ processors:
       - resource.attributes["low-memory-process"] != nil
 {{- end }}
 
-exporters:
-  otlp_http:
-    endpoint: {{ .Endpoint }}/api/v2/otlp
-    headers:
-      Authorization: "{{ .AuthHeader }}"
-
 service:
 {{- if .HostMonitoring }}
   extensions: [health_check]
@@ -296,3 +290,9 @@ service:
       processors: [resource_detection]
       exporters: [otlp_http]
 {{- end }}
+
+exporters:
+  otlp_http:
+    endpoint: {{ .Endpoint }}/api/v2/otlp
+    headers:
+      Authorization: "{{ .AuthHeader }}"

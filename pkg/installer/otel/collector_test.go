@@ -1,6 +1,9 @@
 package otel
 
 import (
+	"bytes"
+	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -394,6 +397,123 @@ func TestPipelinesSectionStart(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := pipelinesSectionStart(tc.lines); got != tc.want {
 				t.Errorf("pipelinesSectionStart() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+// captureStdout redirects os.Stdout for the duration of fn and returns what was written.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := os.Stdout
+	os.Stdout = w
+	fn()
+	w.Close()
+	os.Stdout = old
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatal(err)
+	}
+	return buf.String()
+}
+
+// buildPreviewConfig builds a synthetic config.yaml content with the given
+// number of head lines, middle lines (between head and pipelines), and an
+// optional "  pipelines:" section at the end.
+func buildPreviewConfig(headLines, middleLines int, withPipelines bool) string {
+	var b strings.Builder
+	for i := range headLines {
+		fmt.Fprintf(&b, "head_%02d: value\n", i)
+	}
+	for i := range middleLines {
+		fmt.Fprintf(&b, "middle_%02d: value\n", i)
+	}
+	if withPipelines {
+		b.WriteString("  pipelines:\n")
+		b.WriteString("    traces:\n")
+		b.WriteString("      receivers: [otlp]\n")
+	}
+	return b.String()
+}
+
+func TestPrintConfigPreview_Truncation(t *testing.T) {
+	const sep = "────"
+
+	tests := []struct {
+		name          string
+		headLines     int
+		middleLines   int
+		withPipelines bool
+		wantEllipsis  bool
+		wantMsg       string // substring expected in ellipsis line (if wantEllipsis)
+	}{
+		{
+			name:          "short middle with pipelines — no truncation",
+			headLines:     20,
+			middleLines:   9, // 9 ≤ 30: show everything
+			withPipelines: true,
+			wantEllipsis:  false,
+		},
+		{
+			name:          "long middle with pipelines — truncate, show pipelines after",
+			headLines:     20,
+			middleLines:   31, // 31 > 30: hide middle
+			withPipelines: true,
+			wantEllipsis:  true,
+			wantMsg:       "31 lines",
+		},
+		{
+			name:          "short tail without pipelines — no truncation",
+			headLines:     20,
+			middleLines:   9, // 9 ≤ 30: show everything
+			withPipelines: false,
+			wantEllipsis:  false,
+		},
+		{
+			name:          "long tail without pipelines — truncate",
+			headLines:     20,
+			middleLines:   31, // 31 > 30: hide tail
+			withPipelines: false,
+			wantEllipsis:  true,
+			wantMsg:       "31 more lines",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cp := &collectorPlan{
+				configPath:    "/some/path/config.yaml",
+				configPreview: buildPreviewConfig(tc.headLines, tc.middleLines, tc.withPipelines),
+			}
+
+			out := captureStdout(t, func() { cp.printConfigPreview(sep) })
+
+			hasEllipsis := strings.Contains(out, "# ...")
+			if hasEllipsis != tc.wantEllipsis {
+				t.Errorf("ellipsis present = %v, want %v\noutput:\n%s", hasEllipsis, tc.wantEllipsis, out)
+			}
+			if tc.wantEllipsis && !strings.Contains(out, tc.wantMsg) {
+				t.Errorf("ellipsis line missing %q\noutput:\n%s", tc.wantMsg, out)
+			}
+			// When no truncation, all middle/pipelines lines must appear.
+			if !tc.wantEllipsis {
+				for i := range tc.middleLines {
+					marker := fmt.Sprintf("middle_%02d", i)
+					if !strings.Contains(out, marker) {
+						t.Errorf("expected %q in full output\noutput:\n%s", marker, out)
+					}
+				}
+				if tc.withPipelines && !strings.Contains(out, "pipelines:") {
+					t.Errorf("expected pipelines section in full output\noutput:\n%s", out)
+				}
+			}
+			// When truncating with pipelines, the pipelines section must still appear.
+			if tc.wantEllipsis && tc.withPipelines && !strings.Contains(out, "pipelines:") {
+				t.Errorf("pipelines section missing after ellipsis\noutput:\n%s", out)
 			}
 		})
 	}
