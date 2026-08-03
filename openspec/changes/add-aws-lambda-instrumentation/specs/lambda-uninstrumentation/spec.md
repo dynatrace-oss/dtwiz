@@ -4,54 +4,54 @@
 
 ### Requirement: Detect instrumented functions
 
-The system SHALL list all Lambda functions in the current AWS region and filter to those that have a Dynatrace Lambda Layer attached (identified by any layer ARN containing `Dynatrace_OneAgent`). Dynatrace-managed functions (name contains `DynatraceApiClientFunction`) SHALL be excluded from the candidate list even if they carry a Dynatrace layer.
+The system SHALL discover all Lambda functions in the current AWS region and select those that have a Dynatrace layer attached. Dynatrace-managed functions SHALL be excluded from the candidate list even if they carry a Dynatrace layer.
 
 #### Scenario: Instrumented functions found
 
-- **GIVEN** 10 Lambda functions exist in the current region
-- **WHEN** 3 of them have a layer ARN containing `Dynatrace_OneAgent` (and none are Dynatrace-managed)
-- **THEN** the uninstall preview shows only those 3 functions
+- **GIVEN** ten Lambda functions exist in the current region and three of them have a Dynatrace layer (none Dynatrace-managed)
+- **WHEN** the uninstaller runs
+- **THEN** the preview shows only those three functions
 
 #### Scenario: No instrumented functions found
 
-- **GIVEN** no Lambda functions in the current region have a Dynatrace layer
-- **WHEN** `UninstallAWSLambda` runs
-- **THEN** it prints "No Lambda functions with Dynatrace instrumentation found" and exits without error
+- **GIVEN** no functions in the current region have a Dynatrace layer
+- **WHEN** the uninstaller runs
+- **THEN** it reports that no instrumented functions were found and exits without error
 
 ### Requirement: Clean removal of instrumentation
 
-The system SHALL read each candidate function's live configuration, remove every Dynatrace Lambda Layer (ARN contains `Dynatrace_OneAgent`) from the layers list, and remove the Dynatrace-managed environment variables from the environment map: `AWS_LAMBDA_EXEC_WRAPPER`, `DT_TENANT`, `DT_CLUSTER`, `DT_CONNECTION_BASE_URL`, `DT_CONNECTION_AUTH_TOKEN`, `DT_ENABLE_ESM_LOADERS`. All other layers and environment variables SHALL be preserved. The updated configuration is written back via `aws lambda update-function-configuration`.
+The system SHALL remove every Dynatrace layer and every Dynatrace-managed environment variable (`AWS_LAMBDA_EXEC_WRAPPER`, `DT_TENANT`, `DT_CLUSTER`, `DT_CONNECTION_BASE_URL`, `DT_CONNECTION_AUTH_TOKEN`, `DT_ENABLE_ESM_LOADERS`) from each candidate function, preserving all other layers and environment variables.
 
 #### Scenario: Remove layer and env vars
 
-- **GIVEN** a function has layers `[custom-layer, Dynatrace_OneAgent_...]` and env vars `DATABASE_URL`, `DT_TENANT`, `DT_CONNECTION_BASE_URL`, `LOG_LEVEL`
+- **GIVEN** a function has a custom layer plus a Dynatrace layer, and a mix of unrelated and Dynatrace environment variables
 - **WHEN** the system uninstruments the function
-- **THEN** the updated layers are `[custom-layer]` and env vars are `DATABASE_URL`, `LOG_LEVEL`
+- **THEN** only the custom layer and the unrelated environment variables remain
 
 #### Scenario: Node.js ESM loader flag removed
 
-- **GIVEN** a Node.js function has env var `DT_ENABLE_ESM_LOADERS=true` alongside the other DT_* vars
+- **GIVEN** a Node.js function has `DT_ENABLE_ESM_LOADERS=true` alongside the other Dynatrace variables
 - **WHEN** the system uninstruments the function
-- **THEN** `DT_ENABLE_ESM_LOADERS` is removed along with the other DT_* vars
+- **THEN** `DT_ENABLE_ESM_LOADERS` is removed along with the other Dynatrace variables
 
 #### Scenario: Function with only DT env vars
 
-- **GIVEN** a function's only env vars are the DT_* variables
+- **GIVEN** a function's only environment variables are the Dynatrace variables
 - **WHEN** the system uninstruments the function
-- **THEN** the environment variables map is empty (an empty `Variables` object, not null)
+- **THEN** the function is left with no environment variables
 
 ### Requirement: Uninstall preview, confirmation, and dry-run
 
-The system SHALL show a preview of functions to be cleaned up (name, runtime, architecture) with a total count before applying changes. Under `--dry-run`, the preview is shown but no changes are applied and no confirmation prompt appears. Otherwise the system prompts `Apply?` and proceeds only on confirmation, returning `ErrInstallCancelled` on decline. The final summary reports successes and failures.
+The system SHALL show a preview of the functions to be cleaned up (name, runtime, architecture) with a total count before applying changes. Under `--dry-run`, the preview is shown but no changes are applied and no confirmation is requested. Otherwise the system SHALL request confirmation and proceed only on confirmation, cancelling cleanly on decline. The final summary SHALL report successes and failures.
 
 #### Scenario: Uninstall dry run
 
 - **GIVEN** `--dry-run` is set
-- **WHEN** `UninstallAWSLambda` runs
-- **THEN** the preview is printed, no functions are modified, and no confirmation prompt appears
+- **WHEN** the uninstaller runs
+- **THEN** the preview is shown, no functions are modified, and no confirmation is requested
 
 #### Scenario: Uninstall with confirmation
 
-- **GIVEN** `--dry-run` is NOT set
-- **WHEN** `UninstallAWSLambda` displays the preview
-- **THEN** it prompts "Apply?" and proceeds only on confirmation; on decline it returns `ErrInstallCancelled`
+- **GIVEN** `--dry-run` is not set
+- **WHEN** the preview is shown
+- **THEN** the system requests confirmation and proceeds only on confirmation; on decline it cancels cleanly

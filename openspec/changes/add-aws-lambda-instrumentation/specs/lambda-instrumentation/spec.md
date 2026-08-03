@@ -4,170 +4,156 @@
 
 ### Requirement: Lambda function discovery
 
-The system SHALL list all Lambda functions in the current AWS region using `aws lambda list-functions` (JSON output) with `NextMarker`-based pagination. The current region is resolved via `GetAWSCallerInfo()` (dtctl SDK / AWS caller identity), not `aws configure get region`. Functions with `PackageType: Image` (container images) SHALL be excluded since layers cannot be attached to them.
+The system SHALL discover all Lambda functions in the current AWS region. Functions deployed as container images SHALL be excluded, since a layer cannot be attached to them.
 
 #### Scenario: Functions found in current region
 
 - **GIVEN** the AWS CLI is configured with valid credentials and a resolvable region
-- **WHEN** `InstallAWSLambda` lists Lambda functions
-- **THEN** all Zip-packaged functions in the current region are returned with their runtime, architecture, existing layers, and existing environment variables
+- **WHEN** the installer discovers Lambda functions
+- **THEN** all Zip-packaged functions in the current region are returned with their runtime, architecture, layers, and environment variables
 
 #### Scenario: No functions found
 
 - **GIVEN** the AWS CLI is configured with valid credentials
 - **WHEN** no Lambda functions exist in the current region
-- **THEN** the system prints "No Lambda functions found in region {region}" and exits without error
+- **THEN** the system reports that no functions were found and exits without error
 
 #### Scenario: Container image functions excluded
 
-- **GIVEN** some Lambda functions use `PackageType: Image`
+- **GIVEN** some Lambda functions are deployed as container images
 - **WHEN** the function list is built
-- **THEN** container image functions are silently excluded from the list and never appear in the preview or instrumentation loop
+- **THEN** those functions are excluded and never appear in the preview or instrumentation loop
 
-### Requirement: Runtime-to-techtype mapping
+### Requirement: Supported runtimes
 
-The system SHALL map each function's AWS runtime prefix to a Dynatrace `techtype` parameter: `nodejs*` -> `nodejs`, `python*` -> `python`, `java*` -> `java`, `go*` -> `go`. Functions whose runtime matches none of these prefixes (`dotnet*`, `provided*`, or unknown) SHALL be classified as `skip` and shown in the preview table with the reason `skip (unsupported runtime)`.
+The system SHALL instrument functions whose runtime is Node.js, Python, Java, or Go. Functions with any other runtime (e.g. .NET, custom/`provided`) SHALL be skipped and shown in the preview with the reason `skip (unsupported runtime)`.
 
-> Note: the pre-execution info box currently advertises Node.js and Python support only, while the mapping also covers Java and Go. This is a known cosmetic inconsistency in the info box text, not in the mapping behavior.
+#### Scenario: Supported runtime instrumented
 
-#### Scenario: Supported runtime mapped
-
-- **GIVEN** a Lambda function has runtime `nodejs18.x`
-- **WHEN** the system resolves the techtype
-- **THEN** it maps to `nodejs` for the DT layer ARN API call
+- **GIVEN** a Lambda function has a Node.js runtime
+- **WHEN** the system classifies the function
+- **THEN** its action is `new` or `update` and the correct Dynatrace layer for that runtime is used
 
 #### Scenario: Unsupported runtime skipped
 
-- **GIVEN** a Lambda function has runtime `dotnet6`
+- **GIVEN** a Lambda function has a .NET runtime
 - **WHEN** the system classifies the function
-- **THEN** the function's action is `skip`, it is rendered in the preview as `skip (unsupported runtime)`, and it is not modified
+- **THEN** its action is `skip`, it is rendered in the preview as `skip (unsupported runtime)`, and it is not modified
 
 ### Requirement: Skip Dynatrace-managed functions
 
-The system SHALL never instrument Dynatrace-managed Lambda functions. Any function whose name contains `DynatraceApiClientFunction` SHALL be classified as `skip` (reason: `Dynatrace internal`) during instrumentation and SHALL be excluded from the uninstrumentation candidate list.
+The system SHALL never instrument Dynatrace-managed Lambda functions. Such functions SHALL be classified as `skip` (reason: `Dynatrace internal`) and SHALL be excluded from the uninstrumentation candidate list.
 
 #### Scenario: Dynatrace-internal function skipped
 
-- **GIVEN** a function named `dynatrace-...-DynatraceApiClientFunction-...`
+- **GIVEN** a Dynatrace-managed function
 - **WHEN** the system classifies functions for instrumentation
-- **THEN** the function's action is `skip` with reason `Dynatrace internal` and it is never modified
+- **THEN** its action is `skip` with reason `Dynatrace internal` and it is never modified
 
-### Requirement: Layer ARN resolution via Dynatrace API
+### Requirement: Layer resolution
 
-The system SHALL resolve the correct Lambda layer ARN by calling `GET /api/v1/deployment/lambda/layer` on the Classic API URL (derived via `APIURL()`) with query parameters `arch`, `techtype`, `region`, and `withCollector=excluded`. Architecture is translated for the API: `arm64` -> `arm`, everything else -> `x86`. Requires `InstallerDownload` token scope. Resolved ARNs SHALL be cached by `"{techtype}-{arch}"` key within a single invocation to avoid redundant API calls. The first ARN in the response `arns` array is used.
+The system SHALL resolve the correct Dynatrace Lambda layer for each function's runtime, architecture, and region from Dynatrace. When the credentials lack the scope required to resolve a layer, or no layer exists for the requested runtime/architecture/region, the system SHALL return a clear, actionable error.
 
-#### Scenario: Layer ARN resolved successfully
+#### Scenario: Layer resolved successfully
 
-- **GIVEN** a function with runtime `python3.11` and architecture `arm64` in region `eu-central-1`
-- **WHEN** the system queries the DT layer API with `techtype=python&arch=arm&region=eu-central-1&withCollector=excluded`
-- **THEN** it receives a valid ARN and caches it under key `python-arm64` for subsequent functions with the same techtype and architecture
+- **GIVEN** a function with a supported runtime and known architecture in the current region
+- **WHEN** the system resolves its layer
+- **THEN** it obtains the correct layer for that runtime, architecture, and region
 
-#### Scenario: Layer ARN cached for same techtype/arch
+#### Scenario: Insufficient token scope
 
-- **GIVEN** two functions both have runtime `nodejs18.x` and architecture `x86_64`
-- **WHEN** the second function's layer ARN is resolved
-- **THEN** the cached ARN from the first resolution is used without an additional API call
+- **GIVEN** the token lacks the scope required to resolve a Lambda layer
+- **WHEN** the system attempts to resolve a layer
+- **THEN** it returns a clear error stating which scope is required
 
-#### Scenario: API returns 403 (insufficient scope)
+#### Scenario: No layer available
 
-- **GIVEN** the access token does not have `InstallerDownload` scope
-- **WHEN** the layer ARN API is called
-- **THEN** the system returns a clear error: "access token needs InstallerDownload scope for Lambda layer resolution (HTTP 403)"
+- **GIVEN** no Dynatrace layer exists for the requested runtime, architecture, and region
+- **WHEN** the system attempts to resolve a layer
+- **THEN** it returns an error naming the runtime, architecture, and region for which no layer was found
 
-#### Scenario: No ARN found
+### Requirement: Dynatrace connection details
 
-- **GIVEN** the layer API returns an empty `arns` array for the requested techtype/arch/region
-- **WHEN** the system attempts to resolve the ARN
-- **THEN** it returns an error "no Lambda layer ARN found for techtype={techtype} arch={arch} region={region}"
+The system SHALL obtain the Dynatrace connection details needed by an instrumented function (tenant, cluster, connection base URL, and connection auth token) from Dynatrace. When the token lacks the scope required to obtain any of these, the system SHALL return a clear, actionable error.
 
-### Requirement: DT connection info retrieval
+#### Scenario: Connection details retrieved
 
-The system SHALL assemble the Dynatrace connection details used for the function environment variables from three Classic API calls:
+- **GIVEN** a token with the required scopes
+- **WHEN** the system gathers connection details
+- **THEN** `DT_TENANT`, `DT_CLUSTER`, `DT_CONNECTION_BASE_URL`, and `DT_CONNECTION_AUTH_TOKEN` are all populated for the function environment variables
 
-- `GET /api/v1/deployment/installer/agent/connectioninfo` -> `tenantUUID` (used as `DT_TENANT`).
-- `GET /api/v1/config/clusterid` -> numeric `clusterId` (used as `DT_CLUSTER`).
-- `GET /api/v2/agentConnectionToken` -> agent connection token `dt0a01.*` (used as `DT_CONNECTION_AUTH_TOKEN`). Requires the `environment-api:agent-connection-tokens:read` scope.
+#### Scenario: Missing scope
 
-The `DT_CONNECTION_BASE_URL` is the Classic API URL derived from the environment URL via `APIURL()`. All three calls authenticate with the platform token via `AuthHeader()`.
+- **GIVEN** the token lacks a scope required to obtain a connection detail
+- **WHEN** the system attempts to gather connection details
+- **THEN** it returns a clear error stating which scope is required
 
-#### Scenario: Connection info retrieved
+### Requirement: Environment variable configuration
 
-- **GIVEN** a valid platform token with the required scopes
-- **WHEN** the connection info, cluster ID, and agent connection token endpoints are called
-- **THEN** `DT_TENANT`, `DT_CLUSTER`, `DT_CONNECTION_AUTH_TOKEN`, and `DT_CONNECTION_BASE_URL` are all populated for the function environment variables
-
-#### Scenario: Agent connection token scope missing
-
-- **GIVEN** the platform token lacks `environment-api:agent-connection-tokens:read`
-- **WHEN** the agent connection token endpoint returns 403
-- **THEN** the system returns a clear error: "platform token needs environment-api:agent-connection-tokens:read scope (HTTP 403)"
-
-### Requirement: Environment variable merging
-
-The system SHALL read each function's current configuration via `aws lambda get-function-configuration`, merge the Dynatrace env vars into the existing environment variables (preserving all non-DT vars), and write the merged config back via `aws lambda update-function-configuration`. The following env vars SHALL be set on every instrumented function: `AWS_LAMBDA_EXEC_WRAPPER=/opt/dynatrace`, `DT_TENANT`, `DT_CLUSTER`, `DT_CONNECTION_BASE_URL`, `DT_CONNECTION_AUTH_TOKEN`. Additionally, for Node.js runtimes only, `DT_ENABLE_ESM_LOADERS=true` SHALL be set.
+The system SHALL set the Dynatrace environment variables on each instrumented function while preserving all of the function's existing (non-Dynatrace) environment variables. The variables set on every instrumented function are `AWS_LAMBDA_EXEC_WRAPPER`, `DT_TENANT`, `DT_CLUSTER`, `DT_CONNECTION_BASE_URL`, and `DT_CONNECTION_AUTH_TOKEN`. For Node.js functions, `DT_ENABLE_ESM_LOADERS=true` SHALL additionally be set.
 
 #### Scenario: Function with existing env vars
 
-- **GIVEN** a Lambda function has existing environment variables `DATABASE_URL=postgres://...` and `LOG_LEVEL=info`
-- **WHEN** the system instruments the function (non-Node.js runtime)
-- **THEN** the updated configuration contains `DATABASE_URL`, `LOG_LEVEL`, AND the five base DT_* env vars
+- **GIVEN** a non-Node.js function has existing, unrelated environment variables
+- **WHEN** the system instruments the function
+- **THEN** the updated configuration retains all existing variables AND adds the five base Dynatrace variables
 
 #### Scenario: Node.js function gets ESM loader flag
 
-- **GIVEN** a Lambda function has runtime `nodejs20.x`
+- **GIVEN** a Node.js function
 - **WHEN** the system instruments the function
 - **THEN** the updated configuration additionally contains `DT_ENABLE_ESM_LOADERS=true`
 
 #### Scenario: Function with no existing env vars
 
-- **GIVEN** a non-Node.js Lambda function has no environment variables
+- **GIVEN** a non-Node.js function with no environment variables
 - **WHEN** the system instruments the function
-- **THEN** the updated configuration contains only the five base DT_* env vars
+- **THEN** the updated configuration contains only the five base Dynatrace variables
 
 ### Requirement: Layer attachment
 
-The system SHALL add the Dynatrace Lambda Layer to the function's layer list. If a Dynatrace layer is already present (any ARN containing `Dynatrace_OneAgent`), it SHALL be replaced in place with the latest version. Other layers SHALL be preserved. Layers are re-read from the live function configuration at instrumentation time.
+The system SHALL attach the Dynatrace Lambda layer to the function, preserving the function's other layers. If a Dynatrace layer is already attached, it SHALL be replaced in place with the resolved version.
 
 #### Scenario: New instrumentation
 
-- **GIVEN** a function has layers `[arn:aws:lambda:...:layer:my-custom-layer:3]`
+- **GIVEN** a function has one custom layer and no Dynatrace layer
 - **WHEN** the system instruments the function
-- **THEN** the updated layers list is `[arn:aws:lambda:...:layer:my-custom-layer:3, arn:aws:lambda:...:layer:Dynatrace_OneAgent_...:1]`
+- **THEN** the custom layer is preserved and the Dynatrace layer is added
 
 #### Scenario: Update existing instrumentation
 
-- **GIVEN** a function already has a layer with ARN containing `Dynatrace_OneAgent` (older version)
+- **GIVEN** a function already has an older Dynatrace layer
 - **WHEN** the system instruments the function
-- **THEN** the old Dynatrace layer is replaced in place with the latest version; other layers are unchanged
+- **THEN** the Dynatrace layer is replaced in place with the resolved version and other layers are unchanged
 
-### Requirement: Sequential processing with error resilience
+### Requirement: Error resilience
 
-The system SHALL process functions one at a time. If instrumentation fails for a single function (e.g., function is in a pending state), the error is printed inline and processing continues with the next function. The final summary reports successes and failures.
+The system SHALL continue instrumenting the remaining functions when instrumentation of a single function fails. The failure SHALL be reported, and the final summary SHALL report the number of successes and failures.
 
 #### Scenario: One function fails, others succeed
 
-- **GIVEN** 5 Lambda functions to instrument
-- **WHEN** function 3 fails with "ResourceConflictException" (function being updated)
-- **THEN** functions 1, 2, 4, 5 are instrumented successfully, function 3's error is printed, and the summary shows "4 succeeded, 1 failed"
+- **GIVEN** five Lambda functions to instrument
+- **WHEN** one of them fails (e.g. it is being updated by another process)
+- **THEN** the other four are instrumented successfully, the failing function's error is reported, and the summary shows four succeeded and one failed
 
 ### Requirement: Preview, confirmation, and dry-run
 
-The system SHALL display a preview table showing: function name, runtime, architecture, and action (`new`/`update`/`skip (reason)`), followed by a count of functions to instrument and functions skipped. When there are no actionable functions, the system prints "No functions to instrument." and exits. Under `--dry-run`, the preview is displayed but no changes are applied and no confirmation prompt is shown. When invoked standalone (confirm enabled), the system prompts `Apply?` and proceeds only on confirmation, returning `ErrInstallCancelled` on decline.
+The system SHALL display a preview of the functions it will act on, showing function name, runtime, architecture, and action (`new`/`update`/`skip (reason)`), followed by counts of functions to instrument and functions skipped. When no functions are actionable, the system SHALL report that there is nothing to instrument and exit. Under `--dry-run`, the preview is shown but no changes are applied and no confirmation is requested. When run standalone, the system SHALL request confirmation before applying and cancel cleanly on decline.
 
 #### Scenario: Dry run preview
 
 - **GIVEN** `--dry-run` is set
-- **WHEN** `InstallAWSLambda` runs
-- **THEN** the preview table is printed, no functions are modified, and no confirmation prompt appears
+- **WHEN** the installer runs
+- **THEN** the preview is shown, no functions are modified, and no confirmation is requested
 
 #### Scenario: Normal run with confirmation
 
-- **GIVEN** `--dry-run` is NOT set and the installer is invoked standalone
-- **WHEN** `InstallAWSLambda` displays the preview
-- **THEN** it prompts "Apply?" and proceeds only on confirmation; on decline it returns `ErrInstallCancelled`
+- **GIVEN** `--dry-run` is not set and the installer runs standalone
+- **WHEN** the preview is shown
+- **THEN** the system requests confirmation and proceeds only on confirmation; on decline it cancels cleanly
 
 #### Scenario: Nothing actionable
 
 - **GIVEN** every discovered function is classified as `skip`
 - **WHEN** the preview is rendered
-- **THEN** the system prints "No functions to instrument." and exits without prompting
+- **THEN** the system reports there is nothing to instrument and exits without requesting confirmation
