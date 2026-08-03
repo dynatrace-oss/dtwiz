@@ -707,11 +707,6 @@ func (cp *collectorPlan) printConfigPreview(sep string) {
 			for _, line := range lines[headEnd:] {
 				fmt.Printf("    %s\n", line)
 			}
-		case pipeStart < 0:
-			// pipelines section not found; show everything rather than silently hiding it
-			for _, line := range lines[headEnd:] {
-				fmt.Printf("    %s\n", line)
-			}
 		case len(lines)-headEnd > truncateThreshold:
 			fmt.Printf("    # ... (%d more lines) — run with --debug to see full %s\n", len(lines)-headEnd, label)
 		case len(lines) > headEnd:
