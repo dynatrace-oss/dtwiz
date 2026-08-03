@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
 	"github.com/dynatrace-oss/dtwiz/test/integration"
 	"github.com/dynatrace-oss/dtwiz/test/integration/grail"
@@ -141,4 +143,48 @@ func runOTelTest(t *testing.T, tc otelCase) {
 		grail.WithInterval(20*time.Second),
 	)
 	t.Logf("found %d trace(s) for service %q", len(traces), svcName)
+}
+
+// TestOTelHostMonitoring installs the OTel Collector with the experimental
+// (host monitoring) flag enabled, waits for system.cpu.utilization metrics to
+// arrive in Dynatrace via the OTLP pipeline, then uninstalls the collector.
+//
+// Required env vars: TEST_DT_ENVIRONMENT, TEST_DT_PLATFORM_TOKEN.
+func TestOTelHostMonitoring(t *testing.T) {
+	env := integration.SetupIntegration(t)
+
+	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
+
+	// AutoConfirm skips all confirmation prompts inside InstallOtelCollectorOnly.
+	origAC := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = origAC })
+
+	t.Log("installing OTel Collector with host monitoring (--experimental)")
+	if err := otel.InstallOtelCollectorOnly(env.EnvURL, env.ClassicToken, env.PlatformToken, false); err != nil {
+		t.Fatalf("InstallOtelCollectorOnly: %v", err)
+	}
+
+	// Uninstall the collector when the test ends so the binary and config are
+	// removed regardless of pass/fail. AutoConfirm is still true here.
+	t.Cleanup(func() {
+		t.Log("uninstalling OTel Collector")
+		if err := otel.UninstallOtelCollector(false); err != nil {
+			t.Logf("warning: UninstallOtelCollector: %v", err)
+		}
+	})
+
+	hostname, err := os.Hostname()
+	if err != nil {
+		t.Fatalf("os.Hostname: %v", err)
+	}
+
+	// The hostmetrics/10s receiver scrapes every 10 s; allow generous time for
+	// the first data to propagate through the collector and be ingested by Grail.
+	t.Logf("waiting for host metrics in Dynatrace (host: %q)", hostname)
+	records := grail.RequireHostMetrics(t, env.Client, hostname,
+		grail.WithTimeout(3*time.Minute),
+		grail.WithInterval(15*time.Second),
+	)
+	t.Logf("received %d metric record(s) for host %q", len(records), hostname)
 }

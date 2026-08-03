@@ -218,12 +218,14 @@ func selectScanRoots() ([]string, error) {
 	// Same lineage as home (cwd == home, home under cwd, or cwd under home):
 	// the working-directory walk is sufficient, so no prompt and no extra root.
 	if pathsInSameLineage(cwd, home) {
+		logger.Debug("scan roots: cwd in same lineage as home, scanning cwd only", "cwd", cwd, "home", home)
 		return []string{cwd}, nil
 	}
 
 	// Disjoint trees: offer to also scan home. Non-interactive runs default to
 	// scanning both without blocking.
 	if installer.AutoConfirm || !stdinIsTTY() {
+		logger.Debug("scan roots: non-interactive, scanning cwd and home", "cwd", cwd, "home", home)
 		return []string{cwd, home}, nil
 	}
 
