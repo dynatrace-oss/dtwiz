@@ -337,6 +337,7 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		if err != nil {
 			return err
 		}
+		logger.Debug("scanning for projects", "roots", roots)
 		projects := detectAllProjects(runtimes, roots)
 		if len(projects) == 0 {
 			fmt.Println("  No projects detected.")

@@ -2,15 +2,15 @@
 
 package installer
 
-import "golang.org/x/sys/windows"
+import (
+	"golang.org/x/sys/windows"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
+)
 
 // IsElevated reports whether the current process has Administrator privileges.
 func IsElevated() bool {
-	token, err := windows.OpenCurrentProcessToken()
-	if err != nil {
-		return false
-	}
-	defer token.Close()
+	token := windows.GetCurrentProcessToken()
 
 	var sid *windows.SID
 	if err := windows.AllocateAndInitializeSid(
@@ -19,6 +19,7 @@ func IsElevated() bool {
 		windows.DOMAIN_ALIAS_RID_ADMINS,
 		0, 0, 0, 0, 0, 0, &sid,
 	); err != nil {
+		logger.Debug("IsElevated: could not initialize Administrators SID", "error", err)
 		return false
 	}
 	defer windows.FreeSid(sid)

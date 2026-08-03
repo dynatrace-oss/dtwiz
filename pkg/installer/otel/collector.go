@@ -653,6 +653,9 @@ func generateOtelConfig(apiURL, token string) (string, error) {
 		data.HostMonitoring = true
 		data.IncludeJournald = runtime.GOOS == "linux"
 		data.HealthCheckPort = healthCheckPort
+		logger.Debug("otel config ports", "grpc", grpcPort, "http", httpPort, "metrics", metricsPort, "health_check", healthCheckPort)
+	} else {
+		logger.Debug("otel config ports", "grpc", grpcPort, "http", httpPort, "metrics", metricsPort)
 	}
 
 	var buf bytes.Buffer
@@ -701,6 +704,11 @@ func (cp *collectorPlan) printConfigPreview(sep string) {
 				fmt.Printf("    %s\n", line)
 			}
 		case pipeStart > headEnd:
+			for _, line := range lines[headEnd:] {
+				fmt.Printf("    %s\n", line)
+			}
+		case pipeStart < 0:
+			// pipelines section not found; show everything rather than silently hiding it
 			for _, line := range lines[headEnd:] {
 				fmt.Printf("    %s\n", line)
 			}
