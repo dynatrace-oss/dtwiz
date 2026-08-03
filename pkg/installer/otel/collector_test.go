@@ -239,7 +239,8 @@ func TestGenerateOtelConfig_Combined_EnvVar(t *testing.T) {
 
 // TestGenerateOtelConfig_JournaldConsistency asserts the journald receiver and
 // its reference in logs/host are both present or both absent — never just one.
-// This test simulates Linux behaviour by inspecting the rendered YAML struct directly.
+// It runs on the current platform; journald will be absent on non-Linux, and the
+// test verifies the pipeline reference is absent too (the guards stay in sync).
 func TestGenerateOtelConfig_JournaldConsistency(t *testing.T) {
 	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
 
