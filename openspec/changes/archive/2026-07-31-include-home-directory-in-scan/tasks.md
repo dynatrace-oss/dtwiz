@@ -32,5 +32,5 @@
 
 - [x] 5.1 `make test` passes
 - [x] 5.2 `make lint` shows no new issues
-- [ ] 5.3 Manual smoke: run `dtwiz install otel --dry-run` from a directory outside home like `/tmp/project` (disjoint → prompt appears), from `~/some/project` (within home → no prompt), from `$HOME` (CWD == home → no prompt), and with `--project <path>` (no scan, no prompt)
+- [x] 5.3 Manual smoke: run `dtwiz install otel --dry-run` from a directory outside home like `/tmp/project` (disjoint → prompt appears), from `~/some/project` (within home → no prompt), from `$HOME` (CWD == home → no prompt), and with `--project <path>` (no scan, no prompt)
 - [x] 5.4 Update `CHANGELOG.md` `[Unreleased]` with the new home-directory scan choice
