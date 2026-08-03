@@ -1,0 +1,126 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "dtwiz analyze",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "args": ["analyze"],
+      "envFile": "${workspaceFolder}/.env",
+      "env": {},
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "dtwiz recommend",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "args": ["recommend"],
+      "envFile": "${workspaceFolder}/.env",
+      "env": {},
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "dtwiz setup",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "args": ["setup"],
+      "envFile": "${workspaceFolder}/.env",
+      "env": {},
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "dtwiz status",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "args": ["status"],
+      "envFile": "${workspaceFolder}/.env",
+      "env": {},
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "dtwiz install otel (dry-run)",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "args": ["install", "otel", "--dry-run"],
+      "envFile": "${workspaceFolder}/.env",
+      "env": {},
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "dtwiz install kubernetes (dry-run)",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "args": ["install", "kubernetes", "--dry-run"],
+      "envFile": "${workspaceFolder}/.env",
+      "env": {},
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "dtwiz install aws-lambda (dry-run)",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "args": ["install", "aws-lambda", "--dry-run"],
+      "envFile": "${workspaceFolder}/.env",
+      "env": {},
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "dtwiz watch",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "args": ["watch"],
+      "envFile": "${workspaceFolder}/.env",
+      "env": {},
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "dtwiz (custom args)",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "cwd": "${input:dtwizCwd}",
+      "args": ["${input:dtwizSubcommand}"],
+      "envFile": "${workspaceFolder}/.env",
+      "env": {},
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "attach to process",
+      "type": "go",
+      "request": "attach",
+      "mode": "local",
+      "processId": "${command:pickProcess}"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "dtwizCwd",
+      "type": "promptString",
+      "description": "Working directory for dtwiz (used for relative paths at runtime)",
+      "default": "${workspaceFolder}"
+    },
+    {
+      "id": "dtwizSubcommand",
+      "type": "promptString",
+      "description": "Subcommand for dtwiz (for example: analyze, setup, status, watch)",
+      "default": "setup"
+    }
+  ]
+}
