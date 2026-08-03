@@ -7,9 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-03
+
 ### Added
 
 - `install otel`: when run from a directory outside your home tree, dtwiz now asks whether to also scan your home directory for projects (`Y` = this directory and home, `c` = this directory only, `n` = cancel). The prompt is skipped when the working directory already sits in the same lineage as home; non-interactive runs (`--yes` or a non-TTY) default to scanning both.
+
+### Changed
+
+- `install aws` / `uninstall aws`: AWS integration migrated to the dtctl SDK (`pkg/installer/aws/`); the bespoke `pkg/extensions` client package is removed and replaced by the shared `installer.ExtensionClient` abstraction, aligning AWS with the Azure and GCP extension-client pattern.
 
 ## [1.1.0] - 2026-07-27
 
@@ -462,7 +468,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/dynatrace-oss/dtwiz/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/dynatrace-oss/dtwiz/compare/v0.2.30...v1.0.0
