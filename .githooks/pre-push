@@ -7,19 +7,14 @@
 HOOK_DIR="$(dirname "$0")"
 ERRORS=0
 
-while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
+while IFS=' ' read -r _ local_sha _ _; do
   # Skip branch deletions
   if [ "$local_sha" = "0000000000000000000000000000000000000000" ]; then
     continue
   fi
 
-  # Determine the commit range to validate
-  if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
-    # New branch: validate commits not yet on any remote
-    commits=$(git log "$local_sha" --not --remotes --format="%H")
-  else
-    commits=$(git log "$remote_sha..$local_sha" --format="%H")
-  fi
+  # Validate all commits on this branch that are not already on origin/main
+  commits=$(git log origin/main.."$local_sha" --format="%H")
 
   for commit in $commits; do
     tmp=$(mktemp)
@@ -38,13 +33,17 @@ done
 if [ "$ERRORS" -gt 0 ]; then
   printf '\033[31mPush rejected: %d commit(s) with invalid message(s). Fix with: git rebase -i\033[0m\n' "$ERRORS" >&2
   exit 1
+else
+  printf '\033[32m✓ All commit messages valid\033[0m\n' >&2
 fi
 
 # ── lint ──────────────────────────────────────────────────────────────────────
-printf 'Running make lint...\n' >&2
+printf 'Running make lint ...\n' >&2
 if ! make lint >&2; then
   printf '\033[31mPush rejected: lint failed. Fix the issues above and try again.\033[0m\n' >&2
   exit 1
 fi
+
+printf '\033[32m✓ Lint passed\033[0m\n' >&2
 
 exit 0
