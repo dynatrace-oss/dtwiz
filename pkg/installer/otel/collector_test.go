@@ -158,7 +158,7 @@ func TestGenerateOtelConfig_AppOnly_Default(t *testing.T) {
 	}
 }
 
-// TestGenerateOtelConfig_AppOnly_EnvEnabled asserts that with the experimental flag
+// TestGenerateOtelConfig_Combined_ExperimentalEnabled asserts that with the experimental flag
 // the combined config includes host receivers, all five processors in order,
 // metrics/host and logs/host pipelines, and the app pipelines.
 func TestGenerateOtelConfig_Combined_ExperimentalEnabled(t *testing.T) {
