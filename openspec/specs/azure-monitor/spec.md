@@ -1,6 +1,10 @@
 # Azure Monitor — Env-Scoped Naming
 
-## CHANGED Requirements
+## Purpose
+
+Define how dtwiz names Azure Monitor resources (Dynatrace connection, monitoring configuration, Azure App Registration) using a Dynatrace environment-scoped identifier, and how discovery uses prefix matching to handle both legacy fixed names and new env-scoped names across install, update, and uninstall.
+
+## Requirements
 
 ### Requirement: Env-scoped resource naming
 

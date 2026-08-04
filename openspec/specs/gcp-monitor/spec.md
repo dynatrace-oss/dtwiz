@@ -1,6 +1,10 @@
 # GCP Monitor — Env-Scoped Naming
 
-## CHANGED Requirements
+## Purpose
+
+Define how dtwiz names GCP Monitor resources (Dynatrace connection, monitoring configuration, GCP service account) using a Dynatrace environment-scoped identifier, and how discovery uses prefix matching to handle both legacy fixed names and new env-scoped names across install, update, and uninstall.
+
+## Requirements
 
 ### Requirement: Env-scoped resource naming
 
