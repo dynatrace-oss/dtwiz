@@ -94,6 +94,22 @@ Credentials resolved from: `--environment` flag → `DT_ENVIRONMENT` env var; `-
 
 - **Prefer dtctl/SDK over custom code:** Before implementing a Dynatrace API call or integration helper from scratch, check whether the Dynatrace SDK or `dtctl` already provides the capability. Prefer library calls over raw HTTP requests to avoid reimplementing auth, pagination, retries, and error handling.
 
+## External reference docs
+
+Use these docs as implementation references when changing related installers, specs, or tests. Prefer product docs over assumptions when behavior, required environment variables, package names, permissions, or setup flows are unclear. If a linked doc conflicts with existing code or specs, do not silently follow either one — update the spec or implementation deliberately and call out the behavior change.
+
+Dynatrace docs pages may fail through generic webpage extraction. To read them, use the integrated browser page reader first; if that is unavailable, fetch the raw HTML with `curl -L` and strip/search the content locally.
+
+| Area | Reference | Use for |
+|---|---|---|
+| Node.js OTel | https://docs.dynatrace.com/docs/ingest-from/opentelemetry/walkthroughs/nodejs | Node.js package setup, auto-instrumentation launch behavior, and Dynatrace OTLP environment variables |
+| Python OTel | https://docs.dynatrace.com/docs/ingest-from/opentelemetry/walkthroughs/python/python-auto | Python auto-instrumentation packages, launch conventions, and Dynatrace OTLP environment variables |
+| Java OTel | https://docs.dynatrace.com/docs/ingest-from/opentelemetry/walkthroughs/java/java-auto | Java agent setup, launch flags, and Dynatrace OTLP environment variables |
+| Kubernetes | https://docs.dynatrace.com/docs/ingest-from/setup-on-k8s/deployment/platform-observability | Dynatrace Operator platform-observability deployment flow and Kubernetes prerequisites |
+| AWS | https://docs.dynatrace.com/docs/ingest-from/amazon-web-services/create-an-aws-connection/aws-connection-api-cli | AWS connection setup, required permissions, and CLI/API behavior |
+| Azure | https://docs.dynatrace.com/docs/ingest-from/microsoft-azure-services/create-an-azure-connection/azure-connection-cli | Azure connection setup, required permissions, and CLI behavior |
+| GCP | https://docs.dynatrace.com/docs/ingest-from/google-cloud-platform/create-a-gcp-connection#deploy-in-gcp | GCP connection deployment, required permissions, and setup flow |
+
 ## CLI conventions
 
 - **Args validation:** All leaf commands must set `Args: cobra.NoArgs`. Parent commands with required subcommands use `Args: cobra.MinimumNArgs(1)`.
