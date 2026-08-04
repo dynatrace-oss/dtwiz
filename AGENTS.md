@@ -102,13 +102,13 @@ Dynatrace docs pages may fail through generic webpage extraction. To read them, 
 
 | Area | Reference | Use for |
 |---|---|---|
-| Node.js OTel | https://docs.dynatrace.com/docs/ingest-from/opentelemetry/walkthroughs/nodejs | Node.js package setup, auto-instrumentation launch behavior, and Dynatrace OTLP environment variables |
-| Python OTel | https://docs.dynatrace.com/docs/ingest-from/opentelemetry/walkthroughs/python/python-auto | Python auto-instrumentation packages, launch conventions, and Dynatrace OTLP environment variables |
-| Java OTel | https://docs.dynatrace.com/docs/ingest-from/opentelemetry/walkthroughs/java/java-auto | Java agent setup, launch flags, and Dynatrace OTLP environment variables |
-| Kubernetes | https://docs.dynatrace.com/docs/ingest-from/setup-on-k8s/deployment/platform-observability | Dynatrace Operator platform-observability deployment flow and Kubernetes prerequisites |
-| AWS | https://docs.dynatrace.com/docs/ingest-from/amazon-web-services/create-an-aws-connection/aws-connection-api-cli | AWS connection setup, required permissions, and CLI/API behavior |
-| Azure | https://docs.dynatrace.com/docs/ingest-from/microsoft-azure-services/create-an-azure-connection/azure-connection-cli | Azure connection setup, required permissions, and CLI behavior |
-| GCP | https://docs.dynatrace.com/docs/ingest-from/google-cloud-platform/create-a-gcp-connection#deploy-in-gcp | GCP connection deployment, required permissions, and setup flow |
+| Node.js OTel | <https://docs.dynatrace.com/docs/ingest-from/opentelemetry/walkthroughs/nodejs> | Node.js package setup, auto-instrumentation launch behavior, and Dynatrace OTLP environment variables |
+| Python OTel | <https://docs.dynatrace.com/docs/ingest-from/opentelemetry/walkthroughs/python/python-auto> | Python auto-instrumentation packages, launch conventions, and Dynatrace OTLP environment variables |
+| Java OTel | <https://docs.dynatrace.com/docs/ingest-from/opentelemetry/walkthroughs/java/java-auto> | Java agent setup, launch flags, and Dynatrace OTLP environment variables |
+| Kubernetes | <https://docs.dynatrace.com/docs/ingest-from/setup-on-k8s/deployment/platform-observability> | Dynatrace Operator platform-observability deployment flow and Kubernetes prerequisites |
+| AWS | <https://docs.dynatrace.com/docs/ingest-from/amazon-web-services/create-an-aws-connection/aws-connection-api-cli> | AWS connection setup, required permissions, and CLI/API behavior |
+| Azure | <https://docs.dynatrace.com/docs/ingest-from/microsoft-azure-services/create-an-azure-connection/azure-connection-cli> | Azure connection setup, required permissions, and CLI behavior |
+| GCP | <https://docs.dynatrace.com/docs/ingest-from/google-cloud-platform/create-a-gcp-connection#deploy-in-gcp> | GCP connection deployment, required permissions, and setup flow |
 
 ## CLI conventions
 
