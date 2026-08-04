@@ -61,7 +61,7 @@ Why over a standalone command: the routes are meaningless without the host-monit
 
 The matcher conditions are hardcoded constants. The pipeline itself is **not** identified by a constructed or assumed identifier; dtwiz lists every object in the signal's pipeline schema and picks the one owned by the OpenTelemetry Host Monitoring extension:
 
-```
+```text
 GET /platform/classic/environment-api/v2/settings/objects?schemaIds=builtin:openpipeline.<signal>.pipelines&scopes=environment&fields=objectId,scope,schemaId,schemaVersion,externalId,summary,value,modificationInfo
 ```
 
@@ -96,7 +96,7 @@ This was arrived at after two rejected approaches, both worth recording so they 
 1. **Filtering the Settings list by `externalIds=extension.opentelemetry-<signal>`.** This assumed the extension's `value.customId` string was also the Settings-object `externalId`. It isn't: the extension leaves `externalId` empty, so the filter always returned an empty list (`{"items":[],"totalCount":0,"pageSize":100}`) and the pipeline was reported as absent even when the extension was active and the pipeline existed.
 2. **Matching on `value.customId == "extension.opentelemetry-<signal>"` after listing unfiltered.** This correctly finds the pipeline (the customId is genuinely present), but then using that same customId string as the routing entry's `pipelineId` fails at write time. The exact request and response, captured live (tenant `mmm5278d`, metrics signal):
 
-   ```
+   ```text
    POST /platform/classic/environment-api/v2/settings/objects
    [{"schemaId":"builtin:openpipeline.metrics.routing","scope":"environment","value":{"routingEntries":[{"enabled":true,"pipelineType":"custom","pipelineId":"extension.opentelemetry-metrics","matcher":"...","description":"OpenTelemetry Host Monitoring"}]}}]
 
@@ -172,7 +172,7 @@ The route plan is built during the install preview phase (before the existing "P
 
 Every OpenPipeline call in this change (pipeline list, routing list, routing update, routing create) uses the same platform token as every other settings-object write in dtwiz. Live testing against tenant `mmm5278d` with an under-permissioned token produced:
 
-```
+```text
 GET /platform/classic/environment-api/v2/settings/objects?schemaIds=builtin:openpipeline.metrics.pipelines&scopes=environment&fields=...
 → 403 Forbidden
 {"error":{"code":403,"message":"Access denied"}}
@@ -189,7 +189,7 @@ GET /platform/classic/environment-api/v2/settings/objects?schemaIds=builtin:open
 
 dtwiz detects a 401/403 via the dtctl SDK's sentinel errors (`errors.Is(err, httpclient.ErrForbidden)` / `ErrUnauthorized`; `APIError.Unwrap()` already exposes these) and enriches the error with the schema/operation and the scope that normally applies, phrased as a starting point rather than a verdict, e.g.:
 
-```
+```text
 check metrics pipeline: list pipelines for builtin:openpipeline.metrics.pipelines: list settings objects for schema "builtin:openpipeline.metrics.pipelines": API error (403): Access denied (schema: builtin:openpipeline.metrics.pipelines, normally requires the "settings:objects:read" scope; if the token already has it, check whether the token's policy restricts that scope to a schema list that excludes this one)
 ```
 
