@@ -2,11 +2,14 @@ package otel
 
 import (
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/fatih/color"
 
@@ -648,6 +651,231 @@ func TestInstallOtelCollector_Experimental_Windows_ElevationNotice_NotElevated(t
 
 	if !strings.Contains(output, "Administrator") {
 		t.Errorf("expected Windows elevation notice (Administrator) when not elevated:\n%s", output)
+	}
+}
+
+// ── Extension activation integration tests ────────────────────────────────────
+
+// stubActivation replaces activateHostMonitoringExtensionFn for the duration of
+// the test and records whether it was called.
+func stubActivation(t *testing.T) *bool {
+	t.Helper()
+	called := false
+	orig := activateHostMonitoringExtensionFn
+	activateHostMonitoringExtensionFn = func(_, _ string) { called = true }
+	t.Cleanup(func() { activateHostMonitoringExtensionFn = orig })
+	return &called
+}
+
+// runInstallWithAutoConfirm calls InstallOtelCollectorWithProject in a temp dir
+// with dryRun=false and AutoConfirm=true. DQL polling is stubbed out so the
+// test completes immediately even when a collector binary is already installed.
+func runInstallWithAutoConfirm(t *testing.T) error {
+	t.Helper()
+	origAC := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = origAC })
+
+	// Stub out DQL polling to avoid a 2-minute wait when a collector binary
+	// is already present on the machine.
+	origWait := waitForLogInDynatraceFn
+	waitForLogInDynatraceFn = func(_, _, _ string, _ time.Duration) error { return nil }
+	t.Cleanup(func() { waitForLogInDynatraceFn = origWait })
+
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatalf("os.Chdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	// Suppress output.
+	r, w, _ := os.Pipe()
+	origStdout := os.Stdout
+	origColorOut := color.Output
+	os.Stdout = w
+	color.Output = w
+	t.Cleanup(func() {
+		os.Stdout = origStdout
+		color.Output = origColorOut
+		w.Close()
+		r.Close()
+	})
+
+	return InstallOtelCollectorWithProject("https://env.example.com", "tok", "", "", false)
+}
+
+// TestInstallOtelCollector_Experimental_CallsActivation verifies that enabling
+// the experimental flag causes the extension activation helper to be invoked.
+func TestInstallOtelCollector_Experimental_CallsActivation(t *testing.T) {
+	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
+	called := stubActivation(t)
+
+	_ = runInstallWithAutoConfirm(t)
+
+	if !*called {
+		t.Error("expected activateHostMonitoringExtensionFn to be called when experimental is enabled")
+	}
+}
+
+// TestInstallOtelCollector_NoExperimental_SkipsActivation verifies that without
+// the experimental flag the extension activation helper is never invoked.
+func TestInstallOtelCollector_NoExperimental_SkipsActivation(t *testing.T) {
+	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
+	t.Setenv("DTWIZ_EXPERIMENTAL", "")
+	called := stubActivation(t)
+
+	_ = runInstallWithAutoConfirm(t)
+
+	if *called {
+		t.Error("expected activateHostMonitoringExtensionFn NOT to be called when experimental is disabled")
+	}
+}
+
+// TestInstallOtelCollector_DryRun_SkipsActivation verifies that --dry-run
+// prevents the extension activation helper from being invoked.
+func TestInstallOtelCollector_DryRun_SkipsActivation(t *testing.T) {
+	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
+	called := stubActivation(t)
+
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatalf("os.Chdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	origAC := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = origAC })
+
+	_ = InstallOtelCollector("https://env.example.com", "tok", "", true /* dryRun */)
+
+	if *called {
+		t.Error("expected activateHostMonitoringExtensionFn NOT to be called on dry run")
+	}
+}
+
+// ── activateHostMonitoringExtension unit tests ────────────────────────────────
+
+const testOtelExtension = "com.dynatrace.extension.opentelemetry"
+
+// otelExtSrv builds a minimal httptest.Server that handles the three extension
+// API calls made by activateHostMonitoringExtension.
+//
+//   - getResp:      JSON body for GET /extensions/{name} (versions list). If empty,
+//     the server returns 404 to simulate "not installed".
+//   - installCode:  HTTP status for POST /extensions/{name} (hub install).
+//   - activateCode: HTTP status for POST /extensions/{name}/environment-configuration.
+func otelExtSrv(t *testing.T, getResp string, installCode, activateCode int) *httptest.Server {
+	t.Helper()
+	getCount := 0
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ext := "/platform/extensions/v2/extensions/" + testOtelExtension
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == ext:
+			getCount++
+			if getResp == "" {
+				// Simulate extension not found: SDK surfaces this as a plain error message.
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte(`{"error":{"message":"extension \"` + testOtelExtension + `\" not found"}}`))
+			} else {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(getResp))
+			}
+		case r.Method == http.MethodPost && r.URL.Path == ext:
+			w.WriteHeader(installCode)
+			_, _ = w.Write([]byte(`{"extensionName":"` + testOtelExtension + `","version":"3.1.1"}`))
+		case r.Method == http.MethodPost && r.URL.Path == ext+"/environment-configuration":
+			w.WriteHeader(activateCode)
+			if activateCode < 300 {
+				_, _ = w.Write([]byte(`{"version":"3.1.1"}`))
+			}
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		_ = getCount
+	}))
+}
+
+func captureActivationOutput(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, _ := os.Pipe()
+	oldStdout := os.Stdout
+	oldColorOut := color.Output
+	os.Stdout = w
+	color.Output = w
+	fn()
+	w.Close()
+	os.Stdout = oldStdout
+	color.Output = oldColorOut
+	out, _ := io.ReadAll(r)
+	return string(out)
+}
+
+func TestActivateHostMonitoringExtension_AlreadyInstalled_Activates(t *testing.T) {
+	getResp := `{"items":[{"version":"3.1.1","extensionName":"` + testOtelExtension + `","active":false}]}`
+	srv := otelExtSrv(t, getResp, http.StatusAccepted, http.StatusOK)
+	defer srv.Close()
+
+	out := captureActivationOutput(t, func() {
+		activateHostMonitoringExtension(srv.URL, "dt0s16.test")
+	})
+
+	if !strings.Contains(out, "✓") {
+		t.Errorf("expected success indicator in output, got: %s", out)
+	}
+	if strings.Contains(out, "Warning") {
+		t.Errorf("unexpected warning in output: %s", out)
+	}
+}
+
+func TestActivateHostMonitoringExtension_FreshInstall_InstallsThenActivates(t *testing.T) {
+	// First GET returns 404 (not installed); subsequent GETs return a version.
+	callCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ext := "/platform/extensions/v2/extensions/" + testOtelExtension
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == ext:
+			callCount++
+			if callCount == 1 {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte(`{"error":{"message":"extension \"` + testOtelExtension + `\" not found"}}`))
+			} else {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"items":[{"version":"3.1.1","extensionName":"` + testOtelExtension + `"}]}`))
+			}
+		case r.Method == http.MethodPost && r.URL.Path == ext:
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"extensionName":"` + testOtelExtension + `","version":"3.1.1"}`))
+		case r.Method == http.MethodPost && r.URL.Path == ext+"/environment-configuration":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"version":"3.1.1"}`))
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	out := captureActivationOutput(t, func() {
+		activateHostMonitoringExtension(srv.URL, "dt0s16.test")
+	})
+
+	if !strings.Contains(out, "✓") {
+		t.Errorf("expected success indicator in output, got: %s", out)
+	}
+}
+
+func TestActivateHostMonitoringExtension_ActivationFails_WarnsAndContinues(t *testing.T) {
+	getResp := `{"items":[{"version":"3.1.1","extensionName":"` + testOtelExtension + `"}]}`
+	srv := otelExtSrv(t, getResp, http.StatusAccepted, http.StatusInternalServerError)
+	defer srv.Close()
+
+	out := captureActivationOutput(t, func() {
+		activateHostMonitoringExtension(srv.URL, "dt0s16.test")
+	})
+
+	if !strings.Contains(out, "Warning") {
+		t.Errorf("expected warning in output when activation fails, got: %s", out)
 	}
 }
 
