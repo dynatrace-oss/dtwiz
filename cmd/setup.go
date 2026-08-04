@@ -112,7 +112,8 @@ var setupCmd = &cobra.Command{
 
 		if input == "u" {
 			fmt.Println()
-			return uninstallCmd.Help()
+			uninstallCmd.Help() //nolint:errcheck
+			return nil
 		}
 
 		if input == "d" {
