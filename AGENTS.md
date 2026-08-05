@@ -69,10 +69,10 @@ scripts/
 
 Two URL families — getting this wrong causes 404s or auth errors:
 
-| Family | Pattern | Auth | Use for |
-|---|---|---|---|
-| **Classic** (no `.apps.`) | `<env-id>.<domain>/api/...` | `Bearer <platform-token>` | `/api/v1`, `/api/v2`, OneAgent download, OTel ingest |
-| **Platform** (with `.apps.`) | `<env-id>.apps.<domain>/platform/...` | `Bearer <platform-token>` | DQL/Grail queries, Platform APIs |
+| Family                       | Pattern                               | Auth                      | Use for                                              |
+| ---------------------------- | ------------------------------------- | ------------------------- | ---------------------------------------------------- |
+| **Classic** (no `.apps.`)    | `<env-id>.<domain>/api/...`           | `Bearer <platform-token>` | `/api/v1`, `/api/v2`, OneAgent download, OTel ingest |
+| **Platform** (with `.apps.`) | `<env-id>.apps.<domain>/platform/...` | `Bearer <platform-token>` | DQL/Grail queries, Platform APIs                     |
 
 **URL conversion helpers in `pkg/installer/installer.go`:**
 
@@ -93,6 +93,22 @@ Credentials resolved from: `--environment` flag → `DT_ENVIRONMENT` env var; `-
 ## Key design rules
 
 - **Prefer dtctl/SDK over custom code:** Before implementing a Dynatrace API call or integration helper from scratch, check whether the Dynatrace SDK or `dtctl` already provides the capability. Prefer library calls over raw HTTP requests to avoid reimplementing auth, pagination, retries, and error handling.
+
+## External reference docs
+
+Use these docs as implementation references when changing related installers, specs, or tests. Prefer product docs over assumptions when behavior, required environment variables, package names, permissions, or setup flows are unclear. If a linked doc conflicts with existing code or specs, do not silently follow either one — update the spec or implementation deliberately and call out the behavior change.
+
+Dynatrace docs pages may fail through generic webpage extraction. To read them, use the integrated browser page reader first; if that is unavailable, fetch the raw HTML with `curl -L` and strip/search the content locally.
+
+| Area         | Reference                                                                                                              | Use for                                                                                               |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Node.js OTel | <https://docs.dynatrace.com/docs/ingest-from/opentelemetry/walkthroughs/nodejs>                                        | Node.js package setup, auto-instrumentation launch behavior, and Dynatrace OTLP environment variables |
+| Python OTel  | <https://docs.dynatrace.com/docs/ingest-from/opentelemetry/walkthroughs/python/python-auto>                            | Python auto-instrumentation packages, launch conventions, and Dynatrace OTLP environment variables    |
+| Java OTel    | <https://docs.dynatrace.com/docs/ingest-from/opentelemetry/walkthroughs/java/java-auto>                                | Java agent setup, launch flags, and Dynatrace OTLP environment variables                              |
+| Kubernetes   | <https://docs.dynatrace.com/docs/ingest-from/setup-on-k8s/deployment/platform-observability>                           | Dynatrace Operator platform-observability deployment flow and Kubernetes prerequisites                |
+| AWS          | <https://docs.dynatrace.com/docs/ingest-from/amazon-web-services/create-an-aws-connection/aws-connection-api-cli>      | AWS connection setup, required permissions, and CLI/API behavior                                      |
+| Azure        | <https://docs.dynatrace.com/docs/ingest-from/microsoft-azure-services/create-an-azure-connection/azure-connection-cli> | Azure connection setup, required permissions, and CLI behavior                                        |
+| GCP          | <https://docs.dynatrace.com/docs/ingest-from/google-cloud-platform/create-a-gcp-connection#deploy-in-gcp>              | GCP connection deployment, required permissions, and setup flow                                       |
 
 ## CLI conventions
 
@@ -180,11 +196,11 @@ if runtime.GOOS != "windows" {
 
 When the user talks about "specs", "a spec", "writing a spec", or "a change" they mean the **openspec** workflow under `openspec/`. Use the right skill — don't improvise:
 
-| User intent | Skill to invoke |
-|---|---|
-| Explore / think through an idea | `openspec-explore` → `/opsx:explore` |
-| Propose a new change (design + tasks) | `openspec-propose` → `/opsx:propose` |
-| Implement tasks from an existing change | `openspec-apply-change` → `/opsx:apply` |
+| User intent                             | Skill to invoke                             |
+| --------------------------------------- | ------------------------------------------- |
+| Explore / think through an idea         | `openspec-explore` → `/opsx:explore`        |
+| Propose a new change (design + tasks)   | `openspec-propose` → `/opsx:propose`        |
+| Implement tasks from an existing change | `openspec-apply-change` → `/opsx:apply`     |
 | Finalize and archive a completed change | `openspec-archive-change` → `/opsx:archive` |
 
 **Key paths:**

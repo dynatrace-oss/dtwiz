@@ -39,7 +39,8 @@ rules:
     - Include rollback plan for risky or architecture-level changes
     - Reference relevant feature flag names when new behavior is gated
   specs:
-    - Use Given/When/Then format for scenarios
+    - Use GIVEN/WHEN/THEN format for every scenario (GIVEN establishes state, WHEN describes the action, THEN states the observable outcome)
+    - Describe WHAT the system does, not HOW — no method names, API endpoints, internal types, or implementation details
     - Reference existing patterns before introducing new ones
     - Document feature flag dependencies directly in scenarios
   tasks:
