@@ -1,13 +1,13 @@
 # OneAgent Detection: Container False Positive Fix
 
-## CHANGED Requirements
+## ADDED Requirements
 
 ### Requirement: Trust `systemctl` only when systemd is the running init
 
-`detectOneAgent()` must only consult `systemctl is-active --quiet oneagent`
+`detectOneAgent()` SHALL consult `systemctl is-active --quiet oneagent` only
 when `/run/systemd/system` exists as a directory (`sd_booted(3)` convention).
 On non-systemd hosts — where `systemctl` may be a compatibility shim that exits
-0 for any invocation — detection must rely solely on the `oneagentctl` fallback.
+0 for any invocation — detection SHALL rely solely on the `oneagentctl` fallback.
 
 #### Scenario: Container with systemctl shim, no OneAgent
 
@@ -44,7 +44,7 @@ On non-systemd hosts — where `systemctl` may be a compatibility shim that exit
 ### Requirement: Windows detection is unaffected
 
 The Windows implementation (`detect_oneagent_windows.go`, separate build tag)
-does not use systemd and must keep its existing behavior.
+does not use systemd and SHALL keep its existing behavior.
 
 #### Scenario: Windows host
 
