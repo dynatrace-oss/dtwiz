@@ -269,6 +269,51 @@ func (e *ExtensionClient) IsExtensionActive(extensionName string) (bool, error) 
 	return false, nil
 }
 
+// ConstraintViolation is a single rejected-field detail from the Dynatrace Settings API.
+// httpclient.CheckResponse parses only the top-level "Constraints violated." message and
+// discards the nested constraintViolations array, so callers that need field-level detail
+// must parse the raw response body with ParseConstraintViolations.
+type ConstraintViolation struct {
+	Path    string `json:"path"`
+	Message string `json:"message"`
+}
+
+// ParseConstraintViolations extracts the constraintViolations array from a raw
+// Dynatrace Settings API error response body.
+func ParseConstraintViolations(body []byte) []ConstraintViolation {
+	var envelope struct {
+		Error struct {
+			ConstraintViolations []ConstraintViolation `json:"constraintViolations"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return nil
+	}
+	return envelope.Error.ConstraintViolations
+}
+
+// FormatConstraintViolations renders violations as "path: message; path: message".
+func FormatConstraintViolations(violations []ConstraintViolation) string {
+	details := make([]string, len(violations))
+	for i, v := range violations {
+		details[i] = fmt.Sprintf("%s: %s", v.Path, v.Message)
+	}
+	return strings.Join(details, "; ")
+}
+
+// WithScopeHint annotates a Settings API error with the platform-token scope that is
+// likely missing, when the failure is a 401 or 403. Without this, the API returns only
+// a bare "Access denied" with no indication of which scope is required.
+func WithScopeHint(err error, scope string) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, httpclient.ErrForbidden) || errors.Is(err, httpclient.ErrUnauthorized) {
+		return fmt.Errorf("%w (platform token may be missing the %q scope)", err, scope)
+	}
+	return err
+}
+
 // LatestExtensionVersion returns the highest semver version installed for extensionName.
 func (e *ExtensionClient) LatestExtensionVersion(extensionName string) (string, error) {
 	versionList, err := e.Extension.Get(context.Background(), extensionName)

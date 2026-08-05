@@ -2,6 +2,7 @@ package otel
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -434,6 +435,27 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		plan.PrintPlanSteps()
 	}
 
+	// Build and show the OpenPipeline route plan as part of the install preview.
+	// Routes are applied after the collector install without a separate prompt.
+	var grailC grailRouteClient
+	var grailPlans []grailSignalPlan
+	experimentalEnabled := featureflags.IsEnabled(featureflags.Experimental)
+	if !experimentalEnabled {
+		logger.Debug("experimental feature flag disabled, skipping OpenPipeline route plan")
+	} else if platformToken == "" {
+		logger.Debug("platform token not provided, skipping OpenPipeline route plan")
+	} else {
+		if c, plans, err := buildGrailRoutePlans(envURL, platformToken); err != nil {
+			fmt.Println()
+			display.PrintWarning("OpenPipeline routes", err)
+		} else {
+			grailC = c
+			grailPlans = plans
+			fmt.Println()
+			printGrailPlan(plans)
+		}
+	}
+
 	fmt.Println()
 
 	if dryRun {
@@ -465,6 +487,17 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		if err := plan.Execute(); err != nil {
 			return err
 		}
+	}
+
+	// Apply the pre-built route plans. Results are printed per-signal so the user
+	// can see what happened; failures are warnings that do not fail the install.
+	if grailC != nil {
+		logger.Debug("applying Grail route plans", "count", len(grailPlans))
+		applyErrs := make([]error, len(grailPlans))
+		for i, p := range grailPlans {
+			applyErrs[i] = applyGrailPlan(context.Background(), grailC, p)
+		}
+		printGrailApplyResults(grailPlans, applyErrs)
 	}
 
 	return nil

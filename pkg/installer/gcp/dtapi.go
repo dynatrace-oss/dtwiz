@@ -2,10 +2,8 @@ package gcp
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/dynatrace-oss/dtctl/sdk/api/extension"
 	"github.com/dynatrace-oss/dtctl/sdk/api/settings"
@@ -14,36 +12,6 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
-
-// constraintViolation mirrors the detail Dynatrace includes in a rejected settings
-// write. httpclient.CheckResponse successfully parses this error shape and keeps only
-// the generic top-level "Constraints violated." message, discarding exactly the part
-// that says what's actually wrong (e.g. "Unknown property" at a given path) — so it's
-// parsed here from the raw response body instead.
-type constraintViolation struct {
-	Path    string `json:"path"`
-	Message string `json:"message"`
-}
-
-func parseConstraintViolations(body []byte) []constraintViolation {
-	var envelope struct {
-		Error struct {
-			ConstraintViolations []constraintViolation `json:"constraintViolations"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(body, &envelope); err != nil {
-		return nil
-	}
-	return envelope.Error.ConstraintViolations
-}
-
-func formatConstraintViolations(violations []constraintViolation) string {
-	details := make([]string, len(violations))
-	for i, v := range violations {
-		details[i] = fmt.Sprintf("%s: %s", v.Path, v.Message)
-	}
-	return strings.Join(details, "; ")
-}
 
 const (
 	// Path constants kept for test assertions.
@@ -199,9 +167,9 @@ func (d *sdkDTClient) updateConnection(objectID, name, serviceAccountEmail strin
 		return fmt.Errorf("update settings object %q: %w", objectID, err)
 	}
 	if checkErr := httpclient.CheckResponse(resp); checkErr != nil {
-		if violations := parseConstraintViolations(resp.Body()); len(violations) > 0 {
-			logger.Debug("connection update rejected", "objectId", objectID, "violations", formatConstraintViolations(violations))
-			return fmt.Errorf("update settings object %q: %w (%s)", objectID, checkErr, formatConstraintViolations(violations))
+		if violations := installer.ParseConstraintViolations(resp.Body()); len(violations) > 0 {
+			logger.Debug("connection update rejected", "objectId", objectID, "violations", installer.FormatConstraintViolations(violations))
+			return fmt.Errorf("update settings object %q: %w (%s)", objectID, checkErr, installer.FormatConstraintViolations(violations))
 		}
 		return fmt.Errorf("update settings object %q: %w", objectID, checkErr)
 	}
