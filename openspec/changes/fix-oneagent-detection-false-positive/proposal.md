@@ -14,7 +14,7 @@ does not exist.
 
 Verified reproduction (container, no OneAgent installed):
 
-```
+```text
 $ systemctl is-active --quiet oneagent; echo "exit=$?"
 "systemd" is not running in this container due to its overhead. ...
 exit=0
