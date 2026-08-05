@@ -40,8 +40,12 @@ fi
 # ── lint ──────────────────────────────────────────────────────────────────────
 printf 'Running make lint ...\n' >&2
 if ! make lint >&2; then
-  printf '\033[31mPush rejected: lint failed. Fix the issues above and try again.\033[0m\n' >&2
-  exit 1
+  printf '\033[33mLint failed — clearing cache and retrying ...\033[0m\n' >&2
+  golangci-lint cache clean >&2
+  if ! make lint >&2; then
+    printf '\033[31mPush rejected: lint failed. Fix the issues above and try again.\033[0m\n' >&2
+    exit 1
+  fi
 fi
 
 printf '\033[32m✓ Lint passed\033[0m\n' >&2
