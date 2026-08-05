@@ -309,8 +309,8 @@ func printGrailApplyResults(plans []grailSignalPlan, errs []error) {
 		var msg string
 		var colorFn = display.ColorDefault
 		if i < len(errs) && errs[i] != nil {
-			msg = fmt.Sprintf("failed — %v", errs[i])
-			colorFn = display.ColorError
+			msg = fmt.Sprintf("warning — %v", errs[i])
+			colorFn = display.ColorWarning
 		} else {
 			switch p.action {
 			case grailActionCreate:

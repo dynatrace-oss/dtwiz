@@ -100,7 +100,7 @@ func happyFakeClient() *fakeGrailClient {
 // suppressOutput redirects stdout and color.Output to /dev/null for the test.
 func suppressOutput(t *testing.T) {
 	t.Helper()
-	devNull, err := os.Open(os.DevNull)
+	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
 	if err != nil {
 		t.Fatalf("open /dev/null: %v", err)
 	}
