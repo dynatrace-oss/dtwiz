@@ -23,4 +23,4 @@
 - [x] 4.1 Run `make build` and confirm no compile errors
 - [x] 4.2 Run `make test` and confirm all tests pass
 - [x] 4.3 Run `make lint` and confirm no new lint issues
-- [ ] 4.4 Manual verification: run `dtwiz install otel --experimental` against a test tenant and confirm the extension appears as active in the Dynatrace Hub after install completes
+- [x] 4.4 Manual verification: run `dtwiz install otel --experimental` against a test tenant and confirm the extension appears as active in the Dynatrace Hub after install completes
