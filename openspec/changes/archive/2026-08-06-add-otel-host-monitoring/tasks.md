@@ -43,5 +43,3 @@
 
 - [x] 6.1 Update `CHANGELOG.md` `[Unreleased]` with the host monitoring addition, noting it ships behind `--experimental`.
 - [x] 6.2 Run `make test` and `make lint`; fix any new issues.
-- [ ] 6.3 Manually verify (or dry-run) `install otel --experimental` on Linux and one non-Linux platform to confirm platform-aware config and preview output, and separately verify `install otel` without the flag is unchanged from before this change.
-- [ ] 6.4 Once tasks 0–6 are complete and verified, remove the `--experimental` gate (2.4) so host monitoring is unconditionally enabled, matching the zero-config goal, and update this task list, design.md, and proposal.md accordingly.
