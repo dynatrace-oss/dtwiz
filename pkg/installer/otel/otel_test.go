@@ -667,8 +667,8 @@ func stubActivation(t *testing.T) *bool {
 	return &called
 }
 
-// runInstallWithAutoConfirm calls InstallOtelCollectorWithProject in a temp dir
-// with dryRun=false and AutoConfirm=true. DQL polling is stubbed out so the
+// runInstallWithAutoConfirm calls InstallOtelCollectorWithProject with
+// dryRun=false and AutoConfirm=true. DQL polling is stubbed out so the
 // test completes immediately even when a collector binary is already installed.
 func runInstallWithAutoConfirm(t *testing.T) error {
 	t.Helper()
@@ -682,23 +682,21 @@ func runInstallWithAutoConfirm(t *testing.T) error {
 	waitForLogInDynatraceFn = func(_, _, _ string, _ time.Duration) error { return nil }
 	t.Cleanup(func() { waitForLogInDynatraceFn = origWait })
 
-	origDir, _ := os.Getwd()
-	if err := os.Chdir(t.TempDir()); err != nil {
-		t.Fatalf("os.Chdir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(origDir) })
-
 	// Suppress output.
-	r, w, _ := os.Pipe()
+	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatalf("open %s: %v", os.DevNull, err)
+	}
+
 	origStdout := os.Stdout
 	origColorOut := color.Output
-	os.Stdout = w
-	color.Output = w
+	os.Stdout = devNull
+	color.Output = devNull
+
 	t.Cleanup(func() {
 		os.Stdout = origStdout
 		color.Output = origColorOut
-		w.Close()
-		r.Close()
+		_ = devNull.Close()
 	})
 
 	return InstallOtelCollectorWithProject("https://env.example.com", "tok", "", "", false)
@@ -799,16 +797,34 @@ func otelExtSrv(t *testing.T, getResp string, installCode, activateCode int) *ht
 
 func captureActivationOutput(t *testing.T, fn func()) string {
 	t.Helper()
-	r, w, _ := os.Pipe()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+
 	oldStdout := os.Stdout
 	oldColorOut := color.Output
 	os.Stdout = w
 	color.Output = w
+	defer func() {
+		os.Stdout = oldStdout
+		color.Output = oldColorOut
+		if w != nil {
+			_ = w.Close()
+		}
+		if r != nil {
+			_ = r.Close()
+		}
+	}()
+
 	fn()
-	w.Close()
-	os.Stdout = oldStdout
-	color.Output = oldColorOut
+
+	_ = w.Close()
+	w = nil
 	out, _ := io.ReadAll(r)
+	_ = r.Close()
+	r = nil
+
 	return string(out)
 }
 
