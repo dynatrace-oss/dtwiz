@@ -380,6 +380,9 @@ func UpdateOtelConfigInteractive(envURL, token, platformTok string, dryRun bool)
 		if err != nil {
 			return err // includes installer.ErrInstallCancelled
 		}
+		if selected != nil && !selected.isDynatrace {
+			return UpdateNonDynatraceCollector(envURL, token, platformTok, *selected, dryRun)
+		}
 		if selected != nil {
 			if selected.configPath != "" {
 				configPath = selected.configPath
