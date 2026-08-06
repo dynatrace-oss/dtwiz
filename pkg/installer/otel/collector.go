@@ -401,6 +401,9 @@ func sendOtelVerificationLog(body string) error {
 	return fmt.Errorf("sending OTLP log: collector not ready after %d attempts", maxAttempts)
 }
 
+// waitForLogInDynatraceFn is overridable in tests to avoid real DQL polling.
+var waitForLogInDynatraceFn = waitForLogInDynatrace
+
 // waitForLogInDynatrace queries the Dynatrace Grail DQL API directly until a
 // log record containing searchTerm appears, or until the timeout elapses.
 //
@@ -577,7 +580,7 @@ func verifyOtelInstall(envURL, platformToken, apiToken string, crashed <-chan er
 
 	fmt.Printf("  Log sent. Waiting for it to appear in Dynatrace")
 
-	if err := waitForLogInDynatrace(envURL, dqlToken, uniqueID, 2*time.Minute); err != nil {
+	if err := waitForLogInDynatraceFn(envURL, dqlToken, uniqueID, 2*time.Minute); err != nil {
 		return err
 	}
 

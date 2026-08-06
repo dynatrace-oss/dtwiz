@@ -20,6 +20,41 @@ import (
 // isElevatedFn reports whether the process has elevated privileges. Overridable in tests.
 var isElevatedFn = installer.IsElevated
 
+const otelHostMonitoringExtension = "com.dynatrace.extension.opentelemetry"
+
+// activateHostMonitoringExtensionFn is overridable in tests.
+var activateHostMonitoringExtensionFn = activateHostMonitoringExtension
+
+// activateHostMonitoringExtension ensures the OTel Host Monitoring extension is
+// installed from the Dynatrace Hub and its environment configuration is activated.
+// All errors are advisory: a failure logs a warning and returns without aborting the install.
+func activateHostMonitoringExtension(envURL, platformToken string) {
+	ec, err := installer.NewExtensionClient(envURL, platformToken)
+	if err != nil {
+		logger.Debug("failed to create extension client for host monitoring activation", "error", err)
+		fmt.Println("  Warning: could not connect to extensions API; host entity creation may not be available.")
+		return
+	}
+	_, err = ec.EnsureInstalled(otelHostMonitoringExtension)
+	if err != nil {
+		logger.Debug("failed to ensure OTel host monitoring extension installed", "error", err)
+		fmt.Println("  Warning: could not install OTel Host Monitoring extension; host entity creation may not be available.")
+		return
+	}
+	version, err := ec.LatestExtensionVersion(otelHostMonitoringExtension)
+	if err != nil {
+		logger.Debug("failed to get OTel host monitoring extension version", "error", err)
+		fmt.Println("  Warning: could not determine OTel Host Monitoring extension version; host entity creation may not be available.")
+		return
+	}
+	if err := ec.ActivateExtension(otelHostMonitoringExtension, version); err != nil {
+		logger.Debug("failed to activate OTel host monitoring extension", "error", err)
+		fmt.Println("  Warning: could not activate OTel Host Monitoring extension; host entity creation may not be available.")
+		return
+	}
+	display.ColorOK.Println("  ✓ OTel Host Monitoring extension active")
+}
+
 type InstrumentationPlan interface {
 	Runtime() string
 	PrintPlanSteps()
@@ -415,6 +450,11 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		return installer.ErrInstallCancelled
 	}
 	fmt.Println()
+
+	// Extension activation only runs after the user confirms (dryRun exits above).
+	if featureflags.IsEnabled(featureflags.Experimental) {
+		activateHostMonitoringExtensionFn(envURL, platformToken)
+	}
 
 	if err := cp.execute(envURL, platformToken, plan != nil); err != nil {
 		return err

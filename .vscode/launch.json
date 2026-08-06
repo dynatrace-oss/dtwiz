@@ -46,6 +46,17 @@
       "console": "integratedTerminal"
     },
     {
+      "name": "dtwiz install otel (experimental)",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "args": ["install", "otel", "--experimental"],
+      "envFile": "${workspaceFolder}/.env",
+      "env": {},
+      "console": "integratedTerminal"
+    },
+    {
       "name": "dtwiz install otel (dry-run)",
       "type": "go",
       "request": "launch",

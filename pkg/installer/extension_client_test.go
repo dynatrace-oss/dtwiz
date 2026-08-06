@@ -43,6 +43,51 @@ func TestCmpSemver(t *testing.T) {
 	}
 }
 
+// ─── ActivateExtension ──────────────────────────────────────────────────────
+
+func TestExtensionClientActivateExtension_HappyPath(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %q, want POST", r.Method)
+		}
+		wantPath := "/platform/extensions/v2/extensions/" + testExtensionName + "/environment-configuration"
+		if r.URL.Path != wantPath {
+			t.Errorf("path = %q, want %q", r.URL.Path, wantPath)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"version":"1.2.3"}`))
+	}))
+	defer srv.Close()
+
+	if err := newTestExtensionClient(t, srv.URL).ActivateExtension(testExtensionName, "1.2.3"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestExtensionClientActivateExtension_ConflictIsIdempotent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"error":{"message":"version already active"}}`))
+	}))
+	defer srv.Close()
+
+	if err := newTestExtensionClient(t, srv.URL).ActivateExtension(testExtensionName, "1.2.3"); err != nil {
+		t.Errorf("409 Conflict must be treated as success, got: %v", err)
+	}
+}
+
+func TestExtensionClientActivateExtension_APIErrorPropagates(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":{"message":"insufficient permissions"}}`))
+	}))
+	defer srv.Close()
+
+	if err := newTestExtensionClient(t, srv.URL).ActivateExtension(testExtensionName, "1.2.3"); err == nil {
+		t.Fatal("expected error for 403, got nil")
+	}
+}
+
 // ─── DeleteConnection ────────────────────────────────────────────────────────
 
 func TestExtensionClientDeleteConnection_HappyPath(t *testing.T) {

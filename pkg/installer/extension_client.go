@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -105,6 +106,28 @@ func (e *ExtensionClient) InstallExtension(extensionName, version string) error 
 		return fmt.Errorf("install extension %s@%s: %w", extensionName, version, err)
 	}
 	logger.Debug("extension installed", "extension", installed.ExtensionName, "version", installed.Version)
+	return nil
+}
+
+// ActivateExtension sets extensionName@version as the active environment configuration.
+// HTTP 409 (already active) is treated as success — the call is idempotent.
+func (e *ExtensionClient) ActivateExtension(extensionName, version string) error {
+	logger.Debug("activating extension", "extension", extensionName, "version", version)
+	resp, err := e.C.HTTP().R().SetContext(context.Background()).
+		SetBody(map[string]string{"version": version}).
+		Post(fmt.Sprintf("/platform/extensions/v2/extensions/%s/environment-configuration", url.PathEscape(extensionName)))
+	if err != nil {
+		return fmt.Errorf("activate extension %s@%s: %w", extensionName, version, err)
+	}
+	if err := httpclient.CheckResponse(resp); err != nil {
+		var apiErr *httpclient.APIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusConflict {
+			logger.Debug("extension environment configuration already active", "extension", extensionName, "version", version)
+			return nil
+		}
+		return fmt.Errorf("activate extension %s@%s: %w", extensionName, version, err)
+	}
+	logger.Debug("extension activated", "extension", extensionName, "version", version)
 	return nil
 }
 
