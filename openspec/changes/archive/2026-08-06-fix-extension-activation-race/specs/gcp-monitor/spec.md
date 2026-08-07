@@ -14,9 +14,9 @@ It polls every 5 s for up to 60 s and shows progress to the user.
 - **WHEN** `dtwiz install gcp` runs
 - **THEN** step 6 (update connection) completes
 - **AND** `installExtension()` installs the extension and returns `freshlyInstalled = true`
-- **AND** the install flow prints `"Extension freshly installed -- waiting for it to become active..."`
+- **AND** the install flow prints `"Extension freshly installed — waiting for it to become active..."`
 - **AND** the flow polls `isExtensionActive()` until `Active == true`
-- **AND** `"Extension is active"` is printed
+- **AND** `"✓ Extension is active"` is printed
 - **AND** step 7 (create monitoring configuration) succeeds
 
 #### Scenario: Extension already installed, no wait needed
