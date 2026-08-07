@@ -236,7 +236,7 @@ func TestUninstallOtelCollector_IncludesNodeDirs(t *testing.T) {
 	helpers.SetTestWorkingDir(t, dir)
 
 	output := helpers.CaptureStdout(t, func() {
-		_ = UninstallOtelCollector(true) // dry-run
+		_ = UninstallOtelCollector("https://env.example.com", "dt0s16.test", true) // dry-run
 	})
 
 	// The ".otel/ directories that will be removed:" line is printed via fmt.Println
@@ -344,7 +344,7 @@ func TestUninstallOtelCollector_JavaDryRun_NothingPresent(t *testing.T) {
 	runtimeCleaners = []RuntimeCleaner{}
 
 	output := stripANSI(helpers.CaptureStdout(t, func() {
-		_ = UninstallOtelCollector(true)
+		_ = UninstallOtelCollector("https://env.example.com", "dt0s16.test", true)
 	}))
 
 	if strings.Contains(output, "Java") {
@@ -380,7 +380,7 @@ func TestUninstallOtelCollector_JavaDryRun_AgentDirExists(t *testing.T) {
 	runtimeCleaners = []RuntimeCleaner{}
 
 	output := stripANSI(helpers.CaptureStdout(t, func() {
-		_ = UninstallOtelCollector(true)
+		_ = UninstallOtelCollector("https://env.example.com", "dt0s16.test", true)
 	}))
 
 	if !strings.Contains(output, "Java agent directory") {

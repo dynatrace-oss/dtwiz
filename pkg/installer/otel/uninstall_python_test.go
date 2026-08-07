@@ -63,7 +63,7 @@ func TestUninstallOtelCollector_PythonSectionAlwaysPresent(t *testing.T) {
 	runtimeCleaners = []RuntimeCleaner{testCleaner}
 
 	output := stripANSI(helpers.CaptureStdout(t, func() {
-		_ = UninstallOtelCollector(true)
+		_ = UninstallOtelCollector("https://env.example.com", "dt0s16.test", true)
 	}))
 
 	if strings.Contains(output, "Instrumented Python processes that will be stopped:") {
@@ -75,7 +75,7 @@ func TestUninstallOtelCollector_PythonSectionAlwaysPresent(t *testing.T) {
 	}
 
 	output = stripANSI(helpers.CaptureStdout(t, func() {
-		_ = UninstallOtelCollector(true)
+		_ = UninstallOtelCollector("https://env.example.com", "dt0s16.test", true)
 	}))
 
 	if !strings.Contains(output, "Instrumented Python processes that will be stopped:") {
@@ -95,7 +95,7 @@ func TestUninstallOtelCollector_PythonPIDsInOutput(t *testing.T) {
 	}}
 
 	output := stripANSI(helpers.CaptureStdout(t, func() {
-		_ = UninstallOtelCollector(true)
+		_ = UninstallOtelCollector("https://env.example.com", "dt0s16.test", true)
 	}))
 
 	if !strings.Contains(output, "Instrumented Python processes that will be stopped:") {
@@ -112,7 +112,7 @@ func TestUninstallOtelCollector_ScanErrorHandling(t *testing.T) {
 	runtimeCleaners = []RuntimeCleaner{&testRuntimeCleaner{label: "Python", processes: nil}}
 
 	output := stripANSI(helpers.CaptureStdout(t, func() {
-		_ = UninstallOtelCollector(true)
+		_ = UninstallOtelCollector("https://env.example.com", "dt0s16.test", true)
 	}))
 
 	if strings.Contains(output, "Instrumented Python processes") {

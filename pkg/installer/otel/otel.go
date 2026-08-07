@@ -27,6 +27,9 @@ const otelHostMonitoringExtension = "com.dynatrace.extension.opentelemetry"
 // activateHostMonitoringExtensionFn is overridable in tests.
 var activateHostMonitoringExtensionFn = activateHostMonitoringExtension
 
+// deactivateHostMonitoringExtensionFn is overridable in tests.
+var deactivateHostMonitoringExtensionFn = deactivateHostMonitoringExtension
+
 // activateHostMonitoringExtension ensures the OTel Host Monitoring extension is
 // installed from the Dynatrace Hub and its environment configuration is activated.
 // All errors are advisory: a failure logs a warning and returns without aborting the install.
@@ -92,6 +95,39 @@ func printExtensionActivationPreview(status installer.ExtensionStatus) {
 		colorFn = display.ColorOK
 	}
 	display.PrintStatusLine("Extension", msg, colorFn)
+}
+
+// deactivateHostMonitoringExtension removes the OTel Host Monitoring extension version from
+// the tenant. All errors are advisory: a failure logs a warning and returns without aborting
+// the uninstall.
+func deactivateHostMonitoringExtension(envURL, platformToken string) {
+	ec, err := installer.NewExtensionClient(envURL, platformToken)
+	if err != nil {
+		logger.Debug("failed to create extension client for host monitoring deactivation", "error", err)
+		fmt.Println("  Warning: could not connect to extensions API; OTel Host Monitoring extension was not removed.")
+		return
+	}
+	if err := ec.DeactivateExtension(otelHostMonitoringExtension); err != nil {
+		logger.Debug("failed to deactivate OTel host monitoring extension environment configuration", "error", err)
+		fmt.Println("  Warning: could not deactivate OTel Host Monitoring extension; extension was not removed.")
+		return
+	}
+	version, err := ec.LatestExtensionVersion(otelHostMonitoringExtension)
+	if err != nil {
+		if installer.IsExtensionNotFound(err, otelHostMonitoringExtension) {
+			logger.Debug("OTel host monitoring extension not installed; nothing to remove")
+			return
+		}
+		logger.Debug("failed to get OTel host monitoring extension version", "error", err)
+		fmt.Println("  Warning: could not determine OTel Host Monitoring extension version; extension was not removed.")
+		return
+	}
+	if err := ec.DeleteExtensionVersion(otelHostMonitoringExtension, version); err != nil {
+		logger.Debug("failed to delete OTel host monitoring extension version", "error", err)
+		fmt.Println("  Warning: could not remove OTel Host Monitoring extension; please remove it manually.")
+		return
+	}
+	display.ColorOK.Println("  ✓ OTel Host Monitoring extension removed")
 }
 
 type InstrumentationPlan interface {

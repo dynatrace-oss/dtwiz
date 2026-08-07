@@ -75,11 +75,11 @@ func TestInstallDemo(t *testing.T) {
 	t.Run("installs demo and delivers traces to tenant", func(t *testing.T) {
 		// Stop any lingering OTel processes from previous runs before starting
 		// fresh (avoids "Address already in use" on schnitzel's hardcoded ports).
-		_ = otel.UninstallOtelCollector(false)
+		_ = otel.UninstallOtelCollector(env.EnvURL, env.PlatformToken, false)
 		// Register the same cleanup so the processes started by THIS run are
 		// stopped after the test, keeping ports free for the next run.
 		t.Cleanup(func() {
-			_ = otel.UninstallOtelCollector(false)
+			_ = otel.UninstallOtelCollector(env.EnvURL, env.PlatformToken, false)
 		})
 		if err := otel.InstallDemo(env.EnvURL, env.ClassicToken, env.PlatformToken, false); err != nil {
 			t.Fatalf("InstallDemo: %v", err)

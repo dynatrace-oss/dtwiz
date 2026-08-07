@@ -1,6 +1,7 @@
 package otel
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
+	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
@@ -272,6 +274,49 @@ func printCollectorUninstallPreview(processes []otelProcessInfo, dirs []string) 
 	}
 }
 
+type uninstallDecision int
+
+const (
+	uninstallAll           uninstallDecision = iota // remove collector and extension
+	uninstallCollectorOnly                          // remove collector, keep extension
+	uninstallCancelled
+)
+
+// promptUninstallDecisionFn is overridable in tests.
+var promptUninstallDecisionFn = promptUninstallDecision
+
+func promptUninstallDecision() (uninstallDecision, error) {
+	if installer.AutoConfirm {
+		return uninstallAll, nil
+	}
+	fmt.Println()
+	display.ColorMessage.Println("  How do you want to proceed?")
+	fmt.Println()
+	fmt.Printf("    [1]  ")
+	display.ColorError.Printf("Delete all")
+	display.ColorMuted.Println("     — remove collector and OTel Host Monitoring extension (default)")
+	fmt.Printf("    [2]  ")
+	display.ColorDefault.Printf("Only collector")
+	display.ColorMuted.Println(" — remove collector, keep extension on tenant")
+	fmt.Printf("    [3]  ")
+	display.ColorMuted.Println("Cancel")
+	fmt.Println()
+	display.ColorMessage.Print("  Selection [1]: ")
+
+	answer, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	if err != nil {
+		return uninstallCancelled, fmt.Errorf("reading selection: %w", err)
+	}
+	switch strings.TrimSpace(answer) {
+	case "", "1":
+		return uninstallAll, nil
+	case "2":
+		return uninstallCollectorOnly, nil
+	default:
+		return uninstallCancelled, nil
+	}
+}
+
 // collectorToProcessInfo converts a collectorInstance to the otelProcessInfo type
 // used by the kill/remove helpers.
 func collectorToProcessInfo(c collectorInstance) otelProcessInfo {
@@ -292,7 +337,9 @@ func collectorToProcessInfo(c collectorInstance) otelProcessInfo {
 // lets the user select which to remove, then kills the selected process(es) and
 // deletes their installation directories.  It also removes dtwiz-installed
 // runtime instrumentation artifacts (Node.js, Python, Java).
-func UninstallOtelCollector(dryRun bool) error {
+// When the experimental flag is enabled, it also removes the OTel Host Monitoring
+// extension from the tenant after local cleanup completes.
+func UninstallOtelCollector(envURL, platformToken string, dryRun bool) error {
 	display.Header("Dynatrace OTel Collector Uninstall")
 
 	// Find all Dynatrace OTel Collectors and let the user choose which to uninstall.
@@ -407,6 +454,13 @@ func UninstallOtelCollector(dryRun bool) error {
 		fmt.Println()
 	}
 
+	if featureflags.IsEnabled(featureflags.Experimental) {
+		fmt.Println("  Extension that will be removed from tenant:")
+		fmt.Printf("    ")
+		display.ColorError.Printf("delete  %s\n", otelHostMonitoringExtension)
+		fmt.Println()
+	}
+
 	display.ColorMuted.Println("  " + strings.Repeat("─", 50))
 
 	if dryRun {
@@ -414,13 +468,26 @@ func UninstallOtelCollector(dryRun bool) error {
 		return nil
 	}
 
-	ok, err := installer.ConfirmProceed("  Proceed with uninstall?")
-	if err != nil {
-		return fmt.Errorf("reading confirmation: %w", err)
-	}
-	if !ok {
-		display.ColorDefault.Println("  Uninstall cancelled.")
-		return nil
+	var removeExtension bool
+	if featureflags.IsEnabled(featureflags.Experimental) {
+		decision, err := promptUninstallDecisionFn()
+		if err != nil {
+			return err
+		}
+		if decision == uninstallCancelled {
+			display.ColorDefault.Println("  Uninstall cancelled.")
+			return nil
+		}
+		removeExtension = decision == uninstallAll
+	} else {
+		ok, err := installer.ConfirmProceed("  Proceed with uninstall?")
+		if err != nil {
+			return fmt.Errorf("reading confirmation: %w", err)
+		}
+		if !ok {
+			display.ColorDefault.Println("  Uninstall cancelled.")
+			return nil
+		}
 	}
 	fmt.Println()
 
@@ -468,6 +535,10 @@ func UninstallOtelCollector(dryRun bool) error {
 		} else {
 			fmt.Printf("  Removed %s\n", agentDir)
 		}
+	}
+
+	if removeExtension {
+		deactivateHostMonitoringExtensionFn(envURL, platformToken)
 	}
 
 	fmt.Println()

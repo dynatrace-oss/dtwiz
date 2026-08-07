@@ -90,6 +90,17 @@
       "console": "integratedTerminal"
     },
     {
+      "name": "dtwiz uninstall otel (experimental)",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "args": ["uninstall", "otel", "--experimental"],
+      "envFile": "${workspaceFolder}/.env",
+      "env": {},
+      "console": "integratedTerminal"
+    },
+    {
       "name": "dtwiz watch",
       "type": "go",
       "request": "launch",

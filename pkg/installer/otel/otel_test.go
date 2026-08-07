@@ -851,10 +851,10 @@ func TestActivateHostMonitoringExtension_AlreadyInstalled_Activates(t *testing.T
 		activateHostMonitoringExtension(srv.URL, "dt0s16.test")
 	})
 
-	if !strings.Contains(out, "✓") {
-		t.Errorf("expected success indicator in output, got: %s", out)
+	if !strings.Contains(out, "✓ OTel Host Monitoring extension active") {
+		t.Errorf("expected success message in output, got: %s", out)
 	}
-	if strings.Contains(out, "Warning") {
+	if strings.Contains(out, "Warning:") {
 		t.Errorf("unexpected warning in output: %s", out)
 	}
 }
@@ -890,8 +890,8 @@ func TestActivateHostMonitoringExtension_FreshInstall_InstallsThenActivates(t *t
 		activateHostMonitoringExtension(srv.URL, "dt0s16.test")
 	})
 
-	if !strings.Contains(out, "✓") {
-		t.Errorf("expected success indicator in output, got: %s", out)
+	if !strings.Contains(out, "✓ OTel Host Monitoring extension active") {
+		t.Errorf("expected success message in output, got: %s", out)
 	}
 }
 
@@ -904,8 +904,198 @@ func TestActivateHostMonitoringExtension_ActivationFails_WarnsAndContinues(t *te
 		activateHostMonitoringExtension(srv.URL, "dt0s16.test")
 	})
 
-	if !strings.Contains(out, "Warning") {
-		t.Errorf("expected warning in output when activation fails, got: %s", out)
+	if !strings.Contains(out, "Warning: could not activate OTel Host Monitoring extension; host entity creation may not be available.") {
+		t.Errorf("expected activation failure warning in output, got: %s", out)
+	}
+}
+
+// ── deactivateHostMonitoringExtension unit tests ─────────────────────────────
+
+// otelDeleteSrv builds a minimal httptest.Server that handles the three extension
+// API calls made by deactivateHostMonitoringExtension:
+//   - DELETE /extensions/{name}/environment-configuration → deactivateCode HTTP status
+//   - GET    /extensions/{name}                           → versions list (getResp JSON)
+//   - DELETE /extensions/{name}/{ver}                     → deleteCode HTTP status
+func otelDeleteSrv(t *testing.T, getResp string, deactivateCode, deleteCode int) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ext := "/platform/extensions/v2/extensions/" + testOtelExtension
+		switch {
+		case r.Method == http.MethodDelete && r.URL.Path == ext+"/environment-configuration":
+			w.WriteHeader(deactivateCode)
+		case r.Method == http.MethodGet && r.URL.Path == ext:
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(getResp))
+		case r.Method == http.MethodDelete && r.URL.Path == ext+"/3.1.1":
+			w.WriteHeader(deleteCode)
+			if deleteCode < 300 {
+				_, _ = w.Write([]byte(`{"extensionName":"` + testOtelExtension + `","version":"3.1.1"}`))
+			}
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}))
+}
+
+// stubDeactivation replaces deactivateHostMonitoringExtensionFn for the duration
+// of the test and records whether it was called.
+func stubDeactivation(t *testing.T) *bool {
+	t.Helper()
+	called := false
+	orig := deactivateHostMonitoringExtensionFn
+	deactivateHostMonitoringExtensionFn = func(_, _ string) { called = true }
+	t.Cleanup(func() { deactivateHostMonitoringExtensionFn = orig })
+	return &called
+}
+
+func TestDeactivateHostMonitoringExtension_HappyPath(t *testing.T) {
+	getResp := `{"items":[{"version":"3.1.1","extensionName":"` + testOtelExtension + `"}]}`
+	srv := otelDeleteSrv(t, getResp, http.StatusNoContent, http.StatusAccepted)
+	defer srv.Close()
+
+	out := captureActivationOutput(t, func() {
+		deactivateHostMonitoringExtension(srv.URL, "dt0s16.test")
+	})
+
+	if !strings.Contains(out, "✓ OTel Host Monitoring extension removed") {
+		t.Errorf("expected success message in output, got: %s", out)
+	}
+	if strings.Contains(out, "Warning:") {
+		t.Errorf("unexpected warning in output: %s", out)
+	}
+}
+
+func TestDeactivateHostMonitoringExtension_VersionNotFound_Warns(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	out := captureActivationOutput(t, func() {
+		deactivateHostMonitoringExtension(srv.URL, "dt0s16.test")
+	})
+
+	if !strings.Contains(out, "Warning: could not deactivate OTel Host Monitoring extension; extension was not removed.") {
+		t.Errorf("expected deactivation failure warning in output, got: %s", out)
+	}
+}
+
+func TestDeactivateHostMonitoringExtension_DeleteFails_Warns(t *testing.T) {
+	getResp := `{"items":[{"version":"3.1.1","extensionName":"` + testOtelExtension + `"}]}`
+	srv := otelDeleteSrv(t, getResp, http.StatusNoContent, http.StatusForbidden)
+	defer srv.Close()
+
+	out := captureActivationOutput(t, func() {
+		deactivateHostMonitoringExtension(srv.URL, "dt0s16.test")
+	})
+
+	if !strings.Contains(out, "Warning: could not remove OTel Host Monitoring extension; please remove it manually.") {
+		t.Errorf("expected delete failure warning in output, got: %s", out)
+	}
+}
+
+// stubPromptDecision replaces promptUninstallDecisionFn for the duration of the
+// test with a function that returns the given decision without reading stdin.
+func stubPromptDecision(t *testing.T, decision uninstallDecision) {
+	t.Helper()
+	orig := promptUninstallDecisionFn
+	promptUninstallDecisionFn = func() (uninstallDecision, error) { return decision, nil }
+	t.Cleanup(func() { promptUninstallDecisionFn = orig })
+}
+
+// runUninstallDryRun calls UninstallOtelCollector in dry-run mode with AutoConfirm.
+func runUninstallDryRun(t *testing.T) {
+	t.Helper()
+	origAC := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = origAC })
+
+	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatalf("open %s: %v", os.DevNull, err)
+	}
+	origStdout := os.Stdout
+	origColorOut := color.Output
+	os.Stdout = devNull
+	color.Output = devNull
+	t.Cleanup(func() {
+		os.Stdout = origStdout
+		color.Output = origColorOut
+		_ = devNull.Close()
+	})
+
+	_ = UninstallOtelCollector("https://env.example.com", "dt0s16.test", true)
+}
+
+// runUninstallWithConfirm calls UninstallOtelCollector with dryRun=false and AutoConfirm=true.
+func runUninstallWithConfirm(t *testing.T) {
+	t.Helper()
+	origAC := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = origAC })
+
+	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatalf("open %s: %v", os.DevNull, err)
+	}
+	origStdout := os.Stdout
+	origColorOut := color.Output
+	os.Stdout = devNull
+	color.Output = devNull
+	t.Cleanup(func() {
+		os.Stdout = origStdout
+		color.Output = origColorOut
+		_ = devNull.Close()
+	})
+
+	_ = UninstallOtelCollector("https://env.example.com", "dt0s16.test", false)
+}
+
+func TestUninstallOtelCollector_Experimental_DeleteAll_CallsDeactivation(t *testing.T) {
+	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
+	stubPromptDecision(t, uninstallAll)
+	called := stubDeactivation(t)
+
+	runUninstallWithConfirm(t)
+
+	if !*called {
+		t.Error("expected deactivateHostMonitoringExtensionFn to be called when user selects Delete all")
+	}
+}
+
+func TestUninstallOtelCollector_Experimental_CollectorOnly_SkipsDeactivation(t *testing.T) {
+	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
+	stubPromptDecision(t, uninstallCollectorOnly)
+	called := stubDeactivation(t)
+
+	runUninstallWithConfirm(t)
+
+	if *called {
+		t.Error("expected deactivateHostMonitoringExtensionFn NOT to be called when user selects Only collector")
+	}
+}
+
+func TestUninstallOtelCollector_NoExperimental_SkipsDeactivation(t *testing.T) {
+	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
+	t.Setenv("DTWIZ_EXPERIMENTAL", "")
+	called := stubDeactivation(t)
+
+	runUninstallWithConfirm(t)
+
+	if *called {
+		t.Error("expected deactivateHostMonitoringExtensionFn NOT to be called when experimental is disabled")
+	}
+}
+
+func TestUninstallOtelCollector_DryRun_SkipsDeactivation(t *testing.T) {
+	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
+	called := stubDeactivation(t)
+
+	runUninstallDryRun(t)
+
+	if *called {
+		t.Error("expected deactivateHostMonitoringExtensionFn NOT to be called on dry run")
 	}
 }
 

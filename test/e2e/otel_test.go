@@ -169,7 +169,7 @@ func TestOTelHostMonitoring(t *testing.T) {
 	// removed regardless of pass/fail. AutoConfirm is still true here.
 	t.Cleanup(func() {
 		t.Log("uninstalling OTel Collector")
-		if err := otel.UninstallOtelCollector(false); err != nil {
+		if err := otel.UninstallOtelCollector(env.EnvURL, env.PlatformToken, false); err != nil {
 			t.Logf("warning: UninstallOtelCollector: %v", err)
 		}
 	})
