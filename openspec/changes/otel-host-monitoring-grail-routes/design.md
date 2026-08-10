@@ -198,6 +198,18 @@ This still follows the precedent already in the codebase for the same class of p
 
 Errors that are not 401/403 (e.g. the 400 constraint violation in Decision 2/4, or a 5xx) pass through unchanged; the scope hint would be misleading for those.
 
+### Decision 7: Preview the extension activation status too, ordered before the route plan
+
+The install preview shows two related but distinct install steps that run after confirmation, in this order: extension activation (`activateHostMonitoringExtensionFn`, existing behavior from the `otel-extension-activation` capability), then the route plan from this change. Originally only the route plan appeared in the preview; the extension step's outcome was only visible after confirmation, when it ran. Since a route is meaningless without the pipeline the extension provisions, and the extension activation runs first, its preview line is shown first too, so the preview mirrors execution order end to end.
+
+`buildExtensionActivationPreview(envURL, platformToken)` determines the status via `installer.ExtensionClient.GetStatus(extensionName)`, a single read-only call added to the shared `ExtensionClient` (`pkg/installer/extension_client.go`) alongside `EnsureInstalled`/`ActivateExtension`/`IsExtensionActive`, rather than as otel-specific logic. `GetStatus` makes one `Extension.Get` call and returns `ExtensionNotInstalled`, `ExtensionInstalledInactive`, or `ExtensionInstalledActive`: a single round trip, where combining the existing `LatestExtensionVersion` (installed or not) and `IsExtensionActive` (active or not) helpers would have made two, since both already call the same underlying endpoint independently. It makes no install or activation call itself; the actual `EnsureInstalled` + `ActivateExtension` sequence still runs only after confirmation, unchanged. Living on `ExtensionClient` also makes the same three-state check available to the Azure/GCP/AWS installers, which already depend on this client for their own install/activate flow, should a similar preview be wanted there later.
+
+**Gate:** identical to the route plan's gate (Decision 5): `featureflags.IsEnabled(featureflags.Experimental)` and a non-empty `platformToken`. This also keeps the preview free of a real API call when no platform token is available to authenticate it (relevant for tests and any future path that lacks one at preview time).
+
+**Preview-check failures are warnings, not blockers:** if `GetStatus` fails (auth or API error), a warning is printed for the extension section only; the rest of the preview (route plan, config, confirmation prompt) proceeds exactly as before. This matches the existing failure handling for the route plan (Decision 5) and for the real activation step itself, which already treats every failure as advisory.
+
+**Dry-run still runs the check:** like the route plan, `--dry-run` builds and prints this preview because the preview phase (including this check) runs before the dry-run early return. No install or activation call is made either way, so this is consistent with "dry-run performs read-only checks but writes nothing."
+
 ## Risks / Trade-offs
 
 - **Schema shape (resolved):** the routing schema IDs and value layout are confirmed for all three signals against two live tenants (one with routing objects present, one with them absent). Residual risk is that other tenants/versions differ; the reconciliation validates against the schema and parses constraint violations so a shape mismatch fails loudly during development rather than silently mis-writing.

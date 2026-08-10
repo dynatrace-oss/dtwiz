@@ -44,3 +44,10 @@
 - [ ] 7.1 Update `CHANGELOG.md` `[Unreleased]` with the Smartscape on Grail dynamic-route reconciliation, noting it ships behind `--experimental`.
 - [ ] 7.2 `make test` and `make lint` pass.
 - [ ] 7.3 Manually verify against a live tenant: `install otel --experimental --dry-run` shows the correct three-route plan; a real run creates the routes; a second run is a no-op; and with the extension inactive the routes are skipped and the install still succeeds. (The PoC pass already did this once against a live tenant, see `proposal.md`'s Impact section, but re-verify against the final implementation.)
+
+## 8. Extension activation status in the install preview
+
+- [x] 8.1 Add `installer.ExtensionClient.GetStatus(extensionName)` (`pkg/installer/extension_client.go`) reporting `ExtensionNotInstalled` / `ExtensionInstalledInactive` / `ExtensionInstalledActive` with a single `Extension.Get` call, instead of composing the existing `LatestExtensionVersion` + `IsExtensionActive` helpers (which would call the same endpoint twice). Unit-tested for all three states plus an API-error case.
+- [x] 8.2 Add `buildExtensionActivationPreview(envURL, platformToken)` in `pkg/installer/otel/otel.go`, a thin wrapper returning `installer.ExtensionStatus` directly (no otel-local status type), and `printExtensionActivationPreview` to render it as a one-line section, ordered before the OpenPipeline route plan section (design.md Decision 7).
+- [x] 8.3 Wire the preview into `InstallOtelCollectorWithProject`, gated identically to the route plan (`featureflags.Experimental` and non-empty `platformToken`); a failure prints a warning and does not block the rest of the preview or the install.
+- [x] 8.4 Add the corresponding requirement to `specs/otel-host-monitoring-grail-routes/spec.md` ("Extension activation status shown in the install preview, before the route plan").

@@ -56,6 +56,41 @@ func activateHostMonitoringExtension(envURL, platformToken string) {
 	display.ColorOK.Println("  ✓ OTel Host Monitoring extension active")
 }
 
+// buildExtensionActivationPreviewFn is overridable in tests.
+var buildExtensionActivationPreviewFn = buildExtensionActivationPreview
+
+// buildExtensionActivationPreview checks the current state of the OTel Host
+// Monitoring extension without changing anything, so its status can be shown
+// in the install preview alongside the OpenPipeline route plan.
+func buildExtensionActivationPreview(envURL, platformToken string) (installer.ExtensionStatus, error) {
+	ec, err := installer.NewExtensionClient(envURL, platformToken)
+	if err != nil {
+		return 0, fmt.Errorf("create extension client: %w", err)
+	}
+	return ec.GetStatus(otelHostMonitoringExtension)
+}
+
+// printExtensionActivationPreview prints a one-line summary of what the
+// extension activation step will do, as part of the install preview.
+func printExtensionActivationPreview(status installer.ExtensionStatus) {
+	display.ColorMessage.Println("  OpenTelemetry Host Monitoring extension")
+	display.PrintSectionDivider()
+	var msg string
+	colorFn := display.ColorDefault
+	switch status {
+	case installer.ExtensionInstalledActive:
+		msg = "already active"
+		colorFn = display.ColorMuted
+	case installer.ExtensionInstalledInactive:
+		msg = "will be activated"
+		colorFn = display.ColorOK
+	case installer.ExtensionNotInstalled:
+		msg = "will be installed and activated"
+		colorFn = display.ColorOK
+	}
+	display.PrintStatusLine("Extension", msg, colorFn)
+}
+
 type InstrumentationPlan interface {
 	Runtime() string
 	PrintPlanSteps()
@@ -435,11 +470,26 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		plan.PrintPlanSteps()
 	}
 
+	experimentalEnabled := featureflags.IsEnabled(featureflags.Experimental)
+
+	// Show what the extension activation step (run after confirmation, below)
+	// will do: it runs first, before the collector install and route plan.
+	if !experimentalEnabled {
+		logger.Debug("experimental feature flag disabled, skipping extension activation preview")
+	} else if platformToken == "" {
+		logger.Debug("platform token not provided, skipping extension activation preview")
+	} else if status, err := buildExtensionActivationPreviewFn(envURL, platformToken); err != nil {
+		fmt.Println()
+		display.PrintWarning("OTel Host Monitoring extension", err)
+	} else {
+		fmt.Println()
+		printExtensionActivationPreview(status)
+	}
+
 	// Build and show the OpenPipeline route plan as part of the install preview.
 	// Routes are applied after the collector install without a separate prompt.
 	var grailC grailRouteClient
 	var grailPlans []grailSignalPlan
-	experimentalEnabled := featureflags.IsEnabled(featureflags.Experimental)
 	if !experimentalEnabled {
 		logger.Debug("experimental feature flag disabled, skipping OpenPipeline route plan")
 	} else if platformToken == "" {

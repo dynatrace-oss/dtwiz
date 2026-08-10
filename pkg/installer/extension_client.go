@@ -269,6 +269,35 @@ func (e *ExtensionClient) IsExtensionActive(extensionName string) (bool, error) 
 	return false, nil
 }
 
+// ExtensionStatus is the read-only install/activation state of an extension,
+// as reported by ExtensionClient.GetStatus.
+type ExtensionStatus int
+
+const (
+	ExtensionNotInstalled      ExtensionStatus = iota // no version installed
+	ExtensionInstalledInactive                        // installed, but no version is active
+	ExtensionInstalledActive                          // installed and a version is active
+)
+
+// GetStatus reports whether extensionName is not installed, installed but not active, or
+// installed and active, with a single API call. Unlike EnsureInstalled/ActivateExtension,
+// it never installs or activates anything, so it's safe to call from a preview.
+func (e *ExtensionClient) GetStatus(extensionName string) (ExtensionStatus, error) {
+	versionList, err := e.Extension.Get(context.Background(), extensionName)
+	if err != nil {
+		if IsExtensionNotFound(err, extensionName) {
+			return ExtensionNotInstalled, nil
+		}
+		return 0, fmt.Errorf("get extension versions: %w", err)
+	}
+	for _, item := range versionList.Items {
+		if item.Active {
+			return ExtensionInstalledActive, nil
+		}
+	}
+	return ExtensionInstalledInactive, nil
+}
+
 // ConstraintViolation is a single rejected-field detail from the Dynatrace Settings API.
 // httpclient.CheckResponse parses only the top-level "Constraints violated." message and
 // discards the nested constraintViolations array, so callers that need field-level detail

@@ -223,6 +223,67 @@ func TestExtensionClientLatestExtensionVersion_ServerError(t *testing.T) {
 	}
 }
 
+// ─── GetStatus ────────────────────────────────────────────────────────────────
+
+func TestExtensionClientGetStatus_NotInstalled(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":{"message":"extension \"` + testExtensionName + `\" not found"}}`))
+	}))
+	defer srv.Close()
+
+	status, err := newTestExtensionClient(t, srv.URL).GetStatus(testExtensionName)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if status != ExtensionNotInstalled {
+		t.Errorf("status = %v, want ExtensionNotInstalled", status)
+	}
+}
+
+func TestExtensionClientGetStatus_InstalledInactive(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[{"version":"1.2.0","active":false}]}`))
+	}))
+	defer srv.Close()
+
+	status, err := newTestExtensionClient(t, srv.URL).GetStatus(testExtensionName)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if status != ExtensionInstalledInactive {
+		t.Errorf("status = %v, want ExtensionInstalledInactive", status)
+	}
+}
+
+func TestExtensionClientGetStatus_InstalledActive(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[{"version":"1.2.0","active":true}]}`))
+	}))
+	defer srv.Close()
+
+	status, err := newTestExtensionClient(t, srv.URL).GetStatus(testExtensionName)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if status != ExtensionInstalledActive {
+		t.Errorf("status = %v, want ExtensionInstalledActive", status)
+	}
+}
+
+func TestExtensionClientGetStatus_ServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	if _, err := newTestExtensionClient(t, srv.URL).GetStatus(testExtensionName); err == nil {
+		t.Fatal("expected error for 500, got nil")
+	}
+}
+
 // ─── FetchExtensionSchema / EnumValues ───────────────────────────────────────
 
 func TestExtensionClientFetchExtensionSchema_HappyPath(t *testing.T) {

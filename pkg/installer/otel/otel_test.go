@@ -667,11 +667,24 @@ func stubActivation(t *testing.T) *bool {
 	return &called
 }
 
+// stubExtensionPreview replaces buildExtensionActivationPreviewFn so install
+// preview tests don't make a real network call against the test envURL.
+func stubExtensionPreview(t *testing.T) {
+	t.Helper()
+	orig := buildExtensionActivationPreviewFn
+	buildExtensionActivationPreviewFn = func(_, _ string) (installer.ExtensionStatus, error) {
+		return installer.ExtensionInstalledActive, nil
+	}
+	t.Cleanup(func() { buildExtensionActivationPreviewFn = orig })
+}
+
 // runInstallWithAutoConfirm calls InstallOtelCollectorWithProject with
 // dryRun=false and AutoConfirm=true. DQL polling is stubbed out so the
 // test completes immediately even when a collector binary is already installed.
 func runInstallWithAutoConfirm(t *testing.T) error {
 	t.Helper()
+	stubExtensionPreview(t)
+
 	origAC := installer.AutoConfirm
 	installer.AutoConfirm = true
 	t.Cleanup(func() { installer.AutoConfirm = origAC })
@@ -734,6 +747,7 @@ func TestInstallOtelCollector_NoExperimental_SkipsActivation(t *testing.T) {
 func TestInstallOtelCollector_DryRun_SkipsActivation(t *testing.T) {
 	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
 	called := stubActivation(t)
+	stubExtensionPreview(t)
 
 	origDir, _ := os.Getwd()
 	if err := os.Chdir(t.TempDir()); err != nil {
@@ -892,6 +906,60 @@ func TestActivateHostMonitoringExtension_ActivationFails_WarnsAndContinues(t *te
 
 	if !strings.Contains(out, "Warning") {
 		t.Errorf("expected warning in output when activation fails, got: %s", out)
+	}
+}
+
+// ── buildExtensionActivationPreview unit tests ────────────────────────────────
+
+func TestBuildExtensionActivationPreview_NotInstalled(t *testing.T) {
+	srv := otelExtSrv(t, "" /* not installed */, http.StatusAccepted, http.StatusOK)
+	defer srv.Close()
+
+	status, err := buildExtensionActivationPreview(srv.URL, "dt0s16.test")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if status != installer.ExtensionNotInstalled {
+		t.Errorf("expected ExtensionNotInstalled, got %v", status)
+	}
+}
+
+func TestBuildExtensionActivationPreview_InstalledNotActive(t *testing.T) {
+	getResp := `{"items":[{"version":"3.1.1","extensionName":"` + testOtelExtension + `","active":false}]}`
+	srv := otelExtSrv(t, getResp, http.StatusAccepted, http.StatusOK)
+	defer srv.Close()
+
+	status, err := buildExtensionActivationPreview(srv.URL, "dt0s16.test")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if status != installer.ExtensionInstalledInactive {
+		t.Errorf("expected ExtensionInstalledInactive, got %v", status)
+	}
+}
+
+func TestBuildExtensionActivationPreview_InstalledAndActive(t *testing.T) {
+	getResp := `{"items":[{"version":"3.1.1","extensionName":"` + testOtelExtension + `","active":true}]}`
+	srv := otelExtSrv(t, getResp, http.StatusAccepted, http.StatusOK)
+	defer srv.Close()
+
+	status, err := buildExtensionActivationPreview(srv.URL, "dt0s16.test")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if status != installer.ExtensionInstalledActive {
+		t.Errorf("expected ExtensionInstalledActive, got %v", status)
+	}
+}
+
+func TestBuildExtensionActivationPreview_APIError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	if _, err := buildExtensionActivationPreview(srv.URL, "dt0s16.test"); err == nil {
+		t.Error("expected error from a failing extensions API")
 	}
 }
 
