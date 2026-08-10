@@ -16,14 +16,15 @@ import (
 // connectedService is an app process tied to the collector — via TCP connection
 // to its OTLP ports or by exporting to the same Dynatrace tenant.
 type connectedService struct {
-	pid           int
-	name          string   // short display name (binary basename)
-	command       string   // full command line
-	workDir       string   // working directory at detection time
-	collectorPort string   // OTLP receiver port this service sends to (e.g. "4317" or "4318")
-	listenPorts   []string // TCP ports this process itself listens on (e.g. ["8080", "8001"])
-	exportsTo     string   // OTLP export endpoint from the process env, when tenant-matched
-	env           []string // full environment ("KEY=VAL"), captured for faithful relaunch
+	pid               int
+	name              string   // short display name (binary basename)
+	command           string   // full command line
+	workDir           string   // working directory at detection time
+	collectorPort     string   // OTLP receiver port this service sends to (e.g. "4317" or "4318")
+	listenPorts       []string // TCP ports this process itself listens on (e.g. ["8080", "8001"])
+	exportsTo         string   // OTLP export endpoint from the process env, when tenant-matched
+	env               []string // full environment ("KEY=VAL"), captured for faithful relaunch
+	collectorEndpoint string   // local OTLP HTTP endpoint to route through on restart (e.g. "http://localhost:4320")
 }
 
 // receiverPortsFromConfig parses the collector YAML config and returns the
@@ -243,6 +244,20 @@ func reconcileExportEnv(env []string) (out []string, endpoint string, changed bo
 	return out, target, true
 }
 
+// retargetEnvToCollector returns env with OTEL_EXPORTER_OTLP_ENDPOINT set to
+// the local collector HTTP endpoint and per-signal endpoint overrides removed.
+// No-op when the current endpoint is already loopback (already collector-routed).
+func retargetEnvToCollector(env []string, endpoint string) (out []string, changed bool) {
+	if current := envGet(env, "OTEL_EXPORTER_OTLP_ENDPOINT"); current != "" {
+		if host, _ := hostPort(current); isLoopback(host) {
+			return env, false
+		}
+	}
+	out = envSet(env, "OTEL_EXPORTER_OTLP_ENDPOINT", endpoint)
+	out = envRemove(out, otlpSignalEndpointKeys...)
+	return out, true
+}
+
 // envGet returns the value of key in a "KEY=VAL" environment slice, or "".
 func envGet(env []string, key string) string {
 	prefix := key + "="
@@ -428,7 +443,9 @@ func printConnectedServices(svcs []connectedService) {
 		if svc.exportsTo != "" {
 			display.ColorMuted.Printf("              exports to: %s\n", svc.exportsTo)
 		}
-		if _, target, changed := reconcileExportEnv(svc.env); changed {
+		if svc.collectorEndpoint != "" {
+			display.ColorDefault.Printf("              ↳ will be routed through collector: %s\n", svc.collectorEndpoint)
+		} else if _, target, changed := reconcileExportEnv(svc.env); changed {
 			display.ColorDefault.Printf("              ↳ will be retargeted to: %s\n", target)
 		}
 		if svc.command != "" {
@@ -459,9 +476,13 @@ func restartConnectedServices(svcs []connectedService) {
 			continue
 		}
 
-		// Reconcile the export target with DT_ENVIRONMENT before relaunch so the
-		// app follows its configured tenant instead of a stale OTLP endpoint.
-		newEnv, target, retargeted := reconcileExportEnv(svc.env)
+		// Route through local collector when requested; otherwise reconcile the
+		// export tenant with DT_ENVIRONMENT so a stale endpoint is corrected.
+		envToUse := svc.env
+		if svc.collectorEndpoint != "" {
+			envToUse, _ = retargetEnvToCollector(svc.env, svc.collectorEndpoint)
+		}
+		newEnv, reconcileTarget, retargeted := reconcileExportEnv(envToUse)
 		svc.env = newEnv
 
 		newPID, err := relaunchService(svc)
@@ -471,9 +492,12 @@ func restartConnectedServices(svcs []connectedService) {
 			logger.Debug("relaunchService failed", "pid", svc.pid, "name", svc.name, "err", err)
 			continue
 		}
-		if retargeted {
-			fmt.Println(display.ColorOK.Sprintf("restarted (PID %d) → %s", newPID, target))
-		} else {
+		switch {
+		case svc.collectorEndpoint != "":
+			fmt.Println(display.ColorOK.Sprintf("restarted (PID %d) → %s", newPID, svc.collectorEndpoint))
+		case retargeted:
+			fmt.Println(display.ColorOK.Sprintf("restarted (PID %d) → %s", newPID, reconcileTarget))
+		default:
 			fmt.Println(display.ColorOK.Sprintf("restarted (PID %d)", newPID))
 		}
 	}

@@ -265,6 +265,51 @@ func TestEnvSetAndRemove(t *testing.T) {
 	}
 }
 
+func TestRetargetEnvToCollector_SetsEndpointAndDropsSignalOverrides(t *testing.T) {
+	env := []string{
+		"PATH=/usr/bin",
+		"OTEL_EXPORTER_OTLP_ENDPOINT=https://rrx28105.dev.dynatracelabs.com/api/v2/otlp",
+		"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=https://rrx28105.dev.dynatracelabs.com/v1/traces",
+		"OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer%20tok",
+	}
+	out, changed := retargetEnvToCollector(env, "http://localhost:4320")
+	if !changed {
+		t.Fatal("expected changed=true")
+	}
+	if got := envGet(out, "OTEL_EXPORTER_OTLP_ENDPOINT"); got != "http://localhost:4320" {
+		t.Fatalf("endpoint = %q, want http://localhost:4320", got)
+	}
+	if got := envGet(out, "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"); got != "" {
+		t.Fatalf("signal endpoint should be removed, got %q", got)
+	}
+	// Other vars preserved.
+	if envGet(out, "PATH") != "/usr/bin" {
+		t.Fatal("PATH not preserved")
+	}
+	if envGet(out, "OTEL_EXPORTER_OTLP_HEADERS") != "Authorization=Bearer%20tok" {
+		t.Fatal("OTLP_HEADERS should be preserved")
+	}
+}
+
+func TestRetargetEnvToCollector_NoopWhenAlreadyLoopback(t *testing.T) {
+	env := []string{"OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4320"}
+	out, changed := retargetEnvToCollector(env, "http://localhost:4320")
+	if changed {
+		t.Fatal("expected no change when endpoint is already loopback")
+	}
+	if &out[0] != &env[0] { // same slice returned
+		_ = out // just confirm no panic
+	}
+}
+
+func TestRetargetEnvToCollector_NoopFor127Loopback(t *testing.T) {
+	env := []string{"OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4320"}
+	_, changed := retargetEnvToCollector(env, "http://localhost:4320")
+	if changed {
+		t.Fatal("expected no change for 127.0.0.1 loopback")
+	}
+}
+
 func TestIsEnvKey(t *testing.T) {
 	yes := []string{"OTEL_EXPORTER_OTLP_ENDPOINT", "PATH", "DT_ENVIRONMENT", "A1_B2"}
 	no := []string{"", "1FOO", "lowercase", "delivery/app.py", "app.py"}

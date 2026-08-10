@@ -171,7 +171,7 @@ func TestGenerateOtelConfig_Combined_ExperimentalEnabled(t *testing.T) {
 	parsed := parseOtelConfig(t, cfg)
 
 	// Host receivers present.
-	for _, recv := range []string{"hostmetrics/10s", "hostmetrics/5m", "hostmetrics/1h"} {
+	for _, recv := range []string{"host_metrics/10s", "host_metrics/5m", "host_metrics/1h"} {
 		if _, ok := parsed.Receivers[recv]; !ok {
 			t.Errorf("combined config missing receiver %q", recv)
 		}
@@ -341,6 +341,12 @@ func TestConfigHeadEnd(t *testing.T) {
 		{
 			name:      "cuts before hostmetrics line",
 			lines:     []string{"receivers:", "  otlp: {}", "  hostmetrics/10s:", "    scrapers: {}"},
+			headLines: 20,
+			want:      2,
+		},
+		{
+			name:      "cuts before host_metrics line",
+			lines:     []string{"receivers:", "  otlp: {}", "  host_metrics/10s:", "    scrapers: {}"},
 			headLines: 20,
 			want:      2,
 		},

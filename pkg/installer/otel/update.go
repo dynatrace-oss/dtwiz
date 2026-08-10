@@ -148,21 +148,76 @@ func diffLines(oldLines, newLines []string) []diffEdit {
 	return edits
 }
 
-// showConfigDiff prints a coloured line diff to stdout.
-// Added lines are green (+), removed lines are red (-), unchanged lines are dimmed.
+// showConfigDiff prints a focused diff: only changed lines and up to 2 YAML
+// ancestor lines above each change as context, with "..." between gaps.
 func showConfigDiff(origData, updatedData []byte) {
+	const parentContext = 2
+
 	oldLines := strings.Split(strings.TrimRight(string(origData), "\n"), "\n")
 	newLines := strings.Split(strings.TrimRight(string(updatedData), "\n"), "\n")
+	edits := diffLines(oldLines, newLines)
 
-	for _, e := range diffLines(oldLines, newLines) {
+	yamlIndent := func(s string) int {
+		return len(s) - len(strings.TrimLeft(s, " \t"))
+	}
+	isStructural := func(s string) bool {
+		t := strings.TrimSpace(s)
+		return t != "" && !strings.HasPrefix(t, "#")
+	}
+
+	show := make([]bool, len(edits))
+	for i, e := range edits {
+		if e.kind != editAdd && e.kind != editDel {
+			continue
+		}
+		show[i] = true
+		indent := yamlIndent(e.line)
+		found := 0
+		for j := i - 1; j >= 0 && found < parentContext; j-- {
+			if e.kind == editAdd && edits[j].kind == editDel {
+				continue
+			}
+			if e.kind == editDel && edits[j].kind == editAdd {
+				continue
+			}
+			if !isStructural(edits[j].line) {
+				continue
+			}
+			if yamlIndent(edits[j].line) < indent {
+				show[j] = true
+				indent = yamlIndent(edits[j].line)
+				found++
+			}
+		}
+	}
+
+	// redactAuth replaces the token value on Authorization lines with "Bearer ***"
+	// so secrets are never printed, while the diff kind (add/del/keep) is unchanged.
+	redactAuth := func(s string) string {
+		if strings.HasPrefix(strings.TrimSpace(s), "Authorization:") {
+			return s[:len(s)-len(strings.TrimLeft(s, " \t"))] + `Authorization: "Bearer ***"`
+		}
+		return s
+	}
+
+	lastShown := -2
+	for i, e := range edits {
+		if !show[i] {
+			continue
+		}
+		if lastShown >= 0 && i > lastShown+1 {
+			fmt.Println(display.ColorMuted.Sprint("  ..."))
+		}
+		displayLine := redactAuth(e.line)
 		switch e.kind {
 		case editAdd:
-			fmt.Println(display.ColorOK.Sprint("+ " + e.line))
+			fmt.Println(display.ColorOK.Sprint("+ " + displayLine))
 		case editDel:
-			fmt.Println(display.ColorError.Sprint("- " + e.line))
+			fmt.Println(display.ColorError.Sprint("- " + displayLine))
 		case editKeep:
-			fmt.Println(display.ColorMuted.Sprint("  " + e.line))
+			fmt.Println(display.ColorMuted.Sprint("  " + displayLine))
 		}
+		lastShown = i
 	}
 }
 
@@ -371,6 +426,7 @@ func PatchConfigFile(configPath, apiURL, token string) (*UpdateResult, error) {
 func UpdateOtelConfigInteractive(envURL, token, platformTok string, dryRun bool) error {
 	var configPath string
 	var runningProcs []otelProcessInfo
+	var selectedIsDynatrace bool
 
 	allProcs := findAllRunningOtelCollectorsFunc()
 	if len(allProcs) > 0 {
@@ -381,6 +437,7 @@ func UpdateOtelConfigInteractive(envURL, token, platformTok string, dryRun bool)
 			return err // includes installer.ErrInstallCancelled
 		}
 		if selected != nil {
+			selectedIsDynatrace = selected.isDynatrace
 			if selected.configPath != "" {
 				configPath = selected.configPath
 			}
@@ -433,6 +490,9 @@ func UpdateOtelConfigInteractive(envURL, token, platformTok string, dryRun bool)
 		return fmt.Errorf("config file not found: %s", configPath)
 	}
 
+	if selectedIsDynatrace {
+		return updateDynatraceCollector(configPath, runningProcs, envURL, token, platformTok, dryRun)
+	}
 	return updateOtelConfig(configPath, runningProcs, envURL, token, platformTok, dryRun)
 }
 
@@ -457,6 +517,7 @@ func UpdateOtelConfig(configPath, envURL, token, platformTok string, dryRun bool
 	}
 
 	var runningProcs []otelProcessInfo
+	var isDynatraceCollector bool
 	for _, inst := range findAllRunningOtelCollectorsFunc() {
 		if inst.configPath == "" {
 			continue
@@ -472,6 +533,7 @@ func UpdateOtelConfig(configPath, envURL, token, platformTok string, dryRun bool
 			continue
 		}
 		if instAbs == absConfig {
+			isDynatraceCollector = isDynatraceCollector || inst.isDynatrace
 			installDir := ""
 			if inst.binaryPath != "" {
 				installDir = filepath.Dir(inst.binaryPath)
@@ -487,6 +549,9 @@ func UpdateOtelConfig(configPath, envURL, token, platformTok string, dryRun bool
 		}
 	}
 
+	if isDynatraceCollector {
+		return updateDynatraceCollector(configPath, runningProcs, envURL, token, platformTok, dryRun)
+	}
 	return updateOtelConfig(configPath, runningProcs, envURL, token, platformTok, dryRun)
 }
 
@@ -634,7 +699,7 @@ func updateOtelConfig(configPath string, runningProcs []otelProcessInfo, envURL,
 			return fmt.Errorf("restarting collector: %w", err)
 		}
 
-		if err := verifyOtelInstall(envURL, platformTok, token, crashed); err != nil {
+		if err := verifyOtelInstall(envURL, platformTok, token, otlpHTTPPortFromConfig(configPath), crashed); err != nil {
 			fmt.Printf("\n  Warning: log verification failed: %v\n", err)
 			fmt.Println("  The collector may still be working — check the Dynatrace UI.")
 			return nil
@@ -642,10 +707,10 @@ func updateOtelConfig(configPath string, runningProcs []otelProcessInfo, envURL,
 	}
 
 	if len(containerProcs) > 0 {
-		// Best-effort verification for containers: port 4318 may or may not be
+		// Best-effort verification for containers: the OTLP port may or may not be
 		// exposed to the host depending on how the container was started.
 		noCrash := make(chan error) // never sends — no process to monitor
-		if err := verifyOtelInstall(envURL, platformTok, token, noCrash); err != nil {
+		if err := verifyOtelInstall(envURL, platformTok, token, otlpHTTPPortFromConfig(configPath), noCrash); err != nil {
 			fmt.Printf("\n  Warning: log verification failed: %v\n", err)
 			fmt.Println("  The collector may still be working — check the Dynatrace UI.")
 			return nil

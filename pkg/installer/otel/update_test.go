@@ -1,6 +1,7 @@
 package otel
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -339,6 +340,57 @@ func TestShowConfigDiff_WithChanges(t *testing.T) {
 	updated := []byte("receivers:\n  otlp: {}\nexporters:\n  logging: {}\n")
 	// Should not panic.
 	showConfigDiff(orig, updated)
+}
+
+func TestShowConfigDiff_FocusedOutput(t *testing.T) {
+	// Only changed lines and their 2 YAML parents should appear; unchanged
+	// lines outside the context must be suppressed.
+	orig := `receivers:
+  otlp: {}
+exporters:
+  otlp_http:
+    endpoint: https://old.env/api/v2/otlp
+    headers:
+      Authorization: "Bearer old-tok"
+`
+	updated := `receivers:
+  otlp: {}
+exporters:
+  otlp_http:
+    endpoint: https://new.env/api/v2/otlp
+    headers:
+      Authorization: "Bearer new-tok"
+`
+	var buf strings.Builder
+	orig2 := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	showConfigDiff([]byte(orig), []byte(updated))
+
+	w.Close()
+	os.Stdout = orig2
+	io.Copy(&buf, r)
+	out := buf.String()
+
+	// Changed lines must appear.
+	if !strings.Contains(out, "old.env") {
+		t.Errorf("expected removed endpoint in output:\n%s", out)
+	}
+	if !strings.Contains(out, "new.env") {
+		t.Errorf("expected added endpoint in output:\n%s", out)
+	}
+	// Parent context must appear.
+	if !strings.Contains(out, "exporters") {
+		t.Errorf("expected 'exporters' parent context in output:\n%s", out)
+	}
+	if !strings.Contains(out, "otlp_http") {
+		t.Errorf("expected 'otlp_http' parent context in output:\n%s", out)
+	}
+	// Unchanged top-level lines outside the changed section must be absent.
+	if strings.Contains(out, "receivers") {
+		t.Errorf("expected 'receivers' to be suppressed in focused diff:\n%s", out)
+	}
 }
 
 func TestMergeDynatraceExporter_InvalidPipelineValue(t *testing.T) {
