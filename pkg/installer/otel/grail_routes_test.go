@@ -3,13 +3,9 @@ package otel
 import (
 	"context"
 	"errors"
-	"io"
-	"os"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/fatih/color"
 
 	"github.com/dynatrace-oss/dtctl/sdk/httpclient"
 
@@ -96,46 +92,6 @@ func happyFakeClient() *fakeGrailClient {
 		}
 	}
 	return c
-}
-
-// suppressOutput redirects stdout and color.Output to /dev/null for the test.
-func suppressOutput(t *testing.T) {
-	t.Helper()
-	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
-	if err != nil {
-		t.Fatalf("open /dev/null: %v", err)
-	}
-	oldStdout := os.Stdout
-	oldColorOut := color.Output
-	os.Stdout = devNull
-	color.Output = devNull
-	t.Cleanup(func() {
-		os.Stdout = oldStdout
-		color.Output = oldColorOut
-		devNull.Close()
-	})
-}
-
-// suppressOutputPipe redirects stdout + color.Output to a pipe; returns the
-// read end so callers can optionally drain it.
-func suppressOutputPipe(t *testing.T) *os.File {
-	t.Helper()
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe: %v", err)
-	}
-	oldStdout := os.Stdout
-	oldColorOut := color.Output
-	os.Stdout = w
-	color.Output = w
-	t.Cleanup(func() {
-		w.Close()
-		io.Copy(io.Discard, r) //nolint:errcheck // test cleanup
-		r.Close()
-		os.Stdout = oldStdout
-		color.Output = oldColorOut
-	})
-	return r
 }
 
 // ── constants ─────────────────────────────────────────────────────────────────
@@ -592,94 +548,5 @@ func TestBuildGrailPlans_RoutingObjectAbsent(t *testing.T) {
 	}
 	if plans[0].routingObjID != "" {
 		t.Errorf("metrics: want empty routingObjID (absent singleton), got %q", plans[0].routingObjID)
-	}
-}
-
-// ── reconcileGrailRoutes gate ─────────────────────────────────────────────────
-
-func TestReconcileGrailRoutes_DryRun(t *testing.T) {
-	suppressOutput(t)
-
-	c := happyFakeClient()
-	err := reconcileGrailRoutes(context.Background(), c, true)
-	if err != nil {
-		t.Fatalf("dry-run should return nil, got %v", err)
-	}
-	if len(c.putCalls) != 0 {
-		t.Errorf("dry-run must not write routes; got %d PUT calls", len(c.putCalls))
-	}
-}
-
-func TestReconcileGrailRoutes_Decline(t *testing.T) {
-	suppressOutputPipe(t)
-	setTestStdin(t, "n\n")
-
-	origAC := installer.AutoConfirm
-	installer.AutoConfirm = false
-	t.Cleanup(func() { installer.AutoConfirm = origAC })
-
-	c := happyFakeClient()
-	err := reconcileGrailRoutes(context.Background(), c, false)
-	if !errors.Is(err, installer.ErrInstallCancelled) {
-		t.Errorf("decline should return ErrInstallCancelled, got %v", err)
-	}
-	if len(c.putCalls) != 0 {
-		t.Errorf("decline must not write routes; got %d PUT calls", len(c.putCalls))
-	}
-}
-
-func TestReconcileGrailRoutes_AutoConfirm_WritesRoutes(t *testing.T) {
-	suppressOutput(t)
-
-	origAC := installer.AutoConfirm
-	installer.AutoConfirm = true
-	t.Cleanup(func() { installer.AutoConfirm = origAC })
-
-	c := happyFakeClient()
-	err := reconcileGrailRoutes(context.Background(), c, false)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	// All three signals were missing → three PUT calls expected.
-	if len(c.putCalls) != 3 {
-		t.Errorf("expected 3 PUT calls (one per signal), got %d", len(c.putCalls))
-	}
-}
-
-// TestReconcileGrailRoutes_MixedPlan verifies that only signals needing
-// action produce PUT calls: absent → create, enabled → noop, skip → skip.
-func TestReconcileGrailRoutes_MixedPlan(t *testing.T) {
-	suppressOutput(t)
-
-	origAC := installer.AutoConfirm
-	installer.AutoConfirm = true
-	t.Cleanup(func() { installer.AutoConfirm = origAC })
-
-	c := happyFakeClient()
-
-	// Metrics: already configured and enabled — noop.
-	metricsSig := grailSignals[0]
-	obj := c.routing[metricsSig.routingSchema]
-	obj.entries = []routingEntry{{
-		Enabled:    true,
-		PipelineID: pipelineObjID(metricsSig.pipelineSchema),
-	}}
-	c.routing[metricsSig.routingSchema] = obj
-
-	// Logs: no pipeline — skip.
-	c.pipelines[grailSignals[1].pipelineSchema] = ""
-
-	// Spans: absent — create.
-
-	err := reconcileGrailRoutes(context.Background(), c, false)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	// Only spans needed a write.
-	if len(c.putCalls) != 1 {
-		t.Errorf("expected 1 PUT call (spans only), got %d", len(c.putCalls))
-	}
-	if c.putCalls[0].objectID != "route-obj-"+grailSignals[2].name {
-		t.Errorf("PUT call objectID = %q, want route for spans", c.putCalls[0].objectID)
 	}
 }

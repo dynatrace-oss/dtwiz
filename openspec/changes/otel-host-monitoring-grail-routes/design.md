@@ -55,7 +55,7 @@ dtwiz already writes Settings 2.0 objects elsewhere through `installer.Extension
 
 The reconciliation is invoked from the host-monitoring install path in [pkg/installer/otel/otel.go](../../../pkg/installer/otel/otel.go) after `collectorPlan.execute(...)` returns success, in the non-dry-run branch, and only when `featureflags.IsEnabled(featureflags.Experimental)` is true. It receives the already-resolved `envURL` and `platformToken` that the collector install threads through, and constructs an `installer.ExtensionClient` via `installer.NewExtensionClient(envURL, platformToken)`.
 
-Why over a standalone command: the routes are meaningless without the host-monitoring collector and extension, so binding them to that flow keeps a single zero-config action. A separate command would add surface area and a second auth/preview path for a step that has no independent use. If a standalone `update` entry point is wanted later, the reconciliation function is written to be callable on its own so it can be lifted without rework.
+Why over a standalone command: the routes are meaningless without the host-monitoring collector and extension, so binding them to that flow keeps a single zero-config action. A separate command would add surface area and a second auth/preview path for a step that has no independent use. An earlier draft kept a standalone `ReconcileGrailRoutes` function around for a hypothetical future `update otel` entry point; it was removed as dead code once no caller ever used it (see Decision 9). If that entry point is wanted later, it can be built from `buildGrailRoutePlans` and `applyGrailPlan`, the same building blocks the install flow already uses.
 
 ### Decision 2: Discover the pipeline by listing the schema and matching extension ownership; never construct or assume an identifier
 
@@ -167,7 +167,7 @@ The route plan is built during the install preview phase (before the existing "P
 - **Apply failures:** if `applyGrailPlan` fails for a signal after confirmation, a warning is printed for that signal. The failure does not affect the install result. The user can re-run `install otel` to retry.
 - **Dry-run:** `--dry-run` builds and prints the plan but returns before the confirmation prompt, so no routes are applied.
 - **Auto-confirm:** `--yes`/`-y` sets `installer.AutoConfirm` on the single install confirmation prompt; this covers the route apply step as well.
-- **Standalone use:** `ReconcileGrailRoutes(envURL, platformToken, dryRun bool)` remains as a standalone function with its own plan/preview/confirm/apply cycle for potential future use from `update otel`.
+- **No standalone entry point:** an earlier draft kept a `ReconcileGrailRoutes(envURL, platformToken, dryRun bool)` function around, with its own plan/preview/confirm/apply cycle, for potential future use from `update otel`. It was removed once nothing ever called it; see Decision 9.
 
 ### Decision 6: On 401/403, surface diagnostic context rather than a confident diagnosis
 
@@ -231,6 +231,12 @@ A wait timeout is advisory: it's logged under `--debug` and the rebuild proceeds
 **What a remaining skip means, before vs. after this fix:** before Decision 8, the plan was checked before the extension was even installed, so on a completely fresh tenant every signal was skipped on the first run every single time, whether or not the activation that followed actually succeeded. The skip didn't reflect anything real; a second run was always required, unconditionally.
 
 After this fix, the plan is checked again only after dtwiz has installed the extension, activated it, and waited (bounded) for its pipeline to show up. So if a signal is still skipped at that point, it means one of those steps genuinely didn't finish in time: activation failed, or the pipeline is taking longer to appear than the wait allows. The apply-results skip message was reworded from `"skip — pipeline not found (activate the OpenTelemetry Host Monitoring extension first)"` to `"skip — pipeline not found (re-run install otel once the extension is active)"`, because the old wording told the user to take a manual action dtwiz already attempts automatically whenever this code path is reachable (the whole route step is gated behind the same `--experimental` flag that gates extension activation, so telling the user to "activate first" never described a step they needed to do themselves). The preview's equivalent state is worded differently still (see the Preview bullet above, Decision 5): it says "pending", not "skip", since at preview time nothing has actually failed yet.
+
+### Decision 9: Remove the standalone `ReconcileGrailRoutes` entry point as dead code
+
+Earlier drafts of this change (Decision 1, Decision 5) kept `ReconcileGrailRoutes` (and its internal `reconcileGrailRoutes`) as a standalone function with its own plan/preview/confirm/apply cycle, reasoning that a future `update otel` command might want to call it directly without going through the install flow. In practice, nothing ever called it: the install flow in `otel.go` uses `buildGrailRoutePlans` and `applyGrailPlan` directly instead, and no `update otel` command materialized. The only callers were its own tests.
+
+Both functions and their four tests (`TestReconcileGrailRoutes_DryRun/Decline/AutoConfirm_WritesRoutes/MixedPlan`) were deleted, along with the test-only `suppressOutput`/`suppressOutputPipe` helpers that existed solely to support them. Building for a hypothetical caller that never arrived just added ~130 lines nothing exercised outside of its own tests. If a standalone entry point is genuinely needed later, `buildGrailPlans`, `applyGrailPlan`, and `printGrailPlan` are the same building blocks already used by the install flow, and a thin wrapper equivalent to the deleted `reconcileGrailRoutes` can be reconstructed from them in a few lines when there's an actual caller to justify it.
 
 ## Risks / Trade-offs
 

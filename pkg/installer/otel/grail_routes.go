@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
+
 	"github.com/dynatrace-oss/dtctl/sdk/api/settings"
 	"github.com/dynatrace-oss/dtctl/sdk/httpclient"
 
@@ -198,7 +200,6 @@ func (c *sdkGrailClient) createRoutingObject(ctx context.Context, schemaID strin
 	return nil
 }
 
-// findRoutingEntry scans entries for one whose pipelineId equals pipelineID.
 func findRoutingEntry(entries []routingEntry, pipelineID string) (found bool, idx int, enabled bool) {
 	for i, e := range entries {
 		if e.PipelineID == pipelineID {
@@ -208,7 +209,6 @@ func findRoutingEntry(entries []routingEntry, pipelineID string) (found bool, id
 	return false, -1, false
 }
 
-// buildGrailPlans resolves pipeline existence and computes the per-signal action plan.
 func buildGrailPlans(ctx context.Context, c grailRouteClient) ([]grailSignalPlan, error) {
 	logger.Debug("building Grail route plans", "signals", len(grailSignals))
 	plans := make([]grailSignalPlan, 0, len(grailSignals))
@@ -268,8 +268,7 @@ func countAction(plans []grailSignalPlan, action grailAction) int {
 	return n
 }
 
-// applyGrailPlan writes the route change for a single signal. Noop and skip
-// plans are ignored. The caller is responsible for checking ShouldProceed first.
+// applyGrailPlan assumes the caller has already checked ShouldProceed.
 func applyGrailPlan(ctx context.Context, c grailRouteClient, plan grailSignalPlan) error {
 	logger.Debug("applying Grail route plan", "signal", plan.signal.name, "action", plan.action)
 	switch plan.action {
@@ -303,61 +302,60 @@ func applyGrailPlan(ctx context.Context, c grailRouteClient, plan grailSignalPla
 	return nil
 }
 
-// printGrailApplyResults prints the per-signal outcome after route reconciliation runs.
+// grailApplyMessage returns the display message and color for action's actual outcome,
+// after routes have been applied. A skip here is a final result: dtwiz has already tried
+// to install, activate, and wait for the extension by this point.
+func grailApplyMessage(action grailAction) (string, *color.Color) {
+	switch action {
+	case grailActionCreate:
+		return "route created", display.ColorOK
+	case grailActionReEnable:
+		return "route re-enabled", display.ColorOK
+	case grailActionNoop:
+		return "already configured", display.ColorMuted
+	case grailActionSkip:
+		return "skip — pipeline not found (re-run install otel once the extension is active)", display.ColorMuted
+	}
+	return "", display.ColorDefault
+}
+
 func printGrailApplyResults(plans []grailSignalPlan, errs []error) {
 	fmt.Printf("\n  ── OpenPipeline dynamic routes ──\n\n")
 	for i, p := range plans {
-		var msg string
-		var colorFn = display.ColorDefault
+		msg, colorFn := grailApplyMessage(p.action)
 		if i < len(errs) && errs[i] != nil {
 			msg = fmt.Sprintf("warning — %v", errs[i])
 			colorFn = display.ColorWarning
-		} else {
-			switch p.action {
-			case grailActionCreate:
-				msg = "route created"
-				colorFn = display.ColorOK
-			case grailActionReEnable:
-				msg = "route re-enabled"
-				colorFn = display.ColorOK
-			case grailActionNoop:
-				msg = "already configured"
-				colorFn = display.ColorMuted
-			case grailActionSkip:
-				msg = "skip — pipeline not found (re-run install otel once the extension is active)"
-				colorFn = display.ColorMuted
-			}
 		}
 		display.PrintStatusLine(p.signal.displayName, msg, colorFn)
 	}
 	fmt.Println()
 }
 
-// printGrailPlan prints a one-line summary per signal as part of the install preview.
-// This is a snapshot from before extension activation runs, so a skip shown here is not a
-// final decision: the plan is rebuilt and re-evaluated right before being applied (see
+// grailPreviewMessage returns the display message and color for action as shown in the
+// install preview, before extension activation has run. A skip here is never a final
+// decision: the plan is rebuilt and re-evaluated right before being applied (see
 // InstallOtelCollectorWithProject), by which point the extension has been installed and
-// activated. Only printGrailApplyResults reports a skip as an actual, final outcome.
+// activated. Only grailApplyMessage reports a skip as an actual, final outcome.
+func grailPreviewMessage(action grailAction) (string, *color.Color) {
+	switch action {
+	case grailActionCreate:
+		return "create route", display.ColorOK
+	case grailActionReEnable:
+		return "re-enable route", display.ColorWarning
+	case grailActionNoop:
+		return "already configured", display.ColorMuted
+	case grailActionSkip:
+		return "pending — extension not active yet", display.ColorMuted
+	}
+	return "", display.ColorDefault
+}
+
 func printGrailPlan(plans []grailSignalPlan) {
 	display.ColorMessage.Println("  OpenPipeline dynamic routes (Smartscape on Grail)")
 	display.PrintSectionDivider()
 	for _, p := range plans {
-		var msg string
-		var colorFn = display.ColorDefault
-		switch p.action {
-		case grailActionCreate:
-			msg = "create route"
-			colorFn = display.ColorOK
-		case grailActionReEnable:
-			msg = "re-enable route"
-			colorFn = display.ColorWarning
-		case grailActionNoop:
-			msg = "already configured"
-			colorFn = display.ColorMuted
-		case grailActionSkip:
-			msg = "pending — extension not active yet"
-			colorFn = display.ColorMuted
-		}
+		msg, colorFn := grailPreviewMessage(p.action)
 		display.PrintStatusLine(p.signal.displayName, msg, colorFn)
 	}
 }
@@ -366,13 +364,13 @@ func printGrailPlan(plans []grailSignalPlan) {
 var waitForGrailPipelinesFn = waitForGrailPipelines
 
 // waitForGrailPipelines polls, bounded, for at least one of the OTel Host Monitoring
-// extension's OpenPipeline pipelines to become listable. Only meant to be called after a
-// freshly hub-installed extension: Hub installs are asynchronous (202 Accepted, see
-// ExtensionClient.IsExtensionActive), so a pipeline that isn't listable yet right after
-// install doesn't mean the extension failed, only that it hasn't propagated. Any single
-// signal's pipeline appearing is treated as readiness, since the extension provisions all
-// three together. Returns the last error seen if none appear within the bound; the caller
-// treats that as advisory (the route step's own skip-and-retry-later handling still applies).
+// extension's OpenPipeline pipelines to become listable. Called unconditionally, whether or
+// not the extension was freshly installed this run: an already-listable pipeline satisfies
+// the first check immediately, while a freshly hub-installed one (async, 202 Accepted; see
+// ExtensionClient.IsExtensionActive) gets the time it needs to propagate. Any single signal's
+// pipeline appearing is treated as readiness, since the extension provisions all three
+// together. Returns the last error seen if none appear within the bound; the caller treats
+// that as advisory (the route step's own skip-and-retry-later handling still applies).
 func waitForGrailPipelines(ctx context.Context, c grailRouteClient, sleeper func(time.Duration)) error {
 	return installer.Retry(sleeper, installer.RetryConfig{
 		MaxAttempts: installer.ExtensionActiveMaxAttempts,
@@ -408,45 +406,4 @@ func buildGrailRoutePlans(envURL, platformToken string) (grailRouteClient, []gra
 		return nil, nil, err
 	}
 	return c, plans, nil
-}
-
-// reconcileGrailRoutes is the internal implementation of ReconcileGrailRoutes.
-// It includes its own plan/print/confirm/apply cycle and is kept for standalone
-// use (e.g. a future "update otel" command). The install flow in otel.go uses
-// buildGrailRoutePlans + applyGrailPlan directly instead.
-func reconcileGrailRoutes(ctx context.Context, c grailRouteClient, dryRun bool) error {
-	plans, err := buildGrailPlans(ctx, c)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println()
-	printGrailPlan(plans)
-	fmt.Println()
-
-	if proceed, err := installer.ShouldProceed(dryRun, "Route reconciliation"); !proceed {
-		return err
-	}
-
-	for _, plan := range plans {
-		if err := applyGrailPlan(ctx, c, plan); err != nil {
-			return fmt.Errorf("apply %s route: %w", plan.signal.name, err)
-		}
-	}
-	return nil
-}
-
-// ReconcileGrailRoutes ensures the three OpenPipeline dynamic routes for
-// Smartscape on Grail are present. It is additive and idempotent: it only
-// creates routes that are absent and re-enables routes that are disabled; it
-// never modifies or deletes existing routes. A missing pipeline for a signal
-// causes that signal to be skipped safely. This function includes its own
-// preview+confirm cycle; the install flow in otel.go uses buildGrailRoutePlans
-// and applyGrailPlan directly instead.
-func ReconcileGrailRoutes(envURL, platformToken string, dryRun bool) error {
-	c, err := newSDKGrailClient(envURL, platformToken)
-	if err != nil {
-		return fmt.Errorf("create Grail route client: %w", err)
-	}
-	return reconcileGrailRoutes(context.Background(), c, dryRun)
 }
