@@ -20,7 +20,7 @@
 
 ## 4. Preview, confirm, dry-run
 
-- [ ] 4.1 Print the per-signal plan one line each (signal, create/re-enable/exists/skip). No separate confirmation prompt for routes: the existing `"Proceed with installation?"` prompt in `otel.go` already covers them. `ReconcileGrailRoutes` receives `dryRun bool` and returns early (after printing the plan) when it is true — no writes.
+- [ ] 4.1 Print the per-signal plan one line each (signal, create/re-enable/exists/skip). No separate confirmation prompt for routes: the existing `"Proceed with installation?"` prompt in `otel.go` already covers them. `ReconcileGrailRoutes` receives `dryRun bool` and returns early (after printing the plan) when it is true, making no writes.
 - [ ] 4.2 There is no route-only cancellation path. `ReconcileGrailRoutes` is only called after the user has already confirmed (or `--yes` was set); it never calls `ShouldProceed` or returns `ErrInstallCancelled`.
 
 ## 5. Wire into the install flow

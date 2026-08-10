@@ -22,9 +22,7 @@ const grailPipelineName = "OpenTelemetry Host Monitoring"
 
 const otelExtensionName = "com.dynatrace.extension.opentelemetry"
 
-// Documented matching conditions for each signal type.
-// Metrics uses uppercase AND; logs/spans use lowercase and — confirmed against
-// a live tenant and the docs above.
+// Case matters: metrics uses uppercase AND; logs/spans use lowercase and.
 const (
 	grailMatcherMetrics = `matchesValue(metric.key, {"system.*", "process.*"}) AND isNotNull(host.id)`
 	grailMatcherLogs    = `isNotNull(host.id) and isNotNull(host.name) and matchesValue(dt.openpipeline.source, "/api/v2/otlp/v1/logs")`
@@ -32,11 +30,11 @@ const (
 )
 
 type grailSignal struct {
-	name           string // lowercase, used in error messages
-	displayName    string // title-case, used in output
-	pipelineSchema string // builtin:openpipeline.<signal>.pipelines — where the extension's pipeline object lives
+	name           string // used in logs/errors
+	displayName    string // used in UI output
+	pipelineSchema string // builtin:openpipeline.<signal>.pipelines
 	routingSchema  string // builtin:openpipeline.<signal>.routing
-	matcher        string // documented matching condition
+	matcher        string
 }
 
 var grailSignals = []grailSignal{
@@ -63,8 +61,7 @@ var grailSignals = []grailSignal{
 	},
 }
 
-// routingEntry mirrors the shape confirmed against a live tenant for all
-// three builtin:openpipeline.<signal>.routing schemas.
+// routingEntry mirrors one item of a routing schema's value.routingEntries[] array.
 type routingEntry struct {
 	Enabled      bool   `json:"enabled"`
 	PipelineType string `json:"pipelineType"`
@@ -95,15 +92,12 @@ type grailSignalPlan struct {
 // grailRouteClient abstracts the Dynatrace API calls needed for route
 // reconciliation. The interface exists for unit-test injection.
 type grailRouteClient interface {
-	// checkPipeline finds the OTel-extension-owned pipeline in pipelineSchema and
-	// returns its Settings objectId (used as the routing entry's pipelineId, which is
-	// a setting reference). Returns ("", nil) when absent (extension not installed or
-	// no matching pipeline); propagates other errors.
+	// checkPipeline returns the OTel-owned pipeline's Settings objectId in pipelineSchema,
+	// or ("", nil) if none exists (not an error). Other failures propagate.
 	checkPipeline(ctx context.Context, pipelineSchema string) (objectID string, err error)
 	getRoutingEntries(ctx context.Context, schemaID string) (objectID, schemaVersion string, entries []routingEntry, err error)
 	putRoutingEntries(ctx context.Context, objectID, schemaVersion string, entries []routingEntry) error
-	// createRoutingObject creates the singleton routing config for schemaID with the
-	// given entries. Used when the routing object does not exist yet (fresh tenant).
+	// createRoutingObject POST-creates the singleton routing config when it doesn't exist yet.
 	createRoutingObject(ctx context.Context, schemaID string, entries []routingEntry) error
 }
 
@@ -141,10 +135,8 @@ func (c *sdkGrailClient) getRoutingEntries(ctx context.Context, schemaID string)
 		return "", "", nil, installer.WithScopeHint(fmt.Errorf("get routing object for %s: %w", schemaID, err), "settings:objects:read")
 	}
 	if len(list.Items) == 0 {
-		// The routing config is a singleton (maxObjects=1) that does not exist until
-		// the first route is written. On a fresh tenant it is simply absent — a valid
-		// state, not an error. Return empty entries with no objectID; applyGrailPlan
-		// then POST-creates the object instead of PUT-updating it.
+		// The routing singleton doesn't exist until the first route is written; absence is
+		// valid, not an error. Empty entries + no objectID tells applyGrailPlan to POST-create.
 		logger.Debug("routing object absent — will create on first route", "schema", schemaID)
 		return "", "", nil, nil
 	}
@@ -164,11 +156,8 @@ func (c *sdkGrailClient) getRoutingEntries(ctx context.Context, schemaID string)
 
 func (c *sdkGrailClient) putRoutingEntries(ctx context.Context, objectID, schemaVersion string, entries []routingEntry) error {
 	logger.Debug("putting routing entries", "objectId", objectID, "count", len(entries))
-	// Bypass settings.Handler.Update here so the raw response body is accessible:
-	// CheckResponse parses the top-level "Constraints violated." message but discards
-	// the nested constraintViolations array that names the specific offending field.
-	// The raw body is needed to surface that detail. This mirrors the pattern in
-	// pkg/installer/gcp/dtapi.go (updateConnection).
+	// Raw PUT instead of settings.Handler.Update: CheckResponse drops the nested
+	// constraintViolations detail we need below. Mirrors gcp/dtapi.go's updateConnection.
 	resp, err := c.C.HTTP().R().SetContext(ctx).
 		SetBody(map[string]any{"value": map[string]any{"routingEntries": entries}}).
 		SetHeader("If-Match", schemaVersion).
@@ -236,8 +225,7 @@ func buildGrailPlans(ctx context.Context, c grailRouteClient) ([]grailSignalPlan
 		plan.entries = entries
 		logger.Debug("routing entries retrieved", "signal", sig.name, "objectId", objID, "entryCount", len(entries))
 
-		// Routing entries reference the pipeline by its Settings objectId, so match on
-		// pipelineObjID (not the customId) to detect an existing route.
+		// Match on the pipeline's objectId (not customId) to detect an existing route.
 		found, idx, enabled := findRoutingEntry(entries, pipelineObjID)
 		switch {
 		case !found:
@@ -284,8 +272,7 @@ func applyGrailPlan(ctx context.Context, c grailRouteClient, plan grailSignalPla
 			Matcher:      plan.signal.matcher,
 			Description:  grailPipelineName,
 		}
-		// An empty routingObjID means the singleton routing config does not exist yet
-		// (fresh tenant) — POST-create it. Otherwise PUT the appended entry list.
+		// Empty routingObjID means the singleton doesn't exist yet: POST-create instead of PUT.
 		if plan.routingObjID == "" {
 			logger.Debug("creating routing object with first route", "signal", plan.signal.name, "schema", plan.signal.routingSchema)
 			return c.createRoutingObject(ctx, plan.signal.routingSchema, newEntries)
@@ -302,9 +289,8 @@ func applyGrailPlan(ctx context.Context, c grailRouteClient, plan grailSignalPla
 	return nil
 }
 
-// grailApplyMessage returns the display message and color for action's actual outcome,
-// after routes have been applied. A skip here is a final result: dtwiz has already tried
-// to install, activate, and wait for the extension by this point.
+// grailApplyMessage reports the outcome after routes are applied; a skip here is final,
+// since install/activate/wait have already been attempted by this point.
 func grailApplyMessage(action grailAction) (string, *color.Color) {
 	switch action {
 	case grailActionCreate:
@@ -332,11 +318,9 @@ func printGrailApplyResults(plans []grailSignalPlan, errs []error) {
 	fmt.Println()
 }
 
-// grailPreviewMessage returns the display message and color for action as shown in the
-// install preview, before extension activation has run. A skip here is never a final
-// decision: the plan is rebuilt and re-evaluated right before being applied (see
-// InstallOtelCollectorWithProject), by which point the extension has been installed and
-// activated. Only grailApplyMessage reports a skip as an actual, final outcome.
+// grailPreviewMessage is shown before extension activation runs, so a skip here is never
+// final: the plan is rebuilt right before applying (see InstallOtelCollectorWithProject).
+// Only grailApplyMessage's skip is a final outcome.
 func grailPreviewMessage(action grailAction) (string, *color.Color) {
 	switch action {
 	case grailActionCreate:
@@ -363,14 +347,11 @@ func printGrailPlan(plans []grailSignalPlan) {
 // waitForGrailPipelinesFn is overridable in tests.
 var waitForGrailPipelinesFn = waitForGrailPipelines
 
-// waitForGrailPipelines polls, bounded, for at least one of the OTel Host Monitoring
-// extension's OpenPipeline pipelines to become listable. Called unconditionally, whether or
-// not the extension was freshly installed this run: an already-listable pipeline satisfies
-// the first check immediately, while a freshly hub-installed one (async, 202 Accepted; see
-// ExtensionClient.IsExtensionActive) gets the time it needs to propagate. Any single signal's
-// pipeline appearing is treated as readiness, since the extension provisions all three
-// together. Returns the last error seen if none appear within the bound; the caller treats
-// that as advisory (the route step's own skip-and-retry-later handling still applies).
+// waitForGrailPipelines polls, bounded, until any one signal's pipeline is listable (the
+// extension provisions all three together). Called unconditionally: an already-listable
+// pipeline satisfies the first check immediately, while a freshly hub-installed one (async,
+// 202 Accepted) gets time to propagate. A timeout is advisory; the route step's own
+// skip-and-retry-later handling covers it.
 func waitForGrailPipelines(ctx context.Context, c grailRouteClient, sleeper func(time.Duration)) error {
 	return installer.Retry(sleeper, installer.RetryConfig{
 		MaxAttempts: installer.ExtensionActiveMaxAttempts,
@@ -392,9 +373,8 @@ func waitForGrailPipelines(ctx context.Context, c grailRouteClient, sleeper func
 	})
 }
 
-// buildGrailRoutePlans creates an SDK client and builds the route plan. Intended
-// for use from the install preview phase in otel.go so the plan can be shown
-// before the confirmation prompt and applied afterwards without a second prompt.
+// buildGrailRoutePlans builds the client + plan for otel.go's install preview: shown
+// before confirmation, applied afterward without a second prompt.
 func buildGrailRoutePlans(envURL, platformToken string) (grailRouteClient, []grailSignalPlan, error) {
 	logger.Debug("creating Grail route client", "envURL", envURL)
 	c, err := newSDKGrailClient(envURL, platformToken)

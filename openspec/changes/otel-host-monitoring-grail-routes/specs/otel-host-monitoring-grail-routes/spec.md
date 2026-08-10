@@ -116,7 +116,7 @@ The install preview SHALL show the current state of the OTel host monitoring ext
 - **WHEN** `install otel` prints its install preview
 - **THEN** the preview SHALL show the extension as already installed
 - **AND** this line SHALL appear before the OpenPipeline route plan section
-- **AND** the preview SHALL NOT claim a specific activation outcome (active vs. inactive), since the API's per-version activation flag is not a reliable signal for this extension: its OpenPipeline pipelines provision on install, not on activation, so a tenant can report the extension as inactive while host monitoring already works end to end
+- **AND** the preview SHALL NOT claim a specific activation outcome (active vs. inactive)
 
 #### Scenario: Extension not installed
 
