@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
@@ -78,12 +79,14 @@ func printExtensionActivationPreview(status installer.ExtensionStatus) {
 	var msg string
 	colorFn := display.ColorDefault
 	switch status {
-	case installer.ExtensionInstalledActive:
-		msg = "already active"
+	case installer.ExtensionInstalledActive, installer.ExtensionInstalledInactive:
+		// The Dynatrace API's per-version "active" flag isn't a reliable signal for this
+		// extension: pipelines get provisioned on install, not on activation, so a tenant
+		// can show "active": false while host monitoring already works end to end. Collapse
+		// both installed states into one message rather than claim an activation state that
+		// can't be confirmed.
+		msg = "already installed"
 		colorFn = display.ColorMuted
-	case installer.ExtensionInstalledInactive:
-		msg = "will be activated"
-		colorFn = display.ColorOK
 	case installer.ExtensionNotInstalled:
 		msg = "will be installed and activated"
 		colorFn = display.ColorOK
@@ -539,9 +542,24 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		}
 	}
 
-	// Apply the pre-built route plans. Results are printed per-signal so the user
-	// can see what happened; failures are warnings that do not fail the install.
+	// Rebuild the route plan right before applying instead of reusing the preview-time
+	// snapshot: extension activation (above) may have just made the pipeline exist, and
+	// applying the stale pre-confirmation plan would skip routes that are now creatable
+	// in this same run. Falls back to the preview snapshot if the rebuild itself fails.
 	if grailC != nil {
+		// Give the pipeline a bounded chance to appear before rebuilding the plan. If it's
+		// already there (the common case, since pipelines provision on extension install,
+		// not activation), this succeeds on the first check with no meaningful cost; if the
+		// extension was just hub-installed (async, 202 Accepted), this is what gives it
+		// time to show up so the route still gets created in this same run.
+		if err := waitForGrailPipelinesFn(context.Background(), grailC, time.Sleep); err != nil {
+			logger.Debug("OTel host-monitoring pipelines did not appear within the wait bound", "error", err)
+		}
+		if freshPlans, err := buildGrailPlans(context.Background(), grailC); err != nil {
+			logger.Debug("failed to rebuild Grail route plans after extension activation, applying preview snapshot", "error", err)
+		} else {
+			grailPlans = freshPlans
+		}
 		logger.Debug("applying Grail route plans", "count", len(grailPlans))
 		applyErrs := make([]error, len(grailPlans))
 		for i, p := range grailPlans {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/fatih/color"
 
@@ -316,6 +317,67 @@ func TestBuildGrailPlans_PipelineNotFound(t *testing.T) {
 	}
 	if plans[2].action != grailActionSkip {
 		t.Errorf("spans: want skip, got %v", plans[2].action)
+	}
+}
+
+// TestBuildGrailPlans_RebuildAfterPipelineAppears guards the otel.go install flow's
+// fix for a real bug: the route plan shown in the preview (before the user confirms)
+// was being reused as-is for the apply step, even though extension activation runs
+// in between and can make a previously-missing pipeline appear. Applying the stale
+// preview snapshot would then skip a route that could actually be created in the same
+// run. otel.go now calls buildGrailPlans again right before applying; this test
+// verifies that a second call against the same client reflects a pipeline that
+// became available after the first call, rather than returning a cached result.
+func TestBuildGrailPlans_RebuildAfterPipelineAppears(t *testing.T) {
+	c := happyFakeClient()
+	metricsSchema := grailSignals[0].pipelineSchema
+	c.pipelines[metricsSchema] = "" // not active yet, as during the initial preview
+
+	preview, err := buildGrailPlans(context.Background(), c)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if preview[0].action != grailActionSkip {
+		t.Fatalf("preview: want skip before activation, got %v", preview[0].action)
+	}
+
+	// Simulate the extension activation step (which runs between preview and apply
+	// in otel.go) making the pipeline appear.
+	c.pipelines[metricsSchema] = pipelineObjID(metricsSchema)
+
+	rebuilt, err := buildGrailPlans(context.Background(), c)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rebuilt[0].action != grailActionCreate {
+		t.Errorf("rebuilt: want create after the pipeline appears, got %v", rebuilt[0].action)
+	}
+}
+
+// ── waitForGrailPipelines ───────────────────────────────────────────────────────
+
+// TestWaitForGrailPipelines_AlreadyPresent verifies the wait returns immediately,
+// without needing any retries, when a pipeline is already listable.
+func TestWaitForGrailPipelines_AlreadyPresent(t *testing.T) {
+	c := happyFakeClient()
+	sleeps := 0
+	err := waitForGrailPipelines(context.Background(), c, func(time.Duration) { sleeps++ })
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sleeps != 0 {
+		t.Errorf("expected no sleeps when a pipeline is already present, got %d", sleeps)
+	}
+}
+
+// TestWaitForGrailPipelines_TimesOut verifies the wait gives up and returns an error
+// after its bounded number of attempts when no pipeline ever becomes listable, using a
+// no-op sleeper so the test doesn't actually wait out the real retry delay.
+func TestWaitForGrailPipelines_TimesOut(t *testing.T) {
+	c := &fakeGrailClient{pipelines: map[string]string{}}
+	err := waitForGrailPipelines(context.Background(), c, func(time.Duration) {})
+	if err == nil {
+		t.Fatal("expected an error when no pipeline ever becomes listable")
 	}
 }
 

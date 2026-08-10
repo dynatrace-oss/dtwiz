@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/dynatrace-oss/dtctl/sdk/api/settings"
 	"github.com/dynatrace-oss/dtctl/sdk/httpclient"
@@ -323,7 +324,7 @@ func printGrailApplyResults(plans []grailSignalPlan, errs []error) {
 				msg = "already configured"
 				colorFn = display.ColorMuted
 			case grailActionSkip:
-				msg = "skip — pipeline not found (activate the OpenTelemetry Host Monitoring extension first)"
+				msg = "skip — pipeline not found (re-run install otel once the extension is active)"
 				colorFn = display.ColorMuted
 			}
 		}
@@ -333,6 +334,10 @@ func printGrailApplyResults(plans []grailSignalPlan, errs []error) {
 }
 
 // printGrailPlan prints a one-line summary per signal as part of the install preview.
+// This is a snapshot from before extension activation runs, so a skip shown here is not a
+// final decision: the plan is rebuilt and re-evaluated right before being applied (see
+// InstallOtelCollectorWithProject), by which point the extension has been installed and
+// activated. Only printGrailApplyResults reports a skip as an actual, final outcome.
 func printGrailPlan(plans []grailSignalPlan) {
 	display.ColorMessage.Println("  OpenPipeline dynamic routes (Smartscape on Grail)")
 	display.PrintSectionDivider()
@@ -350,11 +355,43 @@ func printGrailPlan(plans []grailSignalPlan) {
 			msg = "already configured"
 			colorFn = display.ColorMuted
 		case grailActionSkip:
-			msg = "skip — pipeline not found (activate the OpenTelemetry Host Monitoring extension first)"
+			msg = "pending — extension not active yet"
 			colorFn = display.ColorMuted
 		}
 		display.PrintStatusLine(p.signal.displayName, msg, colorFn)
 	}
+}
+
+// waitForGrailPipelinesFn is overridable in tests.
+var waitForGrailPipelinesFn = waitForGrailPipelines
+
+// waitForGrailPipelines polls, bounded, for at least one of the OTel Host Monitoring
+// extension's OpenPipeline pipelines to become listable. Only meant to be called after a
+// freshly hub-installed extension: Hub installs are asynchronous (202 Accepted, see
+// ExtensionClient.IsExtensionActive), so a pipeline that isn't listable yet right after
+// install doesn't mean the extension failed, only that it hasn't propagated. Any single
+// signal's pipeline appearing is treated as readiness, since the extension provisions all
+// three together. Returns the last error seen if none appear within the bound; the caller
+// treats that as advisory (the route step's own skip-and-retry-later handling still applies).
+func waitForGrailPipelines(ctx context.Context, c grailRouteClient, sleeper func(time.Duration)) error {
+	return installer.Retry(sleeper, installer.RetryConfig{
+		MaxAttempts: installer.ExtensionActiveMaxAttempts,
+		Delay:       func(int) time.Duration { return installer.ExtensionActiveRetryDelay },
+		OnRetry: func(attempt int, _ time.Duration, _ error) {
+			logger.Debug("OTel host-monitoring pipelines not yet listable, polling", "attempt", attempt)
+		},
+	}, func() error {
+		for _, sig := range grailSignals {
+			objID, err := c.checkPipeline(ctx, sig.pipelineSchema)
+			if err != nil {
+				return err
+			}
+			if objID != "" {
+				return nil
+			}
+		}
+		return fmt.Errorf("no OTel host-monitoring pipeline listable yet")
+	})
 }
 
 // buildGrailRoutePlans creates an SDK client and builds the route plan. Intended
