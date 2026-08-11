@@ -3,6 +3,7 @@ package otel
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -43,6 +44,8 @@ type fakeGrailClient struct {
 	putCalls []putCall
 	// createCalls records every createRoutingObject invocation in order
 	createCalls []createCall
+	// putErr is returned by putRoutingEntries when non-nil
+	putErr error
 }
 
 // pipelineObjID is the synthetic Settings objectId the fake returns for a given
@@ -69,7 +72,7 @@ func (f *fakeGrailClient) getRoutingEntries(_ context.Context, schemaID string) 
 
 func (f *fakeGrailClient) putRoutingEntries(_ context.Context, objectID, schemaVersion string, entries []routingEntry) error {
 	f.putCalls = append(f.putCalls, putCall{objectID: objectID, schemaVersion: schemaVersion, entries: entries})
-	return nil
+	return f.putErr
 }
 
 func (f *fakeGrailClient) createRoutingObject(_ context.Context, schemaID string, entries []routingEntry) error {
@@ -548,5 +551,91 @@ func TestBuildGrailPlans_RoutingObjectAbsent(t *testing.T) {
 	}
 	if plans[0].routingObjID != "" {
 		t.Errorf("metrics: want empty routingObjID (absent singleton), got %q", plans[0].routingObjID)
+	}
+}
+
+// ── removeGrailRoutes ─────────────────────────────────────────────────────────
+
+// fakeClientWithRoutes returns a fake where every signal has a pipeline and a
+// routing entry whose PipelineID matches that pipeline's objectId.
+func fakeClientWithRoutes() *fakeGrailClient {
+	c := &fakeGrailClient{
+		pipelines: map[string]string{},
+		routing:   map[string]fakeRoutingObj{},
+	}
+	for _, sig := range grailSignals {
+		objID := pipelineObjID(sig.pipelineSchema)
+		c.pipelines[sig.pipelineSchema] = objID
+		c.routing[sig.routingSchema] = fakeRoutingObj{
+			objectID:      "route-obj-" + sig.name,
+			schemaVersion: "1",
+			entries: []routingEntry{
+				{Enabled: true, PipelineID: objID, Matcher: sig.matcher},
+			},
+		}
+	}
+	return c
+}
+
+func TestRemoveGrailRoutes_HappyPath(t *testing.T) {
+	c := fakeClientWithRoutes()
+	errs := removeGrailRoutes(context.Background(), c)
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("signal %d: unexpected error: %v", i, err)
+		}
+	}
+	if len(c.putCalls) != len(grailSignals) {
+		t.Fatalf("expected %d put calls, got %d", len(grailSignals), len(c.putCalls))
+	}
+	for i, call := range c.putCalls {
+		if len(call.entries) != 0 {
+			t.Errorf("put call %d: expected empty entries after removal, got %d", i, len(call.entries))
+		}
+	}
+}
+
+func TestRemoveGrailRoutes_PipelineAbsent(t *testing.T) {
+	c := fakeClientWithRoutes()
+	// Remove one pipeline to simulate it not existing.
+	delete(c.pipelines, grailSignals[0].pipelineSchema)
+	errs := removeGrailRoutes(context.Background(), c)
+	if errs[0] != nil {
+		t.Errorf("signal 0: expected nil error when pipeline absent, got %v", errs[0])
+	}
+	// Only two puts for the signals whose pipelines exist.
+	if len(c.putCalls) != len(grailSignals)-1 {
+		t.Errorf("expected %d put calls, got %d", len(grailSignals)-1, len(c.putCalls))
+	}
+}
+
+func TestRemoveGrailRoutes_EntryAbsent(t *testing.T) {
+	c := fakeClientWithRoutes()
+	// Clear the routing entry for the first signal so the pipeline exists but
+	// no matching entry is in the routing object.
+	sig := grailSignals[0]
+	c.routing[sig.routingSchema] = fakeRoutingObj{
+		objectID:      "route-obj-" + sig.name,
+		schemaVersion: "1",
+		entries:       []routingEntry{}, // no entry for this pipeline
+	}
+	errs := removeGrailRoutes(context.Background(), c)
+	if errs[0] != nil {
+		t.Errorf("signal 0: expected nil error when entry absent, got %v", errs[0])
+	}
+	// Only two puts for the signals that had entries.
+	if len(c.putCalls) != len(grailSignals)-1 {
+		t.Errorf("expected %d put calls, got %d", len(grailSignals)-1, len(c.putCalls))
+	}
+}
+
+func TestRemoveGrailRoutes_PutFails(t *testing.T) {
+	c := fakeClientWithRoutes()
+	c.putErr = fmt.Errorf("simulated put failure")
+	errs := removeGrailRoutes(context.Background(), c)
+	for i, err := range errs {
+		if err == nil {
+			t.Errorf("signal %d: expected error when put fails, got nil", i)
+		}
 	}
 }

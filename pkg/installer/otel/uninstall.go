@@ -455,9 +455,13 @@ func UninstallOtelCollector(envURL, platformToken string, dryRun bool) error {
 	}
 
 	if featureflags.IsEnabled(featureflags.Experimental) {
-		fmt.Println("  Extension that will be removed from tenant:")
+		fmt.Println("  Extension and OpenPipeline routes that will be removed from tenant:")
 		fmt.Printf("    ")
 		display.ColorError.Printf("delete  %s\n", otelHostMonitoringExtension)
+		for _, sig := range grailSignals {
+			fmt.Printf("    ")
+			display.ColorError.Printf("delete  OpenPipeline %s route\n", sig.displayName)
+		}
 		fmt.Println()
 	}
 

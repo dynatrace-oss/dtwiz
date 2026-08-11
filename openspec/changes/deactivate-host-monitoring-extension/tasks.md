@@ -28,8 +28,17 @@
 - [x] 5.1 Add tests to `pkg/installer/otel/otel_test.go` covering: extension removed when user selects Delete all (experimental on), extension not removed when user selects Only collector, no extension removal when experimental off, advisory warning when deletion fails, dry-run skips deletion but shows preview line. Stub `promptUninstallDecisionFn` where needed to avoid stdin reads.
 - [x] 5.2 Verify all existing `UninstallOtelCollector` call sites compile after the signature change (only `cmd/uninstall.go` calls it)
 
-## 6. Verify
+## 6. Grail route removal
 
-- [x] 6.1 Run `make build` — confirm no compile errors
-- [x] 6.2 Run `make test` — confirm all tests pass
-- [x] 6.3 Run `make lint` — confirm no new lint issues
+- [x] 6.1 Add `removeGrailRoutes(ctx context.Context, c grailRouteClient) []error` to `pkg/installer/otel/grail_routes.go`. For each signal in `grailSignals`: call `checkPipeline` to find the pipeline objectId; if absent, skip (success). Call `getRoutingEntries`; find the entry whose `PipelineID` matches the pipeline objectId via `findRoutingEntry`; if absent, skip. Build a new entry slice with that entry removed and call `putRoutingEntries`. Return one error per signal (nil on success or skip).
+- [x] 6.2 Add `removeHostMonitoringGrailRoutesFn` test hook and `removeHostMonitoringGrailRoutes(envURL, platformToken string)` to `pkg/installer/otel/otel.go`. Create an `sdkGrailClient`, call `removeGrailRoutes`, and print an advisory warning for each non-nil error. Mirror the advisory pattern of `deactivateHostMonitoringExtension`.
+- [x] 6.3 In `deactivateHostMonitoringExtension` in `pkg/installer/otel/otel.go`, call `removeHostMonitoringGrailRoutesFn(envURL, platformToken)` as the first step, before `DeactivateExtension`.
+- [x] 6.4 Update the uninstall preview block in `UninstallOtelCollector` (when `featureflags.Experimental` is enabled) to also show the Grail routes that will be removed alongside the extension line.
+- [x] 6.5 Add unit tests for `removeGrailRoutes` in `pkg/installer/otel/grail_routes_test.go` (or the existing test file): route removed successfully, route entry absent (treated as success), pipeline not found (treated as success), `putRoutingEntries` fails (error propagated per-signal).
+- [x] 6.6 Add tests for the `removeHostMonitoringGrailRoutes` path via `removeHostMonitoringGrailRoutesFn` stub in `otel_test.go`.
+
+## 7. Verify
+
+- [x] 7.1 Run `make build` — confirm no compile errors
+- [x] 7.2 Run `make test` — confirm all tests pass
+- [x] 7.3 Run `make lint` — confirm no new lint issues

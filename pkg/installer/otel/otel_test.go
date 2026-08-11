@@ -938,6 +938,16 @@ func otelDeleteSrv(t *testing.T, getResp string, deactivateCode, deleteCode int)
 	}))
 }
 
+// stubGrailRouteRemoval replaces removeHostMonitoringGrailRoutesFn for the
+// duration of the test with a no-op so deactivation tests don't hit the
+// Grail API.
+func stubGrailRouteRemoval(t *testing.T) {
+	t.Helper()
+	orig := removeHostMonitoringGrailRoutesFn
+	removeHostMonitoringGrailRoutesFn = func(_, _ string) {}
+	t.Cleanup(func() { removeHostMonitoringGrailRoutesFn = orig })
+}
+
 // stubDeactivation replaces deactivateHostMonitoringExtensionFn for the duration
 // of the test and records whether it was called.
 func stubDeactivation(t *testing.T) *bool {
@@ -950,6 +960,7 @@ func stubDeactivation(t *testing.T) *bool {
 }
 
 func TestDeactivateHostMonitoringExtension_HappyPath(t *testing.T) {
+	stubGrailRouteRemoval(t)
 	getResp := `{"items":[{"version":"3.1.1","extensionName":"` + testOtelExtension + `"}]}`
 	srv := otelDeleteSrv(t, getResp, http.StatusNoContent, http.StatusAccepted)
 	defer srv.Close()
@@ -967,6 +978,7 @@ func TestDeactivateHostMonitoringExtension_HappyPath(t *testing.T) {
 }
 
 func TestDeactivateHostMonitoringExtension_VersionNotFound_Warns(t *testing.T) {
+	stubGrailRouteRemoval(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -982,6 +994,7 @@ func TestDeactivateHostMonitoringExtension_VersionNotFound_Warns(t *testing.T) {
 }
 
 func TestDeactivateHostMonitoringExtension_DeleteFails_Warns(t *testing.T) {
+	stubGrailRouteRemoval(t)
 	getResp := `{"items":[{"version":"3.1.1","extensionName":"` + testOtelExtension + `"}]}`
 	srv := otelDeleteSrv(t, getResp, http.StatusNoContent, http.StatusForbidden)
 	defer srv.Close()
@@ -992,6 +1005,25 @@ func TestDeactivateHostMonitoringExtension_DeleteFails_Warns(t *testing.T) {
 
 	if !strings.Contains(out, "Warning: could not remove OTel Host Monitoring extension; please remove it manually.") {
 		t.Errorf("expected delete failure warning in output, got: %s", out)
+	}
+}
+
+func TestDeactivateHostMonitoringExtension_CallsGrailRouteRemoval(t *testing.T) {
+	grailCalled := false
+	orig := removeHostMonitoringGrailRoutesFn
+	removeHostMonitoringGrailRoutesFn = func(_, _ string) { grailCalled = true }
+	t.Cleanup(func() { removeHostMonitoringGrailRoutesFn = orig })
+
+	getResp := `{"items":[{"version":"3.1.1","extensionName":"` + testOtelExtension + `"}]}`
+	srv := otelDeleteSrv(t, getResp, http.StatusNoContent, http.StatusAccepted)
+	defer srv.Close()
+
+	captureActivationOutput(t, func() {
+		deactivateHostMonitoringExtension(srv.URL, "dt0s16.test")
+	})
+
+	if !grailCalled {
+		t.Error("expected removeHostMonitoringGrailRoutesFn to be called from deactivateHostMonitoringExtension")
 	}
 }
 

@@ -48,6 +48,21 @@ Alternative considered: resolve credentials inside `UninstallOtelCollector`. Rej
 
 Local cleanup (kill + rm -rf) is the primary operation; extension removal is secondary. Running it last means a failed API call never blocks local cleanup, and the user gets the most important part done regardless.
 
+**Decision 3a: Grail route removal runs before extension deactivation.**
+
+The `install otel --experimental` flow adds dynamic routing rules to OpenPipeline for metrics, logs, and spans. Each routing entry references the objectId of the pipeline provisioned by the OTel extension. When the extension is removed, the pipeline object is deleted, leaving the routing entry as a dangling reference. Removing routes first avoids orphaned entries in the customer's OpenPipeline configuration.
+
+Route removal reuses the existing `grailRouteClient` interface from `grail_routes.go` — specifically `checkPipeline` (to find the pipeline's objectId) and `getRoutingEntries` / `putRoutingEntries` (to filter and write back the updated entry list). No new API surface is needed.
+
+The full sequence within `deactivateHostMonitoringExtension` is:
+
+1. Remove Grail routes for metrics, logs, spans (advisory per-signal)
+2. Deactivate extension environment configuration
+3. Look up latest installed version
+4. Delete extension version
+
+Failure at step 1 for one signal does not block the remaining signals or steps 2–4. The routes are Settings objects independent of each other.
+
 **Decision 4: `deactivateHostMonitoringExtensionFn` test hook, matching install side.**
 
 `activateHostMonitoringExtension` is stubbed via a package-level `var` for tests. The deactivation function uses the same pattern so tests can inject a no-op or a failure without making real API calls.
@@ -72,4 +87,6 @@ Alternative considered: a `--keep-extension` CLI flag. Rejected — interactive 
 
 - **Version mismatch**: `LatestExtensionVersion` may return a different version than the one originally installed if the user upgraded the extension externally. Deleting the latest installed version is the best we can do without provenance tracking.
 
-- **Token permissions**: Both `DeactivateExtension` and `DeleteExtensionVersion` require `extensions.write` scope. Users whose platform token lacks this scope will see an advisory warning; local cleanup proceeds normally.
+- **Token permissions**: `DeactivateExtension`, `DeleteExtensionVersion`, and route removal via `putRoutingEntries` all require write scopes (`extensions.write`, `settings:objects:write`). Users whose platform token lacks these scopes will see per-operation advisory warnings; local cleanup proceeds normally.
+
+- **Routes added externally**: If the user or another tool added additional routing entries referencing the OTel pipeline, those entries will also be removed since we filter by pipeline objectId. Acceptable — the pipeline itself is being deleted, so any reference to it would become dangling regardless.

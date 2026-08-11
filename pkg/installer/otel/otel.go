@@ -30,6 +30,27 @@ var activateHostMonitoringExtensionFn = activateHostMonitoringExtension
 // deactivateHostMonitoringExtensionFn is overridable in tests.
 var deactivateHostMonitoringExtensionFn = deactivateHostMonitoringExtension
 
+// removeHostMonitoringGrailRoutesFn is overridable in tests.
+var removeHostMonitoringGrailRoutesFn = removeHostMonitoringGrailRoutes
+
+// removeHostMonitoringGrailRoutes removes the OpenPipeline dynamic routing
+// entries for metrics, logs, and spans added during install otel --experimental.
+// All errors are advisory: a per-signal failure warns and does not abort deactivation.
+func removeHostMonitoringGrailRoutes(envURL, platformToken string) {
+	c, err := newSDKGrailClient(envURL, platformToken)
+	if err != nil {
+		logger.Debug("failed to create Grail client for route removal", "error", err)
+		fmt.Println("  Warning: could not connect to Grail API; OpenPipeline routes were not removed.")
+		return
+	}
+	for i, err := range removeGrailRoutes(context.Background(), c) {
+		if err != nil {
+			logger.Debug("failed to remove Grail route", "signal", grailSignals[i].name, "error", err)
+			fmt.Printf("  Warning: could not remove OpenPipeline %s route; please remove it manually.\n", grailSignals[i].displayName)
+		}
+	}
+}
+
 // activateHostMonitoringExtension ensures the OTel Host Monitoring extension is
 // installed from the Dynatrace Hub and its environment configuration is activated.
 // All errors are advisory: a failure logs a warning and returns without aborting the install.
@@ -101,6 +122,7 @@ func printExtensionActivationPreview(status installer.ExtensionStatus) {
 // the tenant. All errors are advisory: a failure logs a warning and returns without aborting
 // the uninstall.
 func deactivateHostMonitoringExtension(envURL, platformToken string) {
+	removeHostMonitoringGrailRoutesFn(envURL, platformToken)
 	ec, err := installer.NewExtensionClient(envURL, platformToken)
 	if err != nil {
 		logger.Debug("failed to create extension client for host monitoring deactivation", "error", err)
