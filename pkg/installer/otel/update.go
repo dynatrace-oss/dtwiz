@@ -16,15 +16,6 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
-// exporterSnippetTemplate is the YAML block to inject into an existing OTel Collector
-// configuration as the `otlp_http/dynatrace` exporter.
-// The second %s receives the full Authorization header value (e.g. "Bearer …" or "Api-Token …").
-const exporterSnippetTemplate = `otlp_http/dynatrace:
-  endpoint: %s
-  headers:
-    Authorization: "%s"
-`
-
 // backupFile writes data to a timestamped .bak.<unix> copy of path and returns
 // the backup path.
 func backupFile(path string, data []byte) (string, error) {
@@ -41,52 +32,12 @@ func dtOTLPEndpoint(apiURL string) string {
 	return strings.TrimRight(apiURL, "/") + "/api/v2/otlp"
 }
 
-// pipelineHint is the human-readable instruction for wiring the exporter.
-const pipelineHint = `Add "otlp_http/dynatrace" to the exporters list of each pipeline you want
-to forward to Dynatrace, for example:
-
-  service:
-    pipelines:
-      traces:
-        exporters: [otlp_http/dynatrace]
-      metrics:
-        exporters: [otlp_http/dynatrace]
-      logs:
-        exporters: [otlp_http/dynatrace]
-`
-
 // UpdateResult holds the outcome of an OTel config update operation.
 type UpdateResult struct {
 	ConfigPath  string
 	BackupPath  string
 	Modified    bool
 	Description string
-}
-
-// GenerateExporterSnippet returns the YAML snippet for the Dynatrace OTLP
-// exporter, ready to paste into an existing OTel Collector config.
-func GenerateExporterSnippet(apiURL, token string) string {
-	return fmt.Sprintf(exporterSnippetTemplate,
-		dtOTLPEndpoint(apiURL),
-		installer.AuthHeader(token),
-	)
-}
-
-// GeneratePipelineHint returns instructions for wiring the DT exporter into
-// service pipelines.
-func GeneratePipelineHint() string {
-	return pipelineHint
-}
-
-// GenerateFullInstructions returns a human-readable guide for manually adding
-// the Dynatrace exporter to an existing OTel Collector configuration.
-func GenerateFullInstructions(apiURL, token string) string {
-	var sb strings.Builder
-	sb.WriteString("Add the following to the `exporters:` section of your OTel Collector config:\n\n")
-	sb.WriteString(GenerateExporterSnippet(apiURL, token))
-	sb.WriteString("\n")
-	sb.WriteString(GeneratePipelineHint())
-	return sb.String()
 }
 
 // editKind represents the type of a line diff operation.

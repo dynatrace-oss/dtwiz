@@ -29,20 +29,6 @@ func TestDtOTLPEndpoint(t *testing.T) {
 	}
 }
 
-func TestGenerateExporterSnippet(t *testing.T) {
-	snippet := GenerateExporterSnippet("https://env.live.dynatrace.com/", "mytoken")
-	if !strings.Contains(snippet, "https://env.live.dynatrace.com/api/v2/otlp") {
-		t.Errorf("snippet missing expected endpoint: %s", snippet)
-	}
-	if !strings.Contains(snippet, "mytoken") {
-		t.Errorf("snippet missing token: %s", snippet)
-	}
-	// Ensure trailing slash on input URL is cleaned up — no double slash.
-	if strings.Contains(snippet, "//api/v2/otlp") {
-		t.Errorf("snippet contains double slash: %s", snippet)
-	}
-}
-
 // mustParseRoot unmarshals YAML and returns the root mapping node.
 func mustParseRoot(t *testing.T, data []byte) *yaml.Node {
 	t.Helper()
@@ -300,32 +286,6 @@ func TestBackupFile_Error(t *testing.T) {
 	_, err := backupFile("/nonexistent/dir/config.yaml", []byte("data"))
 	if err == nil {
 		t.Error("expected error when backup directory does not exist")
-	}
-}
-
-func TestGeneratePipelineHint(t *testing.T) {
-	hint := GeneratePipelineHint()
-	if !strings.Contains(hint, "otlp_http/dynatrace") {
-		t.Errorf("pipeline hint missing exporter name: %s", hint)
-	}
-	if !strings.Contains(hint, "exporters") {
-		t.Errorf("pipeline hint missing 'exporters': %s", hint)
-	}
-}
-
-func TestGenerateFullInstructions(t *testing.T) {
-	instructions := GenerateFullInstructions("https://env.live.dynatrace.com/", "mytoken")
-	if !strings.Contains(instructions, "exporters:") {
-		t.Errorf("instructions missing exporters section header: %s", instructions)
-	}
-	if !strings.Contains(instructions, "otlp_http/dynatrace") {
-		t.Errorf("instructions missing exporter name: %s", instructions)
-	}
-	if !strings.Contains(instructions, "mytoken") {
-		t.Errorf("instructions missing token: %s", instructions)
-	}
-	if !strings.Contains(instructions, "https://env.live.dynatrace.com/api/v2/otlp") {
-		t.Errorf("instructions missing endpoint URL: %s", instructions)
 	}
 }
 
