@@ -33,7 +33,7 @@
 
 - [x] 6.1 Unit-test the plan computation with a stubbed settings client: empty `routingEntries` -> entry appended for each signal; entry present and `enabled: true` -> no-op; entry present and `enabled: false` -> re-enabled (only the `enabled` field changes, all other fields and all sibling entries unchanged); mixed -> only missing/disabled signals acted on; user-broadened entry (same `pipelineId`, different `matcher`) -> recognized as existing, no duplicate. Assert existing entries survive the write unchanged (the PUT body contains prior entries + any additions/re-enables).
 - [x] 6.2 Unit-test that a missing "OpenTelemetry Host Monitoring" pipeline for one signal yields a skip for that signal, creates for the others, and returns success.
-- [ ] 6.3 Unit-test the matching-condition constants match the documented strings exactly (metrics, logs, spans).
+- [x] 6.3 Unit-test the matching-condition constants match the documented strings exactly (metrics, logs, spans).
 - [x] 6.4 Unit-test that when the routing singleton object does not exist yet, the plan still resolves to create (with an empty routing objectId) and applying it calls create (POST) rather than update (PUT), with the correct schema and a single entry referencing the resolved pipeline objectId.
 - [x] 6.5 Unit-test `withGrailScopeHint` (task 3.5): nil passes through; a non-401/403 error is unchanged; a 401 or 403 gets the schema/operation and the normally-applicable scope appended (phrased as a hint, not a diagnosis) and still satisfies `errors.Is` against the underlying sentinel.
 - [x] 6.6 Test the experimental gate: with the flag off, no settings client is constructed and no route read/write occurs; with it on, reconciliation runs.
