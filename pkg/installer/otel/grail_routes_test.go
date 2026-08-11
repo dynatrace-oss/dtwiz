@@ -97,9 +97,9 @@ func happyFakeClient() *fakeGrailClient {
 // ── constants ─────────────────────────────────────────────────────────────────
 
 func TestGrailMatcherConstants(t *testing.T) {
-	wantMetrics := `matchesValue(metric.key, {"system.*", "process.*"}) AND isNotNull(host.id)`
-	wantLogs := `isNotNull(host.id) and isNotNull(host.name) and matchesValue(dt.openpipeline.source, "/api/v2/otlp/v1/logs")`
-	wantSpans := `isNotNull(host.id) and isNotNull(host.name) and matchesValue(telemetry.sdk.name, {"opentelemetry", "odin", "otel"})`
+	wantMetrics := `isNotNull(host.id) AND matchesValue(metric.key, {"system.*", "process.*"})`
+	wantLogs := `isNotNull(host.id) AND isNotNull(host.name) AND matchesValue(dt.openpipeline.source, "/api/v2/otlp/v1/logs")`
+	wantSpans := `isNotNull(host.id) AND isNotNull(host.name) AND matchesValue(telemetry.sdk.name, {"opentelemetry", "odin", "otel"})`
 
 	if grailMatcherMetrics != wantMetrics {
 		t.Errorf("grailMatcherMetrics = %q, want %q", grailMatcherMetrics, wantMetrics)
