@@ -2,6 +2,7 @@ package otel
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
@@ -53,6 +55,43 @@ func activateHostMonitoringExtension(envURL, platformToken string) {
 		return
 	}
 	display.ColorOK.Println("  ✓ OTel Host Monitoring extension active")
+}
+
+// buildExtensionActivationPreviewFn is overridable in tests.
+var buildExtensionActivationPreviewFn = buildExtensionActivationPreview
+
+// buildExtensionActivationPreview checks the current state of the OTel Host
+// Monitoring extension without changing anything, so its status can be shown
+// in the install preview alongside the OpenPipeline route plan.
+func buildExtensionActivationPreview(envURL, platformToken string) (installer.ExtensionStatus, error) {
+	ec, err := installer.NewExtensionClient(envURL, platformToken)
+	if err != nil {
+		return 0, fmt.Errorf("create extension client: %w", err)
+	}
+	return ec.GetStatus(otelHostMonitoringExtension)
+}
+
+// printExtensionActivationPreview prints a one-line summary of what the
+// extension activation step will do, as part of the install preview.
+func printExtensionActivationPreview(status installer.ExtensionStatus) {
+	display.ColorMessage.Println("  OpenTelemetry Host Monitoring extension")
+	display.PrintSectionDivider()
+	var msg string
+	colorFn := display.ColorDefault
+	switch status {
+	case installer.ExtensionInstalledActive, installer.ExtensionInstalledInactive:
+		// The Dynatrace API's per-version "active" flag isn't a reliable signal for this
+		// extension: pipelines get provisioned on install, not on activation, so a tenant
+		// can show "active": false while host monitoring already works end to end. Collapse
+		// both installed states into one message rather than claim an activation state that
+		// can't be confirmed.
+		msg = "already installed"
+		colorFn = display.ColorMuted
+	case installer.ExtensionNotInstalled:
+		msg = "will be installed and activated"
+		colorFn = display.ColorOK
+	}
+	display.PrintStatusLine("Extension", msg, colorFn)
 }
 
 type InstrumentationPlan interface {
@@ -434,6 +473,42 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		plan.PrintPlanSteps()
 	}
 
+	experimentalEnabled := featureflags.IsEnabled(featureflags.Experimental)
+
+	// Show what the extension activation step (run after confirmation, below)
+	// will do: it runs first, before the collector install and route plan.
+	if !experimentalEnabled {
+		logger.Debug("experimental feature flag disabled, skipping extension activation preview")
+	} else if platformToken == "" {
+		logger.Debug("platform token not provided, skipping extension activation preview")
+	} else if status, err := buildExtensionActivationPreviewFn(envURL, platformToken); err != nil {
+		fmt.Println()
+		display.PrintWarning("OTel Host Monitoring extension", err)
+	} else {
+		fmt.Println()
+		printExtensionActivationPreview(status)
+	}
+
+	// Build and show the OpenPipeline route plan as part of the install preview.
+	// Routes are applied after the collector install without a separate prompt.
+	var grailC grailRouteClient
+	var grailPlans []grailSignalPlan
+	if !experimentalEnabled {
+		logger.Debug("experimental feature flag disabled, skipping OpenPipeline route plan")
+	} else if platformToken == "" {
+		logger.Debug("platform token not provided, skipping OpenPipeline route plan")
+	} else {
+		if c, plans, err := buildGrailRoutePlans(envURL, platformToken); err != nil {
+			fmt.Println()
+			display.PrintWarning("OpenPipeline routes", err)
+		} else {
+			grailC = c
+			grailPlans = plans
+			fmt.Println()
+			printGrailPlan(plans)
+		}
+	}
+
 	fmt.Println()
 
 	if dryRun {
@@ -465,6 +540,32 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		if err := plan.Execute(); err != nil {
 			return err
 		}
+	}
+
+	// Rebuild the route plan right before applying instead of reusing the preview-time
+	// snapshot: extension activation (above) may have just made the pipeline exist, and
+	// applying the stale pre-confirmation plan would skip routes that are now creatable
+	// in this same run. Falls back to the preview snapshot if the rebuild itself fails.
+	if grailC != nil {
+		// Give the pipeline a bounded chance to appear before rebuilding the plan. If it's
+		// already there (the common case, since pipelines provision on extension install,
+		// not activation), this succeeds on the first check with no meaningful cost; if the
+		// extension was just hub-installed (async, 202 Accepted), this is what gives it
+		// time to show up so the route still gets created in this same run.
+		if err := waitForGrailPipelinesFn(context.Background(), grailC, time.Sleep); err != nil {
+			logger.Debug("OTel host-monitoring pipelines did not appear within the wait bound", "error", err)
+		}
+		if freshPlans, err := buildGrailPlans(context.Background(), grailC); err != nil {
+			logger.Debug("failed to rebuild Grail route plans after extension activation, applying preview snapshot", "error", err)
+		} else {
+			grailPlans = freshPlans
+		}
+		logger.Debug("applying Grail route plans", "count", len(grailPlans))
+		applyErrs := make([]error, len(grailPlans))
+		for i, p := range grailPlans {
+			applyErrs[i] = applyGrailPlan(context.Background(), grailC, p)
+		}
+		printGrailApplyResults(grailPlans, applyErrs)
 	}
 
 	return nil

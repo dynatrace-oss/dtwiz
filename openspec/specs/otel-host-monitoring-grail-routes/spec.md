@@ -55,13 +55,13 @@ Setting up routes SHALL only add routes that are missing and SHALL never modify 
 
 ### Requirement: Missing target pipeline is skipped safely
 
-When the OTel host monitoring extension's pipeline is not found for a signal type, `install otel` SHALL skip that route and continue, and SHALL NOT fail the install.
+When the OTel host monitoring extension's pipeline is not found for a signal type at the time the routes are actually applied, `install otel` SHALL skip that route and continue, and SHALL NOT fail the install. The skip message SHALL NOT instruct the user to activate the extension themselves, since `install otel` already attempts that as part of the same run whenever the route step runs at all.
 
 #### Scenario: Pipeline not found for a signal type
 
-- **GIVEN** the OTel host monitoring extension's pipeline does not exist for a signal type (for example the extension is not activated)
+- **GIVEN** the OTel host monitoring extension's pipeline does not exist for a signal type when the routes are applied (for example, the extension could not be activated, or its pipelines have not yet propagated)
 - **WHEN** `install otel` sets up the routes
-- **THEN** the route for that signal type SHALL be skipped with an informational message
+- **THEN** the route for that signal type SHALL be skipped with a message directing the user to re-run `install otel`, not to activate the extension themselves
 - **AND** routes for signal types whose pipeline does exist SHALL still be set up
 - **AND** the overall `install otel` result SHALL remain successful
 
@@ -72,9 +72,24 @@ The planned route changes SHALL be shown as part of the main install preview bef
 #### Scenario: Route plan shown in install preview
 
 - **WHEN** `install otel` prints its install preview
-- **THEN** the planned action for each of metrics, logs, and spans SHALL be printed one line each, showing whether the route will be created, re-enabled, already exists, or is skipped
+- **THEN** the planned action for each of metrics, logs, and spans SHALL be printed one line each, showing whether the route will be created, re-enabled, already exists, or is pending on the extension not being active yet
 - **AND** this section SHALL appear before the single install confirmation prompt
 - **AND** no additional confirmation prompt SHALL be shown for routes alone
+- **AND** the preview SHALL NOT describe a route as skipped, since nothing has actually been attempted yet at preview time; a final skip is only ever reported after the routes have actually been applied
+
+#### Scenario: Route plan is re-evaluated before applying
+
+- **GIVEN** a signal's route was shown as skipped in the install preview because its pipeline did not exist yet
+- **AND** the OTel host monitoring extension is installed and activated by this same `install otel` run, after the preview and before the routes are applied
+- **WHEN** the routes are applied
+- **THEN** the route decision for that signal SHALL be re-evaluated against the pipeline's current state rather than reusing the preview's decision
+- **AND** the route SHALL be created if the pipeline now exists
+
+#### Scenario: Bounded wait for a pipeline to become listable
+
+- **WHEN** `install otel` sets up the routes
+- **THEN** `install otel` SHALL wait, up to a bounded number of attempts, for at least one signal's pipeline to become listable before evaluating the route plan
+- **AND** this wait SHALL apply the same way whether or not the extension was already installed before this run, so that a pipeline already present is found on the first attempt
 
 #### Scenario: Dry-run writes nothing
 
@@ -85,11 +100,42 @@ The planned route changes SHALL be shown as part of the main install preview bef
 
 #### Scenario: Route application failure shown as warning
 
-- **GIVEN** a route write fails after the user confirms the install (for example due to a transient API error)
+- **GIVEN** a route write fails after the user confirms the install (for example, due to a transient API error)
 - **WHEN** the route apply step runs
 - **THEN** a warning SHALL be printed identifying the affected signal and the error
 - **AND** the overall `install otel` result SHALL remain successful
 - **AND** the collector install SHALL remain in place
+
+### Requirement: Extension activation status shown in the install preview, before the route plan
+
+The install preview SHALL show the current state of the OTel host monitoring extension activation step, read-only, before the OpenPipeline route plan section. This lets the user see, before confirming, that the extension is installed ahead of the routes being applied, since dynamic routes are only meaningful once the extension's pipeline exists.
+
+#### Scenario: Extension already installed
+
+- **GIVEN** the OTel host monitoring extension is already installed, in any activation state
+- **WHEN** `install otel` prints its install preview
+- **THEN** the preview SHALL show the extension as already installed
+- **AND** this line SHALL appear before the OpenPipeline route plan section
+- **AND** the preview SHALL NOT claim a specific activation outcome (active vs. inactive)
+
+#### Scenario: Extension not installed
+
+- **GIVEN** the OTel host monitoring extension is not installed on the tenant
+- **WHEN** `install otel` prints its install preview
+- **THEN** the preview SHALL show that the extension will be installed and activated
+
+#### Scenario: Preview check failure does not block the install
+
+- **GIVEN** the extension status cannot be determined (for example, an API or auth error)
+- **WHEN** `install otel` prints its install preview
+- **THEN** a warning SHALL be shown for the extension preview section
+- **AND** the install preview and confirmation SHALL continue normally
+
+#### Scenario: Preview check is read-only
+
+- **WHEN** `install otel` builds the extension activation preview
+- **THEN** no extension install or activation call SHALL be made
+- **AND** this holds even when `--dry-run` is passed
 
 ### Requirement: Route setup is gated behind the experimental flag
 
