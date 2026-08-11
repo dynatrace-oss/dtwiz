@@ -620,7 +620,7 @@ func verifyOtelInstall(envURL, platformToken, apiToken string, httpPort int, cra
 	fmt.Println(" ✓")
 	fmt.Println()
 	logsURL := buildOtelLogsUIURL(envURL, uniqueID)
-	fmt.Println("  🎉 View the logline:", termLink("Open in Dynatrace Logs", logsURL))
+	fmt.Println("  🎉 View in", termLink("Dynatrace Logs", logsURL))
 	return nil
 }
 

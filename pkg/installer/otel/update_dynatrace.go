@@ -1,10 +1,10 @@
 package otel
 
 import (
-	"bytes"
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -129,15 +129,10 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 	if err != nil {
 		return fmt.Errorf("generating fresh collector config: %w", err)
 	}
-	// The template uses "host_metrics" (underscore), but older Dynatrace OTel Collector
-	// versions register the factory as "hostmetrics". Preserve whichever name the
-	// existing config uses so the diff stays focused on what actually changed.
-	if bytes.Contains(origData, []byte("hostmetrics/")) && !bytes.Contains(origData, []byte("host_metrics/")) {
-		freshConfig = strings.ReplaceAll(freshConfig, "host_metrics/", "hostmetrics/")
-	}
+
 	updatedData := []byte(freshConfig)
 
-	display.Header(fmt.Sprintf("Recreating collector configuration in %s:", configPath))
+	display.Header(fmt.Sprintf("Preview: collector configuration changes to %s:", configPath))
 	fmt.Println()
 
 	showConfigDiff(origData, updatedData)
@@ -147,16 +142,18 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 	fmt.Println()
 
 	if len(runningProcs) > 0 {
-		display.ColorBold.Println("  Running collectors that will be restarted:")
+		display.ColorBold.Println("  The following will be restarted:")
+		fmt.Println()
+		display.ColorBold.Println("  Collector")
 		for _, p := range runningProcs {
 			if p.containerRuntime != "" {
 				fmt.Printf("    • %s  %s\n", p.containerName, display.ColorMuted.Sprint("("+p.containerRuntime+" restart)"))
 			} else {
-				hint := p.binaryPath
-				if hint == "" {
-					hint = "(unknown binary)"
+				name := filepath.Base(p.binaryPath)
+				if name == "" || name == "." {
+					name = "(unknown)"
 				}
-				fmt.Printf("    • PID %d  %s\n", p.pid, display.ColorDefault.Sprint(hint))
+				fmt.Printf("    • %s (PID %d)\n", display.ColorDefault.Sprint(name), p.pid)
 			}
 		}
 	} else {
@@ -181,7 +178,6 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 		fmt.Println()
 		printConnectedServices(connectedSvcs)
 		fmt.Println()
-		display.ColorDefault.Println("  These services will be restarted after the collector.")
 	}
 
 	fmt.Println()

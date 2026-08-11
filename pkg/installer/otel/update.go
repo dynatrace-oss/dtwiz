@@ -545,11 +545,11 @@ func updateOtelConfig(configPath string, runningProcs []otelProcessInfo, envURL,
 					p.containerName,
 					display.ColorMuted.Sprint("("+p.containerRuntime+" restart)"))
 			} else {
-				hint := p.binaryPath
-				if hint == "" {
-					hint = "(unknown binary)"
+				name := filepath.Base(p.binaryPath)
+				if name == "" || name == "." {
+					name = "(unknown)"
 				}
-				fmt.Printf("    • PID %d  %s\n", p.pid, display.ColorDefault.Sprint(hint))
+				fmt.Printf("    • PID %d  %s\n", p.pid, display.ColorDefault.Sprint(name))
 			}
 		}
 	} else {

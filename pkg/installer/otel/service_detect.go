@@ -427,16 +427,9 @@ func isInterpreter(name string) bool {
 
 // printConnectedServices prints the list of detected connected services.
 func printConnectedServices(svcs []connectedService) {
-	display.ColorBold.Printf("  Application services connected to this collector (%d):\n", len(svcs))
+	display.ColorBold.Printf("  Connected services (%d):\n", len(svcs))
 	for _, svc := range svcs {
-		portHint := ""
-		switch {
-		case svc.collectorPort != "":
-			portHint = "  " + display.ColorMuted.Sprint("(→ collector port "+svc.collectorPort+")")
-		case svc.exportsTo != "":
-			portHint = "  " + display.ColorMuted.Sprint("(same tenant)")
-		}
-		fmt.Printf("    • PID %-6d  %s%s\n", svc.pid, display.ColorDefault.Sprint(svc.name), portHint)
+		fmt.Printf("    • PID %-6d  %s\n", svc.pid, display.ColorDefault.Sprint(svc.name))
 		if len(svc.listenPorts) > 0 {
 			display.ColorMuted.Printf("              listening on: %s\n", strings.Join(svc.listenPorts, ", "))
 		}
