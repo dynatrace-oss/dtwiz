@@ -288,7 +288,7 @@ func (e *ExtensionClient) GetStatus(extensionName string) (ExtensionStatus, erro
 		if IsExtensionNotFound(err, extensionName) {
 			return ExtensionNotInstalled, nil
 		}
-		return 0, fmt.Errorf("get extension versions: %w", err)
+		return ExtensionNotInstalled, fmt.Errorf("get extension versions: %w", err)
 	}
 	for _, item := range versionList.Items {
 		if item.Active {
