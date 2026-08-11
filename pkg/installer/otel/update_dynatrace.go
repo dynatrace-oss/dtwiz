@@ -3,8 +3,10 @@ package otel
 import (
 	"bytes"
 	"fmt"
+	"net"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -12,6 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
+	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
@@ -93,16 +96,6 @@ func nodeYAML(n *yaml.Node) []byte {
 	return bytes.TrimSpace(buf.Bytes())
 }
 
-// normalizeCumulativeName replaces the legacy processor name "cumulativetodelta"
-// with "cumulative_to_delta" in serialised YAML bytes. The Dynatrace OTel
-// Collector template was updated to use the new name; configs installed by
-// older dtwiz versions still carry the old name. Normalising both sides before
-// comparison avoids false "config out of date" results caused solely by the
-// name change.
-func normalizeCumulativeName(data []byte) []byte {
-	return bytes.ReplaceAll(data, []byte("cumulativetodelta"), []byte("cumulative_to_delta"))
-}
-
 // pipelinesNode returns the service.pipelines mapping node from root, or nil.
 func pipelinesNode(root *yaml.Node) *yaml.Node {
 	svc := nodeMappingGet(root, "service")
@@ -160,7 +153,7 @@ func matchesHostMonitoring(currentRoot, refRoot *yaml.Node) bool {
 		for _, field := range []string{"receivers", "processors"} {
 			refField := nodeMappingGet(refNode, field)
 			currentField := nodeMappingGet(currentNode, field)
-			if !bytes.Equal(normalizeCumulativeName(nodeYAML(currentField)), normalizeCumulativeName(nodeYAML(refField))) {
+			if !bytes.Equal(nodeYAML(currentField), nodeYAML(refField)) {
 				logger.Debug("host monitoring mismatch in pipeline field", "key", key, "field", field)
 				return false
 			}
@@ -260,51 +253,6 @@ func mergeHostMonitoringIntoConfig(currentRoot, refRoot *yaml.Node) {
 		}
 	}
 
-	// Older configs use "cumulativetodelta" (no underscores). The reference template
-	// uses "cumulative_to_delta". Adapt any pipeline processor references so the
-	// collector can resolve them against what's actually defined.
-	adaptCumulativeProcessorRefs(currentProcessors, currentPipelines)
-}
-
-// adaptCumulativeProcessorRefs rewrites processor references inside each pipeline's
-// "processors" sequence to match the actual cumulative-to-delta key name in use.
-// Both "cumulativetodelta" and "cumulative_to_delta" are accepted by different
-// versions of the Dynatrace OTel Collector; this prevents a mismatch when an older
-// config (using "cumulativetodelta") has host monitoring pipelines added that were
-// generated from the current template (which uses "cumulative_to_delta").
-func adaptCumulativeProcessorRefs(processors, pipelines *yaml.Node) {
-	const oldName = "cumulativetodelta"
-	const newName = "cumulative_to_delta"
-
-	if processors == nil {
-		return
-	}
-	// If the config already uses the new name, nothing to do.
-	if nodeMappingGet(processors, newName) != nil {
-		return
-	}
-	// If the config uses the old name, rewrite references in all pipeline processor lists.
-	if nodeMappingGet(processors, oldName) == nil {
-		return
-	}
-	if pipelines == nil || pipelines.Kind != yaml.MappingNode {
-		return
-	}
-	for i := 0; i+1 < len(pipelines.Content); i += 2 {
-		pipeline := pipelines.Content[i+1]
-		if pipeline.Kind != yaml.MappingNode {
-			continue
-		}
-		seq := nodeMappingGet(pipeline, "processors")
-		if seq == nil || seq.Kind != yaml.SequenceNode {
-			continue
-		}
-		for _, item := range seq.Content {
-			if item.Value == newName {
-				item.Value = oldName
-			}
-		}
-	}
 }
 
 // ensureInExtensionsList adds name to service.extensions if not already present.
@@ -358,65 +306,6 @@ func updateOtlpExporter(root *yaml.Node, apiURL, token string) bool {
 			logger.Debug("updating otlp_http Authorization header")
 			n.Value = wantAuth
 			changed = true
-		}
-	}
-
-	return changed
-}
-
-// migrateDeprecatedAliases renames deprecated OTel component names to their canonical
-// equivalents in-place. Returns true if any rename was performed.
-//   - "hostmetrics/*" → "host_metrics/*": receiver definition keys and pipeline references
-//   - "cumulativetodelta" → "cumulative_to_delta": processor definition key and pipeline references
-func migrateDeprecatedAliases(root *yaml.Node) bool {
-	const (
-		oldCumulative  = "cumulativetodelta"
-		newCumulative  = "cumulative_to_delta"
-		oldHostMetrics = "hostmetrics"
-		newHostMetrics = "host_metrics"
-	)
-	changed := false
-
-	if receivers := nodeMappingGet(root, "receivers"); receivers != nil && receivers.Kind == yaml.MappingNode {
-		for i := 0; i+1 < len(receivers.Content); i += 2 {
-			k := receivers.Content[i].Value
-			if strings.HasPrefix(k, oldHostMetrics+"/") || k == oldHostMetrics {
-				receivers.Content[i].Value = newHostMetrics + k[len(oldHostMetrics):]
-				logger.Debug("migrated receiver alias", "old", k, "new", receivers.Content[i].Value)
-				changed = true
-			}
-		}
-	}
-
-	if processors := nodeMappingGet(root, "processors"); processors != nil && processors.Kind == yaml.MappingNode {
-		if nodeMappingRename(processors, oldCumulative, newCumulative) {
-			logger.Debug("migrated processor alias", "old", oldCumulative, "new", newCumulative)
-			changed = true
-		}
-	}
-
-	if pipelines := pipelinesNode(root); pipelines != nil && pipelines.Kind == yaml.MappingNode {
-		for i := 0; i+1 < len(pipelines.Content); i += 2 {
-			pipeline := pipelines.Content[i+1]
-			if pipeline.Kind != yaml.MappingNode {
-				continue
-			}
-			if seq := nodeMappingGet(pipeline, "receivers"); seq != nil && seq.Kind == yaml.SequenceNode {
-				for _, item := range seq.Content {
-					if strings.HasPrefix(item.Value, oldHostMetrics+"/") || item.Value == oldHostMetrics {
-						item.Value = newHostMetrics + item.Value[len(oldHostMetrics):]
-						changed = true
-					}
-				}
-			}
-			if seq := nodeMappingGet(pipeline, "processors"); seq != nil && seq.Kind == yaml.SequenceNode {
-				for _, item := range seq.Content {
-					if item.Value == oldCumulative {
-						item.Value = newCumulative
-						changed = true
-					}
-				}
-			}
 		}
 	}
 
@@ -477,9 +366,87 @@ func marshalNode(root *yaml.Node) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// updateDynatraceCollector implements the host monitoring update flow for a
-// Dynatrace OTel Collector. When host monitoring is absent it is merged in;
-// when present it is compared to the reference and updated only if stale.
+// portsFromConfig reads the OTLP receiver ports and internal telemetry ports from
+// an existing OTel Collector config, falling back to canonical defaults for any
+// field that cannot be parsed.
+func portsFromConfig(configPath string) (grpc, http, metrics, healthCheck int) {
+	grpc, http, metrics, healthCheck = 4317, 4318, 8888, 13133
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return
+	}
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil || doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
+		return
+	}
+	root := doc.Content[0]
+
+	parsePort := func(endpoint string) (int, bool) {
+		_, portStr, err := net.SplitHostPort(endpoint)
+		if err != nil {
+			return 0, false
+		}
+		p, err := strconv.Atoi(portStr)
+		if err != nil || p <= 0 {
+			return 0, false
+		}
+		return p, true
+	}
+
+	if receivers := nodeMappingGet(root, "receivers"); receivers != nil {
+		if otlp := nodeMappingGet(receivers, "otlp"); otlp != nil {
+			if protocols := nodeMappingGet(otlp, "protocols"); protocols != nil {
+				if grpcProto := nodeMappingGet(protocols, "grpc"); grpcProto != nil {
+					if ep := nodeMappingGet(grpcProto, "endpoint"); ep != nil {
+						if p, ok := parsePort(ep.Value); ok {
+							grpc = p
+						}
+					}
+				}
+				if httpProto := nodeMappingGet(protocols, "http"); httpProto != nil {
+					if ep := nodeMappingGet(httpProto, "endpoint"); ep != nil {
+						if p, ok := parsePort(ep.Value); ok {
+							http = p
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if svc := nodeMappingGet(root, "service"); svc != nil {
+		if telemetry := nodeMappingGet(svc, "telemetry"); telemetry != nil {
+			if metricsNode := nodeMappingGet(telemetry, "metrics"); metricsNode != nil {
+				if readers := nodeMappingGet(metricsNode, "readers"); readers != nil && readers.Kind == yaml.SequenceNode && len(readers.Content) > 0 {
+					pull := nodeMappingGet(readers.Content[0], "pull")
+					exporter := nodeMappingGet(pull, "exporter")
+					prom := nodeMappingGet(exporter, "prometheus")
+					if portNode := nodeMappingGet(prom, "port"); portNode != nil {
+						if p, err := strconv.Atoi(portNode.Value); err == nil && p > 0 {
+							metrics = p
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if extensions := nodeMappingGet(root, "extensions"); extensions != nil {
+		if hc := nodeMappingGet(extensions, "health_check"); hc != nil {
+			if ep := nodeMappingGet(hc, "endpoint"); ep != nil {
+				if p, ok := parsePort(ep.Value); ok {
+					healthCheck = p
+				}
+			}
+		}
+	}
+
+	return
+}
+
+// updateDynatraceCollector regenerates the Dynatrace OTel Collector config from
+// the install template with new tenant credentials, preserving the existing
+// receiver ports so connected app services keep their OTLP endpoint.
 func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo, envURL, token, platformTok string, dryRun bool) error {
 	startTime := time.Now()
 	apiURL := installer.APIURL(envURL)
@@ -489,54 +456,37 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 		return fmt.Errorf("reading config file %s: %w", configPath, err)
 	}
 
-	refRoot, err := renderHostMonitoringRef(apiURL, token)
+	// Preserve existing ports so connected app services keep their OTLP endpoint.
+	grpcPort, httpPort, metricsPort, healthCheckPort := portsFromConfig(configPath)
+	logger.Debug("existing collector ports", "grpc", grpcPort, "http", httpPort, "metrics", metricsPort, "health_check", healthCheckPort)
+
+	cfgData := otelConfigData{
+		Endpoint:    strings.TrimRight(apiURL, "/"),
+		AuthHeader:  installer.AuthHeader(token),
+		GRPCPort:    grpcPort,
+		HTTPPort:    httpPort,
+		MetricsPort: metricsPort,
+	}
+	if featureflags.IsEnabled(featureflags.Experimental) {
+		cfgData.HostMonitoring = true
+		cfgData.IncludeJournald = runtime.GOOS == "linux"
+		cfgData.HealthCheckPort = healthCheckPort
+	}
+
+	freshConfig, err := renderOtelTemplate(cfgData)
 	if err != nil {
-		return fmt.Errorf("generating host monitoring reference: %w", err)
+		return fmt.Errorf("generating fresh collector config: %w", err)
 	}
-
-	var doc yaml.Node
-	if err := yaml.Unmarshal(origData, &doc); err != nil {
-		return fmt.Errorf("parsing config %s: %w", configPath, err)
+	// The template uses "host_metrics" (underscore), but older Dynatrace OTel Collector
+	// versions register the factory as "hostmetrics". Preserve whichever name the
+	// existing config uses so the diff stays focused on what actually changed.
+	if bytes.Contains(origData, []byte("hostmetrics/")) && !bytes.Contains(origData, []byte("host_metrics/")) {
+		freshConfig = strings.ReplaceAll(freshConfig, "host_metrics/", "hostmetrics/")
 	}
-	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
-		return fmt.Errorf("unexpected YAML structure in %s", configPath)
-	}
-	currentRoot := doc.Content[0]
+	updatedData := []byte(freshConfig)
 
-	aliasesChanged := migrateDeprecatedAliases(currentRoot)
-	dtExporterChanged := needsDTExporterUpdate(currentRoot, apiURL, token)
-
-	hostMonPresent := isHostMonitoringPresent(origData)
-	hostMonNeedsUpdate := !hostMonPresent || !matchesHostMonitoring(currentRoot, refRoot)
-
-	if !aliasesChanged && !dtExporterChanged && !hostMonNeedsUpdate {
-		display.ColorOK.Println("  ✓ Collector configuration is already up to date.")
-		return nil
-	}
-
-	if !hostMonPresent && hostMonNeedsUpdate {
-		display.Header(fmt.Sprintf("Adding host monitoring to %s:", configPath))
-	} else {
-		display.Header(fmt.Sprintf("Updating collector configuration in %s:", configPath))
-	}
+	display.Header(fmt.Sprintf("Recreating collector configuration in %s:", configPath))
 	fmt.Println()
-
-	if hostMonNeedsUpdate {
-		mergeHostMonitoringIntoConfig(currentRoot, refRoot)
-		// Re-check: the host monitoring merge overwrites host pipelines from the
-		// reference template, which does not include otlp_http/dynatrace. If the
-		// exporter was already wired before the merge, it needs to be re-added.
-		if !dtExporterChanged {
-			dtExporterChanged = needsDTExporterUpdate(currentRoot, apiURL, token)
-		}
-	}
-	if dtExporterChanged {
-		mergeDynatraceExporter(currentRoot, apiURL, token)
-	}
-	updatedData, err := marshalNode(currentRoot)
-	if err != nil {
-		return fmt.Errorf("marshalling updated config: %w", err)
-	}
 
 	showConfigDiff(origData, updatedData)
 

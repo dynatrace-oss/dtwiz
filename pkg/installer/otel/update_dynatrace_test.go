@@ -1,6 +1,8 @@
 package otel
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -208,79 +210,6 @@ service:
 	out := roundtrip(t, current)
 	if !strings.Contains(out, "19999") {
 		t.Errorf("expected existing health_check port 19999 to be preserved:\n%s", out)
-	}
-}
-
-func TestMatchesHostMonitoring_TrueAfterRoundtripWithOldName(t *testing.T) {
-	// Regression: after a successful update on a config that uses the legacy
-	// "cumulativetodelta" name, a second run of update must see the config as
-	// up to date, not trigger another update.
-	//
-	// Simulate: merge → serialize to disk → re-parse → compare with fresh ref.
-	ref, err := renderHostMonitoringRef("https://env.dt.com", "tok")
-	if err != nil {
-		t.Fatalf("renderHostMonitoringRef: %v", err)
-	}
-	current := parseRoot(t, `
-processors:
-  cumulativetodelta:
-    max_staleness: 25h
-service:
-  pipelines:
-    metrics:
-      receivers: [otlp]
-      processors: [cumulativetodelta]
-      exporters: [otlp_http]
-`)
-	mergeHostMonitoringIntoConfig(current, ref)
-
-	// Simulate writing to disk and reading back (round-trip).
-	diskBytes, err := marshalNode(current)
-	if err != nil {
-		t.Fatalf("marshalNode: %v", err)
-	}
-	reloaded := parseRoot(t, string(diskBytes))
-
-	// Fresh reference — as if a second `dtwiz update otel` run just started.
-	ref2, err := renderHostMonitoringRef("https://env.dt.com", "tok")
-	if err != nil {
-		t.Fatalf("renderHostMonitoringRef (ref2): %v", err)
-	}
-
-	if !matchesHostMonitoring(reloaded, ref2) {
-		t.Error("expected matchesHostMonitoring to return true after round-trip: second run should see config as up to date")
-	}
-}
-
-func TestMergeHostMonitoring_OldCumulativeNameAdapted(t *testing.T) {
-	// Configs installed by older dtwiz versions use "cumulativetodelta" (no underscores).
-	// The reference template uses "cumulative_to_delta". The metrics/host pipeline must
-	// reference the name that is actually defined in the processors section.
-	ref, err := renderHostMonitoringRef("https://env.dt.com", "tok")
-	if err != nil {
-		t.Fatalf("renderHostMonitoringRef: %v", err)
-	}
-	current := parseRoot(t, `
-processors:
-  cumulativetodelta:
-    max_staleness: 25h
-service:
-  pipelines:
-    metrics:
-      receivers: [otlp]
-      processors: [cumulativetodelta]
-      exporters: [otlp_http]
-`)
-	mergeHostMonitoringIntoConfig(current, ref)
-
-	out := roundtrip(t, current)
-
-	// The metrics/host pipeline must reference the old name.
-	if strings.Contains(out, "cumulative_to_delta") {
-		t.Errorf("expected old name 'cumulativetodelta' to be used in metrics/host pipeline, got 'cumulative_to_delta':\n%s", out)
-	}
-	if !strings.Contains(out, "cumulativetodelta") {
-		t.Errorf("expected 'cumulativetodelta' to remain in output:\n%s", out)
 	}
 }
 
@@ -517,71 +446,6 @@ func TestNodeMappingRename_ReturnsFalseWhenAbsent(t *testing.T) {
 	}
 }
 
-// ── migrateDeprecatedAliases ──────────────────────────────────────────────
-
-func TestMigrateDeprecatedAliases_NoOp(t *testing.T) {
-	cfg := `
-receivers:
-  otlp: {}
-processors:
-  cumulative_to_delta: {}
-`
-	root := parseRoot(t, cfg)
-	if migrateDeprecatedAliases(root) {
-		t.Error("expected false when no deprecated aliases present")
-	}
-}
-
-func TestMigrateDeprecatedAliases_RenamesHostMetrics(t *testing.T) {
-	cfg := `
-receivers:
-  hostmetrics/10s:
-    collection_interval: 10s
-  hostmetrics/5m:
-    collection_interval: 5m
-service:
-  pipelines:
-    metrics/host:
-      receivers: [hostmetrics/10s, hostmetrics/5m]
-      exporters: [otlp_http]
-`
-	root := parseRoot(t, cfg)
-	if !migrateDeprecatedAliases(root) {
-		t.Error("expected true when deprecated aliases present")
-	}
-	out := roundtrip(t, root)
-	if strings.Contains(out, "hostmetrics/") {
-		t.Errorf("expected old 'hostmetrics' names to be removed:\n%s", out)
-	}
-	if !strings.Contains(out, "host_metrics/10s") || !strings.Contains(out, "host_metrics/5m") {
-		t.Errorf("expected new 'host_metrics' names in output:\n%s", out)
-	}
-}
-
-func TestMigrateDeprecatedAliases_RenamesCumulativeToDelta(t *testing.T) {
-	cfg := `
-processors:
-  cumulativetodelta:
-    max_staleness: 25h
-service:
-  pipelines:
-    metrics:
-      processors: [cumulativetodelta]
-      exporters: [otlp_http]
-`
-	root := parseRoot(t, cfg)
-	if !migrateDeprecatedAliases(root) {
-		t.Error("expected true when deprecated processor alias present")
-	}
-	out := roundtrip(t, root)
-	if strings.Contains(out, "cumulativetodelta") {
-		t.Errorf("expected old name to be removed:\n%s", out)
-	}
-	if !strings.Contains(out, "cumulative_to_delta") {
-		t.Errorf("expected new name in output:\n%s", out)
-	}
-}
-
 // ── second-update idempotency ─────────────────────────────────────────────
 
 // TestMatchesHostMonitoring_TrueWhenOnlyExportersDiffer verifies that a config
@@ -673,28 +537,59 @@ service:
 	}
 }
 
-func TestMigrateDeprecatedAliases_UpdatesBothReceiversAndPipelines(t *testing.T) {
+// ── portsFromConfig ────────────────────────────────────────────────────────
+
+func TestPortsFromConfig_ReturnsDefaults_OnMissingFile(t *testing.T) {
+	grpc, http, metrics, hc := portsFromConfig("/nonexistent/path/config.yaml")
+	if grpc != 4317 || http != 4318 || metrics != 8888 || hc != 13133 {
+		t.Errorf("expected canonical defaults, got grpc=%d http=%d metrics=%d hc=%d", grpc, http, metrics, hc)
+	}
+}
+
+func TestPortsFromConfig_ParsesAllPorts(t *testing.T) {
 	cfg := `
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13200
 receivers:
-  hostmetrics/10s:
-    collection_interval: 10s
-processors:
-  cumulativetodelta: {}
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:5317
+      http:
+        endpoint: 0.0.0.0:5318
 service:
+  telemetry:
+    metrics:
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: localhost
+                port: 9999
+  extensions: [health_check]
   pipelines:
-    metrics/host:
-      receivers: [hostmetrics/10s]
-      processors: [cumulativetodelta]
+    traces:
+      receivers: [otlp]
       exporters: [otlp_http]
 `
-	root := parseRoot(t, cfg)
-	migrateDeprecatedAliases(root)
-	out := roundtrip(t, root)
-
-	if strings.Contains(out, "hostmetrics") || strings.Contains(out, "cumulativetodelta") {
-		t.Errorf("expected all deprecated aliases replaced:\n%s", out)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte(cfg), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
 	}
-	if !strings.Contains(out, "host_metrics/10s") || !strings.Contains(out, "cumulative_to_delta") {
-		t.Errorf("expected canonical names in output:\n%s", out)
+
+	grpc, http, metrics, hc := portsFromConfig(path)
+	if grpc != 5317 {
+		t.Errorf("grpc: want 5317, got %d", grpc)
+	}
+	if http != 5318 {
+		t.Errorf("http: want 5318, got %d", http)
+	}
+	if metrics != 9999 {
+		t.Errorf("metrics: want 9999, got %d", metrics)
+	}
+	if hc != 13200 {
+		t.Errorf("health_check: want 13200, got %d", hc)
 	}
 }

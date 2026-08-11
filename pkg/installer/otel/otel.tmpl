@@ -14,7 +14,7 @@ receivers:
       http:
         endpoint: 0.0.0.0:{{ .HTTPPort }}
 {{- if .HostMonitoring }}
-  host_metrics/10s:
+  hostmetrics/10s:
     collection_interval: 10s
     scrapers:
       cpu:
@@ -39,7 +39,7 @@ receivers:
             enabled: false
           system.cpu.load_average.15m:
             enabled: false
-  host_metrics/5m:
+  hostmetrics/5m:
     collection_interval: 5m
     scrapers:
       cpu:
@@ -123,7 +123,7 @@ receivers:
             enabled: true
           process.disk.io:
             enabled: true
-  host_metrics/1h:
+  hostmetrics/1h:
     collection_interval: 1h
     scrapers:
       memory:
@@ -271,7 +271,7 @@ service:
       processors: [cumulative_to_delta]
       exporters: [otlp_http]
     metrics/host:
-      receivers: [host_metrics/10s, host_metrics/5m, host_metrics/1h]
+      receivers: [hostmetrics/10s, hostmetrics/5m, hostmetrics/1h]
       processors: [filter, resource_detection, transform, filter/delete-metrics, cumulative_to_delta]
       exporters: [otlp_http]
 {{- else }}

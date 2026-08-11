@@ -653,16 +653,31 @@ func termLink(label, url string) string {
 	return fmt.Sprintf("%s:\n    %s", label, url)
 }
 
+// renderOtelTemplate renders otel.tmpl with data and validates the output is valid YAML.
+// Used by both the install and update flows.
+func renderOtelTemplate(data otelConfigData) (string, error) {
+	tmpl, err := template.New("otel").Parse(otelConfigTemplateText)
+	if err != nil {
+		return "", fmt.Errorf("parsing otel template: %w", err)
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("rendering otel template: %w", err)
+	}
+	rendered := buf.String()
+	var parsed any
+	if err := yaml.Unmarshal([]byte(rendered), &parsed); err != nil {
+		return "", fmt.Errorf("rendered otel config is not valid YAML: %w", err)
+	}
+	return rendered, nil
+}
+
 // generateOtelConfig renders otel.tmpl and returns a collector configuration YAML string.
 // It probes for free ports starting at the canonical defaults so multiple collectors can
 // run on the same host without conflicting.
 // When the Experimental feature flag is enabled, the combined host+app config is rendered;
 // otherwise the app-only config is rendered (identical to the pre-host-monitoring output).
 func generateOtelConfig(apiURL, token string) (string, error) {
-	tmpl, err := template.New("otel").Parse(otelConfigTemplateText)
-	if err != nil {
-		return "", fmt.Errorf("parsing otel template: %w", err)
-	}
 	grpcPort := findFreePort(4317)
 	httpPort := findFreePort(4318)
 	if httpPort == grpcPort {
@@ -694,18 +709,7 @@ func generateOtelConfig(apiURL, token string) (string, error) {
 		logger.Debug("otel config ports", "grpc", grpcPort, "http", httpPort, "metrics", metricsPort)
 	}
 
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("rendering otel template: %w", err)
-	}
-
-	rendered := buf.String()
-	var parsed any
-	if err := yaml.Unmarshal([]byte(rendered), &parsed); err != nil {
-		return "", fmt.Errorf("rendered otel config is not valid YAML: %w", err)
-	}
-
-	return rendered, nil
+	return renderOtelTemplate(data)
 }
 
 // printConfigPreview prints the OTel Collector config preview.
