@@ -24,9 +24,9 @@ const otelExtensionName = "com.dynatrace.extension.opentelemetry"
 
 // Case matters: metrics uses uppercase AND; logs/spans use lowercase and.
 const (
-	grailMatcherMetrics = `matchesValue(metric.key, {"system.*", "process.*"}) AND isNotNull(host.id)`
-	grailMatcherLogs    = `isNotNull(host.id) and isNotNull(host.name) and matchesValue(dt.openpipeline.source, "/api/v2/otlp/v1/logs")`
-	grailMatcherSpans   = `isNotNull(host.id) and isNotNull(host.name) and matchesValue(telemetry.sdk.name, {"opentelemetry", "odin", "otel"})`
+	grailMatcherMetrics = `isNotNull(host.id) AND matchesValue(metric.key, {"system.*", "process.*"})`
+	grailMatcherLogs    = `isNotNull(host.id) AND isNotNull(host.name) AND matchesValue(dt.openpipeline.source, "/api/v2/otlp/v1/logs")`
+	grailMatcherSpans   = `isNotNull(host.id) AND isNotNull(host.name) AND matchesValue(telemetry.sdk.name, {"opentelemetry", "odin", "otel"})`
 )
 
 type grailSignal struct {
