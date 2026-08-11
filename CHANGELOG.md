@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-08-10
+
+### Added
+
+- `install otel` (experimental): host monitoring — the OTel Collector is now configured to scrape host-level metrics (CPU, memory, disk, network) using the `hostmetrics` receiver; the required Dynatrace host-metrics extension is activated and confirmed as active before the monitoring configuration is written
+
+### Fixed
+
+- `analyze` / `status`: false positive "OneAgent: running" in containers — the `systemctl` check is now guarded by the presence of `/run/systemd/system`, preventing the systemd compatibility shim (which exits 0 for any command when systemd is not the init) from being mistaken for a running OneAgent
+
 ## [1.2.0] - 2026-08-03
 
 ### Added
@@ -468,7 +478,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/dynatrace-oss/dtwiz/compare/v1.0.0...v1.0.1
