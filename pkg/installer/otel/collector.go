@@ -37,6 +37,7 @@ var otelConfigTemplateText string
 type otelConfigData struct {
 	Endpoint        string
 	AuthHeader      string
+	HostGroupID     string
 	MetricsPort     int
 	GRPCPort        int
 	HTTPPort        int
@@ -713,9 +714,11 @@ func generateOtelConfig(apiURL, token string) (generatedOtelConfig, error) {
 		metricsPort = findFreePort(httpPort + 1)
 	}
 
+	hostname, _ := os.Hostname()
 	data := otelConfigData{
 		Endpoint:    strings.TrimRight(apiURL, "/"),
 		AuthHeader:  installer.AuthHeader(token),
+		HostGroupID: hostname,
 		MetricsPort: metricsPort,
 		GRPCPort:    grpcPort,
 		HTTPPort:    httpPort,

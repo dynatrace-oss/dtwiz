@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"text/template"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -201,7 +202,7 @@ func TestGenerateOtelConfig_AppOnly_Default(t *testing.T) {
 		t.Fatal("app-only config missing traces pipeline")
 	}
 	for _, p := range tracesPipeline.Processors {
-		if p == "resource_detection" {
+		if p == "resource_detection/system" {
 			t.Errorf("app-only config traces pipeline must not contain resource_detection processor, got %v", tracesPipeline.Processors)
 			break
 		}
@@ -232,7 +233,7 @@ func TestGenerateOtelConfig_Combined_ExperimentalEnabled(t *testing.T) {
 	if !ok {
 		t.Fatal("combined config missing metrics/host pipeline")
 	}
-	wantProcessors := []string{"filter", "resource_detection", "transform", "filter/delete-metrics", "cumulative_to_delta"}
+	wantProcessors := []string{"filter", "resource/add-host-group-id", "resource_detection/system", "transform", "filter/delete-metrics", "cumulative_to_delta"}
 	if len(hostPipeline.Processors) != len(wantProcessors) {
 		t.Errorf("metrics/host processors: got %v, want %v", hostPipeline.Processors, wantProcessors)
 	} else {
@@ -249,7 +250,7 @@ func TestGenerateOtelConfig_Combined_ExperimentalEnabled(t *testing.T) {
 	}
 	hasResourceDetection := false
 	for _, p := range logsPipeline.Processors {
-		if p == "resource_detection" {
+		if p == "resource_detection/system" {
 			hasResourceDetection = true
 			break
 		}
@@ -283,7 +284,7 @@ func TestGenerateOtelConfig_Combined_ExperimentalEnabled(t *testing.T) {
 	}
 	hasResourceDetectionInTraces := false
 	for _, p := range tracesPipeline.Processors {
-		if p == "resource_detection" {
+		if p == "resource_detection/system" {
 			hasResourceDetectionInTraces = true
 			break
 		}
@@ -398,6 +399,109 @@ func TestGenerateOtelConfig_TokenMaskedInPreview(t *testing.T) {
 	}
 	if !strings.Contains(preview, "***") {
 		t.Error("masked preview must contain '***' placeholder")
+	}
+}
+
+func TestGenerateOtelConfig_HostGroupID_ProcessorPresent(t *testing.T) {
+	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
+
+	cfg, err := generateOtelConfig("https://env.example.com", "mytoken")
+	if err != nil {
+		t.Fatalf("generateOtelConfig: %v", err)
+	}
+	parsed := parseOtelConfig(t, cfg.content)
+
+	proc, ok := parsed.Processors["resource/add-host-group-id"]
+	if !ok {
+		t.Fatal("host monitoring config missing resource/add-host-group-id processor")
+	}
+
+	hostname, _ := os.Hostname()
+	procStr := fmt.Sprintf("%v", proc)
+	if !strings.Contains(procStr, hostname) {
+		t.Errorf("resource/add-host-group-id processor does not contain hostname %q: %v", hostname, proc)
+	}
+}
+
+func TestGenerateOtelConfig_HostGroupID_AppOnly_Absent(t *testing.T) {
+	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
+	t.Setenv("DTWIZ_EXPERIMENTAL", "")
+
+	cfg, err := generateOtelConfig("https://env.example.com", "mytoken")
+	if err != nil {
+		t.Fatalf("generateOtelConfig: %v", err)
+	}
+	parsed := parseOtelConfig(t, cfg.content)
+
+	if _, ok := parsed.Processors["resource/add-host-group-id"]; ok {
+		t.Error("standard-mode config must not contain resource/add-host-group-id processor")
+	}
+	for _, name := range []string{"traces", "metrics", "logs"} {
+		pipeline, ok := parsed.Service.Pipelines[name]
+		if !ok {
+			continue
+		}
+		for _, p := range pipeline.Processors {
+			if p == "resource/add-host-group-id" {
+				t.Errorf("pipeline %q must not reference resource/add-host-group-id in standard mode", name)
+			}
+		}
+	}
+}
+
+func TestGenerateOtelConfig_HostGroupID_HostMonitoring_Pipelines(t *testing.T) {
+	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
+
+	cfg, err := generateOtelConfig("https://env.example.com", "mytoken")
+	if err != nil {
+		t.Fatalf("generateOtelConfig: %v", err)
+	}
+	parsed := parseOtelConfig(t, cfg.content)
+
+	pipelines := []string{"traces", "metrics/apps", "metrics/host", "logs"}
+	for _, name := range pipelines {
+		pipeline, ok := parsed.Service.Pipelines[name]
+		if !ok {
+			t.Errorf("pipeline %q not found", name)
+			continue
+		}
+		found := false
+		for _, p := range pipeline.Processors {
+			if p == "resource/add-host-group-id" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("pipeline %q missing resource/add-host-group-id processor: %v", name, pipeline.Processors)
+		}
+	}
+}
+
+func TestGenerateOtelConfig_HostGroupID_EmptyHostname(t *testing.T) {
+	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
+	t.Setenv("DTWIZ_EXPERIMENTAL", "")
+
+	// Render the template directly with an empty HostGroupID to simulate hostname failure.
+	tmpl, err := template.New("otel").Parse(otelConfigTemplateText)
+	if err != nil {
+		t.Fatalf("parsing template: %v", err)
+	}
+	data := otelConfigData{
+		Endpoint:    "https://env.example.com",
+		AuthHeader:  "Bearer mytoken",
+		HostGroupID: "",
+		MetricsPort: 8888,
+		GRPCPort:    4317,
+		HTTPPort:    4318,
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		t.Fatalf("template execution failed with empty HostGroupID: %v", err)
+	}
+	var parsed any
+	if err := yaml.Unmarshal(buf.Bytes(), &parsed); err != nil {
+		t.Fatalf("rendered config with empty HostGroupID is not valid YAML: %v", err)
 	}
 }
 

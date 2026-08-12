@@ -166,12 +166,16 @@ processors:
   cumulative_to_delta:
     max_staleness: 25h
 {{- if .HostMonitoring }}
-
+  resource/add-host-group-id:
+    attributes:
+      - key: dt.host_group.id
+        value: "{{ .HostGroupID }}"
+        action: upsert
   filter:
     metrics:
       datapoint:
         - metric.name == "system.cpu.utilization" and attributes["state"] == "idle"
-  resource_detection:
+  resource_detection/system:
     detectors: ["system"]
     system:
       resource_attributes:
@@ -263,16 +267,16 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [{{- if .HostMonitoring }}resource_detection{{- end }}]
+      processors: [{{- if .HostMonitoring }}resource/add-host-group-id, resource_detection/system{{- end }}]
       exporters: [otlp_http]
 {{- if .HostMonitoring }}
     metrics/apps:
       receivers: [otlp]
-      processors: [resource_detection, cumulative_to_delta]
+      processors: [resource/add-host-group-id, resource_detection/system, cumulative_to_delta]
       exporters: [otlp_http]
     metrics/host:
-      receivers: [hostmetrics/10s, hostmetrics/5m, hostmetrics/1h]
-      processors: [filter, resource_detection, transform, filter/delete-metrics, cumulative_to_delta]
+      receivers: [host_metrics/10s, host_metrics/5m, host_metrics/1h]
+      processors: [filter, resource/add-host-group-id, resource_detection/system, transform, filter/delete-metrics, cumulative_to_delta]
       exporters: [otlp_http]
 {{- else }}
     metrics:
@@ -282,7 +286,7 @@ service:
 {{- end }}
     logs:
       receivers: [otlp{{- if and .HostMonitoring .IncludeJournald }}, journald{{- end }}]
-      processors: [{{- if .HostMonitoring }}resource_detection{{- end }}]
+      processors: [{{- if .HostMonitoring }}resource/add-host-group-id, resource_detection/system{{- end }}]
       exporters: [otlp_http]
 
 exporters:
