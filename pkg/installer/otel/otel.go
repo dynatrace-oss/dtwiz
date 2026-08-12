@@ -33,6 +33,9 @@ var deactivateHostMonitoringExtensionFn = deactivateHostMonitoringExtension
 // removeHostMonitoringGrailRoutesFn is overridable in tests.
 var removeHostMonitoringGrailRoutesFn = removeHostMonitoringGrailRoutes
 
+// removeGrailRoutesFn is overridable in tests to inject fake results.
+var removeGrailRoutesFn = removeGrailRoutes
+
 // removeHostMonitoringGrailRoutes removes the OpenPipeline dynamic routing
 // entries for metrics, logs, and spans added during install otel --experimental.
 // All errors are advisory: a per-signal failure warns and does not abort deactivation.
@@ -43,10 +46,13 @@ func removeHostMonitoringGrailRoutes(envURL, platformToken string) {
 		fmt.Println("  Warning: could not connect to Grail API; OpenPipeline routes were not removed.")
 		return
 	}
-	for i, err := range removeGrailRoutes(context.Background(), c) {
+	removed, errs := removeGrailRoutesFn(context.Background(), c)
+	for i, err := range errs {
 		if err != nil {
 			logger.Debug("failed to remove Grail route", "signal", grailSignals[i].name, "error", err)
 			fmt.Printf("  Warning: could not remove OpenPipeline %s route; please remove it manually.\n", grailSignals[i].displayName)
+		} else if removed[i] {
+			display.ColorOK.Printf("  ✓ OpenPipeline %s route removed\n", grailSignals[i].displayName)
 		}
 	}
 }

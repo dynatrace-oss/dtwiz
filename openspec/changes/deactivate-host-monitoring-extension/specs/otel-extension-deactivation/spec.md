@@ -13,6 +13,7 @@ When `dtwiz uninstall otel` runs with the experimental flag enabled, the simple 
 - **WHEN** the user selects `[1] Delete all` at the prompt (or `--yes` is set)
 - **THEN** local processes are killed and directories removed first
 - **THEN** the Grail OpenPipeline routing entries for metrics, logs, and spans are removed
+- **THEN** a confirmation line is printed for each successfully removed route
 - **THEN** the extension environment configuration is deactivated
 - **THEN** the extension version is deleted from the tenant
 - **THEN** a confirmation line is printed indicating the extension was removed

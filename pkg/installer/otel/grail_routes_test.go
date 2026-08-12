@@ -579,10 +579,15 @@ func fakeClientWithRoutes() *fakeGrailClient {
 
 func TestRemoveGrailRoutes_HappyPath(t *testing.T) {
 	c := fakeClientWithRoutes()
-	errs := removeGrailRoutes(context.Background(), c)
+	removed, errs := removeGrailRoutes(context.Background(), c)
 	for i, err := range errs {
 		if err != nil {
 			t.Errorf("signal %d: unexpected error: %v", i, err)
+		}
+	}
+	for i, r := range removed {
+		if !r {
+			t.Errorf("signal %d: expected removed=true, got false", i)
 		}
 	}
 	if len(c.putCalls) != len(grailSignals) {
@@ -599,9 +604,12 @@ func TestRemoveGrailRoutes_PipelineAbsent(t *testing.T) {
 	c := fakeClientWithRoutes()
 	// Remove one pipeline to simulate it not existing.
 	delete(c.pipelines, grailSignals[0].pipelineSchema)
-	errs := removeGrailRoutes(context.Background(), c)
+	removed, errs := removeGrailRoutes(context.Background(), c)
 	if errs[0] != nil {
 		t.Errorf("signal 0: expected nil error when pipeline absent, got %v", errs[0])
+	}
+	if removed[0] {
+		t.Errorf("signal 0: expected removed=false when pipeline absent")
 	}
 	// Only two puts for the signals whose pipelines exist.
 	if len(c.putCalls) != len(grailSignals)-1 {
@@ -619,9 +627,12 @@ func TestRemoveGrailRoutes_EntryAbsent(t *testing.T) {
 		schemaVersion: "1",
 		entries:       []routingEntry{}, // no entry for this pipeline
 	}
-	errs := removeGrailRoutes(context.Background(), c)
+	removed, errs := removeGrailRoutes(context.Background(), c)
 	if errs[0] != nil {
 		t.Errorf("signal 0: expected nil error when entry absent, got %v", errs[0])
+	}
+	if removed[0] {
+		t.Errorf("signal 0: expected removed=false when entry absent")
 	}
 	// Only two puts for the signals that had entries.
 	if len(c.putCalls) != len(grailSignals)-1 {
@@ -632,10 +643,13 @@ func TestRemoveGrailRoutes_EntryAbsent(t *testing.T) {
 func TestRemoveGrailRoutes_PutFails(t *testing.T) {
 	c := fakeClientWithRoutes()
 	c.putErr = fmt.Errorf("simulated put failure")
-	errs := removeGrailRoutes(context.Background(), c)
+	removed, errs := removeGrailRoutes(context.Background(), c)
 	for i, err := range errs {
 		if err == nil {
 			t.Errorf("signal %d: expected error when put fails, got nil", i)
+		}
+		if removed[i] {
+			t.Errorf("signal %d: expected removed=false when put fails", i)
 		}
 	}
 }

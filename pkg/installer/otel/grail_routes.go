@@ -374,9 +374,11 @@ func waitForGrailPipelines(ctx context.Context, c grailRouteClient, sleeper func
 
 // removeGrailRoutes removes the OTel host monitoring routing entry for each
 // signal. A missing pipeline or routing entry is treated as success (already
-// clean). Returns one error per signal index (nil on success or skip).
-func removeGrailRoutes(ctx context.Context, c grailRouteClient) []error {
-	errs := make([]error, len(grailSignals))
+// clean). Returns removed[i]=true only when the entry was actually deleted
+// (not skipped), and errs[i] non-nil when the removal failed.
+func removeGrailRoutes(ctx context.Context, c grailRouteClient) (removed []bool, errs []error) {
+	removed = make([]bool, len(grailSignals))
+	errs = make([]error, len(grailSignals))
 	for i, sig := range grailSignals {
 		pipelineObjID, err := c.checkPipeline(ctx, sig.pipelineSchema)
 		if err != nil {
@@ -404,9 +406,10 @@ func removeGrailRoutes(ctx context.Context, c grailRouteClient) []error {
 			errs[i] = fmt.Errorf("remove %s route: %w", sig.name, err)
 			continue
 		}
+		removed[i] = true
 		logger.Debug("routing entry removed", "signal", sig.name)
 	}
-	return errs
+	return removed, errs
 }
 
 // buildGrailRoutePlans builds the client + plan for otel.go's install preview: shown

@@ -1,6 +1,7 @@
 package otel
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -1024,6 +1025,49 @@ func TestDeactivateHostMonitoringExtension_CallsGrailRouteRemoval(t *testing.T) 
 
 	if !grailCalled {
 		t.Error("expected removeHostMonitoringGrailRoutesFn to be called from deactivateHostMonitoringExtension")
+	}
+}
+
+func TestRemoveHostMonitoringGrailRoutes_PrintsSuccessPerSignal(t *testing.T) {
+	allRemoved := make([]bool, len(grailSignals))
+	for i := range allRemoved {
+		allRemoved[i] = true
+	}
+	orig := removeGrailRoutesFn
+	removeGrailRoutesFn = func(_ context.Context, _ grailRouteClient) ([]bool, []error) {
+		return allRemoved, make([]error, len(grailSignals))
+	}
+	t.Cleanup(func() { removeGrailRoutesFn = orig })
+
+	out := captureActivationOutput(t, func() {
+		removeHostMonitoringGrailRoutes("http://fake", "dt0s16.test")
+	})
+
+	for _, sig := range grailSignals {
+		want := "✓ OpenPipeline " + sig.displayName + " route removed"
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in output, got: %s", want, out)
+		}
+	}
+}
+
+func TestRemoveHostMonitoringGrailRoutes_NoOutputWhenSkipped(t *testing.T) {
+	orig := removeGrailRoutesFn
+	removeGrailRoutesFn = func(_ context.Context, _ grailRouteClient) ([]bool, []error) {
+		// All skipped: removed=false, err=nil.
+		return make([]bool, len(grailSignals)), make([]error, len(grailSignals))
+	}
+	t.Cleanup(func() { removeGrailRoutesFn = orig })
+
+	out := captureActivationOutput(t, func() {
+		removeHostMonitoringGrailRoutes("http://fake", "dt0s16.test")
+	})
+
+	if strings.Contains(out, "route removed") {
+		t.Errorf("expected no route removed output when skipped, got: %s", out)
+	}
+	if strings.Contains(out, "Warning") {
+		t.Errorf("expected no warning when skipped, got: %s", out)
 	}
 }
 

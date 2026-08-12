@@ -36,6 +36,8 @@
 - [x] 6.4 Update the uninstall preview block in `UninstallOtelCollector` (when `featureflags.Experimental` is enabled) to also show the Grail routes that will be removed alongside the extension line.
 - [x] 6.5 Add unit tests for `removeGrailRoutes` in `pkg/installer/otel/grail_routes_test.go` (or the existing test file): route removed successfully, route entry absent (treated as success), pipeline not found (treated as success), `putRoutingEntries` fails (error propagated per-signal).
 - [x] 6.6 Add tests for the `removeHostMonitoringGrailRoutes` path via `removeHostMonitoringGrailRoutesFn` stub in `otel_test.go`.
+- [x] 6.7 In `removeHostMonitoringGrailRoutes` in `pkg/installer/otel/otel.go`, print `"  ✓ OpenPipeline <DisplayName> route removed"` (using `display.ColorOK`) for each signal whose removal succeeded (i.e. `removeGrailRoutes` returned nil for that index). No output for signals that were skipped (pipeline or entry absent).
+- [x] 6.8 Add a unit test in `otel_test.go` verifying the per-signal success line is printed when route removal succeeds, and is absent when skipped.
 
 ## 7. Verify
 
