@@ -18,9 +18,9 @@ All existing installer code creates `resty` clients inline with no shared config
 
 ## Decisions
 
-### 1. Client lives in `cmd/`, not `pkg/installer/`
+### 1. Client lives in `pkg/client/`, not `cmd/`
 
-The new `Client` type is a command-layer concern: it reads credentials from flag/env helpers (`environmentHint()`, `accessToken()`, `platformToken()`) that only exist in `cmd/`. Installer packages use their own credential-passing conventions. Mixing the two layers would require threading CLI flag values into packages that currently take plain strings.
+The `Client` type takes pre-resolved credential strings rather than reading CLI flags itself, so it belongs in `pkg/client/` where it is dependency-free and independently testable. Credential resolution stays in `cmd/` (`getDtEnvironment()`, `setupClient()`). The `setupClientFromCreds()` function in `root.go` is the bridge between the two layers.
 
 ### 2. Two sub-clients (`ClassicClient`, `PlatformClient`) on one `Client` struct
 
@@ -42,5 +42,5 @@ Running two extra API calls on every `dtwiz status` invocation adds latency and 
 
 ## Risks / Trade-offs
 
-- **[Token requirement]** `NewHTTPClient()` requires all three credentials (environment, access token, platform token). Commands that only need one token family cannot use it without providing all three. → Mitigation: `printExtensionsStatus()` calls `NewHTTPClient()` and surfaces a clear error if credentials are incomplete; the rest of `dtwiz status` still runs.
+- **[Token requirement]** `client.New()` requires `classicURL`, `platformURL`, and `platformToken`. The access token is optional; when absent, the platform token is used for Classic API calls as well. `setupClient()` handles the fallback via `validateCredentials()` in `auth.go`.
 - **[6-minute timeout]** Generous timeout suits slow or rate-limited environments but means a hung request blocks the command for a long time. → Mitigation: acceptable for a diagnostic command; can be tuned later.

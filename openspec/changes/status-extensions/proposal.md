@@ -6,7 +6,7 @@
 
 ## What Changes
 
-- New centralized HTTP client (`cmd/client.go`) with `ClassicClient` and `PlatformClient`, constructed once via `NewHTTPClient()` and shared by commands that need it
+- New centralized HTTP client (`pkg/client/client.go`) with `ClassicClient` and `PlatformClient`, constructed via `client.New()` and shared by commands that need it
 - `--extensions` flag on `dtwiz status` that probes both Extensions APIs and reports reachability and package counts
 
 ## Capabilities
@@ -21,8 +21,8 @@
 
 ## Impact
 
-- **New files**: `cmd/client.go`, `cmd/client_test.go`
-- **Modified files**: `cmd/status.go`
+- **New files**: `pkg/client/client.go`, `pkg/client/client_test.go`
+- **Modified files**: `cmd/status.go`, `cmd/root.go`
 - **Dependencies**: none new — uses existing `go-resty/resty/v2`
 - **APIs used**: `GET /api/v2/extensions` (Classic), `GET /platform/extensions/v2/extensions` (Platform)
-- **Auth**: Classic client uses `Api-Token` / `DT_ACCESS_TOKEN`; Platform client uses `Bearer` / `DT_PLATFORM_TOKEN`
+- **Auth**: both sub-clients use the platform token by default; an explicit access token (opt-in via `--access-token`) takes precedence for Classic API calls when provided
