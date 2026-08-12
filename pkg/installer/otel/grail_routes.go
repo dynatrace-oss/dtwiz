@@ -372,6 +372,46 @@ func waitForGrailPipelines(ctx context.Context, c grailRouteClient, sleeper func
 	})
 }
 
+// removeGrailRoutes removes the OTel host monitoring routing entry for each
+// signal. A missing pipeline or routing entry is treated as success (already
+// clean). Returns removed[i]=true only when the entry was actually deleted
+// (not skipped), and errs[i] non-nil when the removal failed.
+func removeGrailRoutes(ctx context.Context, c grailRouteClient) (removed []bool, errs []error) {
+	removed = make([]bool, len(grailSignals))
+	errs = make([]error, len(grailSignals))
+	for i, sig := range grailSignals {
+		pipelineObjID, err := c.checkPipeline(ctx, sig.pipelineSchema)
+		if err != nil {
+			errs[i] = fmt.Errorf("remove %s route: %w", sig.name, err)
+			continue
+		}
+		if pipelineObjID == "" {
+			logger.Debug("pipeline absent, skipping route removal", "signal", sig.name)
+			continue
+		}
+		objID, schemaVer, entries, err := c.getRoutingEntries(ctx, sig.routingSchema)
+		if err != nil {
+			errs[i] = fmt.Errorf("remove %s route: %w", sig.name, err)
+			continue
+		}
+		found, idx, _ := findRoutingEntry(entries, pipelineObjID)
+		if !found {
+			logger.Debug("routing entry absent, skipping removal", "signal", sig.name)
+			continue
+		}
+		newEntries := make([]routingEntry, 0, len(entries)-1)
+		newEntries = append(newEntries, entries[:idx]...)
+		newEntries = append(newEntries, entries[idx+1:]...)
+		if err := c.putRoutingEntries(ctx, objID, schemaVer, newEntries); err != nil {
+			errs[i] = fmt.Errorf("remove %s route: %w", sig.name, err)
+			continue
+		}
+		removed[i] = true
+		logger.Debug("routing entry removed", "signal", sig.name)
+	}
+	return removed, errs
+}
+
 // buildGrailRoutePlans builds the client + plan for otel.go's install preview: shown
 // before confirmation, applied afterward without a second prompt.
 func buildGrailRoutePlans(envURL, platformToken string) (grailRouteClient, []grailSignalPlan, error) {

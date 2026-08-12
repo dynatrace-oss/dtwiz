@@ -131,6 +131,48 @@ func (e *ExtensionClient) ActivateExtension(extensionName, version string) error
 	return nil
 }
 
+// DeactivateExtension removes the active environment configuration for extensionName.
+// HTTP 404 (already inactive / not installed) is treated as success.
+func (e *ExtensionClient) DeactivateExtension(extensionName string) error {
+	logger.Debug("deactivating extension environment configuration", "extension", extensionName)
+	resp, err := e.C.HTTP().R().SetContext(context.Background()).
+		Delete(fmt.Sprintf("/platform/extensions/v2/extensions/%s/environment-configuration", url.PathEscape(extensionName)))
+	if err != nil {
+		return fmt.Errorf("deactivate extension %s: %w", extensionName, err)
+	}
+	if err := httpclient.CheckResponse(resp); err != nil {
+		var apiErr *httpclient.APIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+			logger.Debug("extension environment configuration already inactive", "extension", extensionName)
+			return nil
+		}
+		return fmt.Errorf("deactivate extension %s: %w", extensionName, err)
+	}
+	logger.Debug("extension environment configuration deactivated", "extension", extensionName)
+	return nil
+}
+
+// DeleteExtensionVersion removes an installed extension version from the environment.
+// HTTP 404 (already gone) is treated as success.
+func (e *ExtensionClient) DeleteExtensionVersion(extensionName, version string) error {
+	logger.Debug("deleting extension version", "extension", extensionName, "version", version)
+	resp, err := e.C.HTTP().R().SetContext(context.Background()).
+		Delete(fmt.Sprintf("/platform/extensions/v2/extensions/%s/%s", url.PathEscape(extensionName), url.PathEscape(version)))
+	if err != nil {
+		return fmt.Errorf("delete extension %s@%s: %w", extensionName, version, err)
+	}
+	if err := httpclient.CheckResponse(resp); err != nil {
+		var apiErr *httpclient.APIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+			logger.Debug("extension version already gone", "extension", extensionName, "version", version)
+			return nil
+		}
+		return fmt.Errorf("delete extension %s@%s: %w", extensionName, version, err)
+	}
+	logger.Debug("extension version deleted", "extension", extensionName, "version", version)
+	return nil
+}
+
 // DeleteConnection deletes a Settings object by ID; a 404 (already gone) is treated as success.
 func (e *ExtensionClient) DeleteConnection(objectID string) error {
 	obj, err := e.Settings.Get(context.Background(), objectID)

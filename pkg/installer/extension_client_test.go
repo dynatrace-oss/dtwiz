@@ -88,6 +88,95 @@ func TestExtensionClientActivateExtension_APIErrorPropagates(t *testing.T) {
 	}
 }
 
+// ─── DeactivateExtension ─────────────────────────────────────────────────────
+
+func TestExtensionClientDeactivateExtension_HappyPath(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			t.Errorf("method = %q, want DELETE", r.Method)
+		}
+		wantPath := "/platform/extensions/v2/extensions/" + testExtensionName + "/environment-configuration"
+		if r.URL.Path != wantPath {
+			t.Errorf("path = %q, want %q", r.URL.Path, wantPath)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	if err := newTestExtensionClient(t, srv.URL).DeactivateExtension(testExtensionName); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestExtensionClientDeactivateExtension_404IsIdempotent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":{"message":"no environment configuration"}}`))
+	}))
+	defer srv.Close()
+
+	if err := newTestExtensionClient(t, srv.URL).DeactivateExtension(testExtensionName); err != nil {
+		t.Errorf("404 must be treated as already inactive, got: %v", err)
+	}
+}
+
+func TestExtensionClientDeactivateExtension_APIErrorPropagates(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":{"message":"insufficient permissions"}}`))
+	}))
+	defer srv.Close()
+
+	if err := newTestExtensionClient(t, srv.URL).DeactivateExtension(testExtensionName); err == nil {
+		t.Fatal("expected error for 403, got nil")
+	}
+}
+
+// ─── DeleteExtensionVersion ──────────────────────────────────────────────────
+
+func TestExtensionClientDeleteExtensionVersion_HappyPath(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			t.Errorf("method = %q, want DELETE", r.Method)
+		}
+		wantPath := "/platform/extensions/v2/extensions/" + testExtensionName + "/1.2.3"
+		if r.URL.Path != wantPath {
+			t.Errorf("path = %q, want %q", r.URL.Path, wantPath)
+		}
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"extensionName":"` + testExtensionName + `","version":"1.2.3"}`))
+	}))
+	defer srv.Close()
+
+	if err := newTestExtensionClient(t, srv.URL).DeleteExtensionVersion(testExtensionName, "1.2.3"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestExtensionClientDeleteExtensionVersion_404IsIdempotent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":{"message":"extension version not found"}}`))
+	}))
+	defer srv.Close()
+
+	if err := newTestExtensionClient(t, srv.URL).DeleteExtensionVersion(testExtensionName, "1.2.3"); err != nil {
+		t.Errorf("404 must be treated as already deleted, got: %v", err)
+	}
+}
+
+func TestExtensionClientDeleteExtensionVersion_APIErrorPropagates(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":{"message":"insufficient permissions"}}`))
+	}))
+	defer srv.Close()
+
+	if err := newTestExtensionClient(t, srv.URL).DeleteExtensionVersion(testExtensionName, "1.2.3"); err == nil {
+		t.Fatal("expected error for 403, got nil")
+	}
+}
+
 // ─── DeleteConnection ────────────────────────────────────────────────────────
 
 func TestExtensionClientDeleteConnection_HappyPath(t *testing.T) {
