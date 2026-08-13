@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `install otel`: port allocation no longer selects a port that is already occupied on `0.0.0.0` when the hostname `localhost` resolves to IPv6 ahead of IPv4 (observed on macOS); this previously caused the newly started collector to exit immediately with `exit status 1`
+- `install otel`: fixed port allocation incorrectly reporting an occupied port as free, which could cause the newly started collector to exit immediately with `exit status 1`
 
 ## [1.4.0] - 2026-08-17
 

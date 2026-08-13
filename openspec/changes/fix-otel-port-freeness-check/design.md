@@ -12,16 +12,17 @@ l, err := net.Listen("tcp", addr)
 ```
 
 The rendered config ([otel.tmpl](../../../pkg/installer/otel/otel.tmpl)) binds two different addresses depending on the
-receiver: `otlp` and `health_check` bind `0.0.0.0` explicitly; the Prometheus telemetry reader binds `localhost`. On a
-host where `localhost` resolves to the IPv6 local address `::1` before `127.0.0.1`, which is the default on macOS,
-`net.Listen("tcp", "localhost:<port>")` ends up listening only on `[::1]:<port>`. That is not the same address as
-`0.0.0.0:<port>`, so a port already taken on `0.0.0.0` (by any process, including another vendor's OTel Collector) is
-wrongly reported free. The Dynatrace collector then tries to bind that same port for real, gets an "address already in
-use" error from the operating system, and exits immediately.
+receiver: `otlp` and `health_check` bind `0.0.0.0` explicitly; the Prometheus telemetry reader binds `localhost`, which
+resolves to `127.0.0.1` or `::1` depending on the system. `net.Listen("tcp", "localhost:<port>")` only ever listens on
+one of those, never on `0.0.0.0`. A listener already bound to `0.0.0.0` and a later attempt to bind a specific loopback
+address on the same port can coexist (they are not the same address), so checking only `localhost` never notices that
+`0.0.0.0` is already taken. The Dynatrace collector then tries to bind that same port for real, gets an "address
+already in use" error from the operating system, and exits immediately.
 
 Reproduced live: with a foreign collector bound to `0.0.0.0:4317`/`4318`, `install otel` allocated `grpc=4317
 http=4318` (unchanged, wrongly free) while the metrics port was correctly moved to the next one, because its own
-conflict happened to be on `localhost`/`::1` on both sides. The Dynatrace collector then crashed with `exit status 1`
+conflict happened to be on `localhost` on both sides (the foreign collector's own telemetry reader also binds
+`localhost`, so the two probes landed on the same address). The Dynatrace collector then crashed with `exit status 1`
 on startup.
 
 ## Goals / Non-Goals
@@ -37,30 +38,45 @@ on startup.
   default port value. That logic is already correct.
 - Detecting or reasoning about any other collector on the host. This fix makes port allocation accurate; it has no
   opinion on whose process holds a port.
-- IPv6. No receiver in `otel.tmpl` binds an IPv6 address, so there is nothing to check there; the bug is entirely about
-  `localhost` resolving to IPv6 by accident, not about needing IPv6 support.
+- Handling any address family explicitly. No receiver in `otel.tmpl` binds an IPv6 address by name; the fix works by
+  matching each check to what the config actually binds (`0.0.0.0`, or the literal hostname `localhost`), not by
+  reasoning about IPv4 versus IPv6.
 
 ## Decisions
 
-### Check literal addresses, not the hostname `localhost`
+### Check `0.0.0.0` and the hostname `localhost` itself, one check per address the config actually binds
 
-`findFreePort` now checks two literal addresses per candidate port: `0.0.0.0` (what `otlp`/`health_check` bind) and
-`127.0.0.1` (what the Prometheus telemetry reader binds via `localhost`). A port is free only when both checks
-succeed. This is implemented as a small `canBindPort(host string, port int) bool` helper so the two checks share one
-code path.
+`findFreePort` now checks two addresses per candidate port: the literal address `0.0.0.0` (what `otlp`/`health_check`
+bind) and the literal hostname `localhost` (what the Prometheus telemetry reader binds to, whatever that resolves to
+on the current system). A port is free only when both checks succeed. This is implemented as a small `canBindPort(host
+string, port int) bool` helper so the two checks share one code path.
 
-**Alternative considered: check only `0.0.0.0`.** Binding `0.0.0.0:<port>` fails if anything else, no matter which
-address it is bound to, already holds that port on most platforms, which would catch the exact bug reproduced above.
-It was rejected because it only catches conflicts that show up on `0.0.0.0` itself. The telemetry reader binds
-`127.0.0.1` specifically (via `localhost`), and on a host where `localhost` resolves to `127.0.0.1` first (common on
-Linux), an existing conflict on `127.0.0.1` alone would go undetected by a `0.0.0.0`-only check: trading today's bug
-for the same bug in reverse on a different platform. Checking both addresses removes any dependency on which address
-`localhost` happens to resolve to first.
+**Alternative considered and rejected: check only `0.0.0.0`.** This was the first version of the fix, and it missed a
+real case: a wildcard bind on `0.0.0.0` and a specific bind on a loopback address can coexist on the same port
+(confirmed empirically; they are genuinely different addresses, not overlapping ones), so a `0.0.0.0`-only check cannot
+see a conflict on whatever address `localhost` resolves to. Checking `0.0.0.0` alone would have reintroduced the same
+class of bug for the telemetry reader's port that this change fixes for the OTLP and health-check ports.
 
-**Alternative considered: resolve `localhost` and check every address it returns.** Would generalize better if a
-receiver ever bound an IPv6 address, but nothing in this codebase does, and it adds an extra lookup step, plus
-handling however many addresses come back, for a case that does not exist. Two literal, known-correct addresses are
-simpler and just as correct for the receivers this project actually renders.
+**Alternative considered and rejected: check `0.0.0.0` and a hardcoded `127.0.0.1`.** Closer, but still wrong: which
+loopback address `localhost` resolves to (`127.0.0.1` or `::1`) depends on the system, and hardcoding one guess means
+the check silently stops matching the real bind target on a system that resolves the other way. Probing the literal
+hostname `localhost`, exactly as the telemetry reader's own config does, removes the guess entirely: whatever address
+the real bind ends up using, the check uses the same one, because it asks the same question the same way.
+
+### Remove the misfiled requirement in `otel-collector-update` rather than leaving it stale
+
+`openspec/specs/otel-collector-update/spec.md` already had a requirement titled "Generated config ports must not
+conflict with already-running collectors," describing `findFreePort(8888)` and a `localhost`-only probe. Code review
+caught that declaring this change's "Modified Capabilities" as empty was wrong: that requirement exists and would
+have been left stale and partly contradicted by this fix.
+
+Reconciling in place (editing that requirement where it sits) was rejected: `otel-collector-update`'s own overview
+says the capability patches an *existing* config; it never generates one or allocates ports.
+`findFreePort`/`generateOtelConfig` are called only from `prepareCollectorPlan`, which only `install otel` uses. The
+requirement was describing `install otel`'s behavior under the wrong capability's name. Editing it in place would
+have preserved that misfiling. Instead it is removed from `otel-collector-update` with a reason and migration
+pointing at `otel-collector-port-allocation`, which already states the corrected, complete version of the same
+requirement where it actually belongs.
 
 ## Risks / Trade-offs
 

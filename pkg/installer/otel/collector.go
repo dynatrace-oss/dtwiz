@@ -45,14 +45,13 @@ type otelConfigData struct {
 	HealthCheckPort int
 }
 
-// findFreePort returns the lowest port >= startPort that is free on both the
-// wildcard address (0.0.0.0, what the otlp and health_check receivers bind
-// per otel.tmpl) and the IPv4 loopback address (127.0.0.1, what the
-// Prometheus telemetry reader binds via "localhost"). Checking literal
-// addresses instead of the hostname "localhost" matters: on systems where
-// "localhost" resolves to the IPv6 loopback ([::1]) ahead of 127.0.0.1 (macOS
-// is one), a listener already bound to 0.0.0.0 would go undetected and the
-// real collector would then fail to bind and exit immediately on startup.
+// findFreePort returns the lowest port >= startPort that is free on both
+// 0.0.0.0 (otlp/health_check) and "localhost" (the Prometheus telemetry
+// reader). Both checks are required: a 0.0.0.0 bind does not conflict with
+// an existing bind on a specific loopback address. "localhost" is probed
+// literally, not as a hardcoded IP, since it can resolve to either 127.0.0.1
+// or ::1 depending on the system. See
+// openspec/changes/fix-otel-port-freeness-check/design.md for the full story.
 // Falls back to startPort if no free port is found within 100 attempts
 // (avoids an infinite loop on pathological systems).
 func findFreePort(startPort int) int {
@@ -60,7 +59,7 @@ func findFreePort(startPort int) int {
 		if !canBindPort("0.0.0.0", port) {
 			continue
 		}
-		if !canBindPort("127.0.0.1", port) {
+		if !canBindPort("localhost", port) {
 			continue
 		}
 		return port
