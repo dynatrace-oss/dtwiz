@@ -77,12 +77,26 @@
   `sendOtelVerificationLog`'s retry-on-transient-error check matched the connection-refused/reset error text by
   substring (`"connection reset"` / `"connection refused"`), which is Unix-specific wording. Windows reports the same
   condition as `"No connection could be made because the target machine actively refused it."`, so the retry never
-  fired and the request failed on the first attempt instead of after exhausting retries. Fixed by matching the
-  underlying syscall errno via `errors.Is(err, syscall.ECONNREFUSED)` / `errors.Is(err, syscall.ECONNRESET)` instead
-  of `err.Error()` text; `syscall.ECONNREFUSED`/`ECONNRESET` are defined on all platforms `dtwiz` targets, including
-  Windows ("invented values" the Windows `syscall` package maps WSA errors to expressly so cross-platform code can
-  use `errors.Is` against them), so this now correctly retries on all of them. Verified with `go build`/`go vet`
-  under both the host `GOOS` and `GOOS=windows`, and `go test ./pkg/installer/otel/...`.
+  fired and the request failed on the first attempt instead of after exhausting retries.
+
+  Root cause: on Windows, `syscall.ECONNREFUSED` in the stdlib `syscall` package is one of its "invented" errno values
+  (a synthetic constant used only so POSIX-style `os`-package checks like `errors.Is(err, fs.ErrNotExist)` work
+  cross-platform), not the real WinSock error code a socket syscall actually returns. A refused `connectex` call
+  returns `syscall.Errno(10061)` (`WSAECONNREFUSED`), a different numeric value with no default equality or `Is` match
+  against the invented constant, so a check based on it silently never matches on Windows even though it compiles and
+  vets cleanly under `GOOS=windows`.
+
+  Fixed by moving the check into two build-tagged files, matching this repo's own convention for platform-specific
+  logic (see `AGENTS.md`): `conn_error_unix.go` (`syscall.ECONNREFUSED`/`ECONNRESET`) and `conn_error_windows.go`
+  (`golang.org/x/sys/windows.WSAECONNREFUSED`/`WSAECONNRESET`, the real WinSock codes, already a direct dependency
+  used elsewhere in this package for other Windows-only logic). Both expose the same `isTransientDialError(err) bool`
+  function, called from `sendOtelVerificationLog`. Added `conn_error_unix_test.go` / `conn_error_windows_test.go`,
+  each dialing a real closed port and asserting `isTransientDialError` recognizes the platform's actual
+  connection-refused error, plus a negative case for an unrelated error, a direct, fast regression test for this
+  class of bug instead of relying only on the slower retry-exhaustion test to notice.
+  Verified with `go build`, `go vet`, and a `go test -c` compile check under both the host `GOOS` and
+  `GOOS=windows GOARCH=amd64` (an actual Windows runtime run of the new tests still depends on CI), and
+  `go test ./pkg/installer/otel/...` in full.
 
 ## 4. Verification and docs
 

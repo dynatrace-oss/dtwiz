@@ -8,7 +8,6 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -20,7 +19,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 	"text/template"
 	"time"
 
@@ -408,10 +406,7 @@ func sendOtelVerificationLog(httpPort int, body string) error {
 		url := fmt.Sprintf("http://127.0.0.1:%d/v1/logs", httpPort)
 		resp, err := otlpVerificationClient.Post(url, "application/json", bytes.NewReader(data))
 		if err != nil {
-			// errors.Is against the syscall errno, not err.Error() text: the OS message for
-			// "connection refused" differs on Windows ("actively refused it") and would never
-			// match a substring check tuned to the Unix wording.
-			if errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.ECONNREFUSED) {
+			if isTransientDialError(err) {
 				logger.Debug("sendOtelVerificationLog: transient error, retrying", "attempt", attempt+1, "err", err)
 				continue
 			}
