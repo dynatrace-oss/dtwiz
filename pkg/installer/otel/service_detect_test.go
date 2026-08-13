@@ -167,15 +167,13 @@ func TestReconcileExportEnv_RetargetsToDTEnvironment(t *testing.T) {
 		"OTEL_EXPORTER_OTLP_ENDPOINT=https://oldtenant.dev.dynatracelabs.com/api/v2/otlp",
 		"OTEL_EXPORTER_OTLP_HEADERS=Authorization=Api-Token%20dt0s16.OLDTOKEN",
 	}
-	out, endpoint, changed := reconcileExportEnv(env)
-	if !changed {
-		t.Fatal("expected changed=true")
+	out := reconcileExportEnv(env)
+	if reflect.DeepEqual(out, env) {
+		t.Fatal("expected env to be updated")
 	}
-	if endpoint != "https://newtenant.dev.dynatracelabs.com/api/v2/otlp" {
-		t.Fatalf("endpoint = %q", endpoint)
-	}
-	if got := envGet(out, "OTEL_EXPORTER_OTLP_ENDPOINT"); got != endpoint {
-		t.Fatalf("env endpoint = %q, want %q", got, endpoint)
+	wantEndpoint := "https://newtenant.dev.dynatracelabs.com/api/v2/otlp"
+	if got := envGet(out, "OTEL_EXPORTER_OTLP_ENDPOINT"); got != wantEndpoint {
+		t.Fatalf("endpoint = %q, want %q", got, wantEndpoint)
 	}
 	if got := envGet(out, "OTEL_EXPORTER_OTLP_HEADERS"); got != "Authorization=Api-Token%20dt0s16.NEWTOKEN" {
 		t.Fatalf("header = %q", got)
@@ -193,14 +191,14 @@ func TestReconcileExportEnv_NoopWhenConsistent(t *testing.T) {
 		"OTEL_EXPORTER_OTLP_ENDPOINT=https://t.dev.dynatracelabs.com/api/v2/otlp",
 		"OTEL_EXPORTER_OTLP_HEADERS=Authorization=Api-Token%20dt0s16.TOK",
 	}
-	if _, _, changed := reconcileExportEnv(env); changed {
+	if out := reconcileExportEnv(env); !reflect.DeepEqual(out, env) {
 		t.Fatal("expected no change when already consistent")
 	}
 }
 
 func TestReconcileExportEnv_NoopWhenNoDTEnvironment(t *testing.T) {
 	env := []string{"OTEL_EXPORTER_OTLP_ENDPOINT=https://x/api/v2/otlp"}
-	if _, _, changed := reconcileExportEnv(env); changed {
+	if out := reconcileExportEnv(env); !reflect.DeepEqual(out, env) {
 		t.Fatal("expected no change without DT_ENVIRONMENT")
 	}
 }
@@ -211,7 +209,7 @@ func TestReconcileExportEnv_NoopForCollectorRoutedApp(t *testing.T) {
 		"DT_ENVIRONMENT=https://newtenant.dev.apps.dynatracelabs.com",
 		"OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318",
 	}
-	if _, _, changed := reconcileExportEnv(env); changed {
+	if out := reconcileExportEnv(env); !reflect.DeepEqual(out, env) {
 		t.Fatal("expected no change for loopback endpoint")
 	}
 }
@@ -222,9 +220,9 @@ func TestReconcileExportEnv_DropsSignalEndpoints(t *testing.T) {
 		"OTEL_EXPORTER_OTLP_ENDPOINT=https://old.dev.dynatracelabs.com/api/v2/otlp",
 		"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=https://old.dev.dynatracelabs.com/v1/traces",
 	}
-	out, _, changed := reconcileExportEnv(env)
-	if !changed {
-		t.Fatal("expected change")
+	out := reconcileExportEnv(env)
+	if reflect.DeepEqual(out, env) {
+		t.Fatal("expected env to be updated")
 	}
 	if envGet(out, "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") != "" {
 		t.Fatal("stale signal endpoint should be dropped")

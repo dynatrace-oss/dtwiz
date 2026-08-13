@@ -213,16 +213,16 @@ var otlpSignalEndpointKeys = []string{
 // header to match DT_ENVIRONMENT + DT_PLATFORM_TOKEN, preventing stale OTLP
 // vars from routing to an old tenant.  No-op when DT_ENVIRONMENT is absent,
 // already consistent, or the endpoint is loopback (collector handles routing).
-func reconcileExportEnv(env []string) (out []string, endpoint string, changed bool) {
+func reconcileExportEnv(env []string) (out []string) {
 	dtEnv := envGet(env, "DT_ENVIRONMENT")
 	if dtEnv == "" {
-		return env, "", false
+		return env
 	}
 
 	current := envGet(env, "OTEL_EXPORTER_OTLP_ENDPOINT")
 	if current != "" {
 		if host, _ := hostPort(current); isLoopback(host) {
-			return env, "", false // routed via a local collector — leave as-is
+			return env // routed via a local collector — leave as-is
 		}
 	}
 
@@ -232,7 +232,7 @@ func reconcileExportEnv(env []string) (out []string, endpoint string, changed bo
 		tokenMatches = headerHasToken(envGet(env, "OTEL_EXPORTER_OTLP_HEADERS"), tok)
 	}
 	if current == target && tokenMatches {
-		return env, "", false // already consistent
+		return env // already consistent
 	}
 
 	out = envSet(env, "OTEL_EXPORTER_OTLP_ENDPOINT", target)
@@ -241,7 +241,7 @@ func reconcileExportEnv(env []string) (out []string, endpoint string, changed bo
 		hdr := rebuildAuthHeader(envGet(env, "OTEL_EXPORTER_OTLP_HEADERS"), tok)
 		out = envSet(out, "OTEL_EXPORTER_OTLP_HEADERS", hdr)
 	}
-	return out, target, true
+	return out
 }
 
 // retargetEnvToCollector returns env with OTEL_EXPORTER_OTLP_ENDPOINT set to
@@ -436,11 +436,6 @@ func printConnectedServices(svcs []connectedService) {
 		if svc.exportsTo != "" {
 			display.ColorMuted.Printf("              exports to: %s\n", svc.exportsTo)
 		}
-		if svc.collectorEndpoint != "" {
-			display.ColorDefault.Printf("              ↳ will be routed through collector: %s\n", svc.collectorEndpoint)
-		} else if _, target, changed := reconcileExportEnv(svc.env); changed {
-			display.ColorDefault.Printf("              ↳ will be retargeted to: %s\n", target)
-		}
 		if svc.command != "" {
 			display.ColorMuted.Printf("              %s\n", truncateStr(svc.command, 80))
 		}
@@ -475,7 +470,7 @@ func restartConnectedServices(svcs []connectedService) {
 		if svc.collectorEndpoint != "" {
 			envToUse, _ = retargetEnvToCollector(svc.env, svc.collectorEndpoint)
 		}
-		newEnv, reconcileTarget, retargeted := reconcileExportEnv(envToUse)
+		newEnv := reconcileExportEnv(envToUse)
 		svc.env = newEnv
 
 		newPID, err := relaunchService(svc)
@@ -485,14 +480,7 @@ func restartConnectedServices(svcs []connectedService) {
 			logger.Debug("relaunchService failed", "pid", svc.pid, "name", svc.name, "err", err)
 			continue
 		}
-		switch {
-		case svc.collectorEndpoint != "":
-			fmt.Println(display.ColorOK.Sprintf("restarted (PID %d) → %s", newPID, svc.collectorEndpoint))
-		case retargeted:
-			fmt.Println(display.ColorOK.Sprintf("restarted (PID %d) → %s", newPID, reconcileTarget))
-		default:
-			fmt.Println(display.ColorOK.Sprintf("restarted (PID %d)", newPID))
-		}
+		fmt.Println(display.ColorOK.Sprintf("restarted (PID %d)", newPID))
 	}
 
 	if relaunchFailed {

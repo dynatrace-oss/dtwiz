@@ -1,6 +1,7 @@
 package otel
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"os"
@@ -131,6 +132,11 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 	}
 
 	updatedData := []byte(freshConfig)
+
+	if bytes.Equal(origData, updatedData) {
+		display.ColorOK.Println("  Collector configuration is up to date.")
+		return ErrUpToDate
+	}
 
 	display.Header(fmt.Sprintf("Preview: collector configuration changes to %s:", configPath))
 	fmt.Println()

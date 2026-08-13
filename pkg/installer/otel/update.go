@@ -16,6 +16,11 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
+// ErrUpToDate is returned when the collector config is already current and no
+// changes were applied. Callers should treat it as a clean exit and skip any
+// post-update actions (e.g. WatchIngest).
+var ErrUpToDate = fmt.Errorf("collector configuration is already up to date")
+
 // backupFile writes data to a timestamped .bak.<unix> copy of path and returns
 // the backup path.
 func backupFile(path string, data []byte) (string, error) {
