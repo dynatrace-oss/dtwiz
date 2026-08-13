@@ -78,6 +78,20 @@ have preserved that misfiling. Instead it is removed from `otel-collector-update
 pointing at `otel-collector-port-allocation`, which already states the corrected, complete version of the same
 requirement where it actually belongs.
 
+### Thread the allocated OTLP HTTP port through verification instead of hardcoding it
+
+Writing task 2.4's regression test exposed that verification (`waitForOtelCollectorReady`, `sendOtelVerificationLog`,
+`verifyOtelInstall`) hardcoded the OTLP HTTP receiver's default port. With the test's decoy occupying that default
+port, `install otel` would have allocated a different one for the real collector, and hardcoded verification would
+have probed/posted to the decoy instead. This is the same class of bug as the port-freeness defect: code that assumes
+a fixed port instead of the one `generateOtelConfig` actually chose.
+
+`install otel` has the allocated port on hand (`collectorPlan.httpPort`), so it is threaded straight through.
+`update otel` patches a config it did not generate and has no allocated-port value to reuse, so `extractOtlpHTTPPort`
+reads the port back out of the patched config's `receivers.otlp.protocols.http.endpoint`, falling back to the default
+only when that cannot be parsed, matching the pattern used for the other "config might not be one dtwiz wrote"
+cases in `update.go`.
+
 ## Risks / Trade-offs
 
 - **The check is strictly more conservative than before**: it can only reject a port the old check would have

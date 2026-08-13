@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -116,7 +119,7 @@ func TestGenerateOtelConfig_ContainsMetricsPort(t *testing.T) {
 	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
 	t.Setenv("DTWIZ_EXPERIMENTAL", "")
 
-	cfg, err := generateOtelConfig("https://env.example.com", "mytoken")
+	cfg, _, err := generateOtelConfig("https://env.example.com", "mytoken")
 	if err != nil {
 		t.Fatalf("generateOtelConfig: %v", err)
 	}
@@ -158,7 +161,7 @@ func TestGenerateOtelConfig_AppOnly_Default(t *testing.T) {
 	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
 	t.Setenv("DTWIZ_EXPERIMENTAL", "")
 
-	cfg, err := generateOtelConfig("https://env.example.com", "mytoken")
+	cfg, _, err := generateOtelConfig("https://env.example.com", "mytoken")
 	if err != nil {
 		t.Fatalf("generateOtelConfig: %v", err)
 	}
@@ -190,7 +193,7 @@ func TestGenerateOtelConfig_AppOnly_Default(t *testing.T) {
 func TestGenerateOtelConfig_Combined_ExperimentalEnabled(t *testing.T) {
 	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
 
-	cfg, err := generateOtelConfig("https://env.example.com", "mytoken")
+	cfg, _, err := generateOtelConfig("https://env.example.com", "mytoken")
 	if err != nil {
 		t.Fatalf("generateOtelConfig: %v", err)
 	}
@@ -252,7 +255,7 @@ func TestGenerateOtelConfig_Combined_EnvVar(t *testing.T) {
 	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
 	t.Setenv("DTWIZ_EXPERIMENTAL", "true")
 
-	cfg, err := generateOtelConfig("https://env.example.com", "mytoken")
+	cfg, _, err := generateOtelConfig("https://env.example.com", "mytoken")
 	if err != nil {
 		t.Fatalf("generateOtelConfig: %v", err)
 	}
@@ -270,7 +273,7 @@ func TestGenerateOtelConfig_Combined_EnvVar(t *testing.T) {
 func TestGenerateOtelConfig_JournaldConsistency(t *testing.T) {
 	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
 
-	cfg, err := generateOtelConfig("https://env.example.com", "mytoken")
+	cfg, _, err := generateOtelConfig("https://env.example.com", "mytoken")
 	if err != nil {
 		t.Fatalf("generateOtelConfig: %v", err)
 	}
@@ -310,7 +313,7 @@ func TestGenerateOtelConfig_ValidYAML(t *testing.T) {
 				featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
 				t.Setenv("DTWIZ_EXPERIMENTAL", "")
 			}
-			cfg, err := generateOtelConfig("https://env.example.com", "mytoken")
+			cfg, _, err := generateOtelConfig("https://env.example.com", "mytoken")
 			if err != nil {
 				t.Fatalf("generateOtelConfig: %v", err)
 			}
@@ -327,7 +330,7 @@ func TestGenerateOtelConfig_ValidYAML(t *testing.T) {
 func TestGenerateOtelConfig_PreviewTruncation(t *testing.T) {
 	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
 
-	cfg, err := generateOtelConfig("https://env.example.com", "mytoken")
+	cfg, _, err := generateOtelConfig("https://env.example.com", "mytoken")
 	if err != nil {
 		t.Fatalf("generateOtelConfig: %v", err)
 	}
@@ -343,7 +346,7 @@ func TestGenerateOtelConfig_TokenMaskedInPreview(t *testing.T) {
 	t.Setenv("DTWIZ_EXPERIMENTAL", "")
 
 	const token = "dt0s16.supersecrettoken"
-	cfg, err := generateOtelConfig("https://env.example.com", token)
+	cfg, _, err := generateOtelConfig("https://env.example.com", token)
 	if err != nil {
 		t.Fatalf("generateOtelConfig: %v", err)
 	}
@@ -549,5 +552,237 @@ func TestPrintConfigPreview_Truncation(t *testing.T) {
 				t.Errorf("pipelines section missing after ellipsis\noutput:\n%s", out)
 			}
 		})
+	}
+}
+
+func TestExtractOtlpHTTPPort(t *testing.T) {
+	tests := []struct {
+		name     string
+		yamlDoc  string
+		wantPort int
+		wantOK   bool
+	}{
+		{
+			name: "standard IPv4 endpoint",
+			yamlDoc: `
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4320
+`,
+			wantPort: 4320,
+			wantOK:   true,
+		},
+		{
+			name: "bracketed IPv6 endpoint",
+			yamlDoc: `
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: "[::]:4318"
+`,
+			wantPort: 4318,
+			wantOK:   true,
+		},
+		{
+			name: "localhost endpoint",
+			yamlDoc: `
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: localhost:9999
+`,
+			wantPort: 9999,
+			wantOK:   true,
+		},
+		{
+			name: "http protocol absent (grpc only)",
+			yamlDoc: `
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+`,
+			wantOK: false,
+		},
+		{
+			name: "endpoint has no port",
+			yamlDoc: `
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: "0.0.0.0"
+`,
+			wantOK: false,
+		},
+		{
+			name: "non-numeric port",
+			yamlDoc: `
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: "0.0.0.0:notaport"
+`,
+			wantOK: false,
+		},
+		{
+			name:    "empty document",
+			yamlDoc: ``,
+			wantOK:  false,
+		},
+		{
+			name:    "invalid YAML",
+			yamlDoc: "not: [valid: yaml",
+			wantOK:  false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			port, ok := extractOtlpHTTPPort([]byte(tc.yamlDoc))
+			if ok != tc.wantOK {
+				t.Fatalf("extractOtlpHTTPPort() ok = %v, want %v", ok, tc.wantOK)
+			}
+			if tc.wantOK && port != tc.wantPort {
+				t.Errorf("extractOtlpHTTPPort() port = %d, want %d", port, tc.wantPort)
+			}
+		})
+	}
+}
+
+func TestWaitForOtelCollectorReady_ReturnsImmediatelyWhenPortIsOpen(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen: %v", err)
+	}
+	defer l.Close()
+	port := l.Addr().(*net.TCPAddr).Port
+
+	if err := waitForOtelCollectorReady(port, 2*time.Second, make(chan error)); err != nil {
+		t.Fatalf("waitForOtelCollectorReady() error = %v, want nil", err)
+	}
+}
+
+func TestWaitForOtelCollectorReady_TimesOutOnActualPortProbed(t *testing.T) {
+	// findFreePort guarantees a port that is free at this instant on both
+	// addresses the rendered config binds, so nothing answers on it here.
+	port := findFreePort(45000)
+
+	start := time.Now()
+	err := waitForOtelCollectorReady(port, time.Second, make(chan error))
+	if err == nil {
+		t.Fatal("expected an error when nothing ever opens the port")
+	}
+	if !strings.Contains(err.Error(), strconv.Itoa(port)) {
+		t.Errorf("error %q does not mention the port actually probed (%d) — this is the exact class of bug "+
+			"where verification silently checks a hardcoded port instead of the one passed in", err, port)
+	}
+	if elapsed := time.Since(start); elapsed < time.Second {
+		t.Errorf("returned before the timeout elapsed: %s", elapsed)
+	}
+}
+
+func TestWaitForOtelCollectorReady_AbortsImmediatelyOnCrash(t *testing.T) {
+	port := findFreePort(45100)
+
+	crashed := make(chan error, 1)
+	crashed <- fmt.Errorf("boom")
+
+	start := time.Now()
+	err := waitForOtelCollectorReady(port, 30*time.Second, crashed)
+	if err == nil {
+		t.Fatal("expected an error when the collector process has crashed")
+	}
+	if !strings.Contains(err.Error(), "boom") {
+		t.Errorf("error %q does not wrap the crash error", err)
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("expected to abort quickly on crash instead of waiting out the timeout, took %s", elapsed)
+	}
+}
+
+func TestSendOtelVerificationLog_PostsToGivenPort(t *testing.T) {
+	var gotPath string
+	var gotBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotBody, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	port := srv.Listener.Addr().(*net.TCPAddr).Port
+
+	if err := sendOtelVerificationLog(port, "hello from test"); err != nil {
+		t.Fatalf("sendOtelVerificationLog() error = %v", err)
+	}
+	if gotPath != "/v1/logs" {
+		t.Errorf("request path = %q, want /v1/logs", gotPath)
+	}
+	if !bytes.Contains(gotBody, []byte("hello from test")) {
+		t.Errorf("request body does not contain the verification text:\n%s", gotBody)
+	}
+}
+
+func TestSendOtelVerificationLog_NonSuccessStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("boom"))
+	}))
+	defer srv.Close()
+	port := srv.Listener.Addr().(*net.TCPAddr).Port
+
+	err := sendOtelVerificationLog(port, "body")
+	if err == nil {
+		t.Fatal("expected an error for a non-2xx response")
+	}
+	if !strings.Contains(err.Error(), "500") {
+		t.Errorf("error %q does not mention the response status code", err)
+	}
+}
+
+func TestSendOtelVerificationLog_GivesUpAfterRetriesOnRefusedPort(t *testing.T) {
+	// Nothing listens on this port, so every attempt hits "connection refused".
+	port := findFreePort(45200)
+
+	err := sendOtelVerificationLog(port, "body")
+	if err == nil {
+		t.Fatal("expected an error when nothing is listening on the port")
+	}
+	if !strings.Contains(err.Error(), "not ready after") {
+		t.Errorf("error %q does not mention retry exhaustion", err)
+	}
+}
+
+// TestVerifyOtelInstall_UsesGivenHTTPPort confirms the readiness check and
+// verification log both target httpPort end-to-end through verifyOtelInstall,
+// rather than a port assumed by either helper individually.
+func TestVerifyOtelInstall_UsesGivenHTTPPort(t *testing.T) {
+	var hit bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hit = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	port := srv.Listener.Addr().(*net.TCPAddr).Port
+
+	origWait := waitForLogInDynatraceFn
+	waitForLogInDynatraceFn = func(_, _, _ string, _ time.Duration) error { return nil }
+	t.Cleanup(func() { waitForLogInDynatraceFn = origWait })
+
+	var err error
+	captureStdout(t, func() {
+		err = verifyOtelInstall("https://env.example.com", "platform-token", "", port, make(chan error))
+	})
+	if err != nil {
+		t.Fatalf("verifyOtelInstall() error = %v", err)
+	}
+	if !hit {
+		t.Error("expected verifyOtelInstall to send the verification log to the given httpPort")
 	}
 }

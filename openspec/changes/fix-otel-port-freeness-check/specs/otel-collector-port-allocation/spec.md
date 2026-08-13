@@ -37,3 +37,15 @@ interfaces or only on an address reachable from the same machine.
 - **WHEN** the collector starts using those ports
 - **THEN** it SHALL bind all of them successfully
 - **AND** it SHALL NOT exit immediately due to one of those ports already being in use
+
+### Requirement: Post-install verification targets the collector's actual assigned port
+
+After starting the collector, `install otel` SHALL check readiness and send its verification log to whichever port
+was actually assigned to the collector's OTLP HTTP receiver, not a fixed default.
+
+#### Scenario: Default OTLP HTTP port was occupied, so a different port was assigned
+
+- **GIVEN** the collector's default OTLP HTTP port was occupied, so a different port was selected for it
+- **WHEN** `install otel` verifies the collector after starting it
+- **THEN** the readiness check and verification log SHALL be sent to the collector's actual assigned port
+- **AND** SHALL NOT be sent to the default port

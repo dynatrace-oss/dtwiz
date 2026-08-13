@@ -349,12 +349,17 @@ func extractFromZip(archivePath, targetName, destPath string) error {
 	return fmt.Errorf("binary %q not found in zip archive", targetName)
 }
 
-// sendOtelVerificationLog sends a single OTLP log record to the local collector
-// (HTTP on 4318) with the given body text and returns the unique install ID
-// embedded in the message so the caller can search for it.
+// otlpVerificationClient bounds every verification HTTP call to a fixed
+// timeout. Without one, http.Post (which uses http.DefaultClient, Timeout: 0)
+// can hang forever if httpPort belongs to something that accepts the TCP
+// connection but never responds.
+var otlpVerificationClient = &http.Client{Timeout: 10 * time.Second}
+
+// sendOtelVerificationLog sends a single OTLP log record to the local
+// collector's HTTP receiver on httpPort, with the given body text.
 // Retries on connection reset/refused: the TCP port can accept connections before
 // the HTTP handler is fully initialized, causing a RST on the first request.
-func sendOtelVerificationLog(body string, httpPort int) error {
+func sendOtelVerificationLog(httpPort int, body string) error {
 	hostname, _ := os.Hostname()
 
 	payload := map[string]interface{}{
@@ -398,7 +403,8 @@ func sendOtelVerificationLog(body string, httpPort int) error {
 		if attempt > 0 {
 			time.Sleep(500 * time.Millisecond)
 		}
-		resp, err := http.Post(fmt.Sprintf("http://127.0.0.1:%d/v1/logs", httpPort), "application/json", bytes.NewReader(data))
+		url := fmt.Sprintf("http://127.0.0.1:%d/v1/logs", httpPort)
+		resp, err := otlpVerificationClient.Post(url, "application/json", bytes.NewReader(data))
 		if err != nil {
 			errStr := err.Error()
 			if strings.Contains(errStr, "connection reset") || strings.Contains(errStr, "connection refused") {
@@ -521,7 +527,6 @@ func buildOtelLogsUIURL(envURL, searchTerm string) string {
 	encoded := strings.ReplaceAll(url.QueryEscape(fragment), "+", "%20")
 	return base + "/ui/apps/dynatrace.logs/intent/view_query#" + encoded
 }
-
 // otlpHTTPPortFromConfig reads the collector config at configPath and returns
 // the HTTP OTLP receiver port. Falls back to 4318 when the file cannot be
 // read or the endpoint field is absent.
@@ -530,21 +535,8 @@ func otlpHTTPPortFromConfig(configPath string) int {
 	if err != nil {
 		return 4318
 	}
-	var doc yaml.Node
-	if err := yaml.Unmarshal(data, &doc); err != nil || doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
-		return 4318
-	}
-	root := doc.Content[0]
-	endpoint := nodeGet(root, "receivers", "otlp", "protocols", "http", "endpoint")
-	if endpoint == nil {
-		return 4318
-	}
-	_, portStr, err := net.SplitHostPort(endpoint.Value)
-	if err != nil {
-		return 4318
-	}
-	port, err := strconv.Atoi(portStr)
-	if err != nil || port <= 0 {
+	port, ok := extractOtlpHTTPPort(data)
+	if !ok {
 		return 4318
 	}
 	return port
@@ -553,7 +545,7 @@ func otlpHTTPPortFromConfig(configPath string) int {
 // waitForOtelCollectorReady polls the collector's OTLP HTTP port until it
 // accepts connections or the timeout elapses. crashed is closed when the
 // process dies early so the probe can abort immediately.
-func waitForOtelCollectorReady(timeout time.Duration, httpPort int, crashed <-chan error) error {
+func waitForOtelCollectorReady(httpPort int, timeout time.Duration, crashed <-chan error) error {
 	addr := fmt.Sprintf("127.0.0.1:%d", httpPort)
 	deadline := time.Now().Add(timeout)
 	for {
@@ -606,13 +598,13 @@ func verifyOtelInstall(envURL, platformToken, apiToken string, httpPort int, cra
 
 	fmt.Println()
 	fmt.Printf("  Waiting for collector to be ready...")
-	if err := waitForOtelCollectorReady(30*time.Second, httpPort, crashed); err != nil {
+	if err := waitForOtelCollectorReady(httpPort, 30*time.Second, crashed); err != nil {
 		return fmt.Errorf("collector not ready: %w", err)
 	}
 	fmt.Println(" ✓")
 
 	fmt.Printf("  Sending verification log to collector...\n")
-	if err := sendOtelVerificationLog(body, httpPort); err != nil {
+	if err := sendOtelVerificationLog(httpPort, body); err != nil {
 		return fmt.Errorf("sending verification log: %w", err)
 	}
 	if dqlToken == "" {
@@ -689,7 +681,7 @@ func renderOtelTemplate(data otelConfigData) (string, error) {
 // run on the same host without conflicting.
 // When the Experimental feature flag is enabled, the combined host+app config is rendered;
 // otherwise the app-only config is rendered (identical to the pre-host-monitoring output).
-func generateOtelConfig(apiURL, token string) (string, error) {
+func generateOtelConfig(apiURL, token string) (string, int, error) {
 	grpcPort := findFreePort(4317)
 	httpPort := findFreePort(4318)
 	if httpPort == grpcPort {
@@ -721,7 +713,40 @@ func generateOtelConfig(apiURL, token string) (string, error) {
 		logger.Debug("otel config ports", "grpc", grpcPort, "http", httpPort, "metrics", metricsPort)
 	}
 
-	return renderOtelTemplate(data)
+	rendered, err := renderOtelTemplate(data)
+	if err != nil {
+		return "", 0, fmt.Errorf("rendering otel template: %w", err)
+	}
+	return rendered, httpPort, nil
+}
+
+// extractOtlpHTTPPort reads the OTLP HTTP port back out of a config this
+// package didn't render (update.go patches an existing, possibly foreign,
+// config), where the port isn't already known from generating it.
+func extractOtlpHTTPPort(configYAML []byte) (int, bool) {
+	var cfg struct {
+		Receivers struct {
+			Otlp struct {
+				Protocols struct {
+					HTTP struct {
+						Endpoint string `yaml:"endpoint"`
+					} `yaml:"http"`
+				} `yaml:"protocols"`
+			} `yaml:"otlp"`
+		} `yaml:"receivers"`
+	}
+	if err := yaml.Unmarshal(configYAML, &cfg); err != nil {
+		return 0, false
+	}
+	_, portStr, err := net.SplitHostPort(cfg.Receivers.Otlp.Protocols.HTTP.Endpoint)
+	if err != nil {
+		return 0, false
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return 0, false
+	}
+	return port, true
 }
 
 // printConfigPreview prints the OTel Collector config preview.
@@ -871,6 +896,7 @@ type collectorPlan struct {
 	binaryPath     string
 	configContent  string
 	configPreview  string
+	httpPort       int
 	runningPIDs    []runningCollector
 }
 
@@ -881,7 +907,7 @@ func prepareCollectorPlan(envURL, token string) (*collectorPlan, error) {
 	if err != nil {
 		return nil, err
 	}
-	configContent, err := generateOtelConfig(apiURL, collectorToken)
+	configContent, httpPort, err := generateOtelConfig(apiURL, collectorToken)
 	if err != nil {
 		return nil, fmt.Errorf("generating OTel Collector config: %w", err)
 	}
@@ -893,6 +919,7 @@ func prepareCollectorPlan(envURL, token string) (*collectorPlan, error) {
 		binaryPath:     filepath.Join(installDir, otelCollectorBinaryName()),
 		configContent:  configContent,
 		configPreview:  installer.MaskSecret(configContent, collectorToken),
+		httpPort:       httpPort,
 		runningPIDs:    findRunningOtelCollectors(),
 	}, nil
 }
@@ -956,8 +983,7 @@ func (cp *collectorPlan) execute(envURL, platformToken string, skipVerification 
 		fmt.Println("  Collector started — skipping verification (app instrumentation will follow).")
 		return nil
 	}
-
-	if err := verifyOtelInstall(envURL, platformToken, cp.collectorToken, otlpHTTPPortFromConfig(cp.configPath), crashed); err != nil {
+	if err := verifyOtelInstall(envURL, platformToken, cp.collectorToken, cp.httpPort, crashed); err != nil {
 		fmt.Printf("\n  Warning: log verification failed: %v\n", err)
 		fmt.Println("  The collector may still be working — check the Dynatrace UI.")
 	}

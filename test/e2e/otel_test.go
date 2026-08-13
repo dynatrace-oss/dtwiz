@@ -4,6 +4,7 @@ package e2e_test
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -187,4 +188,57 @@ func TestOTelHostMonitoring(t *testing.T) {
 		grail.WithInterval(15*time.Second),
 	)
 	t.Logf("received %d metric record(s) for host %q", len(records), hostname)
+}
+
+// TestOTelInstallAvoidsOccupiedPorts occupies the collector's default ports
+// with decoys bound the same way otel.tmpl binds them (0.0.0.0 for
+// otlp/health_check, "localhost" for the Prometheus reader) and asserts
+// install still succeeds by picking different ports.
+//
+// Not marked parallel: like TestOTelHostMonitoring, it installs on the
+// collector's real default ports and must not race another test doing the
+// same.
+//
+// Required env vars: TEST_DT_ENVIRONMENT, TEST_DT_PLATFORM_TOKEN.
+func TestOTelInstallAvoidsOccupiedPorts(t *testing.T) {
+	env := integration.SetupIntegration(t)
+
+	var listeners []net.Listener
+	occupy := func(addr string) {
+		l, err := net.Listen("tcp", addr)
+		if err != nil {
+			t.Skipf("cannot occupy %s for this test: %v", addr, err)
+		}
+		listeners = append(listeners, l)
+	}
+	occupy("0.0.0.0:4317")
+	occupy("0.0.0.0:4318")
+	occupy("0.0.0.0:13133")
+	occupy("localhost:8888")
+	t.Cleanup(func() {
+		for _, l := range listeners {
+			l.Close()
+		}
+	})
+
+	// AutoConfirm skips all confirmation prompts inside InstallOtelCollectorOnly.
+	origAC := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = origAC })
+
+	t.Log("installing OTel Collector with its default ports occupied by decoy listeners")
+	err := otel.InstallOtelCollectorOnly(env.EnvURL, env.ClassicToken, env.PlatformToken, false)
+
+	// Uninstall regardless of the assertion below, best-effort: the install may
+	// have partially completed even on failure.
+	t.Cleanup(func() {
+		t.Log("uninstalling OTel Collector")
+		if uerr := otel.UninstallOtelCollector(env.EnvURL, env.PlatformToken, false); uerr != nil {
+			t.Logf("warning: UninstallOtelCollector: %v", uerr)
+		}
+	})
+
+	if err != nil {
+		t.Fatalf("InstallOtelCollectorOnly failed with default ports occupied (port allocation regression): %v", err)
+	}
 }

@@ -20,6 +20,12 @@
 - [x] 2.2 Update `TestFindFreePort_ReturnsFreePort` to verify the returned port is bindable on both `0.0.0.0` and
   `localhost`.
 - [x] 2.3 Run `go build ./...` and `go test ./pkg/installer/otel/...` and confirm both pass.
+- [x] 2.4 Add `TestOTelInstallAvoidsOccupiedPorts` to `test/e2e/otel_test.go` (build tag `integration`): occupy the
+  collector's default ports with decoy listeners on `0.0.0.0:4317`, `0.0.0.0:4318`, `0.0.0.0:13133`, and
+  `localhost:8888`, matching how `otel.tmpl` binds them, then call `otel.InstallOtelCollectorOnly` and assert it
+  succeeds instead of the collector exiting immediately. End-to-end regression test for the unit-level coverage in
+  task 2.1, exercising the real collector binary rather than only `findFreePort` in isolation. Not marked parallel,
+  matching `TestOTelHostMonitoring`: both install on the collector's real default ports and must not race each other.
 
 ## 3. Review follow-up
 
@@ -38,6 +44,35 @@
   `otel-collector-update` (`specs/otel-collector-update/spec.md`, REMOVED Requirements with reason and migration) and
   updated `proposal.md`'s Modified Capabilities accordingly, rather than leaving it stale or editing it in place under
   the wrong capability. See `design.md`.
+- [x] 3.4 Writing task 2.4's regression test (which occupies the collector's default OTLP HTTP port with a decoy)
+  surfaced a related bug: `waitForOtelCollectorReady`, `sendOtelVerificationLog`, and `verifyOtelInstall` in
+  `pkg/installer/otel/collector.go` hardcoded the default OTLP HTTP port instead of using the port
+  `generateOtelConfig` actually allocated, so verification would probe/post to the wrong port whenever the default
+  was occupied. Fixed by threading the allocated port (`collectorPlan.httpPort`) through `install otel`'s
+  verification path. `update otel` (`pkg/installer/otel/update.go`) patches a config it did not generate, so it has
+  no allocated port to thread through; added `extractOtlpHTTPPort` to read the port back out of the patched config,
+  falling back to the default only when it cannot be parsed. Updated `proposal.md` (What Changes, Modified
+  Capabilities, Impact) and both spec deltas (`otel-collector-port-allocation` new requirement,
+  `otel-collector-update` MODIFIED requirement) to reflect this.
+- [x] 3.5 Bounded the verification HTTP client (`otlpVerificationClient`, 10s timeout) so
+  `sendOtelVerificationLog` cannot hang forever if `httpPort` belongs to a process that accepts the TCP connection
+  but never responds, which is possible now that the port comes from config rather than being hardcoded to a
+  Dynatrace collector's own default.
+- [x] 3.6 Task 3.4/3.5's fix had no direct unit coverage. Simplified `extractOtlpHTTPPort` to use `net.SplitHostPort`
+  instead of manual `strings.LastIndex` slicing (correctly handles bracketed IPv6 endpoints; stdlib-endorsed for this
+  exact parse), then added unit tests in `pkg/installer/otel/collector_test.go`:
+  - `TestExtractOtlpHTTPPort`: table-driven over IPv4/IPv6/hostname endpoints, a missing `http` protocol block, an
+    endpoint with no port, a non-numeric port, an empty document, and invalid YAML.
+  - `TestWaitForOtelCollectorReady_ReturnsImmediatelyWhenPortIsOpen` /
+    `_TimesOutOnActualPortProbed` / `_AbortsImmediatelyOnCrash`: confirm the function dials the `httpPort` actually
+    passed in (not a hardcoded default), including that the timeout error names that same port.
+  - `TestSendOtelVerificationLog_PostsToGivenPort` / `_NonSuccessStatus` / `_GivesUpAfterRetriesOnRefusedPort`: confirm
+    the POST goes to the given `httpPort` via `httptest.Server`, and that non-2xx responses and exhausted retries both
+    surface as errors.
+  - `TestVerifyOtelInstall_UsesGivenHTTPPort`: end-to-end through `verifyOtelInstall` with `waitForLogInDynatraceFn`
+    stubbed, confirming the readiness check and verification log both reach an `httptest.Server` bound to the given
+    `httpPort` rather than a port either helper assumes on its own.
+  Verified with `go build ./...`, `go vet ./pkg/installer/otel/...`, and `go test ./pkg/installer/otel/...` (all pass).
 
 ## 4. Verification and docs
 
@@ -48,4 +83,5 @@
   collector to exit immediately with `exit status 1`.
 - [x] 4.3 Manually re-verify against the originally reproduced scenario: with another OTel Collector already bound to
   `0.0.0.0:4317`/`4318`/`8888`/`13133`, run `install otel` and confirm it allocates ports above those defaults and the
-  new collector starts successfully instead of exiting immediately.
+  new collector starts successfully instead of exiting immediately. Now also covered automatically by task 2.4's
+  integration test.

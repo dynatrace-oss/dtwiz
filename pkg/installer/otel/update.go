@@ -547,6 +547,16 @@ func updateOtelConfig(configPath string, runningProcs []otelProcessInfo, envURL,
 		return fmt.Errorf("building config preview for %s: %w", configPath, err)
 	}
 
+	// The restarted collector's HTTP receiver may not be on the default port,
+	// since this config is patched in place rather than rendered by dtwiz.
+	// Fall back to 4318 (the previous unconditional assumption) only when the
+	// port cannot be determined from the config itself.
+	httpPort, portFound := extractOtlpHTTPPort(updatedData)
+	if !portFound {
+		logger.Debug("could not determine otlp http port from config, falling back to default", "configPath", configPath)
+		httpPort = 4318
+	}
+
 	display.Header(fmt.Sprintf("Preview of changes to %s:", configPath))
 	fmt.Println()
 
@@ -670,7 +680,7 @@ func updateOtelConfig(configPath string, runningProcs []otelProcessInfo, envURL,
 			return fmt.Errorf("restarting collector: %w", err)
 		}
 
-		if err := verifyOtelInstall(envURL, platformTok, token, otlpHTTPPortFromConfig(configPath), crashed); err != nil {
+		if err := verifyOtelInstall(envURL, platformTok, token, httpPort, crashed); err != nil {
 			fmt.Printf("\n  Warning: log verification failed: %v\n", err)
 			fmt.Println("  The collector may still be working — check the Dynatrace UI.")
 			return nil
@@ -678,10 +688,10 @@ func updateOtelConfig(configPath string, runningProcs []otelProcessInfo, envURL,
 	}
 
 	if len(containerProcs) > 0 {
-		// Best-effort verification for containers: the OTLP port may or may not be
+		// Best-effort verification for containers: httpPort may or may not be
 		// exposed to the host depending on how the container was started.
 		noCrash := make(chan error) // never sends — no process to monitor
-		if err := verifyOtelInstall(envURL, platformTok, token, otlpHTTPPortFromConfig(configPath), noCrash); err != nil {
+		if err := verifyOtelInstall(envURL, platformTok, token, httpPort, noCrash); err != nil {
 			fmt.Printf("\n  Warning: log verification failed: %v\n", err)
 			fmt.Println("  The collector may still be working — check the Dynatrace UI.")
 			return nil

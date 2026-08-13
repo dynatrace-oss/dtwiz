@@ -19,6 +19,13 @@ wrong.
   telemetry reader binds to). A port is only considered free when both checks succeed.
 - No change to the allocation algorithm (lowest free port at or above each default, de-duplicated against the other
   chosen ports) or to any of the default port values.
+- Fixed a related bug surfaced while writing the regression test (task 2.4): `install otel`'s post-install
+  verification (`waitForOtelCollectorReady`, `sendOtelVerificationLog`, `verifyOtelInstall`) hardcoded the OTLP HTTP
+  receiver's default port instead of using the port actually allocated for it. Whenever that default port was
+  occupied, causing a different port to be allocated, exactly the scenario this change's port-freeness fix targets,
+  verification silently probed and posted to the wrong port. `install otel` now threads the allocated port through to
+  verification. `update otel` reads the OTLP HTTP port back out of the patched config instead of assuming the
+  default, since it patches an existing config it did not generate.
 
 ## Capabilities
 
@@ -36,11 +43,17 @@ wrong.
   it. The requirement is superseded by `otel-collector-port-allocation`, which also corrects it: the removed version
   only covered the Prometheus metrics port's `localhost` binding and did not account for the `otlp`/`health_check`
   receivers binding `0.0.0.0`, which is the defect this change fixes.
+- `otel-collector-update`: modifies the "Collector restart after patching" requirement, which stated verification
+  always targets the OTLP HTTP receiver's default port. It now targets whichever port the patched config actually
+  configures, corrected for the same reason described above.
 
 ## Impact
 
-- **Code:** `pkg/installer/otel/collector.go` (`findFreePort`, new `canBindPort` helper) and
-  `pkg/installer/otel/collector_test.go`. No other files.
+- **Code:** `pkg/installer/otel/collector.go` (`findFreePort`, new `canBindPort` helper, and the verification helpers
+  now parameterized by the collector's actual OTLP HTTP port), `pkg/installer/otel/update.go` (new
+  `extractOtlpHTTPPort` to read that port back out of a patched config), and `pkg/installer/otel/collector_test.go`
+  for the fix and its unit tests; `test/e2e/otel_test.go` (build tag `integration`) for an end-to-end regression test
+  against the real collector binary.
 - **Affected commands:** `install otel` directly; any future command that reuses `findFreePort` for port allocation
   inherits the fix automatically, since it is the single implementation.
 - **Feature flags:** none. This is not gated: it is a correctness fix to logic that already runs on every

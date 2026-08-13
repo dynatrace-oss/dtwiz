@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `install otel`: fixed port allocation incorrectly reporting an occupied port as free, which could cause the newly started collector to exit immediately with `exit status 1`
+- `install otel` / `update otel`: post-install verification now targets the OTel Collector's actual OTLP HTTP port instead of always assuming the default, which previously caused verification to silently probe or post to the wrong port whenever the default port was unavailable and a different one was allocated
 
 ## [1.4.0] - 2026-08-17
 
