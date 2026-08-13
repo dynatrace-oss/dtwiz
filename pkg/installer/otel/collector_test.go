@@ -40,19 +40,42 @@ func TestFindFreePort_ReturnsFreePort(t *testing.T) {
 	if port < 8888 {
 		t.Fatalf("expected port >= 8888, got %d", port)
 	}
-	// The returned port must actually be bindable on localhost (matching the collector's Prometheus bind address).
-	l, err := net.Listen("tcp", "localhost:"+strconv.Itoa(port))
-	if err != nil {
-		t.Fatalf("port %d returned by findFreePort is not free: %v", port, err)
+	// The returned port must actually be bindable on both addresses the rendered
+	// config uses: 0.0.0.0 for otlp/health_check, 127.0.0.1 for the Prometheus
+	// telemetry reader ("localhost").
+	for _, host := range []string{"0.0.0.0", "127.0.0.1"} {
+		l, err := net.Listen("tcp", host+":"+strconv.Itoa(port))
+		if err != nil {
+			t.Fatalf("port %d returned by findFreePort is not free on %s: %v", port, host, err)
+		}
+		l.Close()
 	}
-	l.Close()
 }
 
-func TestFindFreePort_SkipsOccupied(t *testing.T) {
-	// Occupy 8888 on localhost; findFreePort should hand back the next free port.
-	l, err := net.Listen("tcp", "localhost:8888")
+func TestFindFreePort_SkipsOccupiedWildcard(t *testing.T) {
+	// Occupy 8888 on the wildcard address, exactly as a foreign OTel Collector's
+	// otlp receiver does (endpoint: 0.0.0.0:<port> in otel.tmpl and in
+	// third-party configs such as ddotel.tmpl). Regression test for the bug
+	// where probing "localhost" (which can resolve to the IPv6 loopback ahead
+	// of 127.0.0.1) missed a conflict on the IPv4 wildcard address.
+	l, err := net.Listen("tcp", "0.0.0.0:8888")
 	if err != nil {
-		t.Skip("cannot bind to localhost:8888 — skipping")
+		t.Skip("cannot bind to 0.0.0.0:8888 — skipping")
+	}
+	defer l.Close()
+
+	port := findFreePort(8888)
+	if port == 8888 {
+		t.Fatal("expected findFreePort to skip the occupied 8888 port")
+	}
+}
+
+func TestFindFreePort_SkipsOccupiedLoopback(t *testing.T) {
+	// Occupy 8888 on the IPv4 loopback address only, matching the Prometheus
+	// telemetry reader's own bind target ("localhost" via otel.tmpl).
+	l, err := net.Listen("tcp", "127.0.0.1:8888")
+	if err != nil {
+		t.Skip("cannot bind to 127.0.0.1:8888 — skipping")
 	}
 	defer l.Close()
 

@@ -45,20 +45,37 @@ type otelConfigData struct {
 	HealthCheckPort int
 }
 
-// findFreePort returns the lowest port >= startPort on which localhost is not
-// already listening.  Falls back to startPort if no free port is found within
-// 100 attempts (avoids an infinite loop on pathological systems).
+// findFreePort returns the lowest port >= startPort that is free on both the
+// wildcard address (0.0.0.0, what the otlp and health_check receivers bind
+// per otel.tmpl) and the IPv4 loopback address (127.0.0.1, what the
+// Prometheus telemetry reader binds via "localhost"). Checking literal
+// addresses instead of the hostname "localhost" matters: on systems where
+// "localhost" resolves to the IPv6 loopback ([::1]) ahead of 127.0.0.1 (macOS
+// is one), a listener already bound to 0.0.0.0 would go undetected and the
+// real collector would then fail to bind and exit immediately on startup.
+// Falls back to startPort if no free port is found within 100 attempts
+// (avoids an infinite loop on pathological systems).
 func findFreePort(startPort int) int {
 	for port := startPort; port < startPort+100; port++ {
-		addr := fmt.Sprintf("localhost:%d", port)
-		l, err := net.Listen("tcp", addr)
-		if err != nil {
+		if !canBindPort("0.0.0.0", port) {
 			continue
 		}
-		l.Close()
+		if !canBindPort("127.0.0.1", port) {
+			continue
+		}
 		return port
 	}
 	return startPort
+}
+
+// canBindPort reports whether a TCP listener can be opened on host:port.
+func canBindPort(host string, port int) bool {
+	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", host, port))
+	if err != nil {
+		return false
+	}
+	l.Close()
+	return true
 }
 
 // otelCollectorBinaryName returns the expected binary name inside the release archive.
