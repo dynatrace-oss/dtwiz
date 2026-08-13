@@ -8,9 +8,7 @@ Define how `dtwiz analyze` detects the Kubernetes distribution (EKS, GKE, AKS, K
 
 ### Requirement: Detect GKE Autopilot as distinct from GKE Standard
 
-The system SHALL identify a GKE Autopilot cluster by checking node names after the parent GKE distro is confirmed. GKE Autopilot nodes always use the `gk3-` name prefix; GKE Standard nodes use `gke-`. The returned distribution string SHALL be `"GKE-Autopilot"`.
-
-Note: the `autopilot.gke.io` annotation previously used for this check is absent on current GKE Autopilot clusters. The `cloud.google.com/gke-provisioning` node label is also unreliable (reports `standard` on Autopilot nodes). Node name prefix is the officially documented signal per GKE Autopilot node naming conventions.
+The system SHALL identify a GKE Autopilot cluster by checking node names after the parent GKE distro is confirmed. GKE Autopilot nodes use the `gk3-` name prefix; GKE Standard nodes use `gke-`. The returned distribution string SHALL be `"GKE-Autopilot"`. Node name prefix is the officially documented detection signal.
 
 #### Scenario: Autopilot cluster detected
 

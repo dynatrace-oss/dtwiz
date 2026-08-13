@@ -8,11 +8,7 @@ Define how `dtwiz uninstall otel` detects and removes Python OTel instrumentatio
 
 ### Requirement: Detect running Python processes associated with OTel-managed project directories on uninstall
 
-`dtwiz uninstall otel` SHALL detect running Python processes that are associated with a known Python project directory. The mechanism cannot verify that a process is actively instrumented with OpenTelemetry; it identifies processes likely to be part of a managed project based on path correlation. Detection uses a two-pass approach:
-
-1. Broad command-line filter: `detectProcesses("python", []string{"pip ", "setup.py", "/bin/dtwiz"})` — identical to install-time detection. Filtering on `"opentelemetry-instrument"` is explicitly incorrect: `opentelemetry-instrument` uses `os.execl` on Unix (replacing the wrapper process image with `python`) and spawns a `python` child and exits on Windows. In both cases the surviving process appears as a plain `python` command with no wrapper visible in the process list.
-
-2. Project directory cross-reference: `scanProjectDirs` scans for Python project directories starting from the current working directory and a limited number of ancestor directories (not a full-machine filesystem scan). Project directories are identified by the presence of marker files: `pyproject.toml`, `setup.py`, `setup.cfg`, `requirements.txt`, `Pipfile`, `poetry.lock`, `manage.py`. Each candidate process is matched against the discovered project paths via `matchProcessesToProjects()`: a process is included only if its working directory starts with a known project path, or its command line contains the project path. This is the same mechanism used at install time. A process running from a project directory that happens not to be instrumented may still be matched.
+`dtwiz uninstall otel` SHALL detect running Python processes associated with a known project directory using a two-pass approach: (1) broad command-line filter via `detectProcesses("python", ...)` (filtering on `"opentelemetry-instrument"` is incorrect as the process appears as plain `python`); (2) cross-reference against project directories identified by marker files, matched via `matchProcessesToProjects()`. This path correlation cannot verify that a matched process is actively instrumented with OpenTelemetry, so an uninstrumented process running from a discovered project directory MAY also be matched.
 
 #### Scenario: One Python process associated with a project directory is running
 

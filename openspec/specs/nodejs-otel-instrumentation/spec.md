@@ -67,7 +67,7 @@ The system SHALL generate OTEL\_\* environment variables for Node.js including t
 
 ### Requirement: Framework bootstrap scripts generation
 
-For Next.js and Nuxt projects, the system SHALL generate framework-specific bootstrap scripts in `.otel/`. These scripts require the auto-instrumentation register module before delegating to the framework. OTEL\_\* env vars are NOT embedded in the scripts — they are passed via `cmd.Env` at process launch time, which sets `process.env` before any JS code executes. This avoids writing secrets (e.g. API tokens in `OTEL_EXPORTER_OTLP_HEADERS`) to disk. Bootstrap scripts SHALL be written with `0600` permissions (owner-only).
+For Next.js and Nuxt projects, the system SHALL generate framework-specific bootstrap scripts in `.otel/`. OTEL_\* env vars SHALL NOT be embedded in scripts; they are passed via `cmd.Env` at process launch time to avoid writing secrets to disk. Bootstrap scripts SHALL be written with `0600` permissions.
 
 #### Scenario: next-otel-bootstrap.js generated for Next.js
 
@@ -95,7 +95,7 @@ For Next.js and Nuxt projects, the system SHALL generate framework-specific boot
 
 ### Requirement: Entrypoint detection
 
-The system SHALL use the existing `detectNodeEntrypoints` function to resolve the entrypoint for regular Node.js projects. The detection priority is: `package.json` `"main"` field → `scripts.start` file reference → other `scripts` entries with `node <file>` patterns → conventional filenames at project root (`index`, `app`, `server` with `.js`, `.ts`, `.mjs`, `.cjs`, `.mts`, `.cts` extensions). If no entrypoint is found and the project is not a known framework (Next.js, Nuxt), the project is skipped.
+The system SHALL use `detectNodeEntrypoints` to resolve the entrypoint for regular Node.js projects. Detection priority: `package.json` `"main"` field, `scripts.start` file reference, other scripts with `node <file>` patterns, or conventional filenames (`index`, `app`, `server` with `.js`/`.ts`/`.mjs`/`.cjs`/`.mts`/`.cts`). If none is found and the project is not Next.js or Nuxt, it is skipped.
 
 #### Scenario: Entrypoint detected via package.json main
 

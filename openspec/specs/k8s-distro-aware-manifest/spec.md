@@ -110,9 +110,7 @@ The system SHALL add `feature.dynatrace.com/oneagent-privileged: "true"` to the 
 
 ### Requirement: Bottlerocket manifests SHALL NOT carry the injection-readonly-volume annotation
 
-The `feature.dynatrace.com/injection-readonly-volume: "true"` annotation was required for Dynatrace Operator **0.12.0+** and **< 1.7.0** to make the injected CSI volume read-only on Bottlerocket nodes. Starting with Operator **1.7.0**, read-only CSI volumes are injected automatically — no annotation is needed. dtwiz targets Operator ≥ 1.7.0; the annotation MUST NOT be added to any DynaKube manifest regardless of distro.
-
-Reference: [Dynatrace Docs — injection-readonly-volume](https://docs.dynatrace.com/docs/ingest-from/setup-on-k8s/guides/networking-security-compliance/advanced-security-configurations/injection-readonly-volume)
+The `feature.dynatrace.com/injection-readonly-volume: "true"` annotation was required for Operator 0.12.0+ and < 1.7.0. Starting with Operator 1.7.0, read-only CSI volumes are injected automatically. dtwiz targets Operator >= 1.7.0; this annotation MUST NOT appear in any DynaKube manifest regardless of distro.
 
 #### Scenario: Annotation absent on EKS-Bottlerocket
 
@@ -150,7 +148,7 @@ The system SHALL set the appropriate `kubeletPath` in the rendered DynaKube spec
 
 ### Requirement: Templates block belongs only in DynaKube #2 (agents), not DynaKube #1 (monitoring)
 
-Per the Dynatrace Kubernetes onboarding guidelines for each supported distribution, DynaKube #1 (monitoring) SHALL contain only `activeGate` with the `kubernetes-monitoring` capability and the optional KSPM block. Extension and image templates (EEC, OTel collector, log module) belong exclusively in DynaKube #2 (agents), alongside `telemetryIngest`, `logMonitoring: {}`, and `extensions`. DynaKube #1 SHALL NOT carry these fields. When KSPM is enabled, only `kspmNodeConfigurationCollector` appears under `templates` in DynaKube #1.
+DynaKube #1 (monitoring) SHALL contain only `activeGate` with the `kubernetes-monitoring` capability and the optional KSPM block. All extension and image templates (EEC, OTel collector, log module), `telemetryIngest`, `logMonitoring: {}`, and `extensions` SHALL belong exclusively in DynaKube #2 (agents). When KSPM is enabled, only `kspmNodeConfigurationCollector` SHALL appear under `templates` in DynaKube #1.
 
 #### Scenario: DynaKube #1 templates limited to kspmNodeConfigurationCollector
 
@@ -188,7 +186,7 @@ The system SHALL pass `--set csidriver.enabled=false` to the Helm install/upgrad
 
 ### Requirement: ClusterRole aggregation label SHALL NOT appear in rendered manifests
 
-The label `rbac.dynatrace.com/aggregate-to-monitoring: "true"` was used in Dynatrace Operator **≤ 1.8.0** to aggregate ClusterRoles into the `dynatrace-kubernetes-monitoring` aggregated ClusterRole. Starting with Operator **1.9.0**, aggregated ClusterRoles are no longer used — the operator uses standard ClusterRoles exclusively. dtwiz targets Operator ≥ 1.7.0; this label MUST NOT appear in any rendered manifest.
+The label `rbac.dynatrace.com/aggregate-to-monitoring: "true"` was used in Operator <= 1.8.0 for ClusterRole aggregation. Starting with Operator 1.9.0, aggregated ClusterRoles are no longer used. dtwiz targets Operator >= 1.7.0; this label MUST NOT appear in any rendered manifest.
 
 Reference: [Dynatrace Docs — ClusterRole aggregation](https://docs.dynatrace.com/docs/ingest-from/setup-on-k8s/guides/deployment-and-configuration/cluster-role-aggregation#default-permissions)
 

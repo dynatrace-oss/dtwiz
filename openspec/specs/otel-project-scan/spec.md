@@ -2,13 +2,13 @@
 
 ## Purpose
 
-Define how the OTel installer scans for projects to instrument, limiting the search scope to the current working directory.
+Define how the OTel installer scans for projects to instrument, using the working directory as the primary root and optionally scanning the home directory when it is in a disjoint tree.
 
 ## Requirements
 
 ### Requirement: Scan scope limited to working directory
 
-The scanner SHALL search the working directory and its subdirectories for OTel project markers. It SHALL NOT traverse any ancestor directories of the working directory. When the working directory lies outside the home-directory tree, the scanner MAY additionally search the home directory and its subdirectories as a separate scan root, either because the user opted in at the interactive prompt or because the command is running non-interactively (see "Interactive home-directory scan choice"). Home is never an ancestor of the working directory in this case, so the no-ancestor-traversal guarantee is preserved.
+The scanner SHALL search the working directory and its subdirectories for OTel project markers and SHALL NOT traverse ancestor directories. When the working directory lies outside the home-directory tree, the scanner MAY additionally search the home directory as a separate root, either via user opt-in at the interactive prompt or non-interactively by default.
 
 #### Scenario: Project in working directory is found
 
@@ -38,23 +38,7 @@ The scanner SHALL search the working directory and its subdirectories for OTel p
 
 ### Requirement: Interactive home-directory scan choice
 
-When `dtwiz install otel` runs WITHOUT an explicit `--project` path, and the working directory lies OUTSIDE the home-directory tree (the working directory and the home directory are in disjoint trees, with neither an ancestor of the other), the scanner SHALL prompt the user exactly once, before any project scanning begins, with a three-way choice:
-
-- `Y` (default): scan the working directory AND the home directory
-- `c`: scan the working directory only
-- `n`: abort the entire `install otel` command
-
-The scanner SHALL NOT prompt, and SHALL scan the working directory only, whenever the working directory is in the same lineage as the home directory:
-
-- the working directory IS the home directory, or
-- the home directory is a descendant of the working directory (the working-directory walk already covers home), or
-- the working directory is a descendant of the home directory (the user is already working inside their home tree); the scanner SHALL NOT add the home directory as a second root in this case.
-
-The prompt SHALL be presented before the per-runtime scans fan out, so that it is shown at most once per invocation regardless of how many runtimes are scanned.
-
-The `~/.dtwiz/examples/` bundled-examples scan SHALL remain always-on regardless of the choice, including when the user selects `c`.
-
-When an explicit `--project` path is provided, the scanner SHALL NOT prompt and SHALL NOT perform a directory scan.
+When `dtwiz install otel` runs without `--project` and the working directory lies outside the home-directory tree, the scanner SHALL prompt once with a three-way choice: `Y` (scan working directory and home), `c` (working directory only), or `n` (abort). The prompt is skipped when the working directory is within, equal to, or an ancestor of the home directory. The `~/.dtwiz/examples/` scan is always-on. When `--project` is provided, the scanner SHALL NOT prompt.
 
 #### Scenario: Prompt offered from a directory outside the home tree
 

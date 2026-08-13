@@ -8,7 +8,7 @@ Define the `dtwiz update azure` command that reconciles an existing Dynatrace Az
 
 ### Requirement: Update is an in-place monitoring-config reconcile
 
-The system SHALL refresh an existing integration in place by reconciling **only** the `da-azure` monitoring configuration to the latest schema-derived defaults. The authentication chain SHALL NOT be modified by an update: the Dynatrace connection, the Azure Service Principal, the federated credential, and the Monitoring Reader role assignment. The update path SHALL be reachable as its own `dtwiz update azure` subcommand, from `dtwiz setup` when an Azure connection already exists, and from `dtwiz install azure` when it finds a complete existing connection.
+The system SHALL refresh an existing integration by reconciling only the `da-azure` monitoring configuration to the latest schema-derived defaults. The authentication chain (connection, SP, federated credential, role assignment) SHALL NOT be modified. The update SHALL be reachable via `dtwiz update azure`, from `dtwiz setup`, and from `dtwiz install azure` when a complete connection exists.
 
 #### Scenario: Direct subcommand invocation
 
@@ -53,7 +53,7 @@ The system SHALL, in parallel, discover existing monitoring configurations, disc
 
 ### Requirement: Require a complete existing connection
 
-The system SHALL require exactly one discovered `dtwiz-azure` connection that already carries its bound application ID, since the monitoring configuration references both the connection object ID and the Service Principal client ID. If no such connection exists, or the only matches are missing their application ID, the system SHALL abort with guidance to run `dtwiz install azure`. If more than one complete connection is found, the system SHALL abort with guidance to run `dtwiz uninstall azure` and then `dtwiz install azure` for a clean single integration.
+The system SHALL require exactly one `dtwiz-azure` connection with a bound application ID. If none exists or matches lack the application ID, it SHALL abort with guidance to run `dtwiz install azure`. If more than one complete connection is found, it SHALL abort with guidance to uninstall then reinstall for a clean single integration.
 
 #### Scenario: No complete connection aborts with install guidance
 
@@ -69,7 +69,7 @@ The system SHALL require exactly one discovered `dtwiz-azure` connection that al
 
 ### Requirement: Preview and confirmation
 
-The system SHALL present a preview with the environment, tenant, subscription, connection name (marked unchanged), and configuration name, followed by the numbered monitoring-configuration steps (one update per existing configuration, or a single create when none exists). It SHALL note that authentication is left unchanged. Any credentials or tokens that appear in the preview SHALL be masked so they are never printed in plaintext. It SHALL prompt a single `Apply?` confirmation; `--dry-run` SHALL stop after the preview and decline SHALL cancel without making any changes.
+The system SHALL present a preview showing environment, tenant, subscription, connection name (unchanged), and configuration name, followed by numbered steps. Authentication is left unchanged. All credentials SHALL be masked. It SHALL prompt a single `Apply?` confirmation; `--dry-run` stops after preview and decline cancels without changes.
 
 #### Scenario: Dry run previews only
 
@@ -91,7 +91,7 @@ The system SHALL present a preview with the environment, tenant, subscription, c
 
 ### Requirement: Reconcile every monitoring configuration to schema-derived defaults
 
-After confirmation, the system SHALL rewrite each discovered monitoring configuration in place using the latest schema-derived defaults (highest extension version, all schema locations, the schema's default feature sets, subscription filtering scoped to the logged-in subscription, and the monitoring configuration referencing the existing connection object ID and Service Principal client ID using federated authentication). When no monitoring configuration exists, the system SHALL create one with the same defaults. The same fail-fast as install applies when the schema yields no locations or feature sets. Because each configuration is rewritten with a single atomic write, a failure SHALL leave the prior configuration intact and SHALL NOT have touched the authentication chain.
+After confirmation, the system SHALL rewrite each discovered monitoring configuration in place using the latest schema-derived defaults: highest extension version, all schema locations, schema default feature sets, and the logged-in subscription. The configuration SHALL reference the existing connection object ID and SP client ID using federated auth. When none exists, it SHALL create one. Failure leaves the prior configuration intact and the authentication chain untouched.
 
 #### Scenario: Existing configuration updated in place
 

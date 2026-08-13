@@ -8,9 +8,7 @@ Define the shared `pkg/display` package that exports canonical terminal color va
 
 ### Requirement: Shared terminal color definitions
 
-The `pkg/display` package SHALL export a fixed set of terminal color variables used consistently across all CLI output: `ColorOK` (green bold), `ColorError` (red bold), `ColorWarning` (yellow bold), `ColorBold` (white bold), `ColorHeader` (magenta bold), `ColorMessage` (magenta), `ColorMuted` (faint), `ColorDefault` (no styling). These SHALL be the canonical colors for all CLI sections — no command or package SHALL define its own equivalent color variables for these roles.
-
-Any new color or print need SHALL be evaluated against this palette first. A new color variable SHALL only be added to `pkg/display/colors.go` if the role it represents is generic and reusable across multiple commands or packages. Color variables that are too specific to a single command or feature SHALL NOT be added to `pkg/display` — they SHALL be defined locally where needed, but MUST be composed from `pkg/display` primitives (e.g. `color.New(...)` is only acceptable if no existing `display.Color*` variable covers the role).
+The `pkg/display` package SHALL export canonical terminal color variables: `ColorOK` (green bold), `ColorError` (red bold), `ColorWarning` (yellow bold), `ColorBold` (white bold), `ColorHeader` (magenta bold), `ColorMessage` (magenta), `ColorMuted` (faint), `ColorDefault` (no styling). These SHALL be the canonical palette for all CLI output. New colors SHALL only be added to `colors.go` for generic reusable roles; others MUST compose existing `pkg/display` primitives.
 
 #### Scenario: ColorHeader used for section headings
 
@@ -50,16 +48,7 @@ Any new color or print need SHALL be evaluated against this palette first. A new
 
 ### Requirement: Print helpers for common output patterns
 
-The `pkg/display` package SHALL expose `Header(message string)`, `PrintSectionDivider()`, `PrintStatusLine(label, message string, c *color.Color)`, `PrintFlagLine(label, message string, c *color.Color)`, `PrintError(label string, err error)`, `PrintPending(label, message string)`, and `ClearPending()` as helpers for recurring output patterns used across commands and installers.
-
-`Header` SHALL print the message indented with two spaces using `ColorHeader`, followed immediately by a section divider — callers SHALL NOT call `PrintSectionDivider()` after `Header()`. Callers SHALL NOT add leading spaces to the message argument; `Header` applies indentation itself.
-`PrintSectionDivider` SHALL print a `─` separator of `DividerLineLength` characters indented with two spaces using `ColorMuted`. It is available for use outside of `Header` where a standalone divider is needed.
-`PrintStatusLine` SHALL print a line of the form `<label>:  <message>` (indented two spaces) where the label is styled with `ColorDefault` and the message is styled with the provided color.
-`PrintFlagLine` SHALL print a line of the form `<label>  <message>` (no colon, indented two spaces) where the label is styled with `ColorDefault` and the message is styled with the provided color.
-`PrintError` SHALL print a line of the form `<label>: ✗ <err>` (indented two spaces) where the error text is styled with `ColorError`.
-`PrintPending` SHALL write a `\r`-prefixed in-progress line of the form `<label>:  <message>` to stderr without a trailing newline, allowing a subsequent call to overwrite it. It SHALL be a no-op when stderr is not a TTY. `ClearPending` SHALL erase the line written by `PrintPending` using ANSI `\r\033[2K` and SHALL also be a no-op on non-TTY stderr. Callers MUST call `ClearPending` (or allow `PrintStatusLine` to start a new line) before returning — a pending line SHALL never be left on screen.
-
-Any print pattern that recurs across two or more files SHALL be extracted into `pkg/display/print.go`. Print patterns that are specific to a single installer or command MAY remain in that file but MUST reuse `display.Color*` variables and MUST NOT construct their own `color.New(...)` instances for roles already covered by the palette.
+The `pkg/display` package SHALL expose `Header`, `PrintSectionDivider`, `PrintStatusLine`, `PrintFlagLine`, `PrintError`, `PrintPending`, and `ClearPending` as shared helpers for recurring output patterns. `PrintFlagLine` SHALL render `<label>  <message>` without a colon; `PrintError` SHALL render `<label>: ✗ <err>`; `PrintPending` SHALL write a carriage-return-prefixed, non-newline status to stderr only when stderr is a TTY; and `ClearPending` SHALL erase that status and otherwise be a no-op. Callers MUST call `ClearPending` before returning if `PrintPending` was used. Any print pattern recurring across two or more files SHALL be extracted into `pkg/display/print.go`; patterns specific to one file MUST reuse `display.Color*` variables.
 
 #### Scenario: Header prints indented magenta bold title followed by a divider
 

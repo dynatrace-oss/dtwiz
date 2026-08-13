@@ -83,7 +83,7 @@ The package SHALL expose `RegisterFlags(flags *pflag.FlagSet)` that registers a 
 
 ### Requirement: `Experimental` flag gates command visibility in help output
 
-Experimental subcommands (`install docker`, `install demo`, `update otel`, and the `MethodOtelUpdate` setup recommendation) SHALL be registered with `Hidden: true` and unhidden only when `featureflags.IsEnabled(featureflags.Experimental)` returns `true`. Commands that conditionally unhide subcommands SHALL override their `HelpFunc` to call `ApplyCLIOverrides` before rendering help. Execution without the flag SHALL return an error directing the user to `--experimental` or `DTWIZ_EXPERIMENTAL=true`. Any command with its own `PersistentPreRun` SHALL call `featureflags.ApplyCLIOverrides` within it.
+Experimental subcommands (`install docker`, `install demo`, and `update otel`) SHALL be registered with `Hidden: true` and unhidden only when `featureflags.IsEnabled(featureflags.Experimental)` is `true`. Commands that conditionally show hidden subcommands SHALL override their `HelpFunc` to call `ApplyCLIOverrides` before rendering. Execution of an experimental command without the flag SHALL return an error directing the user to `--experimental` or `DTWIZ_EXPERIMENTAL=true`. Any command that defines its own `PersistentPreRun` SHALL call `featureflags.ApplyCLIOverrides`.
 
 #### Scenario: Experimental install command hidden from help by default
 

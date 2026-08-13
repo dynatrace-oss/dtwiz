@@ -70,7 +70,7 @@ The system SHALL make a best-effort check that the signed-in principal can creat
 
 ### Requirement: Delegate to update when a complete integration already exists
 
-The system SHALL check for an existing Dynatrace Azure connection named `dtwiz-azure` before installing. When exactly one such connection is found and it already carries its bound application ID, the system SHALL delegate to the in-place reconcile flow (see `azure-monitor-update`) instead of installing, leaving the authentication chain untouched. When the only matches are incomplete (missing their application ID) or there is more than one, the system SHALL abort with guidance to run `dtwiz uninstall azure` first, since that state cannot be safely auto-repaired.
+The system SHALL check for an existing `dtwiz-azure` connection before installing. If exactly one complete connection (with bound application ID) is found, it SHALL delegate to the update flow, leaving the authentication chain untouched. If matches are incomplete or more than one exists, it SHALL abort with guidance to run `dtwiz uninstall azure` first.
 
 #### Scenario: Existing complete connection delegates to update
 
@@ -109,7 +109,7 @@ The system SHALL print a preview showing the environment, tenant, subscription, 
 
 ### Requirement: Seven-step installation workflow in order
 
-The system SHALL execute the installation as seven ordered steps: (1) create the Dynatrace Azure connection; (2) create the Azure Service Principal; (3) create the federated credential bound to the connection ID; (4) retrieve the Service Principal object ID; (5) assign the Monitoring Reader role at subscription scope; (6) finalize the Dynatrace connection with the Azure tenant and application IDs; (7) create the `da-azure` monitoring configuration. The application ID from step 2 SHALL be threaded forward into steps 3, 5, 6, and 7.
+The system SHALL execute the installation as seven ordered steps: (1) create the DT connection; (2) create the Azure Service Principal; (3) create the federated credential; (4) retrieve the SP object ID; (5) assign the Monitoring Reader role; (6) finalize the DT connection; (7) create the `da-azure` monitoring configuration. The client ID from step 2 SHALL be threaded into steps 3, 6, and 7; the SP object ID from step 4 SHALL be used as the role-assignment assignee in step 5.
 
 #### Scenario: Steps run in order and thread identifiers forward
 
@@ -121,7 +121,7 @@ The system SHALL execute the installation as seven ordered steps: (1) create the
 
 ### Requirement: Monitoring configuration defaults derived from the live extension schema
 
-The system SHALL determine the extension version to use by selecting the highest semantic version available for `com.dynatrace.extension.da-azure`. It SHALL fetch that version's monitoring-configuration schema and populate the location filtering from the schema's location list and the feature sets with the schema's default feature sets. Subscription filtering SHALL be set to include the logged-in subscription, and the monitoring configuration SHALL reference the connection object ID and Service Principal client ID using federated authentication. If the schema defines no locations or no default feature sets, the system SHALL fail with a descriptive error rather than create a partial configuration.
+The system SHALL select the highest semantic version of `com.dynatrace.extension.da-azure`, fetch its schema, and populate location filtering from schema locations and feature sets from schema defaults. Subscription filtering SHALL include the logged-in subscription; the configuration SHALL reference the connection object ID and SP client ID using federated auth. If the schema defines no locations or feature sets, the system SHALL fail with a descriptive error.
 
 #### Scenario: Defaults populated from schema
 

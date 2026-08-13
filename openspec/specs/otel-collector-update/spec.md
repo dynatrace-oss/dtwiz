@@ -12,7 +12,7 @@ running-collector picker is shown so the user can select which instance to patch
 
 ### Requirement: When `--config` is omitted, show running collector picker
 
-When `dtwiz update otel` is run without `--config`, `UpdateOtelConfigInteractive` SHALL be called. It SHALL discover all running OTel Collector processes (Dynatrace and upstream, including containers) and present them in a numbered selection list. `UpdateOtelConfig` SHALL return an error when called with an empty `configPath`; callers without a known path SHALL use `UpdateOtelConfigInteractive`.
+When `dtwiz update otel` is run without `--config`, or when `dtwiz setup` selects the OTel-update path, `UpdateOtelConfigInteractive` SHALL be called. It SHALL discover all running OTel Collector processes (Dynatrace and upstream, including containers) and present them in a numbered selection list. `UpdateOtelConfig` SHALL return an error when called with an empty `configPath`; callers without a known path SHALL use `UpdateOtelConfigInteractive`.
 
 #### Scenario: One collector is running with a detectable config
 
@@ -158,16 +158,7 @@ by another process — the probe would succeed yet the collector would fail to s
 
 ### Requirement: Collector restart after patching
 
-After patching the config file, any running collector that owns the patched config SHALL be
-restarted. The restart mechanism differs between native processes and containers.
-
-For **native processes**: the old process is killed and the binary is re-launched with
-the updated config. The restarted collector is verified against Dynatrace.
-
-For **containers**: the patched config is already on the host filesystem (host-mounted
-case) or has been copied back into the container (extract/copy-back case). The container
-is then restarted via `<runtime> restart <name>`. Verification is attempted best-effort —
-port 4318 may or may not be exposed to the host depending on the container's port mapping.
+After patching the config file, any running collector that owns the patched config SHALL be restarted. For native processes, the old process is killed and the binary is re-launched with the updated config, then verified against Dynatrace. For containers, the config is already updated on disk (or copied back) and the container is restarted via `<runtime> restart <name>`. Verification is attempted best-effort.
 
 #### Scenario: Native collector restarted after patch
 
@@ -207,21 +198,7 @@ port 4318 may or may not be exposed to the host depending on the container's por
 
 ### Requirement: All running OTel Collector distributions are shown in the picker
 
-The picker SHALL include both Dynatrace and upstream OTel Collector distributions,
-including container-based collectors detected via docker/podman/nerdctl.
-
-For native processes, the binary name patterns are defined in the shared
-`otelCollectorNames` slice: `otelcorecol`, `otel-collector`, `otelcol`, `otelcol-contrib`,
-`opentelemetry-collector`, `dynatrace-otel-collector`. This single list is used for both
-exact process name matching (`pgrep -x`, `Get-Process`) and command-line substring
-searches (`pgrep -f`, WMI `CommandLine`).
-
-`otelcorecol` and `otelcol-contrib` are listed explicitly because neither is a substring
-of the other patterns — without separate entries they would be missed by substring search.
-
-For containers, any running container whose image name or container name matches the
-pattern `otel.+collector` or `opentelemetry.+collector` (case-insensitive regex) is
-included. Container runtimes probed (in order): `docker`, `podman`, `nerdctl`.
+The picker SHALL include both Dynatrace and upstream OTel Collector distributions, including container-based collectors. Native process binary names are defined in `otelCollectorNames`: `otelcorecol`, `otel-collector`, `otelcol`, `otelcol-contrib`, `opentelemetry-collector`, `dynatrace-otel-collector`. For containers, any running container whose image or name matches `otel.+collector` or `opentelemetry.+collector` (case-insensitive) is included. Runtimes probed: `docker`, `podman`, `nerdctl`.
 
 #### Scenario: `otelcorecol` binary is running
 

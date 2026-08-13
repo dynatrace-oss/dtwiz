@@ -95,7 +95,7 @@ The system SHALL present a preview with the environment, project, service accoun
 
 ### Requirement: Reconcile every monitoring configuration to schema-derived defaults
 
-After confirmation, the system SHALL rewrite each discovered monitoring configuration using the latest schema-derived defaults (highest extension version, all default feature sets, project scoped to the active `gcloud` project). When no configuration exists, it SHALL create one. A failure SHALL leave the prior configuration intact and SHALL NOT touch the authentication chain.
+After confirmation, the system SHALL rewrite each discovered monitoring configuration in place using the latest schema-derived defaults (highest extension version, all default feature sets, project filtering scoped to the active `gcloud` project, and the monitoring configuration referencing the existing connection object ID and service-account email). When no monitoring configuration exists, the system SHALL create one with the same defaults. Each configuration SHALL be rewritten with a single atomic write, so a failure SHALL leave its prior configuration intact and SHALL NOT touch the authentication chain.
 
 #### Scenario: Existing configuration updated in place
 

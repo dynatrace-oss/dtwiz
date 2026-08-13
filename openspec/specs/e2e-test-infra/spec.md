@@ -8,9 +8,7 @@ Define the build tag separation and test infrastructure conventions for E2E test
 
 ### Requirement: Build tag separation
 
-All E2E test files in `test/e2e/` SHALL use the `//go:build integration` build tag. The tag acts as a gating mechanism: it excludes E2E files from default builds (`go test ./...` without `-tags integration`) and includes them when explicitly requested (`go test -tags integration`). Whether it operates as exclusion or inclusion depends on the invocation — both are intentional behaviors of the same tag.
-
-Helper files in `test/integration/` SHALL NOT carry the build tag. They are pure function definitions with no `init()` side effects; they compile harmlessly in any build and are only reachable from tagged test files in `test/e2e/`. Adding the tag to helpers is unnecessary and would add noise without benefit.
+All E2E test files in `test/e2e/` SHALL use the `//go:build integration` build tag, excluding them from default builds and including them when `-tags integration` is passed. Helper files in `test/integration/` SHALL NOT carry the build tag; they are pure function definitions with no `init()` side effects, reachable only from tagged test files.
 
 #### Scenario: Default test run excludes E2E
 
@@ -48,24 +46,7 @@ The `make test-integration` target SHALL require `TEST_DT_ENVIRONMENT`, `TEST_DT
 
 ### Requirement: .e2e.env file loading
 
-The `make test-integration` target SHALL support two credential loading mechanisms, in precedence order:
-
-1. `make VAR=value` command-line overrides (highest — always win in Make regardless of file content)
-2. `.e2e.env` file in the project root, loaded via `include .e2e.env` at Make parse time
-3. Shell environment variables (lowest — overridden by `.e2e.env` assignments)
-
-The makefile SHALL conditionally include `.e2e.env` only when the file exists:
-
-```makefile
-ifneq (,$(wildcard .e2e.env))
-include .e2e.env
-export
-endif
-```
-
-The `.e2e.env` file SHALL use plain `KEY=VALUE` Make/shell syntax (one var per line, no `export` prefix). It SHALL be listed in `.gitignore`. A `.e2e.env.example` file with placeholder values for all three vars SHALL be committed to VCS, with instructions to `cp .e2e.env.example .e2e.env` and fill in credentials.
-
-If any required variable is missing after loading, the target SHALL print a descriptive error to stderr and exit non-zero.
+The `make test-integration` target SHALL load credentials in precedence order: `make VAR=value` overrides, then `.e2e.env` (conditionally included via `ifneq (,$(wildcard .e2e.env))`), then shell environment variables. The `.e2e.env` file SHALL use plain `KEY=VALUE` syntax, be listed in `.gitignore`, and have a committed `.e2e.env.example` with placeholder values. If any required variable is missing after loading, the target SHALL print an error to stderr and exit non-zero.
 
 #### Scenario: .e2e.env file present, no shell vars
 
@@ -145,13 +126,7 @@ E2E tests SHALL use `t.TempDir()` for all fixture app directories. No test artif
 
 ### Requirement: DQL trace query
 
-The test infrastructure SHALL provide a helper function that queries the Dynatrace DQL API for service entities matching a given service name. The function SHALL use the `PlatformClient` from `pkg/client/` via its resty accessor (`.HTTP()`), keeping the Bearer token encapsulated.
-
-The DQL query SHALL use an entity-level `smartscapeNodes` query:
-
-`smartscapeNodes "SERVICE", from: -30m, to: now() | filter name == "<svcName>"`
-
-This queries service entities within a 30-minute window filtered by name. Span-level `fetch spans` queries are not used — they proved unreliable (returned 0 records even when matching spans were ingested).
+The test infrastructure SHALL provide a helper that queries the Dynatrace DQL API for service entities matching a given service name using the `PlatformClient`. The query SHALL use `smartscapeNodes "SERVICE", from: -30m, to: now() | filter name == "<svcName>"` with a 30-minute look-back window.
 
 #### Scenario: Traces found
 
@@ -165,12 +140,7 @@ This queries service entities within a 30-minute window filtered by name. Span-l
 
 ### Requirement: Async DQL execution
 
-The DQL execute endpoint (`/platform/storage/query/v1/query:execute`) MAY return a `RUNNING` state with a `requestToken` instead of immediate results. The helper SHALL handle this two-step flow:
-
-1. POST to `/query:execute` — if response state is `SUCCEEDED`, return records inline
-2. If state is `RUNNING`, poll GET `/platform/storage/query/v1/query:poll?request-token=<token>` until state becomes `SUCCEEDED`, up to a fixed retry limit (10 retries, 1s apart)
-
-Any other state SHALL be treated as an error.
+The DQL execute endpoint MAY return a `RUNNING` state with a `requestToken`. The helper SHALL POST to `/query:execute`; if the response is `SUCCEEDED`, return records immediately. If `RUNNING`, it SHALL poll `/query:poll?request-token=<token>` until `SUCCEEDED`, up to 10 retries at 1-second intervals. Any other state SHALL be treated as an error.
 
 #### Scenario: Query completes immediately
 

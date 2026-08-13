@@ -8,7 +8,7 @@ Define how `dtwiz install aws` instruments Lambda functions in parallel with the
 
 ### Requirement: `install aws` also instruments Lambda functions
 
-When `install aws` proceeds past its confirmation gate, it SHALL instrument the region's Lambda functions alongside the CloudFormation deployment, so the user gets platform and function-level monitoring from one command. The two run concurrently and `install aws` SHALL wait for both to finish before returning. Because the user already confirmed at the `install aws` gate, Lambda instrumentation applies without a second confirmation. Under `--dry-run`, `install aws` returns at its confirmation gate and neither the CloudFormation deployment nor Lambda instrumentation runs.
+When `install aws` proceeds past its confirmation gate, it SHALL run the CloudFormation deployment and Lambda instrumentation concurrently, wait for both to finish, and apply Lambda instrumentation without a second confirmation. Under `--dry-run`, neither the CloudFormation deployment nor Lambda instrumentation runs.
 
 #### Scenario: Both succeed
 

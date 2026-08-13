@@ -142,7 +142,7 @@ The system SHALL continue instrumenting the remaining functions when instrumenta
 
 ### Requirement: Preview, confirmation, and dry-run
 
-The system SHALL display a preview of the functions it will act on, showing function name, runtime, architecture, and action (`new`/`update`/`skip (reason)`), followed by counts of functions to instrument and functions skipped. When no functions are actionable, the system SHALL report that there is nothing to instrument and exit. Under `--dry-run`, the preview is shown but no changes are applied and no confirmation is requested. When run standalone, the system SHALL request confirmation before applying and cancel cleanly on decline.
+The system SHALL display a preview of functions with their name, runtime, architecture, and action (`new`/`update`/`skip (reason)`), plus counts of actionable and skipped functions. When nothing is actionable, it SHALL report so and exit. Under `--dry-run`, preview is shown but no changes applied. When run standalone, it SHALL prompt for confirmation and cancel cleanly on decline.
 
 #### Scenario: Dry run preview
 

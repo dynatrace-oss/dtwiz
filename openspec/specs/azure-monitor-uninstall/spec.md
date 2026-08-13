@@ -28,7 +28,7 @@ The system SHALL discover every Dynatrace connection and every `da-azure` monito
 
 ### Requirement: Ownership-verified Azure app discovery
 
-The system SHALL gather the Azure application IDs to delete from two sources: those bound to a discovered dtwiz connection (trusted, always included), and those found by display-name lookup of the `dtwiz-azure` name. A display-name-only match SHALL be deleted only if the app carries dtwiz's federated credential fingerprint (a credential named `dtwiz-azure-Federated-Credential` issued by the expected Dynatrace token endpoint); apps that fail or cannot complete verification SHALL be skipped with a warning. The resulting set SHALL be de-duplicated. Azure lookup failures SHALL NOT block deletion of already-known resources.
+The system SHALL gather Azure application IDs from two sources: those bound to a discovered dtwiz connection (always included), and display-name matches for `dtwiz-azure`. Display-name-only matches SHALL be included only if they carry a credential named `dtwiz-azure-Federated-Credential` whose issuer is the expected Dynatrace token endpoint; others SHALL be skipped with a warning. The set SHALL be de-duplicated. Azure lookup failures SHALL NOT block deletion of already-known resources.
 
 #### Scenario: Connection-bound app trusted
 
@@ -76,7 +76,7 @@ The system SHALL print a preview listing the environment, each connection, each 
 
 ### Requirement: Best-effort deletion that continues past failures
 
-The system SHALL delete resources in order: monitoring configurations, then per app the Monitoring Reader role assignment and the App Registration, then connections. Deleting the App Registration SHALL be the single call that also removes its Service Principal and federated credentials. A failed step SHALL print a warning and the run SHALL continue with remaining steps; all step errors SHALL be collected and returned together. Role-assignment and app deletions that report "not found" or "no matched assignments", and connection deletes that return a 404, SHALL be treated as success.
+The system SHALL delete in order: monitoring configurations, then per app the role assignment and App Registration (which also removes the SP and federated credentials), then connections. A failed step SHALL print a warning and continue; all errors SHALL be collected and returned together. "Not found" and 404 responses SHALL be treated as success.
 
 #### Scenario: One failure does not strand the rest
 
