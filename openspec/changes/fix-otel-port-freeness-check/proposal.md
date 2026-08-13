@@ -24,8 +24,10 @@ wrong.
   receiver's default port instead of using the port actually allocated for it. Whenever that default port was
   occupied, causing a different port to be allocated, exactly the scenario this change's port-freeness fix targets,
   verification silently probed and posted to the wrong port. `install otel` now threads the allocated port through to
-  verification. `update otel` reads the OTLP HTTP port back out of the patched config instead of assuming the
-  default, since it patches an existing config it did not generate.
+  verification. `update otel` also reads the OTLP HTTP port back out of the config it patches instead of assuming the
+  default, since it patches an existing config it did not generate; this is a small defensive fallback around
+  `update otel`'s existing verification behavior, not a change to its documented contract (same messages, same
+  best-effort caveat for containers), so it does not need its own capability delta.
 
 ## Capabilities
 
@@ -43,9 +45,6 @@ wrong.
   it. The requirement is superseded by `otel-collector-port-allocation`, which also corrects it: the removed version
   only covered the Prometheus metrics port's `localhost` binding and did not account for the `otlp`/`health_check`
   receivers binding `0.0.0.0`, which is the defect this change fixes.
-- `otel-collector-update`: modifies the "Collector restart after patching" requirement, which stated verification
-  always targets the OTLP HTTP receiver's default port. It now targets whichever port the patched config actually
-  configures, corrected for the same reason described above.
 
 ## Impact
 

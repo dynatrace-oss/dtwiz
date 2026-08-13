@@ -51,9 +51,11 @@
   was occupied. Fixed by threading the allocated port (`collectorPlan.httpPort`) through `install otel`'s
   verification path. `update otel` (`pkg/installer/otel/update.go`) patches a config it did not generate, so it has
   no allocated port to thread through; added `extractOtlpHTTPPort` to read the port back out of the patched config,
-  falling back to the default only when it cannot be parsed. Updated `proposal.md` (What Changes, Modified
-  Capabilities, Impact) and both spec deltas (`otel-collector-port-allocation` new requirement,
-  `otel-collector-update` MODIFIED requirement) to reflect this.
+  falling back to the default only when it cannot be parsed. Updated `proposal.md` (What Changes, Impact) and
+  `otel-collector-port-allocation`'s spec delta with a new requirement covering the `install otel` side. Did not add
+  an `otel-collector-update` requirement for the `update otel` side: it's a defensive fallback around existing
+  behavior (same messages, same best-effort container caveat), not a change to that capability's documented
+  contract, so no delta is needed there.
 - [x] 3.5 Bounded the verification HTTP client (`otlpVerificationClient`, 10s timeout) so
   `sendOtelVerificationLog` cannot hang forever if `httpPort` belongs to a process that accepts the TCP connection
   but never responds, which is possible now that the port comes from config rather than being hardcoded to a

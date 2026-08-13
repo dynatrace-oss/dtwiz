@@ -27,16 +27,18 @@ interfaces or only on an address reachable from the same machine.
 - **THEN** it SHALL select the lowest available port at or above each of the collector's default ports, with each
   chosen port distinct from the others
 
-### Requirement: A collector is never started with a port selected for it that it then fails to bind
+### Requirement: A collector does not fail to bind a port that was free at the moment it was selected
 
-`install otel` SHALL NOT select a port for the collector that the collector subsequently fails to bind when it starts.
+`install otel` SHALL NOT select a port for the collector if another process was already listening on it at the
+moment of selection, so the collector SHALL NOT immediately fail to bind that same port when it starts moments
+later.
 
-#### Scenario: Selected ports are usable by the collector on startup
+#### Scenario: A port free at selection time is still free when the collector starts
 
-- **GIVEN** `install otel` has selected ports for a new collector
-- **WHEN** the collector starts using those ports
-- **THEN** it SHALL bind all of them successfully
-- **AND** it SHALL NOT exit immediately due to one of those ports already being in use
+- **GIVEN** `install otel` selected a port for the collector because no process was listening on it at that moment
+- **WHEN** the collector starts and binds that port
+- **THEN** it SHALL bind the port successfully
+- **AND** it SHALL NOT exit immediately due to that port already being in use
 
 ### Requirement: Post-install verification targets the collector's actual assigned port
 
