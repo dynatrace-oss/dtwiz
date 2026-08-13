@@ -4,30 +4,24 @@
 
 ### Requirement: Centralized HTTP client with Classic and Platform sub-clients
 
-The system SHALL provide a `NewHTTPClient()` constructor in `cmd/` that returns a `Client` containing a `ClassicClient` (Classic API, `Api-Token` auth) and a `PlatformClient` (Platform/Apps API, `Bearer` auth). Both sub-clients SHALL share the same retry policy, timeout, and debug-logging behaviour.
+The system SHALL provide a shared HTTP client with a Classic sub-client (Classic API, token auth) and a Platform sub-client (Platform/Apps API, `Bearer` auth). Both sub-clients SHALL share the same retry policy, timeout, and debug-logging behaviour. The access token is optional; when absent, the platform token is used for Classic API calls as well.
 
-#### Scenario: Client construction with all credentials present
+#### Scenario: Client construction with required credentials present
 
-- **GIVEN** `DT_ENVIRONMENT`, `DT_ACCESS_TOKEN`, and `DT_PLATFORM_TOKEN` are all set
-- **WHEN** `NewHTTPClient()` is called
-- **THEN** it returns a `Client` with `Classic` pointing at the Classic API base URL and `Platform` pointing at the Apps URL, each pre-configured with the correct `Authorization` header
+- **GIVEN** `DT_ENVIRONMENT` and `DT_PLATFORM_TOKEN` are set (`DT_ACCESS_TOKEN` is optional)
+- **WHEN** the client is constructed
+- **THEN** the Classic sub-client targets the Classic API base URL and the Platform sub-client targets the Apps URL, each pre-configured with the correct `Authorization` header
 
 #### Scenario: Client construction fails when environment URL is missing
 
 - **GIVEN** `DT_ENVIRONMENT` is not set and `--environment` is not provided
-- **WHEN** `NewHTTPClient()` is called
+- **WHEN** the command runs
 - **THEN** it returns an error with a message explaining how to set the environment URL
-
-#### Scenario: Client construction fails when access token is missing
-
-- **GIVEN** `DT_ACCESS_TOKEN` is not set and `--access-token` is not provided
-- **WHEN** `NewHTTPClient()` is called
-- **THEN** it returns an error with a message explaining how to set the access token
 
 #### Scenario: Client construction fails when platform token is missing
 
 - **GIVEN** `DT_PLATFORM_TOKEN` is not set and `--platform-token` is not provided
-- **WHEN** `NewHTTPClient()` is called
+- **WHEN** the command runs
 - **THEN** it returns an error with a message explaining how to set the platform token
 
 ### Requirement: Retry on transient errors

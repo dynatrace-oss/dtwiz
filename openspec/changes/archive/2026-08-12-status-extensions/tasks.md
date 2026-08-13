@@ -8,11 +8,9 @@
 - [x] 1.4 Add pre-request hook for `-v`: log method + URL to stderr
 - [x] 1.5 Add pre-request hook for `--debug`: additionally log headers (redact `authorization`, `x-api-key`, `cookie`, `set-cookie`) and response body
 
-## 2. Tests (`cmd/client_test.go`)
+## 2. Tests (`pkg/client/client_test.go`)
 
-- [x] 2.1 Unit tests for `NewHTTPClient()` error paths (missing env URL, missing access token, missing platform token)
-- [x] 2.2 Verify `ClassicClient` base URL is the Classic API URL (no `.apps.`)
-- [x] 2.3 Verify `PlatformClient` base URL is the Apps URL (with `.apps.`)
+- [x] 2.1 Tests for `newRestyClient()` settings (retry count, wait times, timeout, headers) and retry behavior on 429 and 5xx; no-retry on 4xx
 
 ## 3. Status --extensions flag (`cmd/status.go`)
 
