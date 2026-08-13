@@ -73,6 +73,16 @@
     stubbed, confirming the readiness check and verification log both reach an `httptest.Server` bound to the given
     `httpPort` rather than a port either helper assumes on its own.
   Verified with `go build ./...`, `go vet ./pkg/installer/otel/...`, and `go test ./pkg/installer/otel/...` (all pass).
+- [x] 3.7 `TestSendOtelVerificationLog_GivesUpAfterRetriesOnRefusedPort` (task 3.6) failed on the Windows CI runner:
+  `sendOtelVerificationLog`'s retry-on-transient-error check matched the connection-refused/reset error text by
+  substring (`"connection reset"` / `"connection refused"`), which is Unix-specific wording. Windows reports the same
+  condition as `"No connection could be made because the target machine actively refused it."`, so the retry never
+  fired and the request failed on the first attempt instead of after exhausting retries. Fixed by matching the
+  underlying syscall errno via `errors.Is(err, syscall.ECONNREFUSED)` / `errors.Is(err, syscall.ECONNRESET)` instead
+  of `err.Error()` text; `syscall.ECONNREFUSED`/`ECONNRESET` are defined on all platforms `dtwiz` targets, including
+  Windows ("invented values" the Windows `syscall` package maps WSA errors to expressly so cross-platform code can
+  use `errors.Is` against them), so this now correctly retries on all of them. Verified with `go build`/`go vet`
+  under both the host `GOOS` and `GOOS=windows`, and `go test ./pkg/installer/otel/...`.
 
 ## 4. Verification and docs
 
