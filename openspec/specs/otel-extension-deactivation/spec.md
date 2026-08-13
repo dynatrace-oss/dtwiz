@@ -1,5 +1,9 @@
 # Spec: OTel Extension Deactivation
 
+## Purpose
+
+Define how `dtwiz uninstall otel` handles the host monitoring extension: offering the user a choice to remove it or leave it in place.
+
 ## Requirements
 
 ### Requirement: OTel uninstall lets the user choose whether to remove the host monitoring extension

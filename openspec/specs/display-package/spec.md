@@ -1,6 +1,10 @@
 # Display Package
 
-## ADDED Requirements
+## Purpose
+
+Define the shared `pkg/display` package that exports canonical terminal color variables used consistently across all CLI output.
+
+## Requirements
 
 ### Requirement: Shared terminal color definitions
 

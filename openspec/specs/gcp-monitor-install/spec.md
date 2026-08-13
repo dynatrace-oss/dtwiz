@@ -1,6 +1,10 @@
 # GCP Monitor Install
 
-## ADDED Requirements
+## Purpose
+
+Define the `dtwiz install gcp` command that sets up the Dynatrace Google Cloud integration.
+
+## Requirements
 
 ### Requirement: Install command and entry point
 

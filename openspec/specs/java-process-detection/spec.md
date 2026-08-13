@@ -1,6 +1,10 @@
 # Spec: Java Process Detection
 
-## ADDED Requirements
+## Purpose
+
+Define how the installer detects running Java processes to enrich project selection and stop instances before relaunch.
+
+## Requirements
 
 ### Requirement: Running Java process discovery as enrichment
 

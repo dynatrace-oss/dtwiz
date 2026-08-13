@@ -1,6 +1,10 @@
 # K8s Distro-Aware Manifest
 
-## ADDED Requirements
+## Purpose
+
+Define how `dtwiz install kubernetes` generates distribution-aware Dynakube manifests.
+
+## Requirements
 
 ### Requirement: InstallKubernetes accepts clusterName and distribution parameters
 

@@ -1,6 +1,10 @@
 # Azure Monitor Install
 
-## ADDED Requirements
+## Purpose
+
+Define the `dtwiz install azure` command that sets up the Dynatrace Azure Monitor integration.
+
+## Requirements
 
 ### Requirement: Install command and entry point
 

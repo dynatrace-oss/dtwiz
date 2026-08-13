@@ -1,6 +1,6 @@
 # Spec: Setup Recommendations
 
-## Overview
+## Purpose
 
 `dtwiz setup` generates a ranked recommendation list and lets the user pick an ingestion
 method to install. This spec covers the rules for what is shown, what is actionable, and

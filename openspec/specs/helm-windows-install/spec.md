@@ -1,6 +1,10 @@
 # Helm Windows Install
 
-## ADDED Requirements
+## Purpose
+
+Define how `dtwiz install kubernetes` auto-installs Helm on Windows via winget when Helm is not on PATH.
+
+## Requirements
 
 ### Requirement: Helm auto-install on Windows via winget
 

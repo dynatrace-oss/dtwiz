@@ -1,6 +1,10 @@
 # Spec: Java Auto-Instrumentation
 
-## ADDED Requirements
+## Purpose
+
+Define how `dtwiz install otel` handles Java auto-instrumentation: agent JAR download, process detection, and launch configuration.
+
+## Requirements
 
 ### Requirement: Agent JAR download
 

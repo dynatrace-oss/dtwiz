@@ -1,6 +1,10 @@
 # Spec: Integration Test Improvements
 
-## ADDED Requirements
+## Purpose
+
+Define the integration test execution conventions including parallel-by-default behavior and the `SEQUENTIAL` override.
+
+## Requirements
 
 ### Requirement: Parallel test execution by default
 

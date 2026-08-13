@@ -1,6 +1,10 @@
 # E2E Test Infrastructure
 
-## ADDED Requirements
+## Purpose
+
+Define the build tag separation and test infrastructure conventions for E2E tests in `test/e2e/`.
+
+## Requirements
 
 ### Requirement: Build tag separation
 

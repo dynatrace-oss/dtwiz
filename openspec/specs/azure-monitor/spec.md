@@ -54,8 +54,8 @@ Discovery in `dtwiz uninstall azure` SHALL use the `dtwiz-azure` prefix to find 
 ### Requirement: Wait for extension to be active before creating monitoring config
 
 After a fresh hub install of the Azure data-acquisition extension, `dtwiz install azure`
-must poll until the extension is active before creating the monitoring configuration.
-It polls every 5 s for up to 60 s and shows progress to the user.
+SHALL poll until the extension is active before creating the monitoring configuration.
+It SHALL poll every 5 s for up to 60 s and show progress to the user.
 
 #### Scenario: Fresh install, extension becomes active in time
 
@@ -86,7 +86,7 @@ It polls every 5 s for up to 60 s and shows progress to the user.
 
 ### Requirement: `installExtension()` returns whether the extension was freshly installed
 
-`dtclient.installExtension()` returns `(bool, error)`, where `true` means the extension
+`dtclient.installExtension()` SHALL return `(bool, error)`, where `true` means the extension
 was just installed from the hub (202 Accepted) and `false` means it was already present.
 
 #### Scenario: Extension already installed

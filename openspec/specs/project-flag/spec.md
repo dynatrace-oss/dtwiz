@@ -1,6 +1,10 @@
 # Spec: project flag
 
-## ADDED Requirements
+## Purpose
+
+Define the `--project` flag on `install otel` and `install otel-python` for specifying a project directory directly.
+
+## Requirements
 
 ### Requirement: --project flag on install otel and install otel-python
 

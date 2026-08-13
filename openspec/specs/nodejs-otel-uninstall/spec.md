@@ -1,6 +1,10 @@
 # Node.js OTel Uninstall
 
-## MODIFIED Requirements
+## Purpose
+
+Define how `dtwiz uninstall otel` removes Node.js OTel instrumentation artifacts.
+
+## Requirements
 
 ### Requirement: UninstallOtelCollector includes Node.js cleanup
 
@@ -33,8 +37,6 @@ The existing `UninstallOtelCollector()` function SHALL be extended to also detec
 - **GIVEN** no collector processes, no collector dirs, no `.otel/` dirs, no instrumented node processes
 - **WHEN** `dtwiz uninstall otel` runs
 - **THEN** it prints "Nothing to remove" and exits
-
-## ADDED Requirements
 
 ### Requirement: Detect .otel/ directories
 

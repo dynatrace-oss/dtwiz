@@ -1,6 +1,10 @@
 # Spec: install demo
 
-## ADDED Requirements
+## Purpose
+
+Define the `dtwiz install demo` command flow including plan preview, prerequisite handling, and confirmation prompt.
+
+## Requirements
 
 ### Requirement: Demo installation plan preview
 

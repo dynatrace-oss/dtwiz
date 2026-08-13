@@ -1,6 +1,10 @@
 # Azure Monitor Uninstall
 
-## ADDED Requirements
+## Purpose
+
+Define the `dtwiz uninstall azure` command that removes the Dynatrace Azure Monitor integration.
+
+## Requirements
 
 ### Requirement: Uninstall command and entry point
 

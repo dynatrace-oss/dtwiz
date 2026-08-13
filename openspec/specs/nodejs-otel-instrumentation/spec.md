@@ -1,6 +1,10 @@
 # Node.js OTel Instrumentation
 
-## ADDED Requirements
+## Purpose
+
+Define how `dtwiz install otel` sets up Node.js OTel auto-instrumentation including package installation, `.otel/` directory, and startup script.
+
+## Requirements
 
 ### Requirement: .otel/ directory creation
 

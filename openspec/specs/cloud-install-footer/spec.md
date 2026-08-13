@@ -1,6 +1,10 @@
 # Cloud Install Footer Specification
 
-## ADDED Requirements
+## Purpose
+
+Define the footer shown after a successful AWS, GCP, or Azure install that links users to the Clouds app.
+
+## Requirements
 
 ### Requirement: Cloud installs show Clouds app footer
 

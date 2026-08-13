@@ -1,6 +1,10 @@
 # OTel Host Monitoring: Smartscape on Grail Routes Spec
 
-## ADDED Requirements
+## Purpose
+
+Define how `dtwiz install otel` sets up dynamic Smartscape-on-Grail routes after a host-monitoring install.
+
+## Requirements
 
 ### Requirement: Dynamic routes for Smartscape on Grail are set up after host-monitoring install
 

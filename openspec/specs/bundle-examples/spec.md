@@ -1,6 +1,10 @@
 # Spec: bundle-examples
 
-## ADDED Requirements
+## Purpose
+
+Define how dtwiz examples are packaged and published as a release asset alongside each dtwiz release.
+
+## Requirements
 
 ### Requirement: All examples are published as a release asset
 

@@ -1,6 +1,10 @@
 # Azure Monitor Update
 
-## ADDED Requirements
+## Purpose
+
+Define the `dtwiz update azure` command that reconciles an existing Dynatrace Azure Monitor integration to the latest monitoring configuration.
+
+## Requirements
 
 ### Requirement: Update is an in-place monitoring-config reconcile
 

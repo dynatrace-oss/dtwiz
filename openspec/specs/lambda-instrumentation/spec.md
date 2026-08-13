@@ -1,6 +1,10 @@
 # Lambda Instrumentation
 
-## ADDED Requirements
+## Purpose
+
+Define how `dtwiz install aws` discovers and instruments AWS Lambda functions with Dynatrace.
+
+## Requirements
 
 ### Requirement: Lambda function discovery
 

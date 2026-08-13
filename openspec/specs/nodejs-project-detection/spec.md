@@ -1,6 +1,10 @@
 # Node.js Project Detection
 
-## ADDED Requirements
+## Purpose
+
+Define how the installer discovers Node.js projects for OTel instrumentation.
+
+## Requirements
 
 ### Requirement: Node.js project discovery
 

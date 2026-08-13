@@ -1,6 +1,10 @@
 # K8s Distribution Detection
 
-## ADDED Requirements
+## Purpose
+
+Define how `dtwiz analyze` detects the Kubernetes distribution (EKS, GKE, AKS, K3s, etc.) and reports it in system analysis.
+
+## Requirements
 
 ### Requirement: Detect GKE Autopilot as distinct from GKE Standard
 

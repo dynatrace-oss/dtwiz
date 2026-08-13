@@ -1,5 +1,9 @@
 # Spec: python install validation
 
+## Purpose
+
+Define the pre-flight validation the Python installer performs before applying OTel instrumentation.
+
 ## Requirements
 
 ### Requirement: Pre-flight validation for Python installer

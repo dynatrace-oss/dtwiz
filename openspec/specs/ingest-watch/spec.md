@@ -1,6 +1,10 @@
 # Spec: Ingest Watch
 
-## ADDED Requirements
+## Purpose
+
+Define the `dtwiz watch` command that polls the Dynatrace DQL API and displays a live-updating terminal summary of newly ingested data.
+
+## Requirements
 
 ### Requirement: Watch command polls Dynatrace for ingested data
 
@@ -112,8 +116,6 @@ The system SHALL display elapsed time since the watch started in the header line
 
 - **WHEN** the watch has been running for some time
 - **THEN** the header shows "Watching for new data in Dynatrace... (elapsed: Xm Ys)"
-
-## CHANGED Requirements
 
 ### Requirement: Watch command polls Dynatrace for ingested data
 

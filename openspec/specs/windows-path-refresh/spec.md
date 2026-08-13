@@ -1,6 +1,10 @@
 # Windows PATH Refresh
 
-## ADDED Requirements
+## Purpose
+
+Define how dtwiz refreshes the PATH environment variable inside the current process on Windows after installing a new tool.
+
+## Requirements
 
 ### Requirement: Refresh PATH inside the current process
 

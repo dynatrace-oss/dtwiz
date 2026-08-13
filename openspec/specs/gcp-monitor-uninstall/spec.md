@@ -1,6 +1,10 @@
 # GCP Monitor Uninstall
 
-## ADDED Requirements
+## Purpose
+
+Define the `dtwiz uninstall gcp` command that removes the Dynatrace Google Cloud integration.
+
+## Requirements
 
 ### Requirement: Uninstall command and entry point
 

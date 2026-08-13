@@ -1,6 +1,10 @@
 # Spec: Status Extensions
 
-## ADDED Requirements
+## Purpose
+
+Define how `dtwiz status` displays Dynatrace extension status using a shared HTTP client with Classic and Platform sub-clients.
+
+## Requirements
 
 ### Requirement: Centralized HTTP client with Classic and Platform sub-clients
 

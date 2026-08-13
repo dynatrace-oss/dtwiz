@@ -1,6 +1,10 @@
 # Status Feature Flags
 
-## ADDED Requirements
+## Purpose
+
+Define how `dtwiz status` displays active feature flags in its output.
+
+## Requirements
 
 ### Requirement: Active feature flags displayed in status output
 

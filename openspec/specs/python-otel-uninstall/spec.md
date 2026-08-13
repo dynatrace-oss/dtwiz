@@ -1,5 +1,9 @@
 # Spec: Python OTel Uninstall
 
+## Purpose
+
+Define how `dtwiz uninstall otel` detects and removes Python OTel instrumentation from managed project directories.
+
 ## Requirements
 
 ### Requirement: Detect running Python processes associated with OTel-managed project directories on uninstall

@@ -1,6 +1,10 @@
 # Status Command Structure
 
-## ADDED Requirements
+## Purpose
+
+Define the structure of the `dtwiz status` command output, including credential status printed via a shared helper.
+
+## Requirements
 
 ### Requirement: Credential status printed via shared helper
 

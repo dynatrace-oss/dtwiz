@@ -1,6 +1,10 @@
 # Windows Demo Python Winget Package
 
-## ADDED Requirements
+## Purpose
+
+Define the correct winget Python package ID used by the Windows demo flow.
+
+## Requirements
 
 ### Requirement: Use a real winget Python package ID
 

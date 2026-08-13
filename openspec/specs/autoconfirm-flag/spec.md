@@ -1,6 +1,10 @@
 # Spec: autoconfirm flag
 
-## ADDED Requirements
+## Purpose
+
+Define the `--yes`/`-y` auto-confirm flag for the `install`, `update`, and `uninstall` command groups, and the shared `confirmProceed()` utility it controls.
+
+## Requirements
 
 ### Requirement: --yes / -y flag on install, update, and uninstall command groups
 

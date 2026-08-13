@@ -1,6 +1,10 @@
 # Spec: OTel Project Scan
 
-## ADDED Requirements
+## Purpose
+
+Define how the OTel installer scans for projects to instrument, limiting the search scope to the current working directory.
+
+## Requirements
 
 ### Requirement: Scan scope limited to working directory
 

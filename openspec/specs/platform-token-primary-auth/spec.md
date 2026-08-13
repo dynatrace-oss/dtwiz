@@ -1,12 +1,12 @@
 # Platform Token Primary Authentication
 
-## Overview
+## Purpose
 
 Dynatrace is deprecating access tokens. New tenants can no longer create them. Platform tokens (`dt0s16.*`) are the replacement and already work for all ingest endpoints. Classic API endpoints are being updated to accept platform tokens as well.
 
 This change makes platform token the required primary credential. Access token (`dt0c01.*`) is retained as an optional fallback for Classic API calls that do not yet accept platform tokens. Once Classic API coverage is complete and verified, access token support will be removed entirely.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Platform token is required
 
@@ -22,7 +22,7 @@ All dtwiz commands SHALL require `DT_PLATFORM_TOKEN` to be set. If not set, the 
 
 ### Requirement: Access token is optional; used as Classic API fallback
 
-Access token is optional. At startup, dtwiz probes the Classic API with the platform token. If rejected (401/403), the access token is used instead for Classic API calls. This fallback exists only until all Classic API endpoints accept platform tokens.
+Access token is optional. At startup, dtwiz SHALL probe the Classic API with the platform token. If rejected (401/403), the access token SHALL be used instead for Classic API calls. This fallback exists only until all Classic API endpoints accept platform tokens.
 
 #### Scenario: Platform token accepted by Classic API
 

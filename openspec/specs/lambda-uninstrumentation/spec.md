@@ -1,6 +1,10 @@
 # Lambda Uninstrumentation
 
-## ADDED Requirements
+## Purpose
+
+Define how `dtwiz uninstall aws` detects and removes Dynatrace instrumentation from AWS Lambda functions.
+
+## Requirements
 
 ### Requirement: Detect instrumented functions
 

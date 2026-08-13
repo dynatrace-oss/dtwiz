@@ -1,6 +1,10 @@
 # AWS Lambda Parallel Execution
 
-## ADDED Requirements
+## Purpose
+
+Define how `dtwiz install aws` instruments Lambda functions in parallel with the CloudFormation deployment so users get both platform and function-level monitoring from a single command.
+
+## Requirements
 
 ### Requirement: `install aws` also instruments Lambda functions
 
