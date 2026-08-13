@@ -80,11 +80,11 @@ requirement where it actually belongs.
 
 ### Thread the allocated OTLP HTTP port through verification instead of hardcoding it
 
-Writing task 2.4's regression test exposed that verification (`waitForOtelCollectorReady`, `sendOtelVerificationLog`,
-`verifyOtelInstall`) hardcoded the OTLP HTTP receiver's default port. With the test's decoy occupying that default
-port, `install otel` would have allocated a different one for the real collector, and hardcoded verification would
-have probed/posted to the decoy instead. This is the same class of bug as the port-freeness defect: code that assumes
-a fixed port instead of the one `generateOtelConfig` actually chose.
+Verification (`waitForOtelCollectorReady`, `sendOtelVerificationLog`, `verifyOtelInstall`) hardcoded the OTLP HTTP
+receiver's default port instead of the one `generateOtelConfig` actually allocated. Task 2.4's regression test
+occupies that default port with a decoy, so `install otel` allocates a different one for the real collector;
+hardcoded verification would probe/post to the decoy instead. This is the same class of bug as the port-freeness
+defect: code that assumes a fixed port instead of the one actually chosen.
 
 `install otel` has the allocated port on hand (`collectorPlan.httpPort`), so it is threaded straight through.
 `update otel` patches a config it did not generate and has no allocated-port value to reuse, so `extractOtlpHTTPPort`
