@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,6 +17,24 @@ import (
 
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
+
+// readProcCmdline reads the null-delimited argv from /proc/<pid>/cmdline on Linux,
+// returning nil on other platforms or when the file is unreadable.
+func readProcCmdline(pid int) []string {
+	if runtime.GOOS != "linux" {
+		return nil
+	}
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
+	if err != nil || len(data) == 0 {
+		return nil
+	}
+	// /proc/<pid>/cmdline is null-terminated; trailing null produces an empty element.
+	parts := strings.Split(strings.TrimRight(string(data), "\x00"), "\x00")
+	if len(parts) == 0 {
+		return nil
+	}
+	return parts
+}
 
 // detectServicesOnPorts returns processes that have active TCP connections
 // TO any of the given ports (i.e. clients of the collector's receivers).
@@ -101,6 +120,7 @@ func detectServicesOnPorts(ports []string) []connectedService {
 			pid:           pid,
 			name:          serviceDisplayName(cmd),
 			command:       cmd,
+			cmdline:       readProcCmdline(pid),
 			workDir:       lookupProcessWorkingDirectory(pid),
 			collectorPort: pidPort[pid],
 			listenPorts:   detectListenPorts(pid),
@@ -168,6 +188,7 @@ func detectInstrumentedServices(tenantIDs, ports []string) []connectedService {
 			pid:         pid,
 			name:        serviceDisplayName(cmd),
 			command:     cmd,
+			cmdline:     readProcCmdline(pid),
 			workDir:     lookupProcessWorkingDirectory(pid),
 			listenPorts: detectListenPorts(pid),
 			exportsTo:   endpoint,
@@ -239,7 +260,12 @@ func stopService(pid int) error {
 // relaunchService restarts the service detached (new session) from its captured
 // command, workdir, and env; output goes to a log file in the workdir.
 func relaunchService(svc connectedService) (int, error) {
-	argv := strings.Fields(svc.command)
+	argv := svc.cmdline
+	if len(argv) == 0 {
+		// /proc/<pid>/cmdline unavailable (macOS or unreadable); ps-derived command
+		// may misparse args that contain spaces (e.g. Java -D flags, paths with spaces).
+		argv = strings.Fields(svc.command)
+	}
 	if len(argv) == 0 {
 		return 0, fmt.Errorf("no command recorded")
 	}

@@ -18,7 +18,8 @@ import (
 type connectedService struct {
 	pid               int
 	name              string   // short display name (binary basename)
-	command           string   // full command line
+	command           string   // full command line (whitespace-joined; may misparse space-containing args)
+	cmdline           []string // null-delimited argv from /proc/<pid>/cmdline on Linux; nil elsewhere
 	workDir           string   // working directory at detection time
 	collectorPort     string   // OTLP receiver port this service sends to (e.g. "4317" or "4318")
 	listenPorts       []string // TCP ports this process itself listens on (e.g. ["8080", "8001"])
@@ -196,7 +197,7 @@ func hostPort(endpoint string) (host, port string) {
 
 func isLoopback(host string) bool {
 	switch host {
-	case "localhost", "127.0.0.1", "::1", "0.0.0.0", "[::1]":
+	case "localhost", "127.0.0.1", "::1", "[::1]":
 		return true
 	}
 	return false

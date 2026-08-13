@@ -71,12 +71,15 @@ func portsFromConfig(configPath string) (grpc, http, metrics, healthCheck int) {
 		if telemetry := nodeMappingGet(svc, "telemetry"); telemetry != nil {
 			if metricsNode := nodeMappingGet(telemetry, "metrics"); metricsNode != nil {
 				if readers := nodeMappingGet(metricsNode, "readers"); readers != nil && readers.Kind == yaml.SequenceNode && len(readers.Content) > 0 {
-					pull := nodeMappingGet(readers.Content[0], "pull")
-					exporter := nodeMappingGet(pull, "exporter")
-					prom := nodeMappingGet(exporter, "prometheus")
-					if portNode := nodeMappingGet(prom, "port"); portNode != nil {
-						if p, err := strconv.Atoi(portNode.Value); err == nil && p > 0 {
-							metrics = p
+					if pull := nodeMappingGet(readers.Content[0], "pull"); pull != nil {
+						if exporter := nodeMappingGet(pull, "exporter"); exporter != nil {
+							if prom := nodeMappingGet(exporter, "prometheus"); prom != nil {
+								if portNode := nodeMappingGet(prom, "port"); portNode != nil {
+									if p, err := strconv.Atoi(portNode.Value); err == nil && p > 0 {
+										metrics = p
+									}
+								}
+							}
 						}
 					}
 				}

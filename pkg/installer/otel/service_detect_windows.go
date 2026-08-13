@@ -160,6 +160,9 @@ func stopService(pid int) error {
 // relaunchService restarts the service detached (windowsDetachedProcess) from its
 // captured command and workdir; env cannot be captured so the child inherits dtwiz's.
 func relaunchService(svc connectedService) (int, error) {
+	// Windows CommandLine is a single string; strings.Fields may misparse
+	// space-containing args (quoted paths, -D flags). Full fix requires
+	// CommandLineToArgvW, which is not yet implemented.
 	argv := strings.Fields(svc.command)
 	if len(argv) == 0 {
 		return 0, fmt.Errorf("no command recorded")
