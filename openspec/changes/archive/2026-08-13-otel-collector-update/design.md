@@ -24,35 +24,35 @@ This change implements the full interactive update flow and introduces a split b
 
 ## Decisions
 
-### 1. Two update paths: `updateDynatraceCollector` vs `updateOtelConfig`
+### 1. Two update paths: Dynatrace Collector vs upstream OTel Collector
 
-Dynatrace-distributed collectors are identified by binary name (`isDynatraceOtelCollector()` checks for the `dynatrace-otel-collector` substring). When detected, `updateDynatraceCollector` regenerates the full config from the install template. This ensures the output always matches the canonical Dynatrace Collector configuration contract rather than accumulating stale or conflicting YAML from successive patch operations.
+Dynatrace-distributed collectors are identified by binary name (checking for the `dynatrace-otel-collector` substring). When detected, the update regenerates the full config from the install template. This ensures the output always matches the canonical Dynatrace Collector configuration contract rather than accumulating stale or conflicting YAML from successive patch operations.
 
-Upstream collectors get the exporter-merge path (`updateOtelConfig`): only the `otlp_http/dynatrace` exporter is injected; the rest of the config is preserved as-is.
+Upstream collectors get the exporter-merge path: only the `otlp_http/dynatrace` exporter is injected; the rest of the config is preserved as-is.
 
 ### 2. YAML node-level editing preserves comments, key order, and flow/block style
 
-A plain `Unmarshal → Marshal` roundtrip discards YAML comments and may reorder keys or normalize sequence styles (e.g. collapsing flow sequences to block style). The update uses a `yaml.Node` tree edit — `mergeDynatraceExporter` walks the existing tree and sets nodes in-place — paired with an LCS-based line diff (`diffLines`) for the preview. Neither step requires a full roundtrip through Go structs.
+A plain unmarshal → marshal roundtrip discards YAML comments and may reorder keys or normalize sequence styles (e.g. collapsing flow sequences to block style). The update uses a `yaml.Node` tree edit — walking the existing tree and setting nodes in-place — paired with an LCS-based line diff for the preview. Neither step requires a full roundtrip through Go structs.
 
 ### 3. Connected service detection via two independent signals
 
-TCP connections (via `lsof(1)`) catch services that actively send OTLP data to the collector. OTLP env-var tenant matching (via `ps -eww`) catches services that export directly to Dynatrace without going through a local collector — they would be invisible to the TCP signal. Both signals are applied and deduplicated by PID.
+Active TCP connections to the collector's OTLP ports catch services that actively send OTLP data to the collector. OTLP env-var tenant matching catches services that export directly to Dynatrace without going through a local collector — they would be invisible to the TCP signal. Both signals are applied and deduplicated by PID.
 
 `DT_ENVIRONMENT` is intentionally excluded from the env-var search: dtwiz and all child processes inherit it, which would produce false matches.
 
-### 4. `ErrUpToDate` as a clean-exit sentinel
+### 4. Up-to-date as a clean-exit sentinel
 
-The Dynatrace Collector up-to-date check uses byte comparison of the freshly rendered template against the existing file. Returning a typed error (`ErrUpToDate`) rather than `nil` lets callers distinguish "nothing to do" from "update applied" without an extra boolean return value. Both `cmd/update.go` and `cmd/setup.go` already check `ErrInstallCancelled` — `ErrUpToDate` is added to the same condition.
+The Dynatrace Collector up-to-date check uses byte comparison of the freshly rendered template against the existing file. Using a typed sentinel error rather than `nil` lets callers distinguish "nothing to do" from "update applied" without an extra boolean return value. The update and setup commands treat it the same as user cancellation — clean exit, no error printed.
 
 ### 5. Port-aware verify and wait
 
-When multiple collectors run concurrently they use different OTLP HTTP ports. Hardcoding 4318 would cause `verifyOtelInstall` to probe the wrong collector after a restart. `otlpHTTPPortFromConfig()` reads the port from the patched or regenerated config, falling back to 4318 only when the field cannot be parsed.
+When multiple collectors run concurrently they use different OTLP HTTP ports. Hardcoding 4318 would cause the verify step to probe the wrong collector after a restart. The OTLP HTTP port is read from the patched or regenerated config, falling back to 4318 only when the field cannot be parsed.
 
 ### 6. Retargeting vs reconciling connected services
 
 Two different post-restart corrections apply depending on the update path:
 
-- **Upstream OTel update**: connected services keep their existing OTLP endpoint (the local collector is already handling routing). Only stale tenant references in `OTEL_EXPORTER_OTLP_ENDPOINT` are corrected against `DT_ENVIRONMENT` + `DT_PLATFORM_TOKEN`.
+- **Upstream OTel update**: connected services keep their existing OTLP endpoint (the local collector is already handling routing). Only stale tenant references in `OTEL_EXPORTER_OTLP_ENDPOINT` are corrected to the current `DT_ENVIRONMENT` and `DT_PLATFORM_TOKEN`.
 - **Dynatrace Collector update**: the config may now export to additional tenants. Services that export directly to any Dynatrace tenant (non-loopback) are retargeted to the local collector HTTP endpoint so their data reaches all configured export destinations.
 
 ## Risks / Trade-offs
