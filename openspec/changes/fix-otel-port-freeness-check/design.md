@@ -1,8 +1,10 @@
+# Design
+
 ## Context
 
 `generateOtelConfig` in [pkg/installer/otel/collector.go](../../../pkg/installer/otel/collector.go) allocates the ports
 the Dynatrace OTel Collector will bind by calling `findFreePort(startPort)`, which returns the lowest port at or above
-`startPort` on which it can open a TCP listener. Today it probes the hostname `localhost`:
+`startPort` on which it can start accepting connections. Today it checks the hostname `localhost`:
 
 ```go
 addr := fmt.Sprintf("localhost:%d", port)
@@ -11,15 +13,16 @@ l, err := net.Listen("tcp", addr)
 
 The rendered config ([otel.tmpl](../../../pkg/installer/otel/otel.tmpl)) binds two different addresses depending on the
 receiver: `otlp` and `health_check` bind `0.0.0.0` explicitly; the Prometheus telemetry reader binds `localhost`. On a
-host where `localhost` resolves to the IPv6 loopback (`::1`) ahead of `127.0.0.1`, which is the default on macOS,
-`net.Listen("tcp", "localhost:<port>")` opens a listener on `[::1]:<port>` only. That is a different socket from
-`0.0.0.0:<port>`, so a port already occupied on `0.0.0.0` (by any process, including another vendor's OTel Collector)
-is wrongly reported free. The Dynatrace collector then tries to bind that same port for real, gets `EADDRINUSE`, and
-exits immediately.
+host where `localhost` resolves to the IPv6 local address `::1` before `127.0.0.1`, which is the default on macOS,
+`net.Listen("tcp", "localhost:<port>")` ends up listening only on `[::1]:<port>`. That is not the same address as
+`0.0.0.0:<port>`, so a port already taken on `0.0.0.0` (by any process, including another vendor's OTel Collector) is
+wrongly reported free. The Dynatrace collector then tries to bind that same port for real, gets an "address already in
+use" error from the operating system, and exits immediately.
 
 Reproduced live: with a foreign collector bound to `0.0.0.0:4317`/`4318`, `install otel` allocated `grpc=4317
-http=4318` (unchanged, wrongly free) while the metrics port was correctly bumped, because its own conflict happened to
-be on `localhost`/`::1` on both sides. The Dynatrace collector then crashed with `exit status 1` on startup.
+http=4318` (unchanged, wrongly free) while the metrics port was correctly moved to the next one, because its own
+conflict happened to be on `localhost`/`::1` on both sides. The Dynatrace collector then crashed with `exit status 1`
+on startup.
 
 ## Goals / Non-Goals
 
@@ -46,22 +49,22 @@ be on `localhost`/`::1` on both sides. The Dynatrace collector then crashed with
 succeed. This is implemented as a small `canBindPort(host string, port int) bool` helper so the two checks share one
 code path.
 
-**Alternative considered: check only `0.0.0.0`.** Binding `0.0.0.0:<port>` fails if anything, wildcard or specific,
-already holds that port on most platforms, which would catch the exact bug reproduced above. It was rejected because
-it only catches conflicts on the address family `0.0.0.0` implies. The telemetry reader binds `127.0.0.1` specifically
-(via `localhost`), and on a host where hostname resolution prefers IPv4 (common on Linux), an existing conflict on
-`127.0.0.1` alone would go undetected by a `0.0.0.0`-only check, trading today's bug for a mirror-image one on a
-different platform. Checking both addresses removes the dependency on hostname resolution order entirely, rather than
-picking a different resolution order to depend on.
+**Alternative considered: check only `0.0.0.0`.** Binding `0.0.0.0:<port>` fails if anything else, no matter which
+address it is bound to, already holds that port on most platforms, which would catch the exact bug reproduced above.
+It was rejected because it only catches conflicts that show up on `0.0.0.0` itself. The telemetry reader binds
+`127.0.0.1` specifically (via `localhost`), and on a host where `localhost` resolves to `127.0.0.1` first (common on
+Linux), an existing conflict on `127.0.0.1` alone would go undetected by a `0.0.0.0`-only check: trading today's bug
+for the same bug in reverse on a different platform. Checking both addresses removes any dependency on which address
+`localhost` happens to resolve to first.
 
-**Alternative considered: resolve `localhost` and iterate all returned addresses.** Would generalize better if a
-receiver ever bound an IPv6 address, but nothing in this codebase does, and it adds indirection (a DNS/hosts-file
-resolution step, plus handling however many addresses it returns) for a case that does not exist. Two literal,
-known-correct addresses are simpler and just as correct for the receivers this project actually renders.
+**Alternative considered: resolve `localhost` and check every address it returns.** Would generalize better if a
+receiver ever bound an IPv6 address, but nothing in this codebase does, and it adds an extra lookup step, plus
+handling however many addresses come back, for a case that does not exist. Two literal, known-correct addresses are
+simpler and just as correct for the receivers this project actually renders.
 
 ## Risks / Trade-offs
 
 - **The check is strictly more conservative than before**: it can only reject a port the old check would have
   accepted (never the reverse), so a host where the old check already worked correctly sees no behavior change.
-- **Two `Listen`/`Close` calls per candidate port instead of one.** Negligible; `findFreePort` is called a handful of
-  times per install, not in a hot loop.
+- **Two connection checks per candidate port instead of one.** Negligible: `findFreePort` runs a handful of times per
+  install, not inside a loop that executes rapidly.

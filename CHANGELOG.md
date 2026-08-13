@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `analyze` / `status`: false positive "OneAgent: running" in containers — the `systemctl` check is now guarded by the presence of `/run/systemd/system`, preventing the systemd compatibility shim (which exits 0 for any command when systemd is not the init) from being mistaken for a running OneAgent
+- `install otel`: port allocation no longer selects a port that is already occupied on `0.0.0.0` when the hostname `localhost` resolves to IPv6 ahead of IPv4 (observed on macOS); this previously caused the newly started collector to exit immediately with `exit status 1`
 
 ## [1.2.0] - 2026-08-03
 

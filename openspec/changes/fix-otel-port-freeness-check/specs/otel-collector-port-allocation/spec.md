@@ -1,10 +1,12 @@
+# OTel Collector Port Allocation
+
 ## ADDED Requirements
 
 ### Requirement: Collector port selection recognizes a port as occupied regardless of which network address it is bound to
 
 When choosing the ports a newly installed collector will use, `install otel` SHALL treat a candidate port as
 unavailable whenever another process is already listening on it, whether that process is listening on all network
-interfaces or on the local loopback address only.
+interfaces or only on an address reachable from the same machine.
 
 #### Scenario: Port occupied on all network interfaces is not selected
 
@@ -12,9 +14,9 @@ interfaces or on the local loopback address only.
 - **WHEN** `install otel` selects a port for one of the collector's ingest endpoints
 - **THEN** that port SHALL NOT be selected
 
-#### Scenario: Port occupied on the loopback address is not selected
+#### Scenario: Port occupied on the machine's own address is not selected
 
-- **GIVEN** another process is already listening on a given port on the local loopback address only
+- **GIVEN** another process is already listening on a given port on an address reachable from the same machine only
 - **WHEN** `install otel` selects a port for the collector's own telemetry endpoint
 - **THEN** that port SHALL NOT be selected
 
