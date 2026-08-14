@@ -2,9 +2,11 @@ package otel
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -113,6 +115,25 @@ func detectConnectedServices(configData []byte, excludePIDs map[int]bool) []conn
 	return result
 }
 
+// isDynatraceEndpoint reports whether endpoint points to a Dynatrace-hosted
+// URL (SaaS or managed). Only these endpoints yield meaningful tenant IDs;
+// non-Dynatrace exporters (Jaeger, Tempo, etc.) must be excluded so their
+// first DNS label never contaminates the tenant set.
+func isDynatraceEndpoint(endpoint string) bool {
+	u, err := url.Parse(endpoint)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	for _, suffix := range []string{".dynatrace.com", ".dynatracelabs.com"} {
+		if strings.HasSuffix(host, suffix) {
+			return true
+		}
+	}
+	// Managed deployment: path contains /e/<tenantId>
+	return strings.Contains(u.Path, "/e/")
+}
+
 // collectorTenantsFromConfig returns tenant IDs extracted from every configured exporter endpoint.
 func collectorTenantsFromConfig(data []byte) []string {
 	var doc yaml.Node
@@ -133,6 +154,9 @@ func collectorTenantsFromConfig(data []byte) []string {
 	for i := 0; i+1 < len(exporters.Content); i += 2 {
 		endpoint := nodeMappingGet(exporters.Content[i+1], "endpoint")
 		if endpoint == nil || endpoint.Value == "" {
+			continue
+		}
+		if !isDynatraceEndpoint(endpoint.Value) {
 			continue
 		}
 		tenant := installer.ExtractTenantID(endpoint.Value)
@@ -437,10 +461,21 @@ func printConnectedServices(svcs []connectedService) {
 		if svc.exportsTo != "" {
 			display.ColorMuted.Printf("              exports to: %s\n", svc.exportsTo)
 		}
-		if svc.command != "" {
-			display.ColorMuted.Printf("              %s\n", truncateStr(svc.command, 80))
+	}
+}
+
+// waitForListenPorts polls detectListenPorts up to maxAttempts times at interval
+// until the process has bound at least one port, then returns the result.
+func waitForListenPorts(pid, maxAttempts int, interval time.Duration) []string {
+	for i := 0; i < maxAttempts; i++ {
+		if ports := detectListenPorts(pid); len(ports) > 0 {
+			return ports
+		}
+		if i < maxAttempts-1 {
+			time.Sleep(interval)
 		}
 	}
+	return nil
 }
 
 // restartConnectedServices stops each service (SIGTERM→SIGKILL) and relaunches
@@ -453,11 +488,7 @@ func restartConnectedServices(svcs []connectedService) {
 	display.ColorBold.Printf("  Restarting %d connected service(s):\n", len(svcs))
 	var relaunchFailed bool
 	for _, svc := range svcs {
-		portLabel := ""
-		if len(svc.listenPorts) > 0 {
-			portLabel = " (ports: " + strings.Join(svc.listenPorts, ", ") + ")"
-		}
-		fmt.Printf("    • PID %-6d  %s%s  ", svc.pid, svc.name, display.ColorMuted.Sprint(portLabel))
+		fmt.Printf("    • PID %-6d  %s  ", svc.pid, svc.name)
 
 		if err := stopService(svc.pid); err != nil {
 			fmt.Println(display.ColorError.Sprint("could not stop: " + err.Error()))
@@ -481,19 +512,18 @@ func restartConnectedServices(svcs []connectedService) {
 			logger.Debug("relaunchService failed", "pid", svc.pid, "name", svc.name, "err", err)
 			continue
 		}
-		fmt.Println(display.ColorOK.Sprintf("restarted (PID %d)", newPID))
+
+		// Detect ports the new process is actually listening on.
+		newPorts := waitForListenPorts(newPID, 5, 200*time.Millisecond)
+		portLabel := ""
+		if len(newPorts) > 0 {
+			portLabel = display.ColorMuted.Sprintf(" (ports: %s)", strings.Join(newPorts, ", "))
+		}
+		fmt.Println(display.ColorOK.Sprintf("restarted (PID %d)", newPID) + portLabel)
 	}
 
 	if relaunchFailed {
 		fmt.Println()
 		display.ColorDefault.Println("  Some services could not be restarted automatically — start them manually.")
 	}
-}
-
-// truncateStr trims s to at most n characters, appending "…" when truncated.
-func truncateStr(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n-1] + "…"
 }

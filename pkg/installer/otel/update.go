@@ -333,6 +333,9 @@ func mergeExporterIntoYAML(data []byte, apiURL, token string) ([]byte, error) {
 	if err := enc.Encode(root); err != nil {
 		return nil, fmt.Errorf("marshalling updated YAML: %w", err)
 	}
+	if err := enc.Close(); err != nil {
+		return nil, fmt.Errorf("finalising updated YAML: %w", err)
+	}
 	return buf.Bytes(), nil
 }
 

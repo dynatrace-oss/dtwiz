@@ -43,6 +43,43 @@ func TestCollectorTenantsFromConfig_NoExporters(t *testing.T) {
 	}
 }
 
+func TestCollectorTenantsFromConfig_IgnoresNonDynatraceExporters(t *testing.T) {
+	cfg := []byte(`
+exporters:
+  otlp/dynatrace:
+    endpoint: https://abc12345.live.dynatrace.com/api/v2/otlp
+  otlp/jaeger:
+    endpoint: http://jaeger-collector:4317
+  otlp/tempo:
+    endpoint: http://tempo:4317
+`)
+	got := collectorTenantsFromConfig(cfg)
+	want := []string{"abc12345"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("tenants = %v, want %v", got, want)
+	}
+}
+
+func TestIsDynatraceEndpoint(t *testing.T) {
+	tests := []struct {
+		endpoint string
+		want     bool
+	}{
+		{"https://abc12345.live.dynatrace.com/api/v2/otlp", true},
+		{"https://abc12345.dev.dynatracelabs.com/api/v2/otlp", true},
+		{"https://managed.example.com/e/abc12345/api/v2/otlp", true},
+		{"http://jaeger-collector:4317", false},
+		{"http://localhost:4317", false},
+		{"https://grafana-tempo.internal/v1/traces", false},
+		{"not-a-url", false},
+	}
+	for _, tt := range tests {
+		if got := isDynatraceEndpoint(tt.endpoint); got != tt.want {
+			t.Errorf("isDynatraceEndpoint(%q) = %v, want %v", tt.endpoint, got, tt.want)
+		}
+	}
+}
+
 func TestOtlpEndpointFromEnv(t *testing.T) {
 	tests := []struct {
 		name   string
