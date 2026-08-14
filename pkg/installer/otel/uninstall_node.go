@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/environment"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -138,5 +139,5 @@ func nodeServiceNameFromCommand(projectDir, command string) string {
 		}
 	}
 	// Framework (next/nuxt) or unrecognized pattern — use project name.
-	return projectServiceName(projectDir)
+	return environment.ProjectServiceName(projectDir)
 }

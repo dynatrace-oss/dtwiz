@@ -13,6 +13,7 @@ import (
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/environment"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -41,7 +42,7 @@ func nodeServiceNameFromEntrypoint(projectPath, entrypoint string) string {
 
 // generateOtelNodeEnvVars extends base OTel env vars with Node.js-specific settings.
 func generateOtelNodeEnvVars(collectorEndpoint, serviceName string) map[string]string {
-	envVars := generateBaseOtelEnvVars(collectorEndpoint, serviceName)
+	envVars := environment.GenerateBaseOtelEnvVars(collectorEndpoint, serviceName)
 	envVars["OTEL_NODE_RESOURCE_DETECTORS"] = "all"
 	return envVars
 }
@@ -73,7 +74,7 @@ func buildNodeInstrumentationPlan(proj ScannedProject, collectorEndpoint string)
 		return nil
 	}
 
-	svcName := projectServiceName(proj.Path)
+	svcName := environment.ProjectServiceName(proj.Path)
 	envVars := generateOtelNodeEnvVars(collectorEndpoint, svcName)
 	pkgManager := detectNodePackageManager(proj.Path)
 	otelDir := filepath.Join(proj.Path, ".otel")
@@ -451,20 +452,20 @@ func (p *NodeInstrumentationPlan) Execute() error {
 
 	switch p.Framework {
 	case "next":
-		svcName := projectServiceName(proj.Path)
+		svcName := environment.ProjectServiceName(proj.Path)
 		epEnvVars := maps.Clone(p.EnvVars)
 		epEnvVars["OTEL_SERVICE_NAME"] = svcName
 
 		cmd := exec.Command("node", filepath.Join(".otel", "next-otel-bootstrap.js"), "start")
 		cmd.Dir = proj.Path
-		cmd.Env = append(os.Environ(), formatEnvVars(epEnvVars)...)
+		cmd.Env = append(os.Environ(), environment.FormatEnvVars(epEnvVars)...)
 
 		mp := launchEntrypoint(svcName, proj.Path, "next:start", cmd)
 		if mp != nil {
 			procs = append(procs, mp)
 		}
 	case "nuxt":
-		svcName := projectServiceName(proj.Path)
+		svcName := environment.ProjectServiceName(proj.Path)
 		epEnvVars := maps.Clone(p.EnvVars)
 		epEnvVars["OTEL_SERVICE_NAME"] = svcName
 
@@ -481,7 +482,7 @@ func (p *NodeInstrumentationPlan) Execute() error {
 		bootstrap := "./" + filepath.ToSlash(filepath.Join(".otel", "nuxt-otel-bootstrap.mjs"))
 		cmd := exec.Command("node", "--import", bootstrap, nitroEntry)
 		cmd.Dir = proj.Path
-		cmd.Env = append(os.Environ(), formatEnvVars(epEnvVars)...)
+		cmd.Env = append(os.Environ(), environment.FormatEnvVars(epEnvVars)...)
 
 		mp := launchEntrypoint(svcName, proj.Path, nitroEntry, cmd)
 		if mp != nil {
@@ -499,7 +500,7 @@ func (p *NodeInstrumentationPlan) Execute() error {
 			relEntrypoint := "../" + filepath.ToSlash(ep)
 			cmd := exec.Command("node", "--require", "@opentelemetry/auto-instrumentations-node/register", relEntrypoint)
 			cmd.Dir = p.OtelDir
-			cmd.Env = append(os.Environ(), formatEnvVars(epEnvVars)...)
+			cmd.Env = append(os.Environ(), environment.FormatEnvVars(epEnvVars)...)
 
 			mp := launchEntrypoint(svcName, proj.Path, ep, cmd)
 			if mp != nil {
@@ -568,7 +569,7 @@ func InstallOtelNode(envURL, token, platformToken, serviceName, projectPath stri
 		}
 		fmt.Println()
 		fmt.Println("  Environment variables:")
-		for _, line := range formatPrintableEnvVars(envVars) {
+		for _, line := range environment.FormatPrintableEnvVars(envVars) {
 			fmt.Printf("    %s\n", line)
 		}
 		return nil

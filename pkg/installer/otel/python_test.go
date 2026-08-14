@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/environment"
 	"github.com/dynatrace-oss/dtwiz/test/helpers"
 )
 
@@ -444,7 +445,7 @@ func TestGenerateOtelPythonEnvVars_NonDefaultPort(t *testing.T) {
 
 func TestGenerateEnvExportScript_AllKeysPresent(t *testing.T) {
 	vars := generateOtelPythonEnvVars("http://127.0.0.1:4318", "my-svc")
-	script := GenerateEnvExportScript(vars)
+	script := environment.GenerateEnvExportScript(vars)
 	for k := range vars {
 		if !strings.Contains(script, k) {
 			t.Fatalf("script missing key %q, got:\n%s", k, script)

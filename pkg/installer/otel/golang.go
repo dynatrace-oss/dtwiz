@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/environment"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -96,8 +97,8 @@ func DetectGoPlan(collectorEndpoint string) *GoInstrumentationPlan {
 		}
 	}
 
-	svcName := projectServiceName(sel.Path)
-	envVars := generateBaseOtelEnvVars(collectorEndpoint, svcName)
+	svcName := environment.ProjectServiceName(sel.Path)
+	envVars := environment.GenerateBaseOtelEnvVars(collectorEndpoint, svcName)
 
 	return &GoInstrumentationPlan{
 		Project: goProj,
@@ -127,7 +128,7 @@ func (p *GoInstrumentationPlan) Execute() error {
 	fmt.Println()
 	fmt.Println("  Set the following environment variables:")
 	fmt.Println()
-	for _, line := range formatEnvExportLines(p.EnvVars) {
+	for _, line := range environment.FormatEnvExportLines(p.EnvVars) {
 		fmt.Printf("    %s\n", line)
 	}
 	fmt.Println()

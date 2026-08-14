@@ -11,11 +11,12 @@ import (
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/environment"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 func generateOtelPythonEnvVars(collectorEndpoint, serviceName string) map[string]string {
-	envVars := generateBaseOtelEnvVars(collectorEndpoint, serviceName)
+	envVars := environment.GenerateBaseOtelEnvVars(collectorEndpoint, serviceName)
 	envVars["OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED"] = "true"
 	return envVars
 }
@@ -27,7 +28,7 @@ func printManualInstructions(envVars map[string]string) {
 	fmt.Printf("    pip install %s\n", strings.Join(otelPythonPackages, " "))
 	fmt.Println("    opentelemetry-bootstrap -a install")
 	fmt.Println()
-	fmt.Print(GenerateEnvExportScript(envVars))
+	fmt.Print(environment.GenerateEnvExportScript(envVars))
 	fmt.Println()
 	fmt.Println("  Then run your application with:")
 	fmt.Println("    opentelemetry-instrument python your_app.py")
@@ -56,7 +57,7 @@ func buildPythonInstrumentationPlan(proj ScannedProject, collectorEndpoint, envU
 	needsVenv := !isVenvHealthy(proj.Path)
 	logger.Debug("python project venv evaluation complete", "project", proj.Path, "needs_venv", needsVenv, "entrypoints", entrypoints)
 
-	svcName := projectServiceName(proj.Path)
+	svcName := environment.ProjectServiceName(proj.Path)
 	envVars := generateOtelPythonEnvVars(collectorEndpoint, svcName)
 
 	return &PythonInstrumentationPlan{
@@ -269,7 +270,7 @@ func (p *PythonInstrumentationPlan) Execute() error {
 			cmd = exec.Command(venvPython, otelInstrument, pythonBin, ep)
 		}
 		cmd.Dir = proj.Path
-		cmd.Env = append(os.Environ(), formatEnvVars(epEnvVars)...)
+		cmd.Env = append(os.Environ(), environment.FormatEnvVars(epEnvVars)...)
 
 		mp, err := StartManagedProcess(svcName, logName, ep, cmd, logFile)
 		if err != nil {
@@ -319,7 +320,7 @@ func InstallOtelPython(envURL, token, platformToken, serviceName, projectPath st
 		fmt.Println("    opentelemetry-bootstrap -a install")
 		fmt.Println()
 		fmt.Println("  Environment variables:")
-		for _, line := range formatPrintableEnvVars(envVars) {
+		for _, line := range environment.FormatPrintableEnvVars(envVars) {
 			fmt.Printf("    %s\n", line)
 		}
 		return nil
