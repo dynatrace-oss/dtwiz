@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-08-17
+
+### Added
+
+- `install otel` (experimental): Grail OpenPipeline dynamic routes are now configured during host monitoring install; routes for metrics (`system.*`, `process.*`), logs (OTLP source), and spans (OTel SDK) are created under the "OpenTelemetry Host Monitoring" pipeline so host-level telemetry is correctly classified from the start
+- `uninstall otel` (experimental): prompts whether to also deactivate the OTel Host Monitoring extension and remove the associated Grail OpenPipeline routes from the tenant; offers "Delete all" (default), "Only collector", or "Cancel"; `--yes` selects "Delete all" automatically
+
+### Changed
+
+- `update otel` (experimental): now detects services connected to the running OTel Collector via TCP connections to its OTLP ports or by matching the Dynatrace tenant export endpoint; patches the Dynatrace endpoint and token in the existing Dynatrace collector config and shows a focused YAML diff (with auth redacted) before applying; returns cleanly with no post-update watch when the config is already current
+
 ## [1.3.0] - 2026-08-10
 
 ### Added
@@ -478,7 +489,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.0.1...v1.1.0
