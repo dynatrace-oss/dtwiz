@@ -1,6 +1,7 @@
 package otel
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,14 +16,10 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
-// exporterSnippetTemplate is the YAML block to inject into an existing OTel Collector
-// configuration as the `otlp_http/dynatrace` exporter.
-// The second %s receives the full Authorization header value (e.g. "Bearer …" or "Api-Token …").
-const exporterSnippetTemplate = `otlp_http/dynatrace:
-  endpoint: %s
-  headers:
-    Authorization: "%s"
-`
+// ErrUpToDate is returned when the collector config is already current and no
+// changes were applied. Callers should treat it as a clean exit and skip any
+// post-update actions (e.g. WatchIngest).
+var ErrUpToDate = fmt.Errorf("collector configuration is already up to date")
 
 // backupFile writes data to a timestamped .bak.<unix> copy of path and returns
 // the backup path.
@@ -40,52 +37,12 @@ func dtOTLPEndpoint(apiURL string) string {
 	return strings.TrimRight(apiURL, "/") + "/api/v2/otlp"
 }
 
-// pipelineHint is the human-readable instruction for wiring the exporter.
-const pipelineHint = `Add "otlp_http/dynatrace" to the exporters list of each pipeline you want
-to forward to Dynatrace, for example:
-
-  service:
-    pipelines:
-      traces:
-        exporters: [otlp_http/dynatrace]
-      metrics:
-        exporters: [otlp_http/dynatrace]
-      logs:
-        exporters: [otlp_http/dynatrace]
-`
-
 // UpdateResult holds the outcome of an OTel config update operation.
 type UpdateResult struct {
 	ConfigPath  string
 	BackupPath  string
 	Modified    bool
 	Description string
-}
-
-// GenerateExporterSnippet returns the YAML snippet for the Dynatrace OTLP
-// exporter, ready to paste into an existing OTel Collector config.
-func GenerateExporterSnippet(apiURL, token string) string {
-	return fmt.Sprintf(exporterSnippetTemplate,
-		dtOTLPEndpoint(apiURL),
-		installer.AuthHeader(token),
-	)
-}
-
-// GeneratePipelineHint returns instructions for wiring the DT exporter into
-// service pipelines.
-func GeneratePipelineHint() string {
-	return pipelineHint
-}
-
-// GenerateFullInstructions returns a human-readable guide for manually adding
-// the Dynatrace exporter to an existing OTel Collector configuration.
-func GenerateFullInstructions(apiURL, token string) string {
-	var sb strings.Builder
-	sb.WriteString("Add the following to the `exporters:` section of your OTel Collector config:\n\n")
-	sb.WriteString(GenerateExporterSnippet(apiURL, token))
-	sb.WriteString("\n")
-	sb.WriteString(GeneratePipelineHint())
-	return sb.String()
 }
 
 // editKind represents the type of a line diff operation.
@@ -147,87 +104,251 @@ func diffLines(oldLines, newLines []string) []diffEdit {
 	return edits
 }
 
-// showConfigDiff prints a coloured line diff to stdout.
-// Added lines are green (+), removed lines are red (-), unchanged lines are dimmed.
+// showConfigDiff prints a focused diff: only changed lines and up to 2 YAML
+// ancestor lines above each change as context, with "..." between gaps.
 func showConfigDiff(origData, updatedData []byte) {
+	const parentContext = 2
+
 	oldLines := strings.Split(strings.TrimRight(string(origData), "\n"), "\n")
 	newLines := strings.Split(strings.TrimRight(string(updatedData), "\n"), "\n")
+	edits := diffLines(oldLines, newLines)
 
-	for _, e := range diffLines(oldLines, newLines) {
-		switch e.kind {
-		case editAdd:
-			fmt.Println(display.ColorOK.Sprint("+ " + e.line))
-		case editDel:
-			fmt.Println(display.ColorError.Sprint("- " + e.line))
-		case editKeep:
-			fmt.Println(display.ColorMuted.Sprint("  " + e.line))
-		}
+	yamlIndent := func(s string) int {
+		return len(s) - len(strings.TrimLeft(s, " \t"))
 	}
-}
-
-// mergeDynatraceExporter deep-merges the Dynatrace exporter definition into
-// the `exporters` key of the provided config map.  It also appends
-// `otlp_http/dynatrace` to the exporters list of every existing pipeline.
-func mergeDynatraceExporter(cfg map[string]interface{}, apiURL, token string) {
-	// Ensure exporters key exists.
-	exporters, ok := cfg["exporters"].(map[string]interface{})
-	if !ok {
-		exporters = make(map[string]interface{})
-		cfg["exporters"] = exporters
+	isStructural := func(s string) bool {
+		t := strings.TrimSpace(s)
+		return t != "" && !strings.HasPrefix(t, "#")
 	}
 
-	exporters["otlp_http/dynatrace"] = map[string]interface{}{
-		"endpoint": dtOTLPEndpoint(apiURL),
-		"headers": map[string]interface{}{
-			"Authorization": installer.AuthHeader(token),
-		},
-	}
-
-	// Append to existing pipeline exporters.
-	service, ok := cfg["service"].(map[string]interface{})
-	if !ok {
-		return
-	}
-	pipelines, ok := service["pipelines"].(map[string]interface{})
-	if !ok {
-		return
-	}
-	for pipelineName, pipelineVal := range pipelines {
-		pipeline, ok := pipelineVal.(map[string]interface{})
-		if !ok {
+	show := make([]bool, len(edits))
+	for i, e := range edits {
+		if e.kind != editAdd && e.kind != editDel {
 			continue
 		}
-		existing, _ := pipeline["exporters"].([]interface{})
-		// Don't add duplicates.
-		alreadyPresent := false
-		for _, e := range existing {
-			if e == "otlp_http/dynatrace" {
-				alreadyPresent = true
-				break
+		show[i] = true
+		indent := yamlIndent(e.line)
+		found := 0
+		for j := i - 1; j >= 0 && found < parentContext; j-- {
+			if e.kind == editAdd && edits[j].kind == editDel {
+				continue
+			}
+			if e.kind == editDel && edits[j].kind == editAdd {
+				continue
+			}
+			if !isStructural(edits[j].line) {
+				continue
+			}
+			if yamlIndent(edits[j].line) < indent {
+				show[j] = true
+				indent = yamlIndent(edits[j].line)
+				found++
 			}
 		}
-		if !alreadyPresent {
-			logger.Debug("adding Dynatrace exporter to pipeline", "pipeline", pipelineName)
-			pipeline["exporters"] = append(existing, "otlp_http/dynatrace")
-			pipelines[pipelineName] = pipeline
-		} else {
-			logger.Debug("Dynatrace exporter already present in pipeline", "pipeline", pipelineName)
+	}
+
+	// redactAuth replaces the token value on Authorization lines with "Bearer ***"
+	// so secrets are never printed, while the diff kind (add/del/keep) is unchanged.
+	redactAuth := func(s string) string {
+		if strings.HasPrefix(strings.TrimSpace(s), "Authorization:") {
+			return s[:len(s)-len(strings.TrimLeft(s, " \t"))] + `Authorization: "Bearer ***"`
 		}
+		return s
+	}
+
+	lastShown := -2
+	for i, e := range edits {
+		if !show[i] {
+			continue
+		}
+		if lastShown >= 0 && i > lastShown+1 {
+			fmt.Println(display.ColorMuted.Sprint("  ..."))
+		}
+		displayLine := redactAuth(e.line)
+		switch e.kind {
+		case editAdd:
+			fmt.Println(display.ColorOK.Sprint("+ " + displayLine))
+		case editDel:
+			fmt.Println(display.ColorError.Sprint("- " + displayLine))
+		case editKeep:
+			fmt.Println(display.ColorMuted.Sprint("  " + displayLine))
+		}
+		lastShown = i
 	}
 }
 
-// mergeExporterIntoYAML unmarshals data, injects the Dynatrace exporter via
-// mergeDynatraceExporter, and returns the re-marshalled YAML.
+// nodeMappingGet returns the value node for key in a YAML mapping node,
+// or nil if not found.
+func nodeMappingGet(m *yaml.Node, key string) *yaml.Node {
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value == key {
+			return m.Content[i+1]
+		}
+	}
+	return nil
+}
+
+// nodeGet traverses a chain of mapping keys starting from n, returning the
+// leaf node or nil if any step is missing.
+func nodeGet(n *yaml.Node, path ...string) *yaml.Node {
+	for _, key := range path {
+		if n == nil {
+			return nil
+		}
+		n = nodeMappingGet(n, key)
+	}
+	return n
+}
+
+// nodeMappingSet sets the value for key in a YAML mapping node.
+// If the key already exists its value is replaced in-place, preserving the
+// original key node (and any line comment on it).  Otherwise a new key-value
+// pair is appended, preserving insertion order.
+func nodeMappingSet(m *yaml.Node, key string, val *yaml.Node) {
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value == key {
+			m.Content[i+1] = val
+			return
+		}
+	}
+	m.Content = append(m.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Value: key, Tag: "!!str"},
+		val,
+	)
+}
+
+// ensureMappingNode returns the existing mapping value for key in parent,
+// creating and inserting an empty mapping node when absent.
+func ensureMappingNode(parent *yaml.Node, key string) *yaml.Node {
+	if n := nodeMappingGet(parent, key); n != nil && n.Kind == yaml.MappingNode {
+		return n
+	}
+	n := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	nodeMappingSet(parent, key, n)
+	return n
+}
+
+// buildDTExporterNode returns the yaml.Node subtree for the
+// otlp_http/dynatrace exporter definition.
+func buildDTExporterNode(apiURL, token string) *yaml.Node {
+	return &yaml.Node{
+		Kind: yaml.MappingNode,
+		Tag:  "!!map",
+		Content: []*yaml.Node{
+			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "endpoint"},
+			{Kind: yaml.ScalarNode, Tag: "!!str", Value: dtOTLPEndpoint(apiURL)},
+			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "headers"},
+			{
+				Kind: yaml.MappingNode,
+				Tag:  "!!map",
+				Content: []*yaml.Node{
+					{Kind: yaml.ScalarNode, Tag: "!!str", Value: "Authorization"},
+					{Kind: yaml.ScalarNode, Tag: "!!str", Value: installer.AuthHeader(token), Style: yaml.DoubleQuotedStyle},
+				},
+			},
+		},
+	}
+}
+
+// appendExporterToPipeline appends "otlp_http/dynatrace" to the exporters list
+// of a single pipeline mapping node.  The existing flow/block style of the
+// sequence is preserved.  It is a no-op if the exporter is already listed.
+func appendExporterToPipeline(pipeline *yaml.Node, name string) {
+	const dtKey = "otlp_http/dynatrace"
+	exportersNode := nodeMappingGet(pipeline, "exporters")
+	if exportersNode == nil {
+		nodeMappingSet(pipeline, "exporters", &yaml.Node{
+			Kind:  yaml.SequenceNode,
+			Tag:   "!!seq",
+			Style: yaml.FlowStyle,
+			Content: []*yaml.Node{
+				{Kind: yaml.ScalarNode, Tag: "!!str", Value: dtKey},
+			},
+		})
+		logger.Debug("adding Dynatrace exporter to pipeline", "pipeline", name)
+		return
+	}
+	if exportersNode.Kind != yaml.SequenceNode {
+		return
+	}
+	for _, item := range exportersNode.Content {
+		if item.Value == dtKey {
+			logger.Debug("Dynatrace exporter already present in pipeline", "pipeline", name)
+			return
+		}
+	}
+	logger.Debug("adding Dynatrace exporter to pipeline", "pipeline", name)
+	exportersNode.Content = append(exportersNode.Content, &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Tag:   "!!str",
+		Value: dtKey,
+	})
+}
+
+// mergeDynatraceExporter injects the otlp_http/dynatrace exporter into the
+// root yaml.Node of an OTel Collector config and appends it to every existing
+// pipeline's exporters list.  Comments, key order, and sequence style are
+// preserved because the yaml.Node tree is edited in place rather than
+// unmarshalled into a plain map.
+func mergeDynatraceExporter(root *yaml.Node, apiURL, token string) {
+	exporters := ensureMappingNode(root, "exporters")
+	nodeMappingSet(exporters, "otlp_http/dynatrace", buildDTExporterNode(apiURL, token))
+
+	service := nodeMappingGet(root, "service")
+	if service == nil || service.Kind != yaml.MappingNode {
+		return
+	}
+	pipelines := nodeMappingGet(service, "pipelines")
+	if pipelines == nil || pipelines.Kind != yaml.MappingNode {
+		return
+	}
+	for i := 0; i+1 < len(pipelines.Content); i += 2 {
+		pipeline := pipelines.Content[i+1]
+		if pipeline.Kind != yaml.MappingNode {
+			continue
+		}
+		appendExporterToPipeline(pipeline, pipelines.Content[i].Value)
+	}
+}
+
+// mergeExporterIntoYAML parses data as a yaml.Node tree, injects the
+// Dynatrace exporter via mergeDynatraceExporter, and re-serialises the result.
+// Unlike a plain Unmarshal→Marshal roundtrip, this preserves YAML comments,
+// key insertion order, and flow/block sequence style.
 func mergeExporterIntoYAML(data []byte, apiURL, token string) ([]byte, error) {
-	var cfg map[string]interface{}
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return nil, fmt.Errorf("parsing YAML: %w", err)
 	}
-	if cfg == nil {
-		cfg = make(map[string]interface{})
+
+	var root *yaml.Node
+	switch {
+	case doc.Kind == yaml.DocumentNode && len(doc.Content) > 0:
+		root = doc.Content[0]
+		if root.Kind != yaml.MappingNode {
+			return nil, fmt.Errorf("YAML root must be a mapping, got kind %d", root.Kind)
+		}
+	default:
+		// Empty or null document — start with a fresh block mapping.
+		root = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 	}
-	mergeDynatraceExporter(cfg, apiURL, token)
-	return yaml.Marshal(cfg)
+	// An inline empty map ("{}") must become a block mapping once we add keys.
+	if root.Style == yaml.FlowStyle {
+		root.Style = 0
+	}
+
+	mergeDynatraceExporter(root, apiURL, token)
+
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(root); err != nil {
+		return nil, fmt.Errorf("marshalling updated YAML: %w", err)
+	}
+	if err := enc.Close(); err != nil {
+		return nil, fmt.Errorf("finalising updated YAML: %w", err)
+	}
+	return buf.Bytes(), nil
 }
 
 // writeConfig writes updatedData to configPath and returns the result.
@@ -276,6 +397,7 @@ func PatchConfigFile(configPath, apiURL, token string) (*UpdateResult, error) {
 func UpdateOtelConfigInteractive(envURL, token, platformTok string, dryRun bool) error {
 	var configPath string
 	var runningProcs []otelProcessInfo
+	var selectedIsDynatrace bool
 
 	allProcs := findAllRunningOtelCollectorsFunc()
 	if len(allProcs) > 0 {
@@ -286,6 +408,7 @@ func UpdateOtelConfigInteractive(envURL, token, platformTok string, dryRun bool)
 			return err // includes installer.ErrInstallCancelled
 		}
 		if selected != nil {
+			selectedIsDynatrace = selected.isDynatrace
 			if selected.configPath != "" {
 				configPath = selected.configPath
 			}
@@ -338,6 +461,9 @@ func UpdateOtelConfigInteractive(envURL, token, platformTok string, dryRun bool)
 		return fmt.Errorf("config file not found: %s", configPath)
 	}
 
+	if selectedIsDynatrace {
+		return updateDynatraceCollector(configPath, runningProcs, envURL, token, platformTok, dryRun)
+	}
 	return updateOtelConfig(configPath, runningProcs, envURL, token, platformTok, dryRun)
 }
 
@@ -362,6 +488,7 @@ func UpdateOtelConfig(configPath, envURL, token, platformTok string, dryRun bool
 	}
 
 	var runningProcs []otelProcessInfo
+	var isDynatraceCollector bool
 	for _, inst := range findAllRunningOtelCollectorsFunc() {
 		if inst.configPath == "" {
 			continue
@@ -377,6 +504,7 @@ func UpdateOtelConfig(configPath, envURL, token, platformTok string, dryRun bool
 			continue
 		}
 		if instAbs == absConfig {
+			isDynatraceCollector = isDynatraceCollector || inst.isDynatrace
 			installDir := ""
 			if inst.binaryPath != "" {
 				installDir = filepath.Dir(inst.binaryPath)
@@ -392,6 +520,9 @@ func UpdateOtelConfig(configPath, envURL, token, platformTok string, dryRun bool
 		}
 	}
 
+	if isDynatraceCollector {
+		return updateDynatraceCollector(configPath, runningProcs, envURL, token, platformTok, dryRun)
+	}
 	return updateOtelConfig(configPath, runningProcs, envURL, token, platformTok, dryRun)
 }
 
@@ -434,16 +565,30 @@ func updateOtelConfig(configPath string, runningProcs []otelProcessInfo, envURL,
 					p.containerName,
 					display.ColorMuted.Sprint("("+p.containerRuntime+" restart)"))
 			} else {
-				hint := p.binaryPath
-				if hint == "" {
-					hint = "(unknown binary)"
+				name := filepath.Base(p.binaryPath)
+				if name == "" || name == "." {
+					name = "(unknown)"
 				}
-				fmt.Printf("    • PID %d  %s\n", p.pid, display.ColorDefault.Sprint(hint))
+				fmt.Printf("    • PID %d  %s\n", p.pid, display.ColorDefault.Sprint(name))
 			}
 		}
 	} else {
 		display.ColorDefault.Println("  No running collector found — config will be updated on disk only.")
 	}
+
+	// Detect app services; exclude the collector's own PID(s).
+	excludePIDs := make(map[int]bool, len(runningProcs))
+	for _, p := range runningProcs {
+		excludePIDs[p.pid] = true
+	}
+	connectedSvcs := detectConnectedServices(origData, excludePIDs)
+	if len(connectedSvcs) > 0 {
+		fmt.Println()
+		printConnectedServices(connectedSvcs)
+		fmt.Println()
+		display.ColorDefault.Println("  These services will be restarted after the collector.")
+	}
+
 	fmt.Println()
 	display.PrintSectionDivider()
 
@@ -525,7 +670,7 @@ func updateOtelConfig(configPath string, runningProcs []otelProcessInfo, envURL,
 			return fmt.Errorf("restarting collector: %w", err)
 		}
 
-		if err := verifyOtelInstall(envURL, platformTok, token, crashed); err != nil {
+		if err := verifyOtelInstall(envURL, platformTok, token, otlpHTTPPortFromConfig(configPath), crashed); err != nil {
 			fmt.Printf("\n  Warning: log verification failed: %v\n", err)
 			fmt.Println("  The collector may still be working — check the Dynatrace UI.")
 			return nil
@@ -533,10 +678,10 @@ func updateOtelConfig(configPath string, runningProcs []otelProcessInfo, envURL,
 	}
 
 	if len(containerProcs) > 0 {
-		// Best-effort verification for containers: port 4318 may or may not be
+		// Best-effort verification for containers: the OTLP port may or may not be
 		// exposed to the host depending on how the container was started.
 		noCrash := make(chan error) // never sends — no process to monitor
-		if err := verifyOtelInstall(envURL, platformTok, token, noCrash); err != nil {
+		if err := verifyOtelInstall(envURL, platformTok, token, otlpHTTPPortFromConfig(configPath), noCrash); err != nil {
 			fmt.Printf("\n  Warning: log verification failed: %v\n", err)
 			fmt.Println("  The collector may still be working — check the Dynatrace UI.")
 			return nil
@@ -544,6 +689,12 @@ func updateOtelConfig(configPath string, runningProcs []otelProcessInfo, envURL,
 	}
 
 	display.ColorOK.Println("  ✓ Collector restarted and verified.")
+
+	if len(connectedSvcs) > 0 {
+		fmt.Println()
+		restartConnectedServices(connectedSvcs)
+	}
+
 	return nil
 }
 

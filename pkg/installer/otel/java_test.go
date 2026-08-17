@@ -645,7 +645,7 @@ func TestBuildInstrumentedCmd_JavaPrefixCommand(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("expected non-nil *exec.Cmd")
 	}
-	if cmd.Path != "/usr/bin/java" && !strings.HasSuffix(cmd.Path, "java.exe") && cmd.Path != "java" {
+	if base := filepath.Base(cmd.Path); base != "java" && base != "java.exe" {
 		t.Fatalf("expected command to be java, got: %s", cmd.Path)
 	}
 }

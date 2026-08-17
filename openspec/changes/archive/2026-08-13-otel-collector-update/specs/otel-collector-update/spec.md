@@ -13,18 +13,15 @@ running-collector picker is shown so the user can select which instance to patch
 ### Requirement: When `--config` is omitted, show running collector picker
 
 When `dtwiz update otel` is run without `--config`, or when `dtwiz setup` selects the
-OTel-update path, `UpdateOtelConfigInteractive` SHALL be called. It discovers all running
-OTel Collector processes on the host (both Dynatrace and upstream distributions, including
-container-based collectors) and presents them in a numbered selection list. The user picks
-one; its detected config path is used as the config to patch.
+OTel-update path, the interactive picker is shown. It discovers all running OTel Collector
+processes on the host (both Dynatrace and upstream distributions, including container-based
+collectors) and presents them in a numbered selection list. The user picks one; its detected
+config path is used as the config to patch.
 
-`UpdateOtelConfig` requires a non-empty `configPath` and returns an error if given an
-empty string — callers that do not have a path must use `UpdateOtelConfigInteractive`.
+The update command requires a non-empty `--config` path when invoked non-interactively — the
+picker is the primary interaction path when no path is provided.
 
 The `--config` flag default is empty — the picker is the primary interaction path.
-
-Discovery is performed via `findAllRunningOtelCollectorsFunc` (a package-level variable,
-overridable in tests) which returns both native processes and container-based collectors.
 
 #### Scenario: One collector is running with a detectable config
 
@@ -79,16 +76,16 @@ overridable in tests) which returns both native processes and container-based co
 
 - **GIVEN** the picker is shown
 - **WHEN** the user enters 0
-- **THEN** the command exits with `ErrInstallCancelled` (exit code 0, no error printed)
+- **THEN** the command exits cleanly (exit code 0, no error printed)
 
 ---
 
 ### Requirement: When `--config` is provided, validate file and find matching running collector
 
-When `UpdateOtelConfig` is called with a non-empty `configPath`, it SHALL validate that
-the file exists and then search for a running collector (native process or container) whose
-detected host-accessible config path resolves to the same absolute path. The matching
-collector is used for the restart step.
+When `--config` is provided with a non-empty path, the update SHALL validate that the file
+exists and then search for a running collector (native process or container) whose detected
+host-accessible config path resolves to the same absolute path. The matching collector is
+used for the restart step.
 
 Container collectors are included in this search when their config is bind-mounted from the
 host. Containers whose config is only inside the container are not matched via `--config`
@@ -121,10 +118,10 @@ host. Containers whose config is only inside the container are not matched via `
 - **THEN** "No running collector found — config will be updated on disk only." is printed
 - **THEN** no restart is attempted
 
-#### Scenario: `UpdateOtelConfig` called with empty path
+#### Scenario: `--config` called with empty path
 
-- **GIVEN** `UpdateOtelConfig` is called programmatically with an empty `configPath`
-- **THEN** the function returns immediately with error: "config path must not be empty — use --config or UpdateOtelConfigInteractive"
+- **GIVEN** `--config` is provided with an empty value
+- **THEN** the command exits with error: "config path must not be empty — use --config or run without it to use the picker"
 
 #### Scenario: Config file does not exist
 
@@ -145,8 +142,8 @@ host. Containers whose config is only inside the container are not matched via `
 When a running collector's config path (parsed from its command line) is relative, it
 SHALL be resolved against that process's working directory — not dtwiz's working directory.
 
-On Linux, the process CWD is read from `/proc/<pid>/cwd`. On macOS, `lsof` is used as a
-fallback. On Windows, relative config paths remain unresolved (WMI does not expose CWD;
+On Linux and macOS, the process CWD is read from OS-provided facilities. On Windows,
+relative config paths remain unresolved (the OS does not expose CWD via available APIs;
 this is an acceptable limitation because Windows collectors typically use absolute paths).
 
 #### Scenario: Collector started with relative config path on Linux/macOS
@@ -234,11 +231,9 @@ port 4318 may or may not be exposed to the host depending on the container's por
 The picker SHALL include both Dynatrace and upstream OTel Collector distributions,
 including container-based collectors detected via docker/podman/nerdctl.
 
-For native processes, the binary name patterns are defined in the shared
-`otelCollectorNames` slice: `otelcorecol`, `otel-collector`, `otelcol`, `otelcol-contrib`,
-`opentelemetry-collector`, `dynatrace-otel-collector`. This single list is used for both
-exact process name matching (`pgrep -x`, `Get-Process`) and command-line substring
-searches (`pgrep -f`, WMI `CommandLine`).
+For native processes, the recognized binary names are: `otelcorecol`, `otel-collector`,
+`otelcol`, `otelcol-contrib`, `opentelemetry-collector`, `dynatrace-otel-collector`. This
+list is used for both exact process name matching and command-line substring searches.
 
 `otelcorecol` and `otelcol-contrib` are listed explicitly because neither is a substring
 of the other patterns — without separate entries they would be missed by substring search.
@@ -278,12 +273,11 @@ connected app services keep their OTLP endpoint after the restart. The ports rea
 - `extensions.health_check.endpoint` (default 13133; included only when `--experimental`)
 
 If the freshly rendered config is byte-identical to the existing file, the update prints
-`Collector configuration is up to date.` and returns `ErrUpToDate`. The `cmd/update.go`
-handler treats `ErrUpToDate` the same as `ErrInstallCancelled` — clean exit, no error
-printed, and `WatchIngest` is not called.
+`Collector configuration is up to date.` and exits cleanly — no error printed, and
+telemetry polling is not started.
 
-After a successful restart of a Dynatrace collector, `WatchIngest()` is called to poll
-until new telemetry data appears in Dynatrace.
+After a successful restart of a Dynatrace collector, the update polls until new telemetry
+data appears in Dynatrace.
 
 #### Scenario: Dynatrace collector with current credentials selected
 
@@ -291,7 +285,7 @@ until new telemetry data appears in Dynatrace.
 - **AND** the existing config already reflects the current tenant and token
 - **WHEN** `dtwiz update otel` is run
 - **THEN** `Collector configuration is up to date.` is printed
-- **THEN** the command exits cleanly (`ErrUpToDate`), no error is printed, and `WatchIngest` is not called
+- **THEN** the command exits cleanly, no error is printed, and telemetry polling is not started
 
 #### Scenario: Dynatrace collector with outdated credentials selected
 
@@ -301,7 +295,7 @@ until new telemetry data appears in Dynatrace.
 - **THEN** the config is regenerated from the template with the current tenant credentials
 - **THEN** the existing OTLP receiver ports are preserved in the new config
 - **THEN** the collector is restarted and verified
-- **THEN** `WatchIngest()` is called to confirm data arrives in Dynatrace
+- **THEN** telemetry polling starts to confirm data arrives in Dynatrace
 
 ---
 
@@ -315,15 +309,13 @@ restarted, the detected services are restarted with a reconciled or retargeted e
 
 1. **TCP connection to OTLP ports**: processes with an active TCP connection to any of the
    collector's OTLP receiver ports (default 4317 and 4318; actual ports read from the
-   collector config). Implemented via `lsof(1)` on Unix. The OTLP HTTP exporter closes
-   the connection after each export batch, so short-lived connections are included (no TCP
-   state filter applied).
+   collector config). The OTLP HTTP exporter closes the connection after each export batch,
+   so short-lived connections are included (no TCP state filter applied).
 
 2. **OTLP env-var tenant match**: OTel-instrumented processes with
    `OTEL_EXPORTER_OTLP_ENDPOINT` (or any per-signal variant) pointing to the same
-   Dynatrace tenant as any configured collector exporter. Implemented via `ps -eww` on
-   Unix. On Windows this method is a no-op because reading process environment variables
-   requires elevated `ReadProcessMemory` privileges.
+   Dynatrace tenant as any configured collector exporter. On Windows this method is a no-op
+   because reading process environment variables requires elevated privileges.
 
 The collector's own PID(s) and dtwiz's own PID are excluded from results. `DT_ENVIRONMENT`
 is intentionally excluded from the OTLP env-var search to avoid false matches against

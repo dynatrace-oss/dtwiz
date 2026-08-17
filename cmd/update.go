@@ -56,7 +56,7 @@ var updateOtelCmd = &cobra.Command{
 		} else {
 			updateErr = otel.UpdateOtelConfigInteractive(envURL, classicTok, platformTok, updateDryRun)
 		}
-		if errors.Is(updateErr, installer.ErrInstallCancelled) {
+		if errors.Is(updateErr, installer.ErrInstallCancelled) || errors.Is(updateErr, otel.ErrUpToDate) {
 			return nil
 		}
 		if updateErr != nil {

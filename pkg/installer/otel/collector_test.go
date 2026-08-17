@@ -345,6 +345,12 @@ func TestConfigHeadEnd(t *testing.T) {
 			want:      2,
 		},
 		{
+			name:      "cuts before host_metrics line",
+			lines:     []string{"receivers:", "  otlp: {}", "  host_metrics/10s:", "    scrapers: {}"},
+			headLines: 20,
+			want:      2,
+		},
+		{
 			name:      "no hostmetrics falls back to headLines",
 			lines:     []string{"receivers:", "  otlp: {}", "exporters:", "  otlp_http: {}"},
 			headLines: 2,

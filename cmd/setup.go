@@ -203,7 +203,7 @@ var setupCmd = &cobra.Command{
 			return fmt.Errorf("unsupported method: %s", selected.Method)
 		}
 		if installErr != nil {
-			if errors.Is(installErr, installer.ErrInstallCancelled) {
+			if errors.Is(installErr, installer.ErrInstallCancelled) || errors.Is(installErr, otel.ErrUpToDate) {
 				return nil
 			}
 			return installErr
