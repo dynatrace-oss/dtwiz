@@ -519,11 +519,7 @@ func otlpHTTPPortFromConfig(configPath string) int {
 		return 4318
 	}
 	root := doc.Content[0]
-	receivers := nodeMappingGet(root, "receivers")
-	otlp := nodeMappingGet(receivers, "otlp")
-	protocols := nodeMappingGet(otlp, "protocols")
-	httpProto := nodeMappingGet(protocols, "http")
-	endpoint := nodeMappingGet(httpProto, "endpoint")
+	endpoint := nodeGet(root, "receivers", "otlp", "protocols", "http", "endpoint")
 	if endpoint == nil {
 		return 4318
 	}

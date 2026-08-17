@@ -188,6 +188,18 @@ func nodeMappingGet(m *yaml.Node, key string) *yaml.Node {
 	return nil
 }
 
+// nodeGet traverses a chain of mapping keys starting from n, returning the
+// leaf node or nil if any step is missing.
+func nodeGet(n *yaml.Node, path ...string) *yaml.Node {
+	for _, key := range path {
+		if n == nil {
+			return nil
+		}
+		n = nodeMappingGet(n, key)
+	}
+	return n
+}
+
 // nodeMappingSet sets the value for key in a YAML mapping node.
 // If the key already exists its value is replaced in-place, preserving the
 // original key node (and any line comment on it).  Otherwise a new key-value

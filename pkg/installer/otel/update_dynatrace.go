@@ -46,54 +46,28 @@ func portsFromConfig(configPath string) (grpc, http, metrics, healthCheck int) {
 		return p, true
 	}
 
-	if receivers := nodeMappingGet(root, "receivers"); receivers != nil {
-		if otlp := nodeMappingGet(receivers, "otlp"); otlp != nil {
-			if protocols := nodeMappingGet(otlp, "protocols"); protocols != nil {
-				if grpcProto := nodeMappingGet(protocols, "grpc"); grpcProto != nil {
-					if ep := nodeMappingGet(grpcProto, "endpoint"); ep != nil {
-						if p, ok := parsePort(ep.Value); ok {
-							grpc = p
-						}
-					}
-				}
-				if httpProto := nodeMappingGet(protocols, "http"); httpProto != nil {
-					if ep := nodeMappingGet(httpProto, "endpoint"); ep != nil {
-						if p, ok := parsePort(ep.Value); ok {
-							http = p
-						}
-					}
-				}
+	if ep := nodeGet(root, "receivers", "otlp", "protocols", "grpc", "endpoint"); ep != nil {
+		if p, ok := parsePort(ep.Value); ok {
+			grpc = p
+		}
+	}
+	if ep := nodeGet(root, "receivers", "otlp", "protocols", "http", "endpoint"); ep != nil {
+		if p, ok := parsePort(ep.Value); ok {
+			http = p
+		}
+	}
+
+	if readers := nodeGet(root, "service", "telemetry", "metrics", "readers"); readers != nil && readers.Kind == yaml.SequenceNode && len(readers.Content) > 0 {
+		if portNode := nodeGet(readers.Content[0], "pull", "exporter", "prometheus", "port"); portNode != nil {
+			if p, err := strconv.Atoi(portNode.Value); err == nil && p > 0 {
+				metrics = p
 			}
 		}
 	}
 
-	if svc := nodeMappingGet(root, "service"); svc != nil {
-		if telemetry := nodeMappingGet(svc, "telemetry"); telemetry != nil {
-			if metricsNode := nodeMappingGet(telemetry, "metrics"); metricsNode != nil {
-				if readers := nodeMappingGet(metricsNode, "readers"); readers != nil && readers.Kind == yaml.SequenceNode && len(readers.Content) > 0 {
-					if pull := nodeMappingGet(readers.Content[0], "pull"); pull != nil {
-						if exporter := nodeMappingGet(pull, "exporter"); exporter != nil {
-							if prom := nodeMappingGet(exporter, "prometheus"); prom != nil {
-								if portNode := nodeMappingGet(prom, "port"); portNode != nil {
-									if p, err := strconv.Atoi(portNode.Value); err == nil && p > 0 {
-										metrics = p
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	if extensions := nodeMappingGet(root, "extensions"); extensions != nil {
-		if hc := nodeMappingGet(extensions, "health_check"); hc != nil {
-			if ep := nodeMappingGet(hc, "endpoint"); ep != nil {
-				if p, ok := parsePort(ep.Value); ok {
-					healthCheck = p
-				}
-			}
+	if ep := nodeGet(root, "extensions", "health_check", "endpoint"); ep != nil {
+		if p, ok := parsePort(ep.Value); ok {
+			healthCheck = p
 		}
 	}
 

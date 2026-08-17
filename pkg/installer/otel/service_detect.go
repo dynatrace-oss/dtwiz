@@ -46,26 +46,14 @@ func receiverPortsFromConfig(data []byte) []string {
 	}
 	root := doc.Content[0]
 
-	receivers := nodeMappingGet(root, "receivers")
-	if receivers == nil {
-		return defaults
-	}
-	otlp := nodeMappingGet(receivers, "otlp")
-	if otlp == nil {
-		return defaults
-	}
-	protocols := nodeMappingGet(otlp, "protocols")
+	protocols := nodeGet(root, "receivers", "otlp", "protocols")
 	if protocols == nil {
 		return defaults
 	}
 
 	var ports []string
 	for _, proto := range []string{"grpc", "http"} {
-		protoNode := nodeMappingGet(protocols, proto)
-		if protoNode == nil {
-			continue
-		}
-		endpointNode := nodeMappingGet(protoNode, "endpoint")
+		endpointNode := nodeGet(protocols, proto, "endpoint")
 		if endpointNode == nil {
 			continue
 		}
