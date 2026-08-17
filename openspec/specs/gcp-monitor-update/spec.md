@@ -1,10 +1,20 @@
 # GCP Monitor Update
 
-## ADDED Requirements
+## Purpose
+
+Define the `dtwiz update gcp` command that reconciles an existing Dynatrace GCP integration to the latest monitoring configuration.
+
+## Requirements
 
 ### Requirement: Update is an in-place monitoring-config reconcile reachable from `dtwiz update gcp`, `dtwiz install gcp`, and `dtwiz setup`
 
-The system SHALL refresh an existing integration in place by reconciling **only** the `da-gcp` monitoring configuration to the latest schema-derived defaults. An update SHALL NOT modify the authentication chain: the Dynatrace connection, GCP service account, project Viewer binding, or impersonation binding. The update flow SHALL be reachable via three paths: (1) `dtwiz update gcp` as an explicit standalone command; (2) `dtwiz install gcp` when a complete connection already exists, which transparently redirects to the update flow; (3) `dtwiz setup` when a complete GCP connection already exists, which routes to update instead of a fresh install.
+The system SHALL refresh an existing integration in place by reconciling only the `da-gcp` monitoring configuration to the latest schema-derived defaults. It SHALL NOT modify the authentication chain. The update flow SHALL be reachable via `dtwiz update gcp`, via `dtwiz install gcp` when a connection already exists, and via `dtwiz setup` when GCP is fully configured.
+
+#### Scenario: Update leaves authentication chain unchanged
+
+- **GIVEN** an update runs against an existing GCP integration
+- **WHEN** the monitoring configuration is reconciled
+- **THEN** the connection, service account, project Viewer binding, and impersonation binding are left unchanged
 
 ### Requirement: `dtwiz update gcp` subcommand
 
@@ -53,7 +63,7 @@ The system SHALL, in parallel, discover existing monitoring configurations, disc
 
 ### Requirement: Require exactly one complete existing connection
 
-The system SHALL require exactly one discovered `dtwiz-gcp` connection that already carries a bound service-account email, since the monitoring configuration references both the connection object ID and the service-account email. If no such connection exists, the system SHALL abort with guidance to run `dtwiz install gcp` (or to uninstall then install to repair a partial one). If more than one complete connection is found, the system SHALL abort with guidance to run `dtwiz uninstall gcp` and then `dtwiz install gcp` for a clean single integration.
+The system SHALL require exactly one `dtwiz-gcp` connection with a bound service-account email. If none exists, it SHALL abort and direct the user to run `dtwiz install gcp`. If more than one exists, it SHALL abort and direct the user to uninstall then reinstall.
 
 #### Scenario: No complete connection aborts with install guidance
 
@@ -85,7 +95,7 @@ The system SHALL present a preview with the environment, project, service accoun
 
 ### Requirement: Reconcile every monitoring configuration to schema-derived defaults
 
-After confirmation, the system SHALL rewrite each discovered monitoring configuration in place using the latest schema-derived defaults (highest extension version, all default feature sets, project filtering scoped to the active `gcloud` project, and the monitoring configuration referencing the existing connection object ID and service-account email). When no monitoring configuration exists, the system SHALL create one with the same defaults. The same fail-fast as install applies when the schema yields no feature sets. Because each configuration is rewritten with a single atomic write, a failure SHALL leave the prior configuration intact and SHALL NOT have touched the authentication chain.
+After confirmation, the system SHALL rewrite each discovered monitoring configuration in place using the latest schema-derived defaults (highest extension version, all default feature sets, project filtering scoped to the active `gcloud` project, and the monitoring configuration referencing the existing connection object ID and service-account email). When no monitoring configuration exists, the system SHALL create one with the same defaults. Each configuration SHALL be rewritten with a single atomic write, so a failure SHALL leave its prior configuration intact and SHALL NOT touch the authentication chain.
 
 #### Scenario: Existing configuration updated in place
 

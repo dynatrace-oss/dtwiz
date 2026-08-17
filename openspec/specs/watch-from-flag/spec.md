@@ -1,6 +1,10 @@
 # Spec: Watch --from Flag
 
-## ADDED Requirements
+## Purpose
+
+Define the `--from` flag on `dtwiz watch` that sets a configurable query start time for the DQL poll.
+
+## Requirements
 
 ### Requirement: Configurable query start time via --from flag
 

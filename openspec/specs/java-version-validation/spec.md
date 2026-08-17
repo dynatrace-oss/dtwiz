@@ -1,6 +1,10 @@
 # Spec: Java Version Validation
 
-## ADDED Requirements
+## Purpose
+
+Define the pre-flight Java version validation that runs before Java OTel instrumentation is applied.
+
+## Requirements
 
 ### Requirement: Pre-flight validation for Java installer
 

@@ -1,6 +1,10 @@
 # Feature Flag Registry
 
-## ADDED Requirements
+## Purpose
+
+Define the `pkg/featureflags` central registry that manages known feature flags with declarative definitions.
+
+## Requirements
 
 ### Requirement: Central registry with declarative flag definitions
 
@@ -79,18 +83,7 @@ The package SHALL expose `RegisterFlags(flags *pflag.FlagSet)` that registers a 
 
 ### Requirement: `Experimental` flag gates command visibility in help output
 
-Subcommands that are experimental SHALL be registered with `Hidden: true` by default and unhidden only when `featureflags.IsEnabled(featureflags.Experimental)` returns `true`. Because `PersistentPreRun` is not called when `--help` is requested, commands that conditionally show hidden subcommands SHALL override their `HelpFunc` to call `ApplyCLIOverrides` before delegating to the default help renderer. Execution of an experimental command without the flag enabled SHALL return an error directing the user to `--experimental` or `DTWIZ_EXPERIMENTAL=true`.
-
-Any command that defines its own `PersistentPreRun` (which overrides root's) SHALL call `featureflags.ApplyCLIOverrides` within that `PersistentPreRun` so that `--experimental` and other feature flags take effect for its subcommands.
-
-The following commands and setup flows are gated behind the `Experimental` flag:
-
-- `dtwiz install docker`
-- `dtwiz install demo`
-- `dtwiz update otel`
-- The `MethodOtelUpdate` recommendation in `dtwiz setup` (patch existing OTel Collector)
-
-The cobra flag description for `--experimental` in the registry entry SHALL enumerate all gated features so that `dtwiz --help` remains accurate. When a new experimental feature is added, its description SHALL be updated.
+Experimental subcommands (`install docker`, `install demo`, and `update otel`) SHALL be registered with `Hidden: true` and unhidden only when `featureflags.IsEnabled(featureflags.Experimental)` is `true`. Commands that conditionally show hidden subcommands SHALL override their `HelpFunc` to call `ApplyCLIOverrides` before rendering. Execution of an experimental command without the flag SHALL return an error directing the user to `--experimental` or `DTWIZ_EXPERIMENTAL=true`. Any command that defines its own `PersistentPreRun` SHALL call `featureflags.ApplyCLIOverrides`.
 
 #### Scenario: Experimental install command hidden from help by default
 
@@ -165,8 +158,20 @@ The package SHALL expose `SetCLIOverrideForTest(t testCleaner, flag Flag, val bo
 
 ### Requirement: Minimal dependencies
 
-The `pkg/featureflags` package SHALL use only Go standard library packages and `github.com/spf13/pflag`, which is already used throughout the project (cobra integration via `pflag.FlagSet`). The `testing` package SHALL NOT be imported in production code; test helpers use a local `testCleaner` interface instead.
+The `pkg/featureflags` package SHALL use only Go standard library packages and `github.com/spf13/pflag`. The `testing` package SHALL NOT be imported in production code; test helpers SHALL use a local `testCleaner` interface instead.
+
+#### Scenario: No testing import in production code
+
+- **GIVEN** the `pkg/featureflags` package is built
+- **WHEN** `pkg/featureflags/featureflags.go` is inspected
+- **THEN** it does not import `"testing"` or any test-only package
 
 ### Requirement: Backward compatibility
 
-The `DTWIZ_ALL_RUNTIMES` environment variable SHALL continue to work identically to the current behavior. Values `"true"` and `"1"` enable the flag; all other values (including empty string) leave it disabled.
+The `DTWIZ_ALL_RUNTIMES` environment variable SHALL continue to work identically to the current behavior. Values `"true"` and `"1"` SHALL enable the flag; all other values (including empty string) SHALL leave it disabled.
+
+#### Scenario: Legacy env var with "true"
+
+- **GIVEN** `DTWIZ_ALL_RUNTIMES=true` is set
+- **WHEN** `IsEnabled(AllRuntimes)` is called
+- **THEN** it returns `true`

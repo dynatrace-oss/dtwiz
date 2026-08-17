@@ -1,6 +1,10 @@
 # GCP Monitor Install
 
-## ADDED Requirements
+## Purpose
+
+Define the `dtwiz install gcp` command that sets up the Dynatrace Google Cloud integration.
+
+## Requirements
 
 ### Requirement: Install command and entry point
 
@@ -47,7 +51,7 @@ The system SHALL run preflight checks before mutating any resource: the `gcloud`
 
 ### Requirement: Redirect to update, resume, or abort based on existing connection completeness
 
-Before installing, the system SHALL discover every Dynatrace connection named `dtwiz-gcp` and classify each as complete (carries a bound service-account email) or incomplete (does not). If exactly one complete connection is found, the system SHALL print a note ("prerequisites already exist — running update instead of a fresh install") and transparently redirect to the update flow without making any new gcloud mutations. If more than one complete connection is found, the system SHALL fall through to the ambiguity check below. If more than one incomplete connection is found, the system SHALL abort with guidance to uninstall and reinstall for a clean slate. If exactly one incomplete connection is found, the system SHALL resume it: its object ID SHALL be reused in step 2 instead of creating a new connection, and the remaining steps SHALL proceed normally.
+Before installing, the system SHALL discover every `dtwiz-gcp` connection and classify each as complete (has bound service-account email) or incomplete. One complete connection SHALL redirect to the update flow. One incomplete connection SHALL be resumed (reusing its object ID in step 2). Multiple incomplete connections SHALL abort with guidance to uninstall and reinstall. Multiple complete connections SHALL fall through to the ambiguity check.
 
 #### Scenario: Existing complete connection redirects to update
 
@@ -94,7 +98,7 @@ The system SHALL print a preview showing the environment, project, service accou
 
 ### Requirement: Seven-step installation workflow in order
 
-The system SHALL execute the installation as seven ordered steps: (1) enable the required Google Cloud APIs on the active project; (2) create the Dynatrace GCP connection, or reuse a resumed incomplete one; (3) create the Google Cloud service account, reusing the deterministic email if one already exists; (4) grant the service account `roles/viewer` on the project; (5) grant the Dynatrace principal `roles/iam.serviceAccountTokenCreator` on the service account; (6) finalize the Dynatrace connection with the service-account email; (7) create the `da-gcp` monitoring configuration. The connection object ID from step 2 and the service-account email from step 3 SHALL be threaded forward into the later steps.
+The system SHALL execute the installation as seven ordered steps: (1) enable required GCP APIs; (2) create the DT connection (or reuse a resumed one); (3) create the GCP service account (idempotent); (4) grant `roles/viewer` on the project; (5) grant `roles/iam.serviceAccountTokenCreator` on the service account; (6) finalize the DT connection; (7) create the `da-gcp` monitoring configuration. The connection ID and service-account email SHALL be threaded forward into later steps.
 
 #### Scenario: Steps run in order and thread identifiers forward
 
@@ -111,7 +115,7 @@ The system SHALL execute the installation as seven ordered steps: (1) enable the
 
 ### Requirement: Monitoring configuration defaults derived from the live extension schema
 
-The system SHALL determine the extension version to use by selecting the highest semantic version available for `com.dynatrace.extension.da-gcp`. It SHALL fetch that version's monitoring-configuration schema and populate the feature sets with the schema's default feature sets. Project filtering SHALL be set to the active `gcloud` project, and the monitoring configuration SHALL reference the connection object ID and service-account email. If the schema defines no default feature sets, the system SHALL fail with a descriptive error rather than create a partial configuration.
+The system SHALL select the highest semantic version of `com.dynatrace.extension.da-gcp`, fetch its schema, and populate feature sets from schema defaults. Project filtering SHALL use the active `gcloud` project; the configuration SHALL reference the connection object ID and service-account email. If the schema defines no default feature sets, the system SHALL fail with a descriptive error.
 
 #### Scenario: Defaults populated from schema
 
@@ -149,7 +153,7 @@ The system SHALL retry each `gcloud`-driven step that can race a just-created re
 
 ### Requirement: Retry connection finalization only on the verified propagation signal
 
-The system SHALL retry the Dynatrace connection finalization (step 6) up to 30 times, with a jittered ~30-second initial delay followed by a jittered ~5-second delay between subsequent attempts, while the error contains the verified constraint-violation signal for an unpropagated impersonation binding. It SHALL exclude permanent schema-mismatch errors from retrying even though they are also reported as constraint violations, and it SHALL NOT treat every error mentioning "permission" as retryable, so a permanent Dynatrace-side authorization failure fails immediately instead of exhausting the retry budget.
+The system SHALL retry connection finalization (step 6) up to 30 times (jittered ~30s initial delay, then ~5s) while the error contains the verified constraint-violation signal for an unpropagated impersonation binding. Permanent schema-mismatch errors and non-matching permission errors SHALL NOT be retried; a permanent Dynatrace-side authorization failure SHALL fail immediately.
 
 #### Scenario: Propagation error retried
 

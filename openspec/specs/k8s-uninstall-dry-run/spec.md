@@ -1,6 +1,10 @@
 # Spec: K8s Uninstall Dry-Run
 
-## ADDED Requirements
+## Purpose
+
+Define the dry-run behavior for `dtwiz uninstall kubernetes`, which prints the uninstall plan without executing any destructive actions.
+
+## Requirements
 
 ### Requirement: Dry-run mode prints uninstall plan without executing
 

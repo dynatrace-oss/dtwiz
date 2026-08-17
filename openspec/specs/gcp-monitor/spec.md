@@ -60,8 +60,8 @@ Discovery in `dtwiz uninstall gcp` SHALL use the `dtwiz-gcp` prefix to find and 
 ### Requirement: Wait for extension to be active before creating monitoring config
 
 After a fresh hub install of the GCP data-acquisition extension, `dtwiz install gcp`
-must poll until the extension is active before creating the monitoring configuration.
-It polls every 5 s for up to 60 s and shows progress to the user.
+SHALL poll until the extension is active before creating the monitoring configuration.
+It SHALL poll every 5 s for up to 60 s and show progress to the user.
 
 #### Scenario: Fresh install, extension becomes active in time
 

@@ -1,6 +1,10 @@
 # GCP Monitor Uninstall
 
-## ADDED Requirements
+## Purpose
+
+Define the `dtwiz uninstall gcp` command that removes the Dynatrace Google Cloud integration.
+
+## Requirements
 
 ### Requirement: Uninstall command and entry point
 
@@ -61,7 +65,7 @@ The system SHALL print a preview listing the environment, the active project (wh
 
 ### Requirement: Best-effort deletion that continues past failures
 
-The system SHALL delete resources in order: monitoring configurations, then (only when a project is active) per service account the project Viewer binding removal and the service-account deletion, then connections. A failed step SHALL print a warning and the run SHALL continue with remaining steps; all step errors SHALL be collected and returned together. Service-account deletes and project-binding removals that report "not found", and monitoring-configuration and connection deletes that report the resource already gone, SHALL be treated as success.
+The system SHALL delete in order: monitoring configurations, then (when a project is active) per service account the Viewer binding removal and service-account deletion, then connections. A failed step SHALL print a warning and continue; all errors SHALL be collected and returned. "Not found" responses SHALL be treated as success.
 
 #### Scenario: One failure does not strand the rest
 

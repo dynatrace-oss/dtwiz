@@ -1,5 +1,9 @@
 # Spec: demo-python-prerequisites
 
+## Purpose
+
+Define how `dtwiz install demo` automatically installs all Python prerequisites before proceeding with OTel setup.
+
 ## Requirements
 
 ### Requirement: Auto-install all Python prerequisites for the demo flow

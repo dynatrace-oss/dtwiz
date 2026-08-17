@@ -1,6 +1,10 @@
 # Spec: bundle-examples
 
-## ADDED Requirements
+## Purpose
+
+Define how dtwiz examples are packaged and published as a release asset alongside each dtwiz release.
+
+## Requirements
 
 ### Requirement: All examples are published as a release asset
 
@@ -16,12 +20,7 @@ The `examples/` directory SHALL be packaged as `dtwiz-examples.tar.gz` and publi
 
 ### Requirement: Examples are downloaded to a fixed location on demand
 
-When `~/.dtwiz/examples/schnitzel/` does not exist, the binary SHALL download `dtwiz-examples.tar.gz` from a dtwiz GitHub release and extract it to `~/.dtwiz/examples/` before proceeding. Release builds build the download URL from the binary's built-in version string. Snapshot builds published by CI have a `SnapshotTag` injected at build time and use the corresponding snapshot pre-release URL. Local dev builds (no `SnapshotTag`) fall back to the latest stable release asset.
-
-The extraction path is:
-
-- macOS and Linux: `$HOME/.dtwiz/examples/`
-- Windows: `%USERPROFILE%\.dtwiz\examples\`
+When `~/.dtwiz/examples/schnitzel/` does not exist, the binary SHALL download `dtwiz-examples.tar.gz` from the appropriate dtwiz GitHub release and extract it to `~/.dtwiz/examples/` (macOS/Linux) or `%USERPROFILE%\.dtwiz\examples\` (Windows). Release builds use the binary's version string; snapshot builds use the `SnapshotTag`; local dev builds fall back to the latest stable release.
 
 #### Scenario: Download creates the expected directory structure
 

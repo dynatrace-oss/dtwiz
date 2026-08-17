@@ -1,6 +1,10 @@
 # Cloud Recommend UX Specification
 
-## ADDED Requirements
+## Purpose
+
+Define how the setup recommender and menu distinguish install vs. update paths for Azure and GCP when a connection already exists.
+
+## Requirements
 
 ### Requirement: Setup menu distinguishes install vs update for Azure and GCP
 

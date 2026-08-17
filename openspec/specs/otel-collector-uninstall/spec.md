@@ -1,6 +1,6 @@
 # Spec: OTel Collector Uninstall
 
-## Overview
+## Purpose
 
 `dtwiz uninstall otel` manages the removal of Dynatrace OTel Collector instances installed
 by dtwiz. When multiple instances are present the user selects which to remove via an
@@ -139,7 +139,7 @@ so that the uninstall execution layer can handle both native processes and conta
 
 ### Requirement: Dry-run skips execution but shows full preview
 
-When `--dry-run` is passed, the selection prompt is still shown and the preview is
+When `--dry-run` is passed, the selection prompt SHALL still be shown and the preview SHALL be
 rendered, but no processes are killed and no files are removed.
 
 #### Scenario: Dry-run with a collector selected

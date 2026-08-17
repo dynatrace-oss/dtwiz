@@ -1,6 +1,6 @@
 # Spec: OTel Collector Update (Config Patching)
 
-## Overview
+## Purpose
 
 `dtwiz update otel` patches an existing OTel Collector config file to add the Dynatrace
 OTLP exporter, then restarts the affected collector. When `--config` is omitted, a
@@ -12,19 +12,7 @@ running-collector picker is shown so the user can select which instance to patch
 
 ### Requirement: When `--config` is omitted, show running collector picker
 
-When `dtwiz update otel` is run without `--config`, or when `dtwiz setup` selects the
-OTel-update path, `UpdateOtelConfigInteractive` SHALL be called. It discovers all running
-OTel Collector processes on the host (both Dynatrace and upstream distributions, including
-container-based collectors) and presents them in a numbered selection list. The user picks
-one; its detected config path is used as the config to patch.
-
-`UpdateOtelConfig` requires a non-empty `configPath` and returns an error if given an
-empty string — callers that do not have a path must use `UpdateOtelConfigInteractive`.
-
-The `--config` flag default is empty — the picker is the primary interaction path.
-
-Discovery is performed via `findAllRunningOtelCollectorsFunc` (a package-level variable,
-overridable in tests) which returns both native processes and container-based collectors.
+When `dtwiz update otel` is run without `--config`, or when `dtwiz setup` selects the OTel-update path, `UpdateOtelConfigInteractive` SHALL be called. It SHALL discover all running OTel Collector processes (Dynatrace and upstream, including containers) and present them in a numbered selection list. `UpdateOtelConfig` SHALL return an error when called with an empty `configPath`; callers without a known path SHALL use `UpdateOtelConfigInteractive`.
 
 #### Scenario: One collector is running with a detectable config
 
@@ -85,14 +73,7 @@ overridable in tests) which returns both native processes and container-based co
 
 ### Requirement: When `--config` is provided, validate file and find matching running collector
 
-When `UpdateOtelConfig` is called with a non-empty `configPath`, it SHALL validate that
-the file exists and then search for a running collector (native process or container) whose
-detected host-accessible config path resolves to the same absolute path. The matching
-collector is used for the restart step.
-
-Container collectors are included in this search when their config is bind-mounted from the
-host. Containers whose config is only inside the container are not matched via `--config`
-(extract/copy-back is only triggered via the picker, not via `--config`).
+When `UpdateOtelConfig` is called with a non-empty `configPath`, it SHALL validate that the file exists and then search for a running collector whose detected host-accessible config path resolves to the same absolute path. Container collectors SHALL be included when their config is bind-mounted from the host. Containers whose config is inside the container SHALL only be matched via the picker, not via `--config`.
 
 #### Scenario: Config file exists and a matching running native collector is found
 
@@ -142,12 +123,7 @@ host. Containers whose config is only inside the container are not matched via `
 
 ### Requirement: Relative config paths from running processes are resolved against the process CWD
 
-When a running collector's config path (parsed from its command line) is relative, it
-SHALL be resolved against that process's working directory — not dtwiz's working directory.
-
-On Linux, the process CWD is read from `/proc/<pid>/cwd`. On macOS, `lsof` is used as a
-fallback. On Windows, relative config paths remain unresolved (WMI does not expose CWD;
-this is an acceptable limitation because Windows collectors typically use absolute paths).
+When a running collector's config path is relative, it SHALL be resolved against that process's working directory, not dtwiz's working directory. On Linux the process CWD SHALL be read from `/proc/<pid>/cwd`; on macOS `lsof` SHALL be used as a fallback. On Windows relative config paths remain unresolved.
 
 #### Scenario: Collector started with relative config path on Linux/macOS
 
@@ -182,16 +158,7 @@ by another process — the probe would succeed yet the collector would fail to s
 
 ### Requirement: Collector restart after patching
 
-After patching the config file, any running collector that owns the patched config is
-restarted. The restart mechanism differs between native processes and containers.
-
-For **native processes**: the old process is killed and the binary is re-launched with
-the updated config. The restarted collector is verified against Dynatrace.
-
-For **containers**: the patched config is already on the host filesystem (host-mounted
-case) or has been copied back into the container (extract/copy-back case). The container
-is then restarted via `<runtime> restart <name>`. Verification is attempted best-effort —
-port 4318 may or may not be exposed to the host depending on the container's port mapping.
+After patching the config file, any running collector that owns the patched config SHALL be restarted. For native processes, the old process is killed and the binary is re-launched with the updated config, then verified against Dynatrace. For containers, the config is already updated on disk (or copied back) and the container is restarted via `<runtime> restart <name>`. Verification is attempted best-effort.
 
 #### Scenario: Native collector restarted after patch
 
@@ -231,21 +198,7 @@ port 4318 may or may not be exposed to the host depending on the container's por
 
 ### Requirement: All running OTel Collector distributions are shown in the picker
 
-The picker SHALL include both Dynatrace and upstream OTel Collector distributions,
-including container-based collectors detected via docker/podman/nerdctl.
-
-For native processes, the binary name patterns are defined in the shared
-`otelCollectorNames` slice: `otelcorecol`, `otel-collector`, `otelcol`, `otelcol-contrib`,
-`opentelemetry-collector`, `dynatrace-otel-collector`. This single list is used for both
-exact process name matching (`pgrep -x`, `Get-Process`) and command-line substring
-searches (`pgrep -f`, WMI `CommandLine`).
-
-`otelcorecol` and `otelcol-contrib` are listed explicitly because neither is a substring
-of the other patterns — without separate entries they would be missed by substring search.
-
-For containers, any running container whose image name or container name matches the
-pattern `otel.+collector` or `opentelemetry.+collector` (case-insensitive regex) is
-included. Container runtimes probed (in order): `docker`, `podman`, `nerdctl`.
+The picker SHALL include both Dynatrace and upstream OTel Collector distributions, including container-based collectors. Native process binary names are defined in `otelCollectorNames`: `otelcorecol`, `otel-collector`, `otelcol`, `otelcol-contrib`, `opentelemetry-collector`, `dynatrace-otel-collector`. For containers, any running container whose image or name matches `otel.+collector` or `opentelemetry.+collector` (case-insensitive) is included. Runtimes probed: `docker`, `podman`, `nerdctl`.
 
 #### Scenario: `otelcorecol` binary is running
 

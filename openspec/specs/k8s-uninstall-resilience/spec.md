@@ -1,6 +1,10 @@
 # K8s Uninstall Resilience
 
-## ADDED Requirements
+## Purpose
+
+Define the resilience behavior for `dtwiz uninstall kubernetes` so that all uninstall steps execute even when prior steps fail.
+
+## Requirements
 
 ### Requirement: All uninstall steps execute regardless of prior step failure
 

@@ -1,6 +1,10 @@
 # AWS Monitor Uninstall
 
-## ADDED Requirements
+## Purpose
+
+Define the `dtwiz uninstall aws` command that removes the Dynatrace AWS CloudFormation integration.
+
+## Requirements
 
 ### Requirement: Uninstall command and entry point
 
@@ -33,6 +37,12 @@ it SHALL abort with an actionable message pointing to the AWS CLI install docume
 The system SHALL call `aws sts get-caller-identity` and `aws configure get region` to
 determine the active AWS account ID and region. Both values are surfaced in the output
 and used to scope the CloudFormation stack deletion and monitoring config lookup.
+
+#### Scenario: Account and region resolved successfully
+
+- **GIVEN** the AWS CLI is configured with valid credentials
+- **WHEN** the uninstaller runs
+- **THEN** it prints the resolved AWS account ID and region before proceeding
 
 ### Requirement: Find existing monitoring configuration
 

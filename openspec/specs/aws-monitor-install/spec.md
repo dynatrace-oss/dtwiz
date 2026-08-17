@@ -1,6 +1,10 @@
 # AWS Monitor Install
 
-## ADDED Requirements
+## Purpose
+
+Define the `dtwiz install aws` command that sets up the Dynatrace AWS CloudFormation integration.
+
+## Requirements
 
 ### Requirement: Install command and entry point
 

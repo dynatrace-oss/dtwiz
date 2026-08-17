@@ -1,6 +1,10 @@
 # Windows Python Detection
 
-## ADDED Requirements
+## Purpose
+
+Define how `dtwiz analyze` detects Python on Windows, ignoring Windows Store stub executables.
+
+## Requirements
 
 ### Requirement: Ignore Windows Store Python stubs
 

@@ -1,5 +1,9 @@
 # Spec: python-prerequisite-validation
 
+## Purpose
+
+Define the pip-in-virtualenv availability check that runs before Python OTel instrumentation is applied.
+
 ## Requirements
 
 ### Requirement: Probe pip availability inside a fresh virtualenv

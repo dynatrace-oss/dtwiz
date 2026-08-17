@@ -1,15 +1,14 @@
 # Status Command Structure
 
-## ADDED Requirements
+## Purpose
+
+Define the structure of the `dtwiz status` command output, including credential status printed via a shared helper.
+
+## Requirements
 
 ### Requirement: Credential status printed via shared helper
 
-`dtwiz status` SHALL print Access Token and Platform Token status using a single shared code path. For each token the output SHALL follow this logic:
-
-- Token not set → `✗ not set (use --<cli-name> or <ENV_VAR>)` in `ColorError`
-- Token set, no environment URL → `✓ configured (skipped validation — no environment URL)` in `ColorOK`
-- Token set, environment URL present, validation fails → `✗ <error>` in `ColorError`
-- Token set, environment URL present, validation passes → `✓ valid (<url>)` in `ColorOK`, where `<url>` is the token-appropriate URL (classic API URL for Access Token, Apps URL for Platform Token)
+`dtwiz status` SHALL print Access Token and Platform Token status using a single shared code path. For each token: not set shows `✗ not set (...)` in `ColorError`; set without URL shows `✓ configured (skipped validation)` in `ColorOK`; validation failure shows `✗ <error>` in `ColorError`; validation success shows `✓ valid (<url>)` in `ColorOK`.
 
 #### Scenario: Access Token valid
 
