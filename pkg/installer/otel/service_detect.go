@@ -486,9 +486,16 @@ func restartConnectedServices(svcs []connectedService) {
 
 		// Route through local collector when requested; otherwise reconcile the
 		// export tenant with DT_ENVIRONMENT so a stale endpoint is corrected.
+		// On Windows the process environment cannot be read, so fall back to the
+		// current process environment as the base — this gives the relaunched
+		// service a complete environment (PATH, etc.) and lets retargetEnvToCollector
+		// correctly override OTEL_EXPORTER_OTLP_ENDPOINT to the local collector.
 		envToUse := svc.env
+		if envToUse == nil {
+			envToUse = os.Environ()
+		}
 		if svc.collectorEndpoint != "" {
-			envToUse, _ = retargetEnvToCollector(svc.env, svc.collectorEndpoint)
+			envToUse, _ = retargetEnvToCollector(envToUse, svc.collectorEndpoint)
 		}
 		newEnv := reconcileExportEnv(envToUse)
 		svc.env = newEnv

@@ -97,10 +97,64 @@ func detectServicesOnPorts(ports []string) []connectedService {
 	return result
 }
 
-// detectInstrumentedServices is a no-op on Windows; process env requires elevated ReadProcessMemory.
+// detectInstrumentedServices finds OTel-instrumented processes on Windows via
+// command-line pattern matching. Process environment blocks require elevated
+// ReadProcessMemory so env vars cannot be checked; instead we match the
+// command-line tokens that dtwiz and common OTel launchers produce:
+//   - Java agent:   -javaagent:...opentelemetry-javaagent
+//   - Python:       opentelemetry-instrument
+//   - Node.js:      @opentelemetry/auto-instrumentations-node/register
+//
+// The tenantIDs and ports filter parameters are ignored because we cannot
+// read process environments; ALL OTel-instrumented processes are returned.
+// Their env field is nil; restartConnectedServices uses os.Environ() as the
+// base and overrides OTEL_EXPORTER_OTLP_ENDPOINT to the local collector.
 func detectInstrumentedServices(_, _ []string) []connectedService {
-	logger.Debug("detectInstrumentedServices not supported on windows")
-	return nil
+	currentPID := os.Getpid()
+	currentPIDStr := strconv.Itoa(currentPID)
+
+	otelPatterns := []string{
+		"opentelemetry-javaagent",
+		"opentelemetry-instrument",
+		"opentelemetry/auto-instrumentations-node/register",
+	}
+
+	seen := map[int]bool{}
+	var result []connectedService
+
+	for _, pattern := range otelPatterns {
+		lines, err := winProcessQuery(
+			"$_.CommandLine -match '"+pattern+"' -and $_.ProcessId -ne "+currentPIDStr,
+			"\"$($_.ProcessId)|$($_.CommandLine)|$($_.WorkingDirectory)\"",
+		)
+		if err != nil {
+			logger.Debug("detectInstrumentedServices: query failed", "pattern", pattern, "err", err)
+			continue
+		}
+		for _, line := range lines {
+			parts := strings.SplitN(line, "|", 3)
+			if len(parts) < 3 {
+				continue
+			}
+			pid, err := strconv.Atoi(strings.TrimSpace(parts[0]))
+			if err != nil || pid == currentPID || seen[pid] {
+				continue
+			}
+			seen[pid] = true
+			command := strings.TrimSpace(parts[1])
+			result = append(result, connectedService{
+				pid:     pid,
+				name:    serviceDisplayName(command),
+				command: command,
+				workDir: strings.TrimSpace(parts[2]),
+				// env is nil — process environment requires elevated access on Windows
+			})
+			logger.Debug("detectInstrumentedServices: found", "pid", pid, "pattern", pattern)
+		}
+	}
+
+	logger.Debug("detectInstrumentedServices (Windows)", "found", len(result))
+	return result
 }
 
 // detectListenPorts returns the TCP ports that the given process is listening on.
