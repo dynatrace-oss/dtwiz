@@ -9,14 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.4.0] - 2026-08-17
 
-### Added
+### What's New
 
-- `install otel` (experimental): Grail OpenPipeline dynamic routes are now configured during host monitoring install; routes for metrics (`system.*`, `process.*`), logs (OTLP source), and spans (OTel SDK) are created under the "OpenTelemetry Host Monitoring" pipeline so host-level telemetry is correctly classified from the start
-- `uninstall otel` (experimental): prompts whether to also deactivate the OTel Host Monitoring extension and remove the associated Grail OpenPipeline routes from the tenant; offers "Delete all" (default), "Only collector", or "Cancel"; `--yes` selects "Delete all" automatically
+- `install otel` (experimental): host monitoring setup now also configures Grail OpenPipeline dynamic routes for metrics (`system.*`, `process.*`), logs (OTLP source), and spans (OTel SDK) under the "OpenTelemetry Host Monitoring" pipeline
+- `uninstall otel` (experimental): now prompts whether to also deactivate the OTel Host Monitoring extension and remove associated Grail OpenPipeline routes ("Delete all" default, "Only collector", or "Cancel"); `--yes` selects "Delete all"
 
-### Changed
+### What's Changed
 
-- `update otel` (experimental): now detects services connected to the running OTel Collector via TCP connections to its OTLP ports or by matching the Dynatrace tenant export endpoint; patches the Dynatrace endpoint and token in the existing Dynatrace collector config and shows a focused YAML diff (with auth redacted) before applying; returns cleanly with no post-update watch when the config is already current
+- `update otel` (experimental): now detects connected services via OTLP port connections or matching Dynatrace tenant export endpoint usage, patches endpoint/token in-place in existing Dynatrace collector configs, previews a focused redacted YAML diff, and exits cleanly without post-update watch when no changes are needed
+
+### Install / Upgrade
+
+```sh
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.sh | bash
+
+# Windows
+iex ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.ps1'))
+
+# Go install
+go install github.com/dynatrace-oss/dtwiz@v1.4.0
+```
+
+**Full Changelog:** [v1.3.0...v1.4.0](https://github.com/dynatrace-oss/dtwiz/compare/v1.3.0...v1.4.0)
 
 ## [1.3.0] - 2026-08-10
 
