@@ -68,7 +68,7 @@ func buildNodeInstrumentationPlan(proj ScannedProject, apiURL, token string) *No
 			"https://docs.dynatrace.com/docs/ingest-from/opentelemetry/walkthroughs/nodejs",
 		)
 		fmt.Println()
-		fmt.Println("  This project can't be auto-instrumented.")
+		fmt.Println("  This project can't be auto-instrumented because of an unsupported runtime. Only Node.js/Next.js/Nuxt are supported at the moment.")
 		fmt.Printf("  See %s to instrument it manually.\n", docLink)
 		return nil
 	}
