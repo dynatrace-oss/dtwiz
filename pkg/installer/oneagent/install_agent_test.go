@@ -110,17 +110,13 @@ func TestBuildInstallCommand_Windows_Basic(t *testing.T) {
 	if argv[0] != `C:\agent.exe` {
 		t.Errorf("argv[0] = %q, want installer path", argv[0])
 	}
+	assertContains(t, argv, "--quiet")
 	assertContains(t, argv, "--set-monitoring-mode=fullstack")
 	assertContains(t, argv, "--set-app-log-content-access=true")
-	for _, a := range argv {
-		if a == "--quiet" {
-			t.Error("--quiet should not be present when opts.Quiet is false")
-		}
-	}
 }
 
 func TestBuildInstallCommand_Windows_Quiet_OrderFirst(t *testing.T) {
-	argv, err := BuildInstallCommand(Environment{OS: "windows", Arch: "x86"}, testLinuxCfg("https://env.live.dynatrace.com"), InstallOptions{Quiet: true}, `C:\agent.exe`)
+	argv, err := BuildInstallCommand(Environment{OS: "windows", Arch: "x86"}, testLinuxCfg("https://env.live.dynatrace.com"), InstallOptions{}, `C:\agent.exe`)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

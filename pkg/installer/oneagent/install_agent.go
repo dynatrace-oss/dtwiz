@@ -45,10 +45,7 @@ func BuildInstallCommand(env Environment, cfg AgentConfig, opts InstallOptions, 
 			argv = append([]string{sudoPath}, argv...)
 		}
 	case "windows":
-		argv = []string{installerPath}
-		if opts.Quiet {
-			argv = append(argv, "--quiet")
-		}
+		argv = []string{installerPath, "--quiet"}
 		argv = append(argv,
 			fmt.Sprintf("--set-monitoring-mode=%s", cfg.MonitoringMode),
 			fmt.Sprintf("--set-app-log-content-access=%t", cfg.AppLogContentAccess),
