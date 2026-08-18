@@ -88,6 +88,7 @@ func detectServicesOnPorts(ports []string) []connectedService {
 			pid:           pid,
 			name:          serviceDisplayName(cmd),
 			command:       cmd,
+			workDir:       lookupProcessWorkingDirectory(pid),
 			collectorPort: pidPort[pid],
 			listenPorts:   detectListenPorts(pid),
 			env:           readProcessEnv(pid),
@@ -231,6 +232,13 @@ func relaunchService(svc connectedService) (int, error) {
 
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = svc.workDir
+	if cmd.Dir == "" {
+		// Windows CreateProcess with DETACHED_PROCESS requires an explicit
+		// working directory; it cannot inherit the parent's CWD when Dir is "".
+		if wd, err := os.Getwd(); err == nil {
+			cmd.Dir = wd
+		}
+	}
 	if len(svc.env) > 0 {
 		cmd.Env = svc.env
 	}
