@@ -124,8 +124,14 @@ func detectInstrumentedServices(_, _ []string) []connectedService {
 
 	for _, pattern := range otelPatterns {
 		lines, err := winProcessQuery(
-			"$_.CommandLine -match '"+pattern+"' -and $_.ProcessId -ne "+currentPIDStr,
-			"\"$($_.ProcessId)|$($_.CommandLine)|$($_.WorkingDirectory)\"",
+			// Exclude dtwiz's own powershell.exe detection processes: their CommandLine
+			// contains both the search pattern AND 'Get-CimInstance', so they would
+			// otherwise match and be returned as instrumented services.
+			"$_.CommandLine -match '"+pattern+"' -and $_.ProcessId -ne "+currentPIDStr+
+				" -and $_.CommandLine -notmatch 'Get-CimInstance'",
+			// WorkingDirectory before CommandLine: CommandLine may contain "|" which
+			// would break SplitN(3) if it appeared before the last field.
+			"\"$($_.ProcessId)|$($_.WorkingDirectory)|$($_.CommandLine)\"",
 		)
 		if err != nil {
 			logger.Debug("detectInstrumentedServices: query failed", "pattern", pattern, "err", err)
@@ -141,12 +147,13 @@ func detectInstrumentedServices(_, _ []string) []connectedService {
 				continue
 			}
 			seen[pid] = true
-			command := strings.TrimSpace(parts[1])
+			workDir := strings.TrimSpace(parts[1])
+			command := strings.TrimSpace(parts[2])
 			result = append(result, connectedService{
 				pid:     pid,
 				name:    serviceDisplayName(command),
 				command: command,
-				workDir: strings.TrimSpace(parts[2]),
+				workDir: workDir,
 				// env is nil — process environment requires elevated access on Windows
 			})
 			logger.Debug("detectInstrumentedServices: found", "pid", pid, "pattern", pattern)
