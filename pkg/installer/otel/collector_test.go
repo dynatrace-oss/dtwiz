@@ -674,8 +674,7 @@ func TestWaitForOtelCollectorReady_TimesOutOnActualPortProbed(t *testing.T) {
 		t.Fatal("expected an error when nothing ever opens the port")
 	}
 	if !strings.Contains(err.Error(), strconv.Itoa(port)) {
-		t.Errorf("error %q does not mention the port actually probed (%d) — this is the exact class of bug "+
-			"where verification silently checks a hardcoded port instead of the one passed in", err, port)
+		t.Errorf("expected error %q to mention the probed port (%d)", err, port)
 	}
 	if elapsed := time.Since(start); elapsed < time.Second {
 		t.Errorf("returned before the timeout elapsed: %s", elapsed)
