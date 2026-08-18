@@ -151,10 +151,11 @@ func detectInstrumentedServices(_, _ []string) []connectedService {
 			workDir := strings.TrimSpace(parts[1])
 			command := strings.TrimSpace(parts[2])
 			result = append(result, connectedService{
-				pid:     pid,
-				name:    serviceDisplayName(command),
-				command: command,
-				workDir: workDir,
+				pid:         pid,
+				name:        serviceDisplayName(command),
+				command:     command,
+				workDir:     workDir,
+				listenPorts: detectListenPorts(pid),
 				// env is nil — process environment requires elevated access on Windows
 			})
 			logger.Debug("detectInstrumentedServices: found", "pid", pid, "pattern", pattern)

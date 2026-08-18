@@ -72,8 +72,10 @@ func receiverPortsFromConfig(data []byte) []string {
 }
 
 // detectConnectedServices returns app processes associated with the collector:
-// those with an active TCP connection to its OTLP ports, and OTel-instrumented
-// processes exporting to the same tenant (apps that never connect locally).
+// those with an active TCP connection to its OTLP ports, OTel-instrumented
+// processes exporting to the same tenant (apps that never connect locally),
+// and — one level deeper — services connected to any of those apps on their
+// own listening ports (so that restarting App A also restarts clients of App A).
 // excludePIDs and dtwiz itself are filtered out; results are deduplicated.
 func detectConnectedServices(configData []byte, excludePIDs map[int]bool) []connectedService {
 	ports := receiverPortsFromConfig(configData)
@@ -86,20 +88,40 @@ func detectConnectedServices(configData []byte, excludePIDs map[int]bool) []conn
 
 	var result []connectedService
 	seen := map[int]bool{}
-	for _, svc := range detectServicesOnPorts(ports) {
+	add := func(svc connectedService) {
 		if excludePIDs[svc.pid] || seen[svc.pid] {
-			continue
+			return
 		}
 		seen[svc.pid] = true
 		result = append(result, svc)
+	}
+
+	for _, svc := range detectServicesOnPorts(ports) {
+		add(svc)
 	}
 	for _, svc := range detectInstrumentedServices(tenants, ports) {
-		if excludePIDs[svc.pid] || seen[svc.pid] {
-			continue
-		}
-		seen[svc.pid] = true
-		result = append(result, svc)
+		add(svc)
 	}
+
+	// Cascade: find services connected to the detected apps on their own
+	// listening ports (e.g. App B → App A → collector).  One level only —
+	// deeper chains are uncommon and would risk pulling in unrelated processes.
+	var cascadePorts []string
+	cascadePortSet := map[string]bool{}
+	for _, svc := range result {
+		for _, p := range svc.listenPorts {
+			if !cascadePortSet[p] {
+				cascadePortSet[p] = true
+				cascadePorts = append(cascadePorts, p)
+			}
+		}
+	}
+	if len(cascadePorts) > 0 {
+		for _, svc := range detectServicesOnPorts(cascadePorts) {
+			add(svc)
+		}
+	}
+
 	return result
 }
 
