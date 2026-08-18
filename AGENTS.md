@@ -176,6 +176,20 @@ if runtime.GOOS != "windows" {
 - Windows: use WMI (via PowerShell)
 - Separate non-trivial platform divergence into build-tagged files (e.g., `_unix.go` with `//go:build !windows`, `_windows.go` with `//go:build windows`)
 
+### Package boundaries
+
+Each package has a single responsibility. Before adding a file to an existing package, verify the new code fits that responsibility. When in doubt, create a new package rather than stretching an existing one.
+
+**Decision checklist — create a new package when any of these are true:**
+
+- The new code serves a different concern than the package's stated purpose (e.g. installation logic inside a detection package, or API client code inside an installer).
+- It interacts with a distinct external system: a new cloud provider, a new Dynatrace API surface, a new runtime toolchain.
+- It would span more than two files with a cohesive internal API that callers consume as a unit.
+
+**The folder-per-method rule is mandatory.** Every `dtwiz install <method>` maps to `pkg/installer/<method>/`. If that subfolder does not exist yet, create it before writing any code. Shared utilities used across multiple methods stay in the `pkg/installer/` root; anything specific to one method lives in its subfolder.
+
+> The codebase contains existing violations of these rules. Do not treat any existing file placement as a precedent — follow the rules above, not the current layout.
+
 ### Error handling
 
 - Wrap with context: `fmt.Errorf("failed to do X: %w", err)`
