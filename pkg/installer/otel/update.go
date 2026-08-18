@@ -32,7 +32,6 @@ func backupFile(path string, data []byte) (string, error) {
 	return backupPath, nil
 }
 
-// dtOTLPEndpoint returns the full Dynatrace OTLP ingest endpoint for apiURL.
 func dtOTLPEndpoint(apiURL string) string {
 	return strings.TrimRight(apiURL, "/") + "/api/v2/otlp"
 }
@@ -45,7 +44,6 @@ type UpdateResult struct {
 	Description string
 }
 
-// editKind represents the type of a line diff operation.
 type editKind int
 
 const (
@@ -177,8 +175,6 @@ func showConfigDiff(origData, updatedData []byte) {
 	}
 }
 
-// nodeMappingGet returns the value node for key in a YAML mapping node,
-// or nil if not found.
 func nodeMappingGet(m *yaml.Node, key string) *yaml.Node {
 	for i := 0; i+1 < len(m.Content); i += 2 {
 		if m.Content[i].Value == key {
@@ -188,8 +184,6 @@ func nodeMappingGet(m *yaml.Node, key string) *yaml.Node {
 	return nil
 }
 
-// nodeGet traverses a chain of mapping keys starting from n, returning the
-// leaf node or nil if any step is missing.
 func nodeGet(n *yaml.Node, path ...string) *yaml.Node {
 	for _, key := range path {
 		if n == nil {
@@ -217,8 +211,6 @@ func nodeMappingSet(m *yaml.Node, key string, val *yaml.Node) {
 	)
 }
 
-// ensureMappingNode returns the existing mapping value for key in parent,
-// creating and inserting an empty mapping node when absent.
 func ensureMappingNode(parent *yaml.Node, key string) *yaml.Node {
 	if n := nodeMappingGet(parent, key); n != nil && n.Kind == yaml.MappingNode {
 		return n
@@ -228,8 +220,6 @@ func ensureMappingNode(parent *yaml.Node, key string) *yaml.Node {
 	return n
 }
 
-// buildDTExporterNode returns the yaml.Node subtree for the
-// otlp_http/dynatrace exporter definition.
 func buildDTExporterNode(apiURL, token string) *yaml.Node {
 	return &yaml.Node{
 		Kind: yaml.MappingNode,
@@ -351,7 +341,6 @@ func mergeExporterIntoYAML(data []byte, apiURL, token string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// writeConfig writes updatedData to configPath and returns the result.
 func writeConfig(configPath string, updatedData []byte) (*UpdateResult, error) {
 	if err := os.WriteFile(configPath, updatedData, 0o600); err != nil {
 		return nil, fmt.Errorf("writing updated config to %s: %w", configPath, err)
@@ -377,7 +366,6 @@ func PatchConfigFile(configPath, apiURL, token string) (*UpdateResult, error) {
 		return nil, fmt.Errorf("patching config %s: %w", configPath, err)
 	}
 
-	// Create a timestamped backup.
 	backupPath, err := backupFile(configPath, data)
 	if err != nil {
 		return nil, err
@@ -537,7 +525,6 @@ func updateOtelConfig(configPath string, runningProcs []otelProcessInfo, envURL,
 		logger.Debug("collector for restart", "pid", p.pid, "binary", p.binaryPath)
 	}
 
-	// Build a preview of the updated config so we can diff it against the original.
 	origData, err := os.ReadFile(configPath)
 	if err != nil {
 		return fmt.Errorf("reading config file %s: %w", configPath, err)
@@ -547,10 +534,6 @@ func updateOtelConfig(configPath string, runningProcs []otelProcessInfo, envURL,
 		return fmt.Errorf("building config preview for %s: %w", configPath, err)
 	}
 
-	// The restarted collector's HTTP receiver may not be on the default port,
-	// since this config is patched in place rather than rendered by dtwiz.
-	// Fall back to 4318 (the previous unconditional assumption) only when the
-	// port cannot be determined from the config itself.
 	httpPort, portFound := extractOtlpHTTPPort(updatedData)
 	if !portFound {
 		logger.Debug("could not determine otlp http port from config, falling back to default", "configPath", configPath)
@@ -566,7 +549,6 @@ func updateOtelConfig(configPath string, runningProcs []otelProcessInfo, envURL,
 	display.PrintSectionDivider()
 	fmt.Println()
 
-	// Show restart plan.
 	if len(runningProcs) > 0 {
 		display.ColorBold.Println("  Running collectors that will be restarted:")
 		for _, p := range runningProcs {
@@ -586,7 +568,6 @@ func updateOtelConfig(configPath string, runningProcs []otelProcessInfo, envURL,
 		display.ColorDefault.Println("  No running collector found — config will be updated on disk only.")
 	}
 
-	// Detect app services; exclude the collector's own PID(s).
 	excludePIDs := make(map[int]bool, len(runningProcs))
 	for _, p := range runningProcs {
 		excludePIDs[p.pid] = true
@@ -617,13 +598,11 @@ func updateOtelConfig(configPath string, runningProcs []otelProcessInfo, envURL,
 	}
 	fmt.Println()
 
-	// Create a timestamped backup before writing.
 	backupPath, err := backupFile(configPath, origData)
 	if err != nil {
 		return err
 	}
 
-	// Write updated config using data already computed for the diff preview.
 	result, err := writeConfig(configPath, updatedData)
 	if err != nil {
 		return err
@@ -637,7 +616,6 @@ func updateOtelConfig(configPath string, runningProcs []otelProcessInfo, envURL,
 		return nil
 	}
 
-	// Partition into container and native-process restarts.
 	var nativeProcs []otelProcessInfo
 	var containerProcs []otelProcessInfo
 	for _, p := range runningProcs {
@@ -648,7 +626,6 @@ func updateOtelConfig(configPath string, runningProcs []otelProcessInfo, envURL,
 		}
 	}
 
-	// Container restart: copy patched config back (when not host-mounted), then restart.
 	for _, p := range containerProcs {
 		if p.containerCfgPath != "" {
 			fmt.Printf("  Copying updated config into container %s...\n", p.containerName)
@@ -663,7 +640,6 @@ func updateOtelConfig(configPath string, runningProcs []otelProcessInfo, envURL,
 		fmt.Printf("  Container %s restarted.\n", p.containerName)
 	}
 
-	// Native process restart: kill old process, start new one.
 	if len(nativeProcs) > 0 {
 		restartBinary := killCollectorProcesses(nativeProcs)
 		fmt.Println()

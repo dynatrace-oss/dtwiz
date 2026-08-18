@@ -203,6 +203,8 @@ func TestOTelHostMonitoring(t *testing.T) {
 func TestOTelInstallAvoidsOccupiedPorts(t *testing.T) {
 	env := integration.SetupIntegration(t)
 
+	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
+
 	var listeners []net.Listener
 	occupy := func(addr string) {
 		l, err := net.Listen("tcp", addr)

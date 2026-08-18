@@ -45,6 +45,11 @@ type otelConfigData struct {
 	HealthCheckPort int
 }
 
+type generatedOtelConfig struct {
+	content  string
+	httpPort int
+}
+
 // findFreePort returns the lowest port >= startPort that is free on both
 // 0.0.0.0 (otlp/health_check) and "localhost" (the Prometheus telemetry
 // reader). Both checks are required: a 0.0.0.0 bind does not conflict with
@@ -676,12 +681,9 @@ func renderOtelTemplate(data otelConfigData) (string, error) {
 	return rendered, nil
 }
 
-// generateOtelConfig renders otel.tmpl and returns a collector configuration YAML string.
-// It probes for free ports starting at the canonical defaults so multiple collectors can
-// run on the same host without conflicting.
-// When the Experimental feature flag is enabled, the combined host+app config is rendered;
-// otherwise the app-only config is rendered (identical to the pre-host-monitoring output).
-func generateOtelConfig(apiURL, token string) (string, int, error) {
+// generateOtelConfig renders otel.tmpl and returns the config plus its OTLP HTTP port.
+// Ports are selected from the canonical defaults; Experimental adds host monitoring.
+func generateOtelConfig(apiURL, token string) (generatedOtelConfig, error) {
 	grpcPort := findFreePort(4317)
 	httpPort := findFreePort(4318)
 	if httpPort == grpcPort {
@@ -715,15 +717,15 @@ func generateOtelConfig(apiURL, token string) (string, int, error) {
 
 	rendered, err := renderOtelTemplate(data)
 	if err != nil {
-		return "", 0, fmt.Errorf("rendering otel template: %w", err)
+		return generatedOtelConfig{}, fmt.Errorf("rendering otel template: %w", err)
 	}
-	return rendered, httpPort, nil
+	return generatedOtelConfig{content: rendered, httpPort: httpPort}, nil
 }
 
 // extractOtlpHTTPPort reads the OTLP HTTP port back out of a config this
 // package didn't render (update.go patches an existing, possibly foreign,
 // config), where the port isn't already known from generating it.
-func extractOtlpHTTPPort(configYAML []byte) (int, bool) {
+func extractOtlpHTTPPort(configYAML []byte) (httpPort int, portFound bool) {
 	var cfg struct {
 		Receivers struct {
 			Otlp struct {
@@ -742,11 +744,11 @@ func extractOtlpHTTPPort(configYAML []byte) (int, bool) {
 	if err != nil {
 		return 0, false
 	}
-	port, err := strconv.Atoi(portStr)
+	parsedPort, err := strconv.Atoi(portStr)
 	if err != nil {
 		return 0, false
 	}
-	return port, true
+	return parsedPort, true
 }
 
 // printConfigPreview prints the OTel Collector config preview.
@@ -907,7 +909,7 @@ func prepareCollectorPlan(envURL, token string) (*collectorPlan, error) {
 	if err != nil {
 		return nil, err
 	}
-	configContent, httpPort, err := generateOtelConfig(apiURL, collectorToken)
+	generatedConfig, err := generateOtelConfig(apiURL, collectorToken)
 	if err != nil {
 		return nil, fmt.Errorf("generating OTel Collector config: %w", err)
 	}
@@ -917,9 +919,9 @@ func prepareCollectorPlan(envURL, token string) (*collectorPlan, error) {
 		installDir:     installDir,
 		configPath:     filepath.Join(installDir, "config.yaml"),
 		binaryPath:     filepath.Join(installDir, otelCollectorBinaryName()),
-		configContent:  configContent,
-		configPreview:  installer.MaskSecret(configContent, collectorToken),
-		httpPort:       httpPort,
+		configContent:  generatedConfig.content,
+		configPreview:  installer.MaskSecret(generatedConfig.content, collectorToken),
+		httpPort:       generatedConfig.httpPort,
 		runningPIDs:    findRunningOtelCollectors(),
 	}, nil
 }

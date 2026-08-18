@@ -43,9 +43,6 @@ func TestFindFreePort_ReturnsFreePort(t *testing.T) {
 	if port < 8888 {
 		t.Fatalf("expected port >= 8888, got %d", port)
 	}
-	// The returned port must actually be bindable on both addresses the rendered
-	// config uses: 0.0.0.0 for otlp/health_check, and "localhost" for the
-	// Prometheus telemetry reader.
 	for _, host := range []string{"0.0.0.0", "localhost"} {
 		l, err := net.Listen("tcp", host+":"+strconv.Itoa(port))
 		if err != nil {
@@ -56,11 +53,7 @@ func TestFindFreePort_ReturnsFreePort(t *testing.T) {
 }
 
 func TestFindFreePort_SkipsOccupiedWildcard(t *testing.T) {
-	// Occupy 8888 on the wildcard address, exactly as a foreign OTel Collector's
-	// otlp receiver does (endpoint: 0.0.0.0:<port> in otel.tmpl and in
-	// third-party configs such as ddotel.tmpl). Regression test for the bug
-	// where probing only "localhost" (a loopback address, never 0.0.0.0) missed
-	// a conflict on the wildcard address.
+	// Regression: probing only "localhost" missed conflicts on 0.0.0.0.
 	l, err := net.Listen("tcp", "0.0.0.0:8888")
 	if err != nil {
 		t.Skip("cannot bind to 0.0.0.0:8888 — skipping")
@@ -74,11 +67,7 @@ func TestFindFreePort_SkipsOccupiedWildcard(t *testing.T) {
 }
 
 func TestFindFreePort_SkipsOccupiedLoopback(t *testing.T) {
-	// Occupy 8888 on "localhost", exactly matching the Prometheus telemetry
-	// reader's own bind target (host: localhost in otel.tmpl). This resolves to
-	// 127.0.0.1 or ::1 depending on the machine; probing the literal address
-	// 0.0.0.0 alone (a wildcard bind) does not detect a conflict here, since a
-	// wildcard bind and a specific loopback bind on the same port can coexist.
+	// Probe literal "localhost" because it may resolve to 127.0.0.1 or ::1.
 	l, err := net.Listen("tcp", "localhost:8888")
 	if err != nil {
 		t.Skip("cannot bind to localhost:8888 — skipping")
@@ -119,10 +108,11 @@ func TestGenerateOtelConfig_ContainsMetricsPort(t *testing.T) {
 	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
 	t.Setenv("DTWIZ_EXPERIMENTAL", "")
 
-	cfg, _, err := generateOtelConfig("https://env.example.com", "mytoken")
+	generatedConfig, err := generateOtelConfig("https://env.example.com", "mytoken")
 	if err != nil {
 		t.Fatalf("generateOtelConfig: %v", err)
 	}
+	cfg := generatedConfig.content
 	if !strings.Contains(cfg, "port:") {
 		t.Errorf("generated config missing metrics port:\n%s", cfg)
 	}
@@ -131,7 +121,32 @@ func TestGenerateOtelConfig_ContainsMetricsPort(t *testing.T) {
 	}
 }
 
-// otelConfigYAML is a minimal map type for inspecting the rendered config.
+func TestGenerateOtelConfig_ReturnsRenderedHTTPPort(t *testing.T) {
+	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
+	t.Setenv("DTWIZ_EXPERIMENTAL", "")
+
+	l, err := net.Listen("tcp", "0.0.0.0:4318")
+	if err != nil {
+		t.Skipf("cannot occupy 0.0.0.0:4318: %v", err)
+	}
+	defer l.Close()
+
+	generatedConfig, err := generateOtelConfig("https://env.example.com", "mytoken")
+	if err != nil {
+		t.Fatalf("generateOtelConfig: %v", err)
+	}
+	renderedPort, portFound := extractOtlpHTTPPort([]byte(generatedConfig.content))
+	if !portFound {
+		t.Fatal("generated config missing OTLP HTTP port")
+	}
+	if generatedConfig.httpPort != renderedPort {
+		t.Fatalf("returned httpPort = %d, rendered port = %d", generatedConfig.httpPort, renderedPort)
+	}
+	if generatedConfig.httpPort == 4318 {
+		t.Fatal("expected generated config to avoid occupied default OTLP HTTP port")
+	}
+}
+
 type otelConfigYAML struct {
 	Extensions map[string]any `yaml:"extensions"`
 	Receivers  map[string]any `yaml:"receivers"`
@@ -155,16 +170,15 @@ func parseOtelConfig(t *testing.T, cfg string) otelConfigYAML {
 	return parsed
 }
 
-// TestGenerateOtelConfig_AppOnly_Default asserts that without the experimental flag
-// the config is app-only: no hostmetrics/journald/health_check, pipeline named "metrics".
 func TestGenerateOtelConfig_AppOnly_Default(t *testing.T) {
 	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
 	t.Setenv("DTWIZ_EXPERIMENTAL", "")
 
-	cfg, _, err := generateOtelConfig("https://env.example.com", "mytoken")
+	generatedConfig, err := generateOtelConfig("https://env.example.com", "mytoken")
 	if err != nil {
 		t.Fatalf("generateOtelConfig: %v", err)
 	}
+	cfg := generatedConfig.content
 	parsed := parseOtelConfig(t, cfg)
 
 	if _, ok := parsed.Receivers["hostmetrics/10s"]; ok {
@@ -187,31 +201,26 @@ func TestGenerateOtelConfig_AppOnly_Default(t *testing.T) {
 	}
 }
 
-// TestGenerateOtelConfig_Combined_ExperimentalEnabled asserts that with the experimental flag
-// the combined config includes host receivers, all five processors in order,
-// metrics/host and logs/host pipelines, and the app pipelines.
 func TestGenerateOtelConfig_Combined_ExperimentalEnabled(t *testing.T) {
 	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
 
-	cfg, _, err := generateOtelConfig("https://env.example.com", "mytoken")
+	generatedConfig, err := generateOtelConfig("https://env.example.com", "mytoken")
 	if err != nil {
 		t.Fatalf("generateOtelConfig: %v", err)
 	}
+	cfg := generatedConfig.content
 	parsed := parseOtelConfig(t, cfg)
 
-	// Host receivers present.
 	for _, recv := range []string{"hostmetrics/10s", "hostmetrics/5m", "hostmetrics/1h"} {
 		if _, ok := parsed.Receivers[recv]; !ok {
 			t.Errorf("combined config missing receiver %q", recv)
 		}
 	}
 
-	// health_check extension present.
 	if _, ok := parsed.Extensions["health_check"]; !ok {
 		t.Error("combined config missing health_check extension")
 	}
 
-	// metrics/host pipeline with processors in correct order.
 	hostPipeline, ok := parsed.Service.Pipelines["metrics/host"]
 	if !ok {
 		t.Fatal("combined config missing metrics/host pipeline")
@@ -227,7 +236,6 @@ func TestGenerateOtelConfig_Combined_ExperimentalEnabled(t *testing.T) {
 		}
 	}
 
-	// logs/host pipeline is only emitted on Linux (journald required).
 	if runtime.GOOS == "linux" {
 		if _, ok := parsed.Service.Pipelines["logs/host"]; !ok {
 			t.Error("combined config missing logs/host pipeline on Linux")
@@ -238,7 +246,6 @@ func TestGenerateOtelConfig_Combined_ExperimentalEnabled(t *testing.T) {
 		}
 	}
 
-	// app pipelines still present.
 	if _, ok := parsed.Service.Pipelines["metrics/apps"]; !ok {
 		t.Error("combined config missing metrics/apps pipeline")
 	}
@@ -250,15 +257,15 @@ func TestGenerateOtelConfig_Combined_ExperimentalEnabled(t *testing.T) {
 	}
 }
 
-// TestGenerateOtelConfig_Combined_EnvVar asserts experimental can be enabled via env var.
 func TestGenerateOtelConfig_Combined_EnvVar(t *testing.T) {
 	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
 	t.Setenv("DTWIZ_EXPERIMENTAL", "true")
 
-	cfg, _, err := generateOtelConfig("https://env.example.com", "mytoken")
+	generatedConfig, err := generateOtelConfig("https://env.example.com", "mytoken")
 	if err != nil {
 		t.Fatalf("generateOtelConfig: %v", err)
 	}
+	cfg := generatedConfig.content
 	parsed := parseOtelConfig(t, cfg)
 
 	if _, ok := parsed.Service.Pipelines["metrics/host"]; !ok {
@@ -266,17 +273,14 @@ func TestGenerateOtelConfig_Combined_EnvVar(t *testing.T) {
 	}
 }
 
-// TestGenerateOtelConfig_JournaldConsistency asserts the journald receiver and
-// its reference in logs/host are both present or both absent — never just one.
-// It runs on the current platform; journald will be absent on non-Linux, and the
-// test verifies the pipeline reference is absent too (the guards stay in sync).
 func TestGenerateOtelConfig_JournaldConsistency(t *testing.T) {
 	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
 
-	cfg, _, err := generateOtelConfig("https://env.example.com", "mytoken")
+	generatedConfig, err := generateOtelConfig("https://env.example.com", "mytoken")
 	if err != nil {
 		t.Fatalf("generateOtelConfig: %v", err)
 	}
+	cfg := generatedConfig.content
 	parsed := parseOtelConfig(t, cfg)
 
 	_, receiverDefined := parsed.Receivers["journald"]
@@ -291,14 +295,12 @@ func TestGenerateOtelConfig_JournaldConsistency(t *testing.T) {
 		}
 	}
 
-	// Both present or both absent — never a mismatch.
 	if receiverDefined != pipelineReferences {
 		t.Errorf("journald receiver defined=%v but pipeline reference=%v — guards must stay in sync",
 			receiverDefined, pipelineReferences)
 	}
 }
 
-// TestGenerateOtelConfig_ValidYAML asserts the rendered config parses as valid YAML.
 func TestGenerateOtelConfig_ValidYAML(t *testing.T) {
 	for _, experimental := range []bool{false, true} {
 		experimental := experimental
@@ -313,10 +315,11 @@ func TestGenerateOtelConfig_ValidYAML(t *testing.T) {
 				featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
 				t.Setenv("DTWIZ_EXPERIMENTAL", "")
 			}
-			cfg, _, err := generateOtelConfig("https://env.example.com", "mytoken")
+			generatedConfig, err := generateOtelConfig("https://env.example.com", "mytoken")
 			if err != nil {
 				t.Fatalf("generateOtelConfig: %v", err)
 			}
+			cfg := generatedConfig.content
 			var parsed any
 			if err := yaml.Unmarshal([]byte(cfg), &parsed); err != nil {
 				t.Errorf("rendered config is not valid YAML: %v\n---\n%s", err, cfg)
@@ -325,31 +328,30 @@ func TestGenerateOtelConfig_ValidYAML(t *testing.T) {
 	}
 }
 
-// TestGenerateOtelConfig_PreviewTruncation asserts that the generated config is long
-// enough to be truncated in the default (non-verbose) preview for the experimental path.
 func TestGenerateOtelConfig_PreviewTruncation(t *testing.T) {
 	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
 
-	cfg, _, err := generateOtelConfig("https://env.example.com", "mytoken")
+	generatedConfig, err := generateOtelConfig("https://env.example.com", "mytoken")
 	if err != nil {
 		t.Fatalf("generateOtelConfig: %v", err)
 	}
+	cfg := generatedConfig.content
 	lines := strings.Split(strings.TrimRight(cfg, "\n"), "\n")
 	if len(lines) <= 20 {
 		t.Errorf("experimental config has %d lines, expected more than 20 so truncation is exercised", len(lines))
 	}
 }
 
-// TestGenerateOtelConfig_TokenMaskedInPreview asserts the token is masked in the preview.
 func TestGenerateOtelConfig_TokenMaskedInPreview(t *testing.T) {
 	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
 	t.Setenv("DTWIZ_EXPERIMENTAL", "")
 
 	const token = "dt0s16.supersecrettoken"
-	cfg, _, err := generateOtelConfig("https://env.example.com", token)
+	generatedConfig, err := generateOtelConfig("https://env.example.com", token)
 	if err != nil {
 		t.Fatalf("generateOtelConfig: %v", err)
 	}
+	cfg := generatedConfig.content
 
 	preview := installer.MaskSecret(cfg, token)
 	if strings.Contains(preview, token) {
@@ -438,7 +440,6 @@ func TestPipelinesSectionStart(t *testing.T) {
 	}
 }
 
-// captureStdout redirects os.Stdout for the duration of fn and returns what was written.
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 	r, w, err := os.Pipe()
@@ -457,9 +458,6 @@ func captureStdout(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
-// buildPreviewConfig builds a synthetic config.yaml content with the given
-// number of head lines, middle lines (between head and pipelines), and an
-// optional "  pipelines:" section at the end.
 func buildPreviewConfig(headLines, middleLines int, withPipelines bool) string {
 	var b strings.Builder
 	for i := range headLines {
@@ -535,7 +533,6 @@ func TestPrintConfigPreview_Truncation(t *testing.T) {
 			if tc.wantEllipsis && !strings.Contains(out, tc.wantMsg) {
 				t.Errorf("ellipsis line missing %q\noutput:\n%s", tc.wantMsg, out)
 			}
-			// When no truncation, all middle/pipelines lines must appear.
 			if !tc.wantEllipsis {
 				for i := range tc.middleLines {
 					marker := fmt.Sprintf("middle_%02d", i)
@@ -547,7 +544,6 @@ func TestPrintConfigPreview_Truncation(t *testing.T) {
 					t.Errorf("expected pipelines section in full output\noutput:\n%s", out)
 				}
 			}
-			// When truncating with pipelines, the pipelines section must still appear.
 			if tc.wantEllipsis && tc.withPipelines && !strings.Contains(out, "pipelines:") {
 				t.Errorf("pipelines section missing after ellipsis\noutput:\n%s", out)
 			}
@@ -670,8 +666,6 @@ func TestWaitForOtelCollectorReady_ReturnsImmediatelyWhenPortIsOpen(t *testing.T
 }
 
 func TestWaitForOtelCollectorReady_TimesOutOnActualPortProbed(t *testing.T) {
-	// findFreePort guarantees a port that is free at this instant on both
-	// addresses the rendered config binds, so nothing answers on it here.
 	port := findFreePort(45000)
 
 	start := time.Now()
@@ -747,7 +741,6 @@ func TestSendOtelVerificationLog_NonSuccessStatus(t *testing.T) {
 }
 
 func TestSendOtelVerificationLog_GivesUpAfterRetriesOnRefusedPort(t *testing.T) {
-	// Nothing listens on this port, so every attempt hits "connection refused".
 	port := findFreePort(45200)
 
 	err := sendOtelVerificationLog(port, "body")
@@ -759,9 +752,6 @@ func TestSendOtelVerificationLog_GivesUpAfterRetriesOnRefusedPort(t *testing.T) 
 	}
 }
 
-// TestVerifyOtelInstall_UsesGivenHTTPPort confirms the readiness check and
-// verification log both target httpPort end-to-end through verifyOtelInstall,
-// rather than a port assumed by either helper individually.
 func TestVerifyOtelInstall_UsesGivenHTTPPort(t *testing.T) {
 	var hit bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

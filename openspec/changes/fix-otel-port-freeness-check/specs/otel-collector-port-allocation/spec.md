@@ -33,12 +33,11 @@ interfaces or only on an address reachable from the same machine.
 moment of selection, so the collector SHALL NOT immediately fail to bind that same port when it starts moments
 later.
 
-#### Scenario: A port free at selection time is still free when the collector starts
+#### Scenario: A port reported as free can be bound by the collector
 
-- **GIVEN** `install otel` selected a port for the collector because no process was listening on it at that moment
-- **WHEN** the collector starts and binds that port
+- **GIVEN** `install otel` selected a port for the collector because its port-availability check succeeded
+- **WHEN** the collector starts and binds that same port on the configured address
 - **THEN** it SHALL bind the port successfully
-- **AND** it SHALL NOT exit immediately due to that port already being in use
 
 ### Requirement: Post-install verification targets the collector's actual assigned port
 
