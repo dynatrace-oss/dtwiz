@@ -526,6 +526,7 @@ func buildOtelLogsUIURL(envURL, searchTerm string) string {
 	encoded := strings.ReplaceAll(url.QueryEscape(fragment), "+", "%20")
 	return base + "/ui/apps/dynatrace.logs/intent/view_query#" + encoded
 }
+
 // otlpHTTPPortFromConfig reads the collector config at configPath and returns
 // the HTTP OTLP receiver port. Falls back to 4318 when the file cannot be
 // read or the endpoint field is absent.
