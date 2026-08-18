@@ -2,6 +2,7 @@ package otel
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -97,7 +98,9 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 		HTTPPort:    httpPort,
 		MetricsPort: metricsPort,
 	}
-	if featureflags.IsEnabled(featureflags.Experimental) {
+
+	experimentalEnabled := featureflags.IsEnabled(featureflags.Experimental)
+	if experimentalEnabled {
 		cfgData.HostMonitoring = true
 		cfgData.IncludeJournald = runtime.GOOS == "linux"
 		cfgData.HealthCheckPort = healthCheckPort
@@ -109,60 +112,94 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 	}
 
 	updatedData := []byte(freshConfig)
+	configChanged := !bytes.Equal(origData, updatedData)
 
-	if bytes.Equal(origData, updatedData) {
+	// When the config is already current and tenant-side prerequisites are not
+	// in scope (no experimental flag or no platform token), there is nothing to do.
+	if !configChanged && !(experimentalEnabled && platformTok != "") {
 		display.ColorOK.Println("  Collector configuration is up to date.")
 		return ErrUpToDate
 	}
 
-	display.Header(fmt.Sprintf("Preview: collector configuration changes to %s:", configPath))
-	fmt.Println()
-
-	showConfigDiff(origData, updatedData)
-
-	fmt.Println()
-	display.PrintSectionDivider()
-	fmt.Println()
-
-	if len(runningProcs) > 0 {
-		display.ColorBold.Println("  The following will be restarted:")
+	if configChanged {
+		display.Header(fmt.Sprintf("Preview: collector configuration changes to %s:", configPath))
 		fmt.Println()
-		display.ColorBold.Println("  Collector")
-		for _, p := range runningProcs {
-			if p.containerRuntime != "" {
-				fmt.Printf("    • %s  %s\n", p.containerName, display.ColorMuted.Sprint("("+p.containerRuntime+" restart)"))
-			} else {
-				name := filepath.Base(p.binaryPath)
-				if name == "" || name == "." {
-					name = "(unknown)"
+
+		showConfigDiff(origData, updatedData)
+
+		fmt.Println()
+		display.PrintSectionDivider()
+		fmt.Println()
+
+		if len(runningProcs) > 0 {
+			display.ColorBold.Println("  The following will be restarted:")
+			fmt.Println()
+			display.ColorBold.Println("  Collector")
+			for _, p := range runningProcs {
+				if p.containerRuntime != "" {
+					fmt.Printf("    • %s  %s\n", p.containerName, display.ColorMuted.Sprint("("+p.containerRuntime+" restart)"))
+				} else {
+					name := filepath.Base(p.binaryPath)
+					if name == "" || name == "." {
+						name = "(unknown)"
+					}
+					fmt.Printf("    • %s (PID %d)\n", display.ColorDefault.Sprint(name), p.pid)
 				}
-				fmt.Printf("    • %s (PID %d)\n", display.ColorDefault.Sprint(name), p.pid)
 			}
+		} else {
+			display.ColorDefault.Println("  No running collector found — config will be updated on disk only.")
 		}
-	} else {
-		display.ColorDefault.Println("  No running collector found — config will be updated on disk only.")
+
+		excludePIDs := make(map[int]bool, len(runningProcs))
+		for _, p := range runningProcs {
+			excludePIDs[p.pid] = true
+		}
+		connectedSvcs := detectConnectedServices(origData, excludePIDs)
+		if len(connectedSvcs) > 0 {
+			fmt.Println()
+			printConnectedServices(connectedSvcs)
+			fmt.Println()
+		}
+
+		fmt.Println()
+		display.PrintSectionDivider()
 	}
 
-	excludePIDs := make(map[int]bool, len(runningProcs))
-	for _, p := range runningProcs {
-		excludePIDs[p.pid] = true
-	}
-	connectedSvcs := detectConnectedServices(origData, excludePIDs)
-	if len(connectedSvcs) > 0 {
-		fmt.Println()
-		printConnectedServices(connectedSvcs)
-		fmt.Println()
+	if experimentalEnabled && platformTok != "" {
+		if status, err := buildExtensionActivationPreviewFn(envURL, platformTok); err != nil {
+			fmt.Println()
+			display.PrintWarning("OTel Host Monitoring extension", err)
+		} else {
+			fmt.Println()
+			printExtensionActivationPreview(status)
+		}
 	}
 
-	fmt.Println()
-	display.PrintSectionDivider()
+	var grailC grailRouteClient
+	var grailPlans []grailSignalPlan
+	if experimentalEnabled && platformTok != "" {
+		if c, plans, err := buildGrailRoutePlansFn(envURL, platformTok); err != nil {
+			fmt.Println()
+			display.PrintWarning("OpenPipeline routes", err)
+		} else {
+			grailC = c
+			grailPlans = plans
+			fmt.Println()
+			printGrailPlan(plans)
+		}
+	}
 
 	if dryRun {
 		display.ColorDefault.Println("  [dry-run] No changes made.")
 		return nil
 	}
 
-	ok, err := installer.ConfirmProceed("  Apply changes and restart collector?")
+	confirmText := "  Apply changes and restart collector?"
+	if !configChanged {
+		confirmText = "  Apply tenant-side prerequisite changes?"
+	}
+
+	ok, err := installer.ConfirmProceed(confirmText)
 	if err != nil {
 		return fmt.Errorf("reading confirmation: %w", err)
 	}
@@ -171,6 +208,32 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 		return installer.ErrInstallCancelled
 	}
 	fmt.Println()
+
+	if experimentalEnabled && platformTok != "" {
+		activateHostMonitoringExtensionFn(envURL, platformTok)
+	}
+
+	if grailC != nil {
+		if err := waitForGrailPipelinesFn(context.Background(), grailC, time.Sleep); err != nil {
+			logger.Debug("OTel host-monitoring pipelines did not appear within the wait bound", "error", err)
+		}
+		if freshPlans, err := buildGrailPlans(context.Background(), grailC); err != nil {
+			logger.Debug("failed to rebuild Grail route plans after extension activation, applying preview snapshot", "error", err)
+		} else {
+			grailPlans = freshPlans
+		}
+		logger.Debug("applying Grail route plans", "count", len(grailPlans))
+		applyErrs := make([]error, len(grailPlans))
+		for i, p := range grailPlans {
+			applyErrs[i] = applyGrailPlan(context.Background(), grailC, p)
+		}
+		printGrailApplyResults(grailPlans, applyErrs)
+	}
+
+	if !configChanged {
+		display.ColorOK.Println("  Collector configuration is up to date.")
+		return nil
+	}
 
 	backupPath, err := backupFile(configPath, origData)
 	if err != nil {

@@ -412,6 +412,9 @@ func removeGrailRoutes(ctx context.Context, c grailRouteClient) (removed []bool,
 	return removed, errs
 }
 
+// buildGrailRoutePlansFn is overridable in tests.
+var buildGrailRoutePlansFn = buildGrailRoutePlans
+
 // buildGrailRoutePlans builds the client + plan for otel.go's install preview: shown
 // before confirmation, applied afterward without a second prompt.
 func buildGrailRoutePlans(envURL, platformToken string) (grailRouteClient, []grailSignalPlan, error) {
