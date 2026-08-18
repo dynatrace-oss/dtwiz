@@ -139,23 +139,6 @@ When a running collector's config path is relative, it SHALL be resolved against
 
 ---
 
-### Requirement: Generated config ports must not conflict with already-running collectors
-
-When generating a new collector config, `dtwiz` SHALL probe `localhost:<port>` to find a
-free port for the Prometheus metrics endpoint (which also binds on `localhost`). On macOS,
-probing on `0.0.0.0` does not detect a conflict when `localhost:<port>` is already taken
-by another process — the probe would succeed yet the collector would fail to start.
-
-#### Scenario: Another collector already occupies the default Prometheus metrics port
-
-- **GIVEN** a collector process is running and has bound `localhost:8888` for its Prometheus metrics endpoint
-- **WHEN** a new collector config is generated
-- **THEN** `findFreePort(8888)` probes `localhost:8888`, detects the conflict, and selects the next available port (e.g. 8889)
-- **THEN** the generated config contains the conflict-free port
-- **THEN** the new collector starts successfully
-
----
-
 ### Requirement: Collector restart after patching
 
 After patching the config file, any running collector that owns the patched config SHALL be restarted. For native processes, the old process is killed and the binary is re-launched with the updated config, then verified against Dynatrace. For containers, the config is already updated on disk (or copied back) and the container is restarted via `<runtime> restart <name>`. Verification is attempted best-effort.
@@ -217,12 +200,12 @@ The picker SHALL include both Dynatrace and upstream OTel Collector distribution
 
 ### Requirement: Dynatrace OTel Collector config is regenerated from the install template
 
-When the selected or matched running collector is identified as a Dynatrace OTel Collector
-(its binary path contains `dynatrace-otel-collector`), the update SHALL regenerate the
-full collector config from the install template with the current tenant credentials and
-receiver ports, rather than patching the exporter in as an additional entry.
+When the selected or matched running collector is identified as a Dynatrace OTel Collector, the update SHALL
+regenerate the full collector config from the install template with the current tenant credentials and receiver
+ports, rather than patching the exporter in as an additional entry. A Dynatrace OTel Collector is identified by a
+binary path that contains `dynatrace-otel-collector`.
 
-Existing OTLP receiver port assignments are preserved from the current config so that
+Existing OTLP receiver port assignments SHALL be preserved from the current config so that
 connected app services keep their OTLP endpoint after the restart. The ports read are:
 
 - `receivers.otlp.protocols.grpc.endpoint` (default 4317)
