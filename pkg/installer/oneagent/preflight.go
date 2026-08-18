@@ -43,7 +43,7 @@ func runPreflightChecks(env Environment, opts InstallOptions) (preflightResult, 
 	}
 
 	if env.OS == "windows" && !opts.DryRun && !opts.ConnectivityCheckOnly && !isElevatedFn() && opts.Quiet {
-		return preflightResult{}, fmt.Errorf("installer requires Administrator privileges: run from an elevated terminal or omit --quiet to allow UAC prompt")
+		return preflightResult{}, fmt.Errorf("installer requires Administrator privileges: run dtwiz from an elevated terminal")
 	}
 
 	return result, nil
