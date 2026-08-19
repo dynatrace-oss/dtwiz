@@ -88,6 +88,7 @@ func detectServicesOnPorts(ports []string) []connectedService {
 			pid:           pid,
 			name:          serviceDisplayName(cmd),
 			command:       cmd,
+			workDir:       lookupProcessWorkingDirectory(pid),
 			collectorPort: pidPort[pid],
 			listenPorts:   detectListenPorts(pid),
 			env:           readProcessEnv(pid),
