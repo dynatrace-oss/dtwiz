@@ -331,7 +331,7 @@ func selectProject(projects []detectedProject) (detectedProject, bool) {
 }
 
 func createRuntimePlan(proj detectedProject, httpPort int, token, envURL, platformToken string) InstrumentationPlan {
-	collectorEndpoint := fmt.Sprintf("http://localhost:%d", httpPort)
+	collectorEndpoint := fmt.Sprintf("http://127.0.0.1:%d", httpPort)
 	svcName := projectServiceName(proj.Path)
 
 	switch proj.Runtime {

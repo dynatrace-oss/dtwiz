@@ -180,7 +180,7 @@ func DetectJavaPlan(envURL, token string) *JavaInstrumentationPlan {
 		return nil
 	}
 
-	collectorEndpoint := fmt.Sprintf("http://localhost:%d", otlpHTTPPortFromConfig(findExistingCollectorConfig()))
+	collectorEndpoint := fmt.Sprintf("http://127.0.0.1:%d", otlpHTTPPortFromConfig(findExistingCollectorConfig()))
 	proj := detectedProject{ScannedProject: *sel, Runtime: "Java"}
 	plan := buildJavaInstrumentationPlan(proj, collectorEndpoint, token, envURL)
 	if jp, ok := plan.(*JavaInstrumentationPlan); ok {
@@ -342,7 +342,7 @@ func InstallOtelJava(envURL, token, serviceName, projectPath string, dryRun bool
 		proj = *sel
 	}
 
-	collectorEndpoint := fmt.Sprintf("http://localhost:%d", otlpHTTPPortFromConfig(findExistingCollectorConfig()))
+	collectorEndpoint := fmt.Sprintf("http://127.0.0.1:%d", otlpHTTPPortFromConfig(findExistingCollectorConfig()))
 
 	if serviceName == "my-service" {
 		serviceName = projectServiceName(proj.Path)
@@ -389,6 +389,7 @@ func InstallOtelJava(envURL, token, serviceName, projectPath string, dryRun bool
 		if err := plan.executeMultiModule(); err != nil {
 			return err
 		}
+		warnIfCollectorUnreachable(collectorEndpoint)
 		return nil
 	}
 
@@ -493,6 +494,7 @@ func InstallOtelJava(envURL, token, serviceName, projectPath string, dryRun bool
 	}
 
 	updateOtelCollectorIfPresent(envURL, token, dryRun)
+	warnIfCollectorUnreachable(collectorEndpoint)
 
 	return nil
 }

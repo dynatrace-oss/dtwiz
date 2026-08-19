@@ -15,9 +15,9 @@ import (
 // ── generateOtelPythonEnvVars ─────────────────────────────────────────────────
 
 func TestGenerateOtelPythonEnvVars_ContainsBase(t *testing.T) {
-	envVars := generateOtelPythonEnvVars("http://localhost:4318", "my-svc")
+	envVars := generateOtelPythonEnvVars("http://127.0.0.1:4318", "my-svc")
 
-	wantEndpoint := "http://localhost:4318"
+	wantEndpoint := "http://127.0.0.1:4318"
 	if got := envVars["OTEL_EXPORTER_OTLP_ENDPOINT"]; got != wantEndpoint {
 		t.Errorf("ENDPOINT = %q, want %q", got, wantEndpoint)
 	}
@@ -30,7 +30,7 @@ func TestGenerateOtelPythonEnvVars_ContainsBase(t *testing.T) {
 }
 
 func TestGenerateOtelPythonEnvVars_PythonLoggingEnabled(t *testing.T) {
-	envVars := generateOtelPythonEnvVars("http://localhost:4318", "svc")
+	envVars := generateOtelPythonEnvVars("http://127.0.0.1:4318", "svc")
 	if got := envVars["OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED"]; got != "true" {
 		t.Errorf("OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED = %q, want %q", got, "true")
 	}
@@ -268,7 +268,7 @@ func TestBuildPythonInstrumentationPlan(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		plan := buildPythonInstrumentationPlan(ScannedProject{Path: dir}, "http://localhost:4318", envURL, platformToken)
+		plan := buildPythonInstrumentationPlan(ScannedProject{Path: dir}, "http://127.0.0.1:4318", envURL, platformToken)
 		if plan == nil {
 			t.Fatal("expected non-nil plan")
 		}
@@ -281,7 +281,7 @@ func TestBuildPythonInstrumentationPlan(t *testing.T) {
 	})
 
 	t.Run("returns nil when entrypoint is missing", func(t *testing.T) {
-		plan := buildPythonInstrumentationPlan(ScannedProject{Path: t.TempDir()}, "http://localhost:4318", envURL, platformToken)
+		plan := buildPythonInstrumentationPlan(ScannedProject{Path: t.TempDir()}, "http://127.0.0.1:4318", envURL, platformToken)
 		if plan != nil {
 			t.Fatalf("expected nil plan, got %#v", plan)
 		}
@@ -291,7 +291,7 @@ func TestBuildPythonInstrumentationPlan(t *testing.T) {
 func TestDetectPythonPlan_NoPythonOnPath(t *testing.T) {
 	t.Setenv("PATH", "")
 
-	plan := DetectPythonPlan("http://localhost:4318")
+	plan := DetectPythonPlan("http://127.0.0.1:4318")
 	if plan != nil {
 		t.Fatalf("expected nil plan, got %#v", plan)
 	}
@@ -313,7 +313,7 @@ func TestDetectPythonPlan_FindsProject(t *testing.T) {
 	helpers.SetTestWorkingDir(t, dir)
 	setTestStdin(t, "1\n")
 
-	plan := DetectPythonPlan("http://localhost:4318")
+	plan := DetectPythonPlan("http://127.0.0.1:4318")
 	if plan == nil {
 		t.Fatal("expected Python plan")
 	}
@@ -401,12 +401,12 @@ func TestRunOtelBootstrap_ErrorIncludesCommand(t *testing.T) {
 }
 
 func TestGenerateOtelPythonEnvVars(t *testing.T) {
-	vars := generateOtelPythonEnvVars("http://localhost:4318", "my-svc")
+	vars := generateOtelPythonEnvVars("http://127.0.0.1:4318", "my-svc")
 	if vars["OTEL_SERVICE_NAME"] != "my-svc" {
 		t.Fatalf("OTEL_SERVICE_NAME = %q, want %q", vars["OTEL_SERVICE_NAME"], "my-svc")
 	}
-	if vars["OTEL_EXPORTER_OTLP_ENDPOINT"] != "http://localhost:4318" {
-		t.Fatalf("OTEL_EXPORTER_OTLP_ENDPOINT = %q, want http://localhost:4318", vars["OTEL_EXPORTER_OTLP_ENDPOINT"])
+	if vars["OTEL_EXPORTER_OTLP_ENDPOINT"] != "http://127.0.0.1:4318" {
+		t.Fatalf("OTEL_EXPORTER_OTLP_ENDPOINT = %q, want http://127.0.0.1:4318", vars["OTEL_EXPORTER_OTLP_ENDPOINT"])
 	}
 	if vars["OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE"] != "delta" {
 		t.Fatalf("temporality = %q, want delta", vars["OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE"])
@@ -414,7 +414,7 @@ func TestGenerateOtelPythonEnvVars(t *testing.T) {
 }
 
 func TestGenerateOtelPythonEnvVars_AllKeys(t *testing.T) {
-	vars := generateOtelPythonEnvVars("http://localhost:4318", "my-svc")
+	vars := generateOtelPythonEnvVars("http://127.0.0.1:4318", "my-svc")
 	required := []string{
 		"OTEL_SERVICE_NAME",
 		"OTEL_EXPORTER_OTLP_ENDPOINT",
@@ -436,14 +436,14 @@ func TestGenerateOtelPythonEnvVars_AllKeys(t *testing.T) {
 }
 
 func TestGenerateOtelPythonEnvVars_NonDefaultPort(t *testing.T) {
-	vars := generateOtelPythonEnvVars("http://localhost:4320", "svc")
-	if vars["OTEL_EXPORTER_OTLP_ENDPOINT"] != "http://localhost:4320" {
-		t.Fatalf("OTEL_EXPORTER_OTLP_ENDPOINT = %q, want http://localhost:4320", vars["OTEL_EXPORTER_OTLP_ENDPOINT"])
+	vars := generateOtelPythonEnvVars("http://127.0.0.1:4320", "svc")
+	if vars["OTEL_EXPORTER_OTLP_ENDPOINT"] != "http://127.0.0.1:4320" {
+		t.Fatalf("OTEL_EXPORTER_OTLP_ENDPOINT = %q, want http://127.0.0.1:4320", vars["OTEL_EXPORTER_OTLP_ENDPOINT"])
 	}
 }
 
 func TestGenerateEnvExportScript_AllKeysPresent(t *testing.T) {
-	vars := generateOtelPythonEnvVars("http://localhost:4318", "my-svc")
+	vars := generateOtelPythonEnvVars("http://127.0.0.1:4318", "my-svc")
 	script := GenerateEnvExportScript(vars)
 	for k := range vars {
 		if !strings.Contains(script, k) {

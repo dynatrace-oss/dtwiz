@@ -571,8 +571,8 @@ func TestCreateRuntimePlan(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected GoInstrumentationPlan, got %T", plan)
 		}
-		if got := goPlan.EnvVars["OTEL_EXPORTER_OTLP_ENDPOINT"]; got != "http://localhost:4320" {
-			t.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT = %q, want http://localhost:4320", got)
+		if got := goPlan.EnvVars["OTEL_EXPORTER_OTLP_ENDPOINT"]; got != "http://127.0.0.1:4320" {
+			t.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT = %q, want http://127.0.0.1:4320", got)
 		}
 	})
 

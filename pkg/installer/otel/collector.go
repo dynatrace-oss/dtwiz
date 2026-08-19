@@ -547,6 +547,25 @@ func otlpHTTPPortFromConfig(configPath string) int {
 	return port
 }
 
+// warnIfCollectorUnreachable dials the collector OTLP endpoint and prints a
+// warning when nothing is listening. Called at the end of standalone install
+// commands so the user is informed before assuming telemetry is flowing.
+func warnIfCollectorUnreachable(endpoint string) {
+	u, err := url.Parse(endpoint)
+	if err != nil || u.Host == "" {
+		return
+	}
+	conn, err := net.DialTimeout("tcp", u.Host, 2*time.Second)
+	if err != nil {
+		fmt.Printf(
+			"\n  Warning: OTel Collector not reachable on %s\n  Telemetry will not reach Dynatrace until a collector is started.\n  Run 'dtwiz install otel-collector' to install one.\n",
+			u.Host,
+		)
+		return
+	}
+	conn.Close()
+}
+
 // waitForOtelCollectorReady polls the collector's OTLP HTTP port until it
 // accepts connections or the timeout elapses. crashed is closed when the
 // process dies early so the probe can abort immediately.

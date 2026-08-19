@@ -152,7 +152,7 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 		// Services that currently export directly to a Dynatrace tenant must be
 		// routed through the local collector so that data reaches all configured
 		// export destinations (both the existing and newly added exporter).
-		collectorEndpoint := fmt.Sprintf("http://localhost:%d", otlpHTTPPortFromConfig(configPath))
+		collectorEndpoint := fmt.Sprintf("http://127.0.0.1:%d", otlpHTTPPortFromConfig(configPath))
 		for i := range connectedSvcs {
 			if _, changed := retargetEnvToCollector(connectedSvcs[i].env, collectorEndpoint); changed {
 				connectedSvcs[i].collectorEndpoint = collectorEndpoint

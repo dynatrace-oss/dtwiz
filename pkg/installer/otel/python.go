@@ -303,7 +303,7 @@ func InstallOtelPython(envURL, token, platformToken, serviceName, projectPath st
 		return err
 	}
 
-	collectorEndpoint := fmt.Sprintf("http://localhost:%d", otlpHTTPPortFromConfig(findExistingCollectorConfig()))
+	collectorEndpoint := fmt.Sprintf("http://127.0.0.1:%d", otlpHTTPPortFromConfig(findExistingCollectorConfig()))
 	if serviceName == "" {
 		serviceName = "my-service"
 	}
@@ -354,5 +354,9 @@ func InstallOtelPython(envURL, token, platformToken, serviceName, projectPath st
 	plan.EnvVars = envVars
 
 	fmt.Printf("\n  ── Python auto-instrumentation ──\n\n")
-	return plan.Execute()
+	if err := plan.Execute(); err != nil {
+		return err
+	}
+	warnIfCollectorUnreachable(collectorEndpoint)
+	return nil
 }

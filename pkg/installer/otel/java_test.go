@@ -502,7 +502,7 @@ func TestInstallOtelJava_DryRun(t *testing.T) {
 	})
 
 	checks := []string{
-		"http://localhost:4318",
+		"http://127.0.0.1:4318",
 		"test-svc",
 		otelJavaAgentURL,
 		"OTEL_SERVICE_NAME",

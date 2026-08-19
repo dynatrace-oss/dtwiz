@@ -51,7 +51,16 @@
 - [x] Update any existing tests in `java_test.go`, `nodejs_test.go`, `python_test.go`, `golang_test.go` that assert the old DT endpoint or auth header values
 - [x] Test that `createRuntimePlan` correctly threads `cp.httpPort` into the generated env vars (use a non-default port, e.g. 4320, to catch hardcoded assumptions)
 
-## 9. Verification
+## 9. Fix `localhost` → `127.0.0.1` and add collector readiness warning
+
+- [x] Replace `fmt.Sprintf("http://localhost:%d", ...)` with `fmt.Sprintf("http://127.0.0.1:%d", ...)` in all standalone installers: `InstallOtelJava` (`java.go`), `InstallOtelNode` (`nodejs.go`), `InstallOtelPython` (`python.go`), `DetectGoPlan` (`golang.go`)
+- [x] Replace the same pattern in `createRuntimePlan` (`otel.go`) for the bundled flow
+- [x] Replace the same pattern in `updateDynatraceCollector` (`update_dynatrace.go:155`) for consistency when retargeting connected services
+- [x] After env vars are written in `InstallOtelJava`, `InstallOtelNode`, and `InstallOtelPython`: TCP-dial `127.0.0.1:<port>` (short timeout, e.g. 2s); if nothing answers, print a clear warning ("OTel Collector not reachable on port X — telemetry will not reach Dynatrace until a collector is started") and exit cleanly
+- [x] Do NOT add the TCP check to `DetectJavaPlan`, `DetectNodePlan`, `DetectPythonPlan`, or `DetectGoPlan` — those are called during passive analysis (`analyze`, `recommend`) and must remain side-effect-free
+- [x] Update tests: assert `127.0.0.1` in generated endpoints (replacing any remaining `localhost` assertions); add a test for the warning path when the port is not listening
+
+## 10. Verification
 
 - [x] `make test` — all tests pass
 - [x] `make lint` — no new issues

@@ -551,7 +551,7 @@ func InstallOtelNode(envURL, token, platformToken, serviceName, projectPath stri
 		return fmt.Errorf("npm not found — install npm and ensure it is in PATH")
 	}
 
-	collectorEndpoint := fmt.Sprintf("http://localhost:%d", otlpHTTPPortFromConfig(findExistingCollectorConfig()))
+	collectorEndpoint := fmt.Sprintf("http://127.0.0.1:%d", otlpHTTPPortFromConfig(findExistingCollectorConfig()))
 	if serviceName == "" {
 		serviceName = "my-service"
 	}
@@ -625,5 +625,9 @@ func InstallOtelNode(envURL, token, platformToken, serviceName, projectPath stri
 	plan.EnvVars = envVars
 
 	fmt.Printf("\n  ── Node.js auto-instrumentation ──\n\n")
-	return plan.Execute()
+	if err := plan.Execute(); err != nil {
+		return err
+	}
+	warnIfCollectorUnreachable(collectorEndpoint)
+	return nil
 }

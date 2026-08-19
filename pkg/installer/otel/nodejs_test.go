@@ -22,7 +22,7 @@ func TestBuildNodeInstrumentationPlan(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		plan := buildNodeInstrumentationPlan(ScannedProject{Path: dir}, "http://localhost:4318")
+		plan := buildNodeInstrumentationPlan(ScannedProject{Path: dir}, "http://127.0.0.1:4318")
 		if plan == nil {
 			t.Fatal("expected non-nil plan")
 		}
@@ -37,7 +37,7 @@ func TestBuildNodeInstrumentationPlan(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		plan := buildNodeInstrumentationPlan(ScannedProject{Path: dir}, "http://localhost:4318")
+		plan := buildNodeInstrumentationPlan(ScannedProject{Path: dir}, "http://127.0.0.1:4318")
 		if plan != nil {
 			t.Fatalf("expected nil plan, got %#v", plan)
 		}
@@ -47,7 +47,7 @@ func TestBuildNodeInstrumentationPlan(t *testing.T) {
 func TestDetectNodePlan_NoNodeOnPath(t *testing.T) {
 	t.Setenv("PATH", "")
 
-	plan, _ := DetectNodePlan("http://localhost:4318")
+	plan, _ := DetectNodePlan("http://127.0.0.1:4318")
 	if plan != nil {
 		t.Fatalf("expected nil plan, got %#v", plan)
 	}
@@ -69,7 +69,7 @@ func TestDetectNodePlan_FindsProject(t *testing.T) {
 	helpers.SetTestWorkingDir(t, dir)
 	setTestStdin(t, "1\n")
 
-	plan, _ := DetectNodePlan("http://localhost:4318")
+	plan, _ := DetectNodePlan("http://127.0.0.1:4318")
 	if plan == nil {
 		t.Fatal("expected Node.js plan")
 	}
@@ -597,7 +597,7 @@ func TestExecute_NextJSApp_MissingNodeModules_DoesNotCreateOtelDir(t *testing.T)
 // --- Task 2.3: generateOtelNodeEnvVars tests ---
 
 func TestGenerateOtelNodeEnvVars_IncludesResourceDetectors(t *testing.T) {
-	envVars := generateOtelNodeEnvVars("http://localhost:4318", "my-svc")
+	envVars := generateOtelNodeEnvVars("http://127.0.0.1:4318", "my-svc")
 
 	if got := envVars["OTEL_NODE_RESOURCE_DETECTORS"]; got != "all" {
 		t.Errorf("OTEL_NODE_RESOURCE_DETECTORS = %q, want %q", got, "all")
@@ -605,7 +605,7 @@ func TestGenerateOtelNodeEnvVars_IncludesResourceDetectors(t *testing.T) {
 }
 
 func TestGenerateOtelNodeEnvVars_IncludesBaseVars(t *testing.T) {
-	envVars := generateOtelNodeEnvVars("http://localhost:4318", "my-svc")
+	envVars := generateOtelNodeEnvVars("http://127.0.0.1:4318", "my-svc")
 
 	// Check that all base vars are present (no auth header — collector owns credentials).
 	baseVars := []string{
@@ -631,7 +631,7 @@ func TestGenerateOtelNodeEnvVars_IncludesBaseVars(t *testing.T) {
 		t.Errorf("OTEL_SERVICE_NAME = %q, want %q", got, "my-svc")
 	}
 
-	wantEndpoint := "http://localhost:4318"
+	wantEndpoint := "http://127.0.0.1:4318"
 	if got := envVars["OTEL_EXPORTER_OTLP_ENDPOINT"]; got != wantEndpoint {
 		t.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT = %q, want %q", got, wantEndpoint)
 	}
@@ -645,7 +645,7 @@ func TestBuildNodeInstrumentationPlan_DetectsNextJS(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	plan := buildNodeInstrumentationPlan(ScannedProject{Path: dir}, "http://localhost:4318")
+	plan := buildNodeInstrumentationPlan(ScannedProject{Path: dir}, "http://127.0.0.1:4318")
 	if plan == nil {
 		t.Fatal("expected non-nil plan for Next.js project")
 	}
@@ -663,7 +663,7 @@ func TestBuildNodeInstrumentationPlan_DetectsNuxt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	plan := buildNodeInstrumentationPlan(ScannedProject{Path: dir}, "http://localhost:4318")
+	plan := buildNodeInstrumentationPlan(ScannedProject{Path: dir}, "http://127.0.0.1:4318")
 	if plan == nil {
 		t.Fatal("expected non-nil plan for Nuxt project")
 	}
@@ -687,7 +687,7 @@ func TestBuildNodeInstrumentationPlan_DetectsPackageManager(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	plan := buildNodeInstrumentationPlan(ScannedProject{Path: dir}, "http://localhost:4318")
+	plan := buildNodeInstrumentationPlan(ScannedProject{Path: dir}, "http://127.0.0.1:4318")
 	if plan == nil {
 		t.Fatal("expected non-nil plan")
 	}
@@ -705,7 +705,7 @@ func TestBuildNodeInstrumentationPlan_SetsOtelDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	plan := buildNodeInstrumentationPlan(ScannedProject{Path: dir}, "http://localhost:4318")
+	plan := buildNodeInstrumentationPlan(ScannedProject{Path: dir}, "http://127.0.0.1:4318")
 	if plan == nil {
 		t.Fatal("expected non-nil plan")
 	}
@@ -724,7 +724,7 @@ func TestBuildNodeInstrumentationPlan_UsesNodeEnvVars(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	plan := buildNodeInstrumentationPlan(ScannedProject{Path: dir}, "http://localhost:4318")
+	plan := buildNodeInstrumentationPlan(ScannedProject{Path: dir}, "http://127.0.0.1:4318")
 	if plan == nil {
 		t.Fatal("expected non-nil plan")
 	}

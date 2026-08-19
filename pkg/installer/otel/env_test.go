@@ -52,9 +52,9 @@ func TestNormalizeServiceName(t *testing.T) {
 }
 
 func TestGenerateBaseOtelEnvVars(t *testing.T) {
-	envVars := generateBaseOtelEnvVars("http://localhost:4318", "my-svc")
+	envVars := generateBaseOtelEnvVars("http://127.0.0.1:4318", "my-svc")
 
-	wantEndpoint := "http://localhost:4318"
+	wantEndpoint := "http://127.0.0.1:4318"
 	if got := envVars["OTEL_EXPORTER_OTLP_ENDPOINT"]; got != wantEndpoint {
 		t.Errorf("ENDPOINT = %q, want %q", got, wantEndpoint)
 	}
@@ -83,8 +83,8 @@ func TestGenerateBaseOtelEnvVars(t *testing.T) {
 }
 
 func TestGenerateBaseOtelEnvVars_NonDefaultPort(t *testing.T) {
-	envVars := generateBaseOtelEnvVars("http://localhost:4320", "svc")
-	want := "http://localhost:4320"
+	envVars := generateBaseOtelEnvVars("http://127.0.0.1:4320", "svc")
+	want := "http://127.0.0.1:4320"
 	if got := envVars["OTEL_EXPORTER_OTLP_ENDPOINT"]; got != want {
 		t.Errorf("ENDPOINT = %q, want %q (non-default port should be preserved)", got, want)
 	}
