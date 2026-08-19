@@ -1,0 +1,30 @@
+name: PR Push Diff
+
+on:
+  pull_request:
+    types: [synchronize]
+
+jobs:
+  comment:
+    name: Post diff link
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Post diff comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const before = context.payload.before;
+            const after = context.payload.after;
+            const repo = context.payload.repository.full_name;
+            const prNumber = context.payload.pull_request.number;
+            const compareUrl = `https://github.com/${repo}/compare/${before}..${after}`;
+            const body = `**Changes in this push:** [${before.slice(0, 7)}..${after.slice(0, 7)}](${compareUrl})`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body,
+            });
