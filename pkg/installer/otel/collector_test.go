@@ -461,7 +461,7 @@ func parseOtelConfig(t *testing.T, cfg string) otelConfigYAML {
 	return parsed
 }
 
-func TestGenerateOtelConfig_AppOnly_Default(t *testing.T) {
+func TestGenerateOtelConfig_DefaultIncludesHostMonitoring(t *testing.T) {
 	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
 	t.Setenv("DTWIZ_EXPERIMENTAL", "")
 
@@ -472,20 +472,31 @@ func TestGenerateOtelConfig_AppOnly_Default(t *testing.T) {
 	cfg := generatedConfig.content
 	parsed := parseOtelConfig(t, cfg)
 
-	if _, ok := parsed.Receivers["hostmetrics/10s"]; ok {
-		t.Error("app-only config must not contain hostmetrics/10s receiver")
+	if _, ok := parsed.Receivers["hostmetrics/10s"]; !ok {
+		t.Error("default config must contain hostmetrics/10s receiver")
 	}
-	if _, ok := parsed.Receivers["journald"]; ok {
-		t.Error("app-only config must not contain journald receiver")
+	if runtime.GOOS == "linux" {
+		if _, ok := parsed.Receivers["journald"]; !ok {
+			t.Error("default config must contain journald receiver on Linux")
+		}
+	} else if _, ok := parsed.Receivers["journald"]; ok {
+		t.Error("default config must not contain journald receiver on non-Linux")
 	}
-	if _, ok := parsed.Extensions["health_check"]; ok {
-		t.Error("app-only config must not contain health_check extension")
+	if _, ok := parsed.Extensions["health_check"]; !ok {
+		t.Error("default config must contain health_check extension")
 	}
-	if _, ok := parsed.Service.Pipelines["metrics/host"]; ok {
-		t.Error("app-only config must not contain metrics/host pipeline")
+	if _, ok := parsed.Service.Pipelines["metrics/host"]; !ok {
+		t.Error("default config must contain metrics/host pipeline")
 	}
-	if _, ok := parsed.Service.Pipelines["metrics"]; !ok {
-		t.Error("app-only config must contain metrics pipeline")
+	if runtime.GOOS == "linux" {
+		if _, ok := parsed.Service.Pipelines["logs/host"]; !ok {
+			t.Error("default config must contain logs/host pipeline on Linux")
+		}
+	} else if _, ok := parsed.Service.Pipelines["logs/host"]; ok {
+		t.Error("default config must not contain logs/host pipeline on non-Linux")
+	}
+	if _, ok := parsed.Service.Pipelines["metrics/apps"]; !ok {
+		t.Error("default config must contain metrics/apps pipeline")
 	}
 	tracesPipeline, tracesOk := parsed.Service.Pipelines["traces"]
 	if !tracesOk {
@@ -499,9 +510,7 @@ func TestGenerateOtelConfig_AppOnly_Default(t *testing.T) {
 	}
 }
 
-func TestGenerateOtelConfig_Combined_ExperimentalEnabled(t *testing.T) {
-	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
-
+func TestGenerateOtelConfig_Combined_Default(t *testing.T) {
 	generatedConfig, err := generateOtelConfig("https://env.example.com", "mytoken")
 	if err != nil {
 		t.Fatalf("generateOtelConfig: %v", err)
@@ -587,9 +596,9 @@ func TestGenerateOtelConfig_Combined_ExperimentalEnabled(t *testing.T) {
 	}
 }
 
-func TestGenerateOtelConfig_Combined_EnvVar(t *testing.T) {
+func TestGenerateOtelConfig_DefaultIgnoresExperimentalEnvVar(t *testing.T) {
 	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
-	t.Setenv("DTWIZ_EXPERIMENTAL", "true")
+	t.Setenv("DTWIZ_EXPERIMENTAL", "")
 
 	generatedConfig, err := generateOtelConfig("https://env.example.com", "mytoken")
 	if err != nil {
@@ -599,13 +608,11 @@ func TestGenerateOtelConfig_Combined_EnvVar(t *testing.T) {
 	parsed := parseOtelConfig(t, cfg)
 
 	if _, ok := parsed.Service.Pipelines["metrics/host"]; !ok {
-		t.Error("expected metrics/host pipeline when DTWIZ_EXPERIMENTAL=true")
+		t.Error("expected metrics/host pipeline by default")
 	}
 }
 
 func TestGenerateOtelConfig_JournaldConsistency(t *testing.T) {
-	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
-
 	generatedConfig, err := generateOtelConfig("https://env.example.com", "mytoken")
 	if err != nil {
 		t.Fatalf("generateOtelConfig: %v", err)
@@ -632,19 +639,11 @@ func TestGenerateOtelConfig_JournaldConsistency(t *testing.T) {
 }
 
 func TestGenerateOtelConfig_ValidYAML(t *testing.T) {
-	for _, experimental := range []bool{false, true} {
-		experimental := experimental
-		name := "app-only"
-		if experimental {
-			name = "combined"
-		}
-		t.Run(name, func(t *testing.T) {
-			if experimental {
-				featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
-			} else {
-				featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
-				t.Setenv("DTWIZ_EXPERIMENTAL", "")
-			}
+	for _, envVal := range []string{"", "true"} {
+		envVal := envVal
+		t.Run("experimental-env-"+envVal, func(t *testing.T) {
+			featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
+			t.Setenv("DTWIZ_EXPERIMENTAL", envVal)
 			generatedConfig, err := generateOtelConfig("https://env.example.com", "mytoken")
 			if err != nil {
 				t.Fatalf("generateOtelConfig: %v", err)
@@ -659,8 +658,6 @@ func TestGenerateOtelConfig_ValidYAML(t *testing.T) {
 }
 
 func TestGenerateOtelConfig_PreviewTruncation(t *testing.T) {
-	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
-
 	generatedConfig, err := generateOtelConfig("https://env.example.com", "mytoken")
 	if err != nil {
 		t.Fatalf("generateOtelConfig: %v", err)
@@ -668,7 +665,7 @@ func TestGenerateOtelConfig_PreviewTruncation(t *testing.T) {
 	cfg := generatedConfig.content
 	lines := strings.Split(strings.TrimRight(cfg, "\n"), "\n")
 	if len(lines) <= 20 {
-		t.Errorf("experimental config has %d lines, expected more than 20 so truncation is exercised", len(lines))
+		t.Errorf("host-monitoring config has %d lines, expected more than 20 so truncation is exercised", len(lines))
 	}
 }
 

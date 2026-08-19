@@ -52,7 +52,7 @@ var removeHostMonitoringGrailRoutesFn = removeHostMonitoringGrailRoutes
 var removeGrailRoutesFn = removeGrailRoutes
 
 // removeHostMonitoringGrailRoutes removes the OpenPipeline dynamic routing
-// entries for metrics, logs, and spans added during install otel --experimental.
+// entries for metrics, logs, and spans added during install otel.
 // All errors are advisory: a per-signal failure warns and does not abort deactivation.
 func removeHostMonitoringGrailRoutes(envURL, platformToken string) {
 	c, err := newSDKGrailClient(envURL, platformToken)
@@ -417,47 +417,21 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 	display.ColorMessage.Println("  Dynatrace OpenTelemetry Installation")
 	fmt.Println()
 
-	if featureflags.IsEnabled(featureflags.Experimental) {
-		fmt.Println("  This will enable OpenTelemetry service and host monitoring.")
-		switch runtime.GOOS {
-		case "linux":
-			if !isElevatedFn() {
-				fmt.Println("  Note: full host metrics and logs require elevated privileges (root or systemd-journal group).")
-				fmt.Println("        process.disk.io is dropped without privileged access; system.processes.created is Linux-only.")
-			}
-		case "windows":
-			if !isElevatedFn() {
-				fmt.Println("  Note: some per-process metrics require Administrator or Debug privilege;")
-				fmt.Println("        without it, metrics for services and other users' processes are skipped.")
-			}
-		case "darwin":
-			fmt.Println("  Note: system.processes.created and process.disk.io are unavailable on macOS")
-			fmt.Println("        regardless of privilege level and will not appear in Dynatrace.")
+	fmt.Println("  This will enable OpenTelemetry service and host monitoring.")
+	switch runtime.GOOS {
+	case "linux":
+		if !isElevatedFn() {
+			fmt.Println("  Note: full host metrics and logs require elevated privileges (root or systemd-journal group).")
+			fmt.Println("        process.disk.io is dropped without privileged access; system.processes.created is Linux-only.")
 		}
-	} else {
-		supportsLinks := display.StdoutSupportsHyperlinks()
-		// ℹ️ (U+2139 + U+FE0F) width is reliable on macOS and Windows (always 2 cols)
-		// but inconsistent across Linux terminals — some render it as 1-wide.
-		// Fall back to ASCII (i) on Linux and non-hyperlink terminals to guarantee
-		// box alignment. Both options pad to 4 visual columns.
-		icon := "(i) " // 3-wide ASCII + 1 space
-		if supportsLinks && runtime.GOOS != "linux" {
-			icon = "ℹ️  " // 2-wide emoji + 2 spaces (macOS/Windows only)
+	case "windows":
+		if !isElevatedFn() {
+			fmt.Println("  Note: some per-process metrics require Administrator or Debug privilege;")
+			fmt.Println("        without it, metrics for services and other users' processes are skipped.")
 		}
-		const hmURL = "https://docs.dynatrace.com/docs/observe/infrastructure-observability/extensions/opentelemetry-host-monitoring"
-		fmt.Println("  ┌────────────────────────────────────────────────────────────────┐")
-		fmt.Printf("  │ %sThis will enable OpenTelemetry service monitoring.         │\n", icon)
-		fmt.Println("  │                                                                │")
-		fmt.Println("  │ If you also want to activate host monitoring, follow the       │")
-		if supportsLinks {
-			fmt.Printf("  │ %s instructions.                    │\n", display.Hyperlink("OpenTelemetry Host Monitoring", hmURL))
-		} else {
-			fmt.Println("  │ OpenTelemetry Host Monitoring instructions.                    │")
-		}
-		fmt.Println("  └────────────────────────────────────────────────────────────────┘")
-		if !supportsLinks {
-			fmt.Printf("    OpenTelemetry Host Monitoring: %s\n", hmURL)
-		}
+	case "darwin":
+		fmt.Println("  Note: system.processes.created and process.disk.io are unavailable on macOS")
+		fmt.Println("        regardless of privilege level and will not appear in Dynatrace.")
 	}
 	fmt.Println()
 
@@ -552,13 +526,9 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		plan.PrintPlanSteps()
 	}
 
-	experimentalEnabled := featureflags.IsEnabled(featureflags.Experimental)
-
 	// Show what the extension activation step (run after confirmation, below)
 	// will do: it runs first, before the collector install and route plan.
-	if !experimentalEnabled {
-		logger.Debug("experimental feature flag disabled, skipping extension activation preview")
-	} else if platformToken == "" {
+	if platformToken == "" {
 		logger.Debug("platform token not provided, skipping extension activation preview")
 	} else if status, err := buildExtensionActivationPreviewFn(envURL, platformToken); err != nil {
 		fmt.Println()
@@ -572,9 +542,7 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 	// Routes are applied after the collector install without a separate prompt.
 	var grailC grailRouteClient
 	var grailPlans []grailSignalPlan
-	if !experimentalEnabled {
-		logger.Debug("experimental feature flag disabled, skipping OpenPipeline route plan")
-	} else if platformToken == "" {
+	if platformToken == "" {
 		logger.Debug("platform token not provided, skipping OpenPipeline route plan")
 	} else {
 		if c, plans, err := buildGrailRoutePlans(envURL, platformToken); err != nil {
@@ -606,7 +574,7 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 	fmt.Println()
 
 	// Extension activation only runs after the user confirms (dryRun exits above).
-	if featureflags.IsEnabled(featureflags.Experimental) {
+	if platformToken != "" {
 		activateHostMonitoringExtensionFn(envURL, platformToken)
 	}
 

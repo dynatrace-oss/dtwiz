@@ -601,49 +601,40 @@ func TestCreateRuntimePlan(t *testing.T) {
 
 // ── Host-monitoring install-flow messaging tests ──────────────────────────────
 
-// TestInstallOtelCollector_Experimental_ShowsHostMonitoringHeader verifies that
-// enabling the experimental flag causes the combined header ("service and host
-// monitoring") to be printed, not the standard info box.
-func TestInstallOtelCollector_Experimental_ShowsHostMonitoringHeader(t *testing.T) {
-	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
-
-	output := captureInstallOutput(t, true /* elevated */)
-
-	// The experimental path prints this exact sentence; the standard path never does.
-	const experimentalHeader = "service and host monitoring"
-	if !strings.Contains(output, experimentalHeader) {
-		t.Errorf("expected %q in output when --experimental is set:\n%s", experimentalHeader, output)
-	}
-}
-
-// TestInstallOtelCollector_Standard_ShowsInfoBox verifies that without the
-// experimental flag the static info-box is shown and the "service and host
-// monitoring" combined header (experimental-only) is absent.
-func TestInstallOtelCollector_Standard_ShowsInfoBox(t *testing.T) {
+// TestInstallOtelCollector_ShowsHostMonitoringHeader verifies that the combined
+// header ("service and host monitoring") is printed by default.
+func TestInstallOtelCollector_ShowsHostMonitoringHeader(t *testing.T) {
 	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
 	t.Setenv("DTWIZ_EXPERIMENTAL", "")
 
 	output := captureInstallOutput(t, true /* elevated */)
 
-	// The experimental combined header must NOT appear.
-	const experimentalHeader = "service and host monitoring"
-	if strings.Contains(output, experimentalHeader) {
-		t.Errorf("unexpected %q in output when --experimental is not set:\n%s", experimentalHeader, output)
-	}
-	// The info box always contains "service monitoring".
-	if !strings.Contains(output, "service monitoring") {
-		t.Errorf("expected 'service monitoring' info-box in output when --experimental is not set:\n%s", output)
+	const hostMonitoringHeader = "service and host monitoring"
+	if !strings.Contains(output, hostMonitoringHeader) {
+		t.Errorf("expected %q in output by default:\n%s", hostMonitoringHeader, output)
 	}
 }
 
-// TestInstallOtelCollector_Experimental_Linux_ElevationNotice_NotElevated verifies
-// that on Linux, when the process is not elevated, an advisory about root /
+// TestInstallOtelCollector_Default_DoesNotShowManualHostMonitoringInfoBox verifies
+// that the old manual host-monitoring instructions are no longer shown by default.
+func TestInstallOtelCollector_Default_DoesNotShowManualHostMonitoringInfoBox(t *testing.T) {
+	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
+	t.Setenv("DTWIZ_EXPERIMENTAL", "")
+
+	output := captureInstallOutput(t, true /* elevated */)
+
+	if strings.Contains(output, "If you also want to activate host monitoring") {
+		t.Errorf("unexpected manual host-monitoring info box by default:\n%s", output)
+	}
+}
+
+// TestInstallOtelCollector_Linux_ElevationNotice_NotElevated verifies that on
+// Linux, when the process is not elevated, an advisory about root /
 // systemd-journal is printed.
-func TestInstallOtelCollector_Experimental_Linux_ElevationNotice_NotElevated(t *testing.T) {
+func TestInstallOtelCollector_Linux_ElevationNotice_NotElevated(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("Linux-only test")
 	}
-	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
 
 	output := captureInstallOutput(t, false /* not elevated */)
 
@@ -652,13 +643,12 @@ func TestInstallOtelCollector_Experimental_Linux_ElevationNotice_NotElevated(t *
 	}
 }
 
-// TestInstallOtelCollector_Experimental_Linux_NoNoticeWhenElevated verifies that
-// on Linux, when the process is already elevated, no advisory is printed.
-func TestInstallOtelCollector_Experimental_Linux_NoNoticeWhenElevated(t *testing.T) {
+// TestInstallOtelCollector_Linux_NoNoticeWhenElevated verifies that on Linux,
+// when the process is already elevated, no advisory is printed.
+func TestInstallOtelCollector_Linux_NoNoticeWhenElevated(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("Linux-only test")
 	}
-	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
 
 	output := captureInstallOutput(t, true /* elevated */)
 
@@ -667,14 +657,13 @@ func TestInstallOtelCollector_Experimental_Linux_NoNoticeWhenElevated(t *testing
 	}
 }
 
-// TestInstallOtelCollector_Experimental_Windows_ElevationNotice_NotElevated verifies
-// that on Windows, when the process is not elevated, an advisory about Administrator
+// TestInstallOtelCollector_Windows_ElevationNotice_NotElevated verifies that on
+// Windows, when the process is not elevated, an advisory about Administrator
 // privilege is printed.
-func TestInstallOtelCollector_Experimental_Windows_ElevationNotice_NotElevated(t *testing.T) {
+func TestInstallOtelCollector_Windows_ElevationNotice_NotElevated(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows-only test")
 	}
-	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
 
 	output := captureInstallOutput(t, false /* not elevated */)
 
@@ -731,7 +720,7 @@ func TestPrintExtensionActivationPreview(t *testing.T) {
 // runInstallWithAutoConfirm calls InstallOtelCollectorWithProject with
 // dryRun=false and AutoConfirm=true. DQL polling is stubbed out so the
 // test completes immediately even when a collector binary is already installed.
-func runInstallWithAutoConfirm(t *testing.T) error {
+func runInstallWithAutoConfirm(t *testing.T, platformToken string) error {
 	t.Helper()
 	stubExtensionPreview(t)
 
@@ -779,40 +768,40 @@ func runInstallWithAutoConfirm(t *testing.T) error {
 	}
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 
-	return InstallOtelCollectorWithProject("https://env.example.com", "tok", "", "", false)
+	return InstallOtelCollectorWithProject("https://env.example.com", "tok", platformToken, "", false)
 }
 
-// TestInstallOtelCollector_Experimental_CallsActivation verifies that enabling
-// the experimental flag causes the extension activation helper to be invoked.
-func TestInstallOtelCollector_Experimental_CallsActivation(t *testing.T) {
-	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
-	called := stubActivation(t)
-
-	_ = runInstallWithAutoConfirm(t)
-
-	if !*called {
-		t.Error("expected activateHostMonitoringExtensionFn to be called when experimental is enabled")
-	}
-}
-
-// TestInstallOtelCollector_NoExperimental_SkipsActivation verifies that without
-// the experimental flag the extension activation helper is never invoked.
-func TestInstallOtelCollector_NoExperimental_SkipsActivation(t *testing.T) {
+// TestInstallOtelCollector_CallsActivation verifies that the extension
+// activation helper is invoked by default.
+func TestInstallOtelCollector_CallsActivation(t *testing.T) {
 	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
 	t.Setenv("DTWIZ_EXPERIMENTAL", "")
 	called := stubActivation(t)
 
-	_ = runInstallWithAutoConfirm(t)
+	_ = runInstallWithAutoConfirm(t, "dt0s16.test")
+
+	if !*called {
+		t.Error("expected activateHostMonitoringExtensionFn to be called by default")
+	}
+}
+
+// TestInstallOtelCollector_NoPlatformToken_SkipsActivation verifies that without
+// a platform token the extension activation helper is never invoked.
+func TestInstallOtelCollector_NoPlatformToken_SkipsActivation(t *testing.T) {
+	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
+	t.Setenv("DTWIZ_EXPERIMENTAL", "")
+	called := stubActivation(t)
+
+	_ = runInstallWithAutoConfirm(t, "")
 
 	if *called {
-		t.Error("expected activateHostMonitoringExtensionFn NOT to be called when experimental is disabled")
+		t.Error("expected activateHostMonitoringExtensionFn NOT to be called without a platform token")
 	}
 }
 
 // TestInstallOtelCollector_DryRun_SkipsActivation verifies that --dry-run
 // prevents the extension activation helper from being invoked.
 func TestInstallOtelCollector_DryRun_SkipsActivation(t *testing.T) {
-	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
 	called := stubActivation(t)
 	stubExtensionPreview(t)
 
@@ -1178,8 +1167,9 @@ func runUninstallWithConfirm(t *testing.T) {
 	_ = UninstallOtelCollector("https://env.example.com", "dt0s16.test", false)
 }
 
-func TestUninstallOtelCollector_Experimental_DeleteAll_CallsDeactivation(t *testing.T) {
-	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
+func TestUninstallOtelCollector_DeleteAll_CallsDeactivation(t *testing.T) {
+	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
+	t.Setenv("DTWIZ_EXPERIMENTAL", "")
 	stubPromptDecision(t, uninstallAll)
 	called := stubDeactivation(t)
 
@@ -1190,8 +1180,9 @@ func TestUninstallOtelCollector_Experimental_DeleteAll_CallsDeactivation(t *test
 	}
 }
 
-func TestUninstallOtelCollector_Experimental_CollectorOnly_SkipsDeactivation(t *testing.T) {
-	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
+func TestUninstallOtelCollector_CollectorOnly_SkipsDeactivation(t *testing.T) {
+	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
+	t.Setenv("DTWIZ_EXPERIMENTAL", "")
 	stubPromptDecision(t, uninstallCollectorOnly)
 	called := stubDeactivation(t)
 
@@ -1202,20 +1193,9 @@ func TestUninstallOtelCollector_Experimental_CollectorOnly_SkipsDeactivation(t *
 	}
 }
 
-func TestUninstallOtelCollector_NoExperimental_SkipsDeactivation(t *testing.T) {
+func TestUninstallOtelCollector_DryRun_SkipsDeactivation(t *testing.T) {
 	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
 	t.Setenv("DTWIZ_EXPERIMENTAL", "")
-	called := stubDeactivation(t)
-
-	runUninstallWithConfirm(t)
-
-	if *called {
-		t.Error("expected deactivateHostMonitoringExtensionFn NOT to be called when experimental is disabled")
-	}
-}
-
-func TestUninstallOtelCollector_DryRun_SkipsDeactivation(t *testing.T) {
-	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
 	called := stubDeactivation(t)
 
 	runUninstallDryRun(t)
@@ -1328,14 +1308,13 @@ func TestPrintGrailPlanAndApplyResults(t *testing.T) {
 	}
 }
 
-// TestInstallOtelCollector_Experimental_Darwin_AlwaysShowsUnavailableNotice verifies
-// that on macOS the advisory about system.processes.created / process.disk.io being
+// TestInstallOtelCollector_Darwin_AlwaysShowsUnavailableNotice verifies that on
+// macOS the advisory about system.processes.created / process.disk.io being
 // unavailable is printed regardless of privilege level.
-func TestInstallOtelCollector_Experimental_Darwin_AlwaysShowsUnavailableNotice(t *testing.T) {
+func TestInstallOtelCollector_Darwin_AlwaysShowsUnavailableNotice(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("Darwin-only test")
 	}
-	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
 
 	for _, tt := range []struct {
 		name       string
