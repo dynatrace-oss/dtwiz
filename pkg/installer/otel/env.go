@@ -9,11 +9,10 @@ import (
 
 const otelExporterOTLPHeadersEnvVar = "OTEL_EXPORTER_OTLP_HEADERS"
 
-func generateBaseOtelEnvVars(apiURL, token, serviceName string) map[string]string {
+func generateBaseOtelEnvVars(collectorEndpoint, serviceName string) map[string]string {
 	return map[string]string{
 		"OTEL_SERVICE_NAME":                                 serviceName,
-		"OTEL_EXPORTER_OTLP_ENDPOINT":                       strings.TrimRight(apiURL, "/") + "/api/v2/otlp",
-		"OTEL_EXPORTER_OTLP_HEADERS":                        "Authorization=Api-Token%20" + token,
+		"OTEL_EXPORTER_OTLP_ENDPOINT":                       collectorEndpoint,
 		"OTEL_EXPORTER_OTLP_PROTOCOL":                       "http/protobuf",
 		"OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE": "delta",
 		"OTEL_TRACES_EXPORTER":                              "otlp",

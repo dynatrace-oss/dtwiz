@@ -40,8 +40,8 @@ func nodeServiceNameFromEntrypoint(projectPath, entrypoint string) string {
 }
 
 // generateOtelNodeEnvVars extends base OTel env vars with Node.js-specific settings.
-func generateOtelNodeEnvVars(apiURL, token, serviceName string) map[string]string {
-	envVars := generateBaseOtelEnvVars(apiURL, token, serviceName)
+func generateOtelNodeEnvVars(collectorEndpoint, serviceName string) map[string]string {
+	envVars := generateBaseOtelEnvVars(collectorEndpoint, serviceName)
 	envVars["OTEL_NODE_RESOURCE_DETECTORS"] = "all"
 	return envVars
 }
@@ -59,7 +59,7 @@ type NodeInstrumentationPlan struct {
 
 func (p *NodeInstrumentationPlan) Runtime() string { return "Node.js" }
 
-func buildNodeInstrumentationPlan(proj ScannedProject, apiURL, token string) *NodeInstrumentationPlan {
+func buildNodeInstrumentationPlan(proj ScannedProject, collectorEndpoint string) *NodeInstrumentationPlan {
 	framework := detectNodeFramework(proj.Path)
 	entrypoints := detectNodeEntrypoints(proj.Path)
 	if len(entrypoints) == 0 && framework == "" {
@@ -74,7 +74,7 @@ func buildNodeInstrumentationPlan(proj ScannedProject, apiURL, token string) *No
 	}
 
 	svcName := projectServiceName(proj.Path)
-	envVars := generateOtelNodeEnvVars(apiURL, token, svcName)
+	envVars := generateOtelNodeEnvVars(collectorEndpoint, svcName)
 	pkgManager := detectNodePackageManager(proj.Path)
 	otelDir := filepath.Join(proj.Path, ".otel")
 
@@ -88,7 +88,7 @@ func buildNodeInstrumentationPlan(proj ScannedProject, apiURL, token string) *No
 	}
 }
 
-func DetectNodePlan(apiURL, token string) (*NodeInstrumentationPlan, bool) {
+func DetectNodePlan(collectorEndpoint string) (*NodeInstrumentationPlan, bool) {
 	if _, err := exec.LookPath("node"); err != nil {
 		logger.Debug("node not found on PATH", "skipping Node.js instrumentation")
 		return nil, false
@@ -111,7 +111,7 @@ func DetectNodePlan(apiURL, token string) (*NodeInstrumentationPlan, bool) {
 			return nil, true
 		}
 
-		plan := buildNodeInstrumentationPlan(*sel, apiURL, token)
+		plan := buildNodeInstrumentationPlan(*sel, collectorEndpoint)
 		if plan != nil {
 			return plan, true
 		}
@@ -551,17 +551,17 @@ func InstallOtelNode(envURL, token, platformToken, serviceName, projectPath stri
 		return fmt.Errorf("npm not found — install npm and ensure it is in PATH")
 	}
 
-	apiURL := installer.APIURL(envURL)
+	collectorEndpoint := fmt.Sprintf("http://localhost:%d", otlpHTTPPortFromConfig(findExistingCollectorConfig()))
 	if serviceName == "" {
 		serviceName = "my-service"
 	}
 
-	envVars := generateOtelNodeEnvVars(apiURL, token, serviceName)
+	envVars := generateOtelNodeEnvVars(collectorEndpoint, serviceName)
 
 	if dryRun {
 		fmt.Println("[dry-run] Would set up OpenTelemetry Node.js auto-instrumentation")
-		fmt.Printf("  API URL:      %s\n", apiURL)
-		fmt.Printf("  Service name: %s\n", serviceName)
+		fmt.Printf("  Collector endpoint: %s\n", collectorEndpoint)
+		fmt.Printf("  Service name:       %s\n", serviceName)
 		fmt.Println("  Packages to install (in .otel/ directory):")
 		for _, pkg := range otelNodePackages {
 			fmt.Printf("    %s\n", pkg)
@@ -591,13 +591,13 @@ func InstallOtelNode(envURL, token, platformToken, serviceName, projectPath stri
 				return fmt.Errorf("project path must be a directory or package.json: %s", projectPath)
 			}
 		}
-		plan = buildNodeInstrumentationPlan(ScannedProject{Path: normalizedProjectPath, Markers: []string{"package.json"}}, apiURL, token)
+		plan = buildNodeInstrumentationPlan(ScannedProject{Path: normalizedProjectPath, Markers: []string{"package.json"}}, collectorEndpoint)
 		if plan == nil {
 			return fmt.Errorf("provided project path is not a valid Node.js project for auto-instrumentation: %s (missing package.json or no recognizable entrypoint/framework detected)", projectPath)
 		}
 	} else {
 		var userInteracted bool
-		plan, userInteracted = DetectNodePlan(apiURL, token)
+		plan, userInteracted = DetectNodePlan(collectorEndpoint)
 		if plan == nil {
 			if !userInteracted {
 				fmt.Println()

@@ -59,7 +59,7 @@ type GoInstrumentationPlan struct {
 
 func (p *GoInstrumentationPlan) Runtime() string { return "Go" }
 
-func DetectGoPlan(apiURL, token string) *GoInstrumentationPlan {
+func DetectGoPlan(collectorEndpoint string) *GoInstrumentationPlan {
 	if _, err := exec.LookPath("go"); err != nil {
 		logger.Debug("go not found on PATH", "skipping Go instrumentation")
 		return nil
@@ -97,7 +97,7 @@ func DetectGoPlan(apiURL, token string) *GoInstrumentationPlan {
 	}
 
 	svcName := projectServiceName(sel.Path)
-	envVars := generateBaseOtelEnvVars(apiURL, token, svcName)
+	envVars := generateBaseOtelEnvVars(collectorEndpoint, svcName)
 
 	return &GoInstrumentationPlan{
 		Project: goProj,

@@ -84,7 +84,7 @@ func TestExtractGoModuleName_MissingOrWithoutModule(t *testing.T) {
 func TestDetectGoPlan_NoGoOnPath(t *testing.T) {
 	t.Setenv("PATH", "")
 
-	plan := DetectGoPlan("https://tenant.live.dynatrace.com", "token")
+	plan := DetectGoPlan("http://localhost:4318")
 	if plan != nil {
 		t.Fatalf("expected nil plan, got %#v", plan)
 	}
@@ -100,7 +100,7 @@ func TestDetectGoPlan_FindsProject(t *testing.T) {
 	helpers.SetTestWorkingDir(t, dir)
 	setTestStdin(t, "1\n")
 
-	plan := DetectGoPlan("https://tenant.live.dynatrace.com", "token")
+	plan := DetectGoPlan("http://localhost:4318")
 	if plan == nil {
 		t.Fatal("expected Go plan")
 	}

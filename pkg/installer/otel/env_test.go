@@ -52,16 +52,15 @@ func TestNormalizeServiceName(t *testing.T) {
 }
 
 func TestGenerateBaseOtelEnvVars(t *testing.T) {
-	envVars := generateBaseOtelEnvVars("https://abc123.live.dynatrace.com", "dt0c01.TOKEN", "my-svc")
+	envVars := generateBaseOtelEnvVars("http://localhost:4318", "my-svc")
 
-	wantEndpoint := "https://abc123.live.dynatrace.com/api/v2/otlp"
+	wantEndpoint := "http://localhost:4318"
 	if got := envVars["OTEL_EXPORTER_OTLP_ENDPOINT"]; got != wantEndpoint {
 		t.Errorf("ENDPOINT = %q, want %q", got, wantEndpoint)
 	}
 
-	wantHeaders := "Authorization=Api-Token%20dt0c01.TOKEN"
-	if got := envVars["OTEL_EXPORTER_OTLP_HEADERS"]; got != wantHeaders {
-		t.Errorf("HEADERS = %q, want %q", got, wantHeaders)
+	if _, ok := envVars["OTEL_EXPORTER_OTLP_HEADERS"]; ok {
+		t.Error("OTEL_EXPORTER_OTLP_HEADERS must not be present — credentials belong to the collector, not the app")
 	}
 
 	if got := envVars["OTEL_SERVICE_NAME"]; got != "my-svc" {
@@ -83,11 +82,11 @@ func TestGenerateBaseOtelEnvVars(t *testing.T) {
 	}
 }
 
-func TestGenerateBaseOtelEnvVars_TrailingSlash(t *testing.T) {
-	envVars := generateBaseOtelEnvVars("https://abc123.live.dynatrace.com/", "tok", "svc")
-	want := "https://abc123.live.dynatrace.com/api/v2/otlp"
+func TestGenerateBaseOtelEnvVars_NonDefaultPort(t *testing.T) {
+	envVars := generateBaseOtelEnvVars("http://localhost:4320", "svc")
+	want := "http://localhost:4320"
 	if got := envVars["OTEL_EXPORTER_OTLP_ENDPOINT"]; got != want {
-		t.Errorf("ENDPOINT = %q, want %q (trailing slash should be stripped)", got, want)
+		t.Errorf("ENDPOINT = %q, want %q (non-default port should be preserved)", got, want)
 	}
 }
 

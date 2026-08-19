@@ -136,7 +136,7 @@ func detectMultiModule(projectPath string) *MultiModuleProject {
 }
 
 // buildMultiModulePlan constructs a JavaInstrumentationPlan for a multi-module project.
-func buildMultiModulePlan(mm *MultiModuleProject, proj ScannedProject, apiURL, token, envURL string) *JavaInstrumentationPlan {
+func buildMultiModulePlan(mm *MultiModuleProject, proj ScannedProject, collectorEndpoint, token, envURL string) *JavaInstrumentationPlan {
 	logger.Debug("building multi-module plan", "tool", mm.BuildTool, "modules", len(mm.Modules), "build_cmd", mm.BuildCommand)
 	agentPath, err := javaAgentPath()
 	if err != nil {
@@ -146,7 +146,7 @@ func buildMultiModulePlan(mm *MultiModuleProject, proj ScannedProject, apiURL, t
 	subs := make([]SubModulePlan, len(mm.Modules))
 	for i, mod := range mm.Modules {
 		svcName := normalizeServiceName(mod.Name)
-		envVars := generateBaseOtelEnvVars(apiURL, token, svcName)
+		envVars := generateBaseOtelEnvVars(collectorEndpoint, svcName)
 
 		var launchCmd string
 		entrypoints := detectJavaEntrypoints(mod.Path)

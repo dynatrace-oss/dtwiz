@@ -330,21 +330,21 @@ func selectProject(projects []detectedProject) (detectedProject, bool) {
 	return projects[num-1], true
 }
 
-func createRuntimePlan(proj detectedProject, apiURL, token, envURL, platformToken string) InstrumentationPlan {
+func createRuntimePlan(proj detectedProject, httpPort int, token, envURL, platformToken string) InstrumentationPlan {
+	collectorEndpoint := fmt.Sprintf("http://localhost:%d", httpPort)
 	svcName := projectServiceName(proj.Path)
-	envVars := generateBaseOtelEnvVars(apiURL, token, svcName)
 
 	switch proj.Runtime {
 	case "Python":
-		plan := buildPythonInstrumentationPlan(proj.ScannedProject, apiURL, token, envURL, platformToken)
+		plan := buildPythonInstrumentationPlan(proj.ScannedProject, collectorEndpoint, envURL, platformToken)
 		if plan == nil {
 			return nil
 		}
 		return plan
 	case "Java":
-		return buildJavaInstrumentationPlan(proj, apiURL, token, envURL)
+		return buildJavaInstrumentationPlan(proj, collectorEndpoint, token, envURL)
 	case "Node.js":
-		plan := buildNodeInstrumentationPlan(proj.ScannedProject, apiURL, token)
+		plan := buildNodeInstrumentationPlan(proj.ScannedProject, collectorEndpoint)
 		if plan == nil {
 			return nil
 		}
@@ -356,7 +356,7 @@ func createRuntimePlan(proj detectedProject, apiURL, token, envURL, platformToke
 		}
 		return &GoInstrumentationPlan{
 			Project: goProj,
-			EnvVars: envVars,
+			EnvVars: generateBaseOtelEnvVars(collectorEndpoint, svcName),
 		}
 	}
 	return nil
@@ -469,7 +469,7 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 			matchProcessesToProjects(projects, detectPythonProcesses())
 		}
 		proj := detectedProject{ScannedProject: projects[0], Runtime: runtime}
-		plan = createRuntimePlan(proj, cp.apiURL, token, envURL, platformToken)
+		plan = createRuntimePlan(proj, cp.httpPort, token, envURL, platformToken)
 	} else {
 		roots, err := selectScanRoots()
 		if err != nil {
@@ -496,7 +496,7 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 				if !ok {
 					break
 				}
-				plan = createRuntimePlan(selected, cp.apiURL, token, envURL, platformToken)
+				plan = createRuntimePlan(selected, cp.httpPort, token, envURL, platformToken)
 				if plan != nil {
 					break
 				}

@@ -14,8 +14,8 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
-func generateOtelPythonEnvVars(apiURL, token, serviceName string) map[string]string {
-	envVars := generateBaseOtelEnvVars(apiURL, token, serviceName)
+func generateOtelPythonEnvVars(collectorEndpoint, serviceName string) map[string]string {
+	envVars := generateBaseOtelEnvVars(collectorEndpoint, serviceName)
 	envVars["OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED"] = "true"
 	return envVars
 }
@@ -44,7 +44,7 @@ type PythonInstrumentationPlan struct {
 
 func (p *PythonInstrumentationPlan) Runtime() string { return "Python" }
 
-func buildPythonInstrumentationPlan(proj ScannedProject, apiURL, token, envURL, platformToken string) *PythonInstrumentationPlan {
+func buildPythonInstrumentationPlan(proj ScannedProject, collectorEndpoint, envURL, platformToken string) *PythonInstrumentationPlan {
 	entrypoints := detectPythonEntrypoints(proj.Path)
 	if len(entrypoints) == 0 {
 		fmt.Printf("  Skipping %s — no Python entrypoint found.\n", proj.Path)
@@ -57,7 +57,7 @@ func buildPythonInstrumentationPlan(proj ScannedProject, apiURL, token, envURL, 
 	logger.Debug("python project venv evaluation complete", "project", proj.Path, "needs_venv", needsVenv, "entrypoints", entrypoints)
 
 	svcName := projectServiceName(proj.Path)
-	envVars := generateOtelPythonEnvVars(apiURL, token, svcName)
+	envVars := generateOtelPythonEnvVars(collectorEndpoint, svcName)
 
 	return &PythonInstrumentationPlan{
 		Project:       proj,
@@ -69,25 +69,25 @@ func buildPythonInstrumentationPlan(proj ScannedProject, apiURL, token, envURL, 
 	}
 }
 
-func DetectPythonPlan(apiURL, token string) *PythonInstrumentationPlan {
-	return DetectPythonPlanFromPath("", apiURL, token)
+func DetectPythonPlan(collectorEndpoint string) *PythonInstrumentationPlan {
+	return DetectPythonPlanFromPath("", collectorEndpoint)
 }
 
-func DetectPythonPlanFromPath(projectPath, apiURL, token string) *PythonInstrumentationPlan {
+func DetectPythonPlanFromPath(projectPath, collectorEndpoint string) *PythonInstrumentationPlan {
 	if _, err := DetectPython(); err != nil {
 		return nil
 	}
-	return detectPythonPlanWithConfirmedRuntime(projectPath, apiURL, token)
+	return detectPythonPlanWithConfirmedRuntime(projectPath, collectorEndpoint)
 }
 
 // detectPythonPlanWithConfirmedRuntime builds the plan assuming Python is already confirmed usable.
 // Call this when DetectPython() or validatePythonPrerequisites() has already run in the same invocation.
-func detectPythonPlanWithConfirmedRuntime(projectPath, apiURL, token string) *PythonInstrumentationPlan {
+func detectPythonPlanWithConfirmedRuntime(projectPath, collectorEndpoint string) *PythonInstrumentationPlan {
 	if projectPath != "" {
 		projects := []ScannedProject{{Path: projectPath}}
 		processes := detectPythonProcesses()
 		matchProcessesToProjects(projects, processes)
-		return buildPythonInstrumentationPlan(projects[0], apiURL, token, "", "")
+		return buildPythonInstrumentationPlan(projects[0], collectorEndpoint, "", "")
 	}
 
 	projects, processes := runInParallel(
@@ -106,7 +106,7 @@ func detectPythonPlanWithConfirmedRuntime(projectPath, apiURL, token string) *Py
 		return nil
 	}
 
-	return buildPythonInstrumentationPlan(*sel, apiURL, token, "", "")
+	return buildPythonInstrumentationPlan(*sel, collectorEndpoint, "", "")
 }
 
 func (p *PythonInstrumentationPlan) PrintPlanSteps() {
@@ -303,17 +303,17 @@ func InstallOtelPython(envURL, token, platformToken, serviceName, projectPath st
 		return err
 	}
 
-	apiURL := installer.APIURL(envURL)
+	collectorEndpoint := fmt.Sprintf("http://localhost:%d", otlpHTTPPortFromConfig(findExistingCollectorConfig()))
 	if serviceName == "" {
 		serviceName = "my-service"
 	}
 
-	envVars := generateOtelPythonEnvVars(apiURL, token, serviceName)
+	envVars := generateOtelPythonEnvVars(collectorEndpoint, serviceName)
 
 	if dryRun {
 		fmt.Println("[dry-run] Would set up OpenTelemetry Python auto-instrumentation")
-		fmt.Printf("  API URL:      %s\n", apiURL)
-		fmt.Printf("  Service name: %s\n", serviceName)
+		fmt.Printf("  Collector endpoint: %s\n", collectorEndpoint)
+		fmt.Printf("  Service name:       %s\n", serviceName)
 		fmt.Println("  Packages to install (in project virtualenv):")
 		fmt.Printf("    pip install %s\n", strings.Join(otelPythonPackages, " "))
 		fmt.Println("    opentelemetry-bootstrap -a install")
@@ -331,7 +331,7 @@ func InstallOtelPython(envURL, token, platformToken, serviceName, projectPath st
 	display.ColorMessage.Println("  Dynatrace Python Auto-Instrumentation")
 	fmt.Println("  " + sep)
 
-	plan := detectPythonPlanWithConfirmedRuntime(projectPath, apiURL, token)
+	plan := detectPythonPlanWithConfirmedRuntime(projectPath, collectorEndpoint)
 	if plan == nil {
 		printManualInstructions(envVars)
 		return installer.ErrInstallCancelled
