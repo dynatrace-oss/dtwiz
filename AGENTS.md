@@ -249,3 +249,6 @@ Archives: `dtwiz_{version}_{os}_{arch}.tar.gz` (Linux/macOS), `.zip` (Windows).
 7. **Push:** `git push origin main --tags`
 8. **Release:** `GITHUB_TOKEN=$(gh auth token) goreleaser release --clean`
 9. **Verify:** `gh release list --limit 3` — confirm the new release appears.
+
+
+That is a dummy change
