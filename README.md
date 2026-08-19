@@ -49,11 +49,11 @@ If you create the token manually, grant the following scopes. This list is a pra
 
 | Group | Scopes |
 |-------|--------|
-| **API tokens** | `api-tokens:tokens:read`, `api-tokens:tokens:write` |
 | **Data acquisition** | `data-acquisition:events:ingest`, `data-acquisition:logs:ingest`, `data-acquisition:metrics:ingest` |
 | **Extensions** | `extensions:configurations:read`, `extensions:configurations:write`, `extensions:definitions:read`, `extensions:definitions:write` |
-| **Fleet management** | `fleet-management:activegate.connection-info:read`, `fleet-management:activegate.tokens:create`, `fleet-management:activegates:download`, `fleet-management:activegates:read`, `fleet-management:activegates:write`, `fleet-management:cluster-id:read`, `fleet-management:container-images:read`, `fleet-management:oneagent.connection-info:read`, `fleet-management:oneagent.tokens:read`, `fleet-management:oneagents:download` |
+| **Fleet management** | `fleet-management:activegate.connection-info:read`, `fleet-management:activegate.tokens:create`, `fleet-management:activegates:download`, `fleet-management:activegates:read`, `fleet-management:activegates:write`, `fleet-management:cluster-id:read`, `fleet-management:container-images:read`, `fleet-management:oneagent.connection-info:read`, `fleet-management:oneagent.tokens:read`, `fleet-management:oneagents:download`, `fleet-management:public-addresses:read` |
 | **OpenPipeline** | `openpipeline:bizevents:ingest`, `openpipeline:events:ingest`, `openpipeline:events.custom:ingest`, `openpipeline:events.davis:ingest`, `openpipeline:events.sdlc:ingest`, `openpipeline:events.sdlc.custom:ingest`, `openpipeline:events.smartscape:ingest`, `openpipeline:logs:ingest`, `openpipeline:metrics:ingest`, `openpipeline:security.events:ingest`, `openpipeline:security.events.custom:ingest`, `openpipeline:traces:ingest` |
+| **Real User Monitoring (RUM)** | `rum:frontends:write`, `rum:manual-insertion-tags:read` |
 | **Settings** | `settings:objects:read`, `settings:objects:write` |
 | **Storage (Grail)** | `storage:buckets:read`, `storage:entities:read`, `storage:events:read`, `storage:events:write`, `storage:files:write`, `storage:logs:read`, `storage:logs:write`, `storage:metrics:read`, `storage:metrics:write`, `storage:smartscape:read`, `storage:spans:read`, `storage:system:read` |
 
