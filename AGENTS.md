@@ -251,4 +251,4 @@ Archives: `dtwiz_{version}_{os}_{arch}.tar.gz` (Linux/macOS), `.zip` (Windows).
 9. **Verify:** `gh release list --limit 3` — confirm the new release appears.
 
 
-That is a dummy change
+That is another dummy change
