@@ -193,9 +193,6 @@ func TestGenerateOtelConfig_AppOnly_Default(t *testing.T) {
 	if _, ok := parsed.Service.Pipelines["metrics/host"]; ok {
 		t.Error("app-only config must not contain metrics/host pipeline")
 	}
-	if _, ok := parsed.Service.Pipelines["logs/host"]; ok {
-		t.Error("app-only config must not contain logs/host pipeline")
-	}
 	if _, ok := parsed.Service.Pipelines["metrics"]; !ok {
 		t.Error("app-only config must contain metrics pipeline")
 	}
@@ -236,13 +233,34 @@ func TestGenerateOtelConfig_Combined_ExperimentalEnabled(t *testing.T) {
 		}
 	}
 
+	logsPipeline, logsOk := parsed.Service.Pipelines["logs"]
+	if !logsOk {
+		t.Fatal("combined config missing logs pipeline")
+	}
+	hasResourceDetection := false
+	for _, p := range logsPipeline.Processors {
+		if p == "resource_detection" {
+			hasResourceDetection = true
+			break
+		}
+	}
+	if !hasResourceDetection {
+		t.Errorf("combined config logs pipeline missing resource_detection processor, got %v", logsPipeline.Processors)
+	}
+	hasJournald := false
+	for _, r := range logsPipeline.Receivers {
+		if r == "journald" {
+			hasJournald = true
+			break
+		}
+	}
 	if runtime.GOOS == "linux" {
-		if _, ok := parsed.Service.Pipelines["logs/host"]; !ok {
-			t.Error("combined config missing logs/host pipeline on Linux")
+		if !hasJournald {
+			t.Error("combined config logs pipeline missing journald receiver on Linux")
 		}
 	} else {
-		if _, ok := parsed.Service.Pipelines["logs/host"]; ok {
-			t.Error("combined config must not contain logs/host pipeline on non-Linux (no journald)")
+		if hasJournald {
+			t.Error("combined config logs pipeline must not contain journald receiver on non-Linux")
 		}
 	}
 
@@ -284,10 +302,10 @@ func TestGenerateOtelConfig_JournaldConsistency(t *testing.T) {
 	parsed := parseOtelConfig(t, cfg)
 
 	_, receiverDefined := parsed.Receivers["journald"]
-	logsHost, logsHostExists := parsed.Service.Pipelines["logs/host"]
+	logsPipeline, logsExists := parsed.Service.Pipelines["logs"]
 	var pipelineReferences bool
-	if logsHostExists {
-		for _, r := range logsHost.Receivers {
+	if logsExists {
+		for _, r := range logsPipeline.Receivers {
 			if r == "journald" {
 				pipelineReferences = true
 				break
@@ -296,7 +314,7 @@ func TestGenerateOtelConfig_JournaldConsistency(t *testing.T) {
 	}
 
 	if receiverDefined != pipelineReferences {
-		t.Errorf("journald receiver defined=%v but pipeline reference=%v — guards must stay in sync",
+		t.Errorf("journald receiver defined=%v but logs pipeline reference=%v — guards must stay in sync",
 			receiverDefined, pipelineReferences)
 	}
 }

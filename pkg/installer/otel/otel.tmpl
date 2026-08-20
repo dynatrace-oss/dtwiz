@@ -281,15 +281,9 @@ service:
       exporters: [otlp_http]
 {{- end }}
     logs:
-      receivers: [otlp]
-      processors: []
+      receivers: [otlp{{- if and .HostMonitoring .IncludeJournald }}, journald{{- end }}]
+      processors: [{{- if .HostMonitoring }}resource_detection{{- end }}]
       exporters: [otlp_http]
-{{- if and .HostMonitoring .IncludeJournald }}
-    logs/host:
-      receivers: [journald]
-      processors: [resource_detection]
-      exporters: [otlp_http]
-{{- end }}
 
 exporters:
   otlp_http:
