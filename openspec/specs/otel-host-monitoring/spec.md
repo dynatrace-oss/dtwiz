@@ -31,21 +31,21 @@ Define how `dtwiz install otel` configures host monitoring via the Dynatrace Ope
 
 ### Requirement: Platform-aware host signal selection
 
-The generated configuration SHALL include host metrics on all supported platforms. A `logs/host` pipeline collecting journald logs through the `resource_detection` processor SHALL be included on Linux only; on macOS and Windows no host log pipeline is added. Application logs reach Dynatrace on all platforms through the existing `logs` pipeline fed by the `otlp` receiver.
+The generated configuration SHALL include host metrics on all supported platforms. The `logs` pipeline SHALL apply `resource_detection` on all platforms when host monitoring is enabled, so all logs are correlated with the host in Dynatrace. On Linux, the `journald` receiver SHALL additionally be included in the `logs` pipeline to collect system journal logs; on macOS and Windows, `journald` is omitted.
 
 #### Scenario: Linux collects metrics and journald logs
 
 - **GIVEN** the target platform is Linux
 - **WHEN** the configuration is generated
-- **THEN** it SHALL include the `journald` receiver and a `logs/host` pipeline forwarding journald logs to Dynatrace through the `resource_detection` processor
-- **AND** the `logs` pipeline fed by the `otlp` receiver SHALL remain present for application logs
+- **THEN** it SHALL include the `journald` receiver in the `logs` pipeline alongside `otlp`
+- **AND** the `logs` pipeline SHALL apply `resource_detection` so all logs are associated with the host
 
-#### Scenario: macOS and Windows collect metrics only, no host logs pipeline
+#### Scenario: macOS and Windows collect metrics only, no journald
 
 - **GIVEN** the target platform is macOS or Windows
 - **WHEN** the configuration is generated
-- **THEN** it SHALL NOT include the `journald` receiver or a `logs/host` pipeline
-- **AND** the `logs` pipeline fed by the `otlp` receiver SHALL remain present for application logs
+- **THEN** it SHALL NOT include the `journald` receiver
+- **AND** the `logs` pipeline SHALL still apply `resource_detection` so application logs are associated with the host
 
 ### Requirement: Preview and confirmation before applying
 
