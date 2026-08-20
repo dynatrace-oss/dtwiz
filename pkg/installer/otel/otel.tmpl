@@ -264,31 +264,31 @@ service:
     traces:
       receivers: [otlp]
       processors: []
-      exporters: [otlp_http, debug]
+      exporters: [otlp_http]
 {{- if .HostMonitoring }}
     metrics/apps:
       receivers: [otlp]
       processors: [cumulative_to_delta]
-      exporters: [otlp_http, debug]
+      exporters: [otlp_http]
     metrics/host:
       receivers: [hostmetrics/10s, hostmetrics/5m, hostmetrics/1h]
       processors: [filter, resource_detection, transform, filter/delete-metrics, cumulative_to_delta]
-      exporters: [otlp_http, debug]
+      exporters: [otlp_http]
 {{- else }}
     metrics:
       receivers: [otlp]
       processors: [cumulative_to_delta]
-      exporters: [otlp_http, debug]
+      exporters: [otlp_http]
 {{- end }}
     logs:
       receivers: [otlp]
       processors: []
-      exporters: [otlp_http, debug]
+      exporters: [otlp_http]
 {{- if and .HostMonitoring .IncludeJournald }}
     logs/host:
       receivers: [journald]
       processors: [resource_detection]
-      exporters: [otlp_http, debug]
+      exporters: [otlp_http]
 {{- end }}
 
 exporters:
@@ -296,5 +296,3 @@ exporters:
     endpoint: {{ .Endpoint }}/api/v2/otlp
     headers:
       Authorization: "{{ .AuthHeader }}"
-  debug:
-    verbosity: normal
