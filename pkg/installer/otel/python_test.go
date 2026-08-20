@@ -15,19 +15,22 @@ import (
 // ── generateOtelPythonEnvVars ─────────────────────────────────────────────────
 
 func TestGenerateOtelPythonEnvVars_ContainsBase(t *testing.T) {
-	envVars := generateOtelPythonEnvVars("https://abc123.live.dynatrace.com", "dt0c01.TOKEN", "my-svc")
+	envVars := generateOtelPythonEnvVars("http://127.0.0.1:4318", "my-svc")
 
-	wantEndpoint := "https://abc123.live.dynatrace.com/api/v2/otlp"
+	wantEndpoint := "http://127.0.0.1:4318"
 	if got := envVars["OTEL_EXPORTER_OTLP_ENDPOINT"]; got != wantEndpoint {
 		t.Errorf("ENDPOINT = %q, want %q", got, wantEndpoint)
 	}
 	if got := envVars["OTEL_SERVICE_NAME"]; got != "my-svc" {
 		t.Errorf("SERVICE_NAME = %q, want %q", got, "my-svc")
 	}
+	if _, ok := envVars["OTEL_EXPORTER_OTLP_HEADERS"]; ok {
+		t.Error("OTEL_EXPORTER_OTLP_HEADERS must not be present — credentials belong to the collector")
+	}
 }
 
 func TestGenerateOtelPythonEnvVars_PythonLoggingEnabled(t *testing.T) {
-	envVars := generateOtelPythonEnvVars("https://abc123.live.dynatrace.com", "tok", "svc")
+	envVars := generateOtelPythonEnvVars("http://127.0.0.1:4318", "svc")
 	if got := envVars["OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED"]; got != "true" {
 		t.Errorf("OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED = %q, want %q", got, "true")
 	}
@@ -256,8 +259,6 @@ func TestDetectPython_NotFound(t *testing.T) {
 }
 
 func TestBuildPythonInstrumentationPlan(t *testing.T) {
-	apiURL := "https://tenant.live.dynatrace.com"
-	token := "token"
 	envURL := "https://tenant.apps.dynatrace.com"
 	platformToken := "platform-token"
 
@@ -267,7 +268,7 @@ func TestBuildPythonInstrumentationPlan(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		plan := buildPythonInstrumentationPlan(ScannedProject{Path: dir}, apiURL, token, envURL, platformToken)
+		plan := buildPythonInstrumentationPlan(ScannedProject{Path: dir}, "http://127.0.0.1:4318", envURL, platformToken)
 		if plan == nil {
 			t.Fatal("expected non-nil plan")
 		}
@@ -280,7 +281,7 @@ func TestBuildPythonInstrumentationPlan(t *testing.T) {
 	})
 
 	t.Run("returns nil when entrypoint is missing", func(t *testing.T) {
-		plan := buildPythonInstrumentationPlan(ScannedProject{Path: t.TempDir()}, apiURL, token, envURL, platformToken)
+		plan := buildPythonInstrumentationPlan(ScannedProject{Path: t.TempDir()}, "http://127.0.0.1:4318", envURL, platformToken)
 		if plan != nil {
 			t.Fatalf("expected nil plan, got %#v", plan)
 		}
@@ -290,7 +291,7 @@ func TestBuildPythonInstrumentationPlan(t *testing.T) {
 func TestDetectPythonPlan_NoPythonOnPath(t *testing.T) {
 	t.Setenv("PATH", "")
 
-	plan := DetectPythonPlan("https://tenant.live.dynatrace.com", "token")
+	plan := DetectPythonPlan("http://127.0.0.1:4318")
 	if plan != nil {
 		t.Fatalf("expected nil plan, got %#v", plan)
 	}
@@ -312,7 +313,7 @@ func TestDetectPythonPlan_FindsProject(t *testing.T) {
 	helpers.SetTestWorkingDir(t, dir)
 	setTestStdin(t, "1\n")
 
-	plan := DetectPythonPlan("https://tenant.live.dynatrace.com", "token")
+	plan := DetectPythonPlan("http://127.0.0.1:4318")
 	if plan == nil {
 		t.Fatal("expected Python plan")
 	}
@@ -400,12 +401,12 @@ func TestRunOtelBootstrap_ErrorIncludesCommand(t *testing.T) {
 }
 
 func TestGenerateOtelPythonEnvVars(t *testing.T) {
-	vars := generateOtelPythonEnvVars("https://abc123.live.dynatrace.com", "dt0c01.test", "my-svc")
+	vars := generateOtelPythonEnvVars("http://127.0.0.1:4318", "my-svc")
 	if vars["OTEL_SERVICE_NAME"] != "my-svc" {
 		t.Fatalf("OTEL_SERVICE_NAME = %q, want %q", vars["OTEL_SERVICE_NAME"], "my-svc")
 	}
-	if !strings.Contains(vars["OTEL_EXPORTER_OTLP_ENDPOINT"], "/api/v2/otlp") {
-		t.Fatalf("OTEL_EXPORTER_OTLP_ENDPOINT = %q, want to contain /api/v2/otlp", vars["OTEL_EXPORTER_OTLP_ENDPOINT"])
+	if vars["OTEL_EXPORTER_OTLP_ENDPOINT"] != "http://127.0.0.1:4318" {
+		t.Fatalf("OTEL_EXPORTER_OTLP_ENDPOINT = %q, want http://127.0.0.1:4318", vars["OTEL_EXPORTER_OTLP_ENDPOINT"])
 	}
 	if vars["OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE"] != "delta" {
 		t.Fatalf("temporality = %q, want delta", vars["OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE"])
@@ -413,11 +414,10 @@ func TestGenerateOtelPythonEnvVars(t *testing.T) {
 }
 
 func TestGenerateOtelPythonEnvVars_AllKeys(t *testing.T) {
-	vars := generateOtelPythonEnvVars("https://abc123.live.dynatrace.com", "dt0c01.test", "my-svc")
+	vars := generateOtelPythonEnvVars("http://127.0.0.1:4318", "my-svc")
 	required := []string{
 		"OTEL_SERVICE_NAME",
 		"OTEL_EXPORTER_OTLP_ENDPOINT",
-		"OTEL_EXPORTER_OTLP_HEADERS",
 		"OTEL_EXPORTER_OTLP_PROTOCOL",
 		"OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE",
 		"OTEL_TRACES_EXPORTER",
@@ -430,29 +430,20 @@ func TestGenerateOtelPythonEnvVars_AllKeys(t *testing.T) {
 			t.Fatalf("missing env var %q", key)
 		}
 	}
-}
-
-func TestGenerateOtelPythonEnvVars_AuthHeaderFormat(t *testing.T) {
-	vars := generateOtelPythonEnvVars("https://abc123.live.dynatrace.com", "dt0c01.TOKEN123", "svc")
-	headers := vars["OTEL_EXPORTER_OTLP_HEADERS"]
-	if !strings.HasPrefix(headers, "Authorization=Api-Token%20") {
-		t.Fatalf("OTEL_EXPORTER_OTLP_HEADERS = %q, want prefix Authorization=Api-Token%%20", headers)
-	}
-	if !strings.Contains(headers, "dt0c01.TOKEN123") {
-		t.Fatalf("OTEL_EXPORTER_OTLP_HEADERS = %q, want to contain token", headers)
+	if _, ok := vars["OTEL_EXPORTER_OTLP_HEADERS"]; ok {
+		t.Fatal("OTEL_EXPORTER_OTLP_HEADERS must not be present — credentials belong to the collector")
 	}
 }
 
-func TestGenerateOtelPythonEnvVars_TrimsTrailingSlash(t *testing.T) {
-	vars := generateOtelPythonEnvVars("https://abc123.live.dynatrace.com/", "dt0c01.test", "svc")
-	ep := vars["OTEL_EXPORTER_OTLP_ENDPOINT"]
-	if strings.Contains(ep, "//api") {
-		t.Fatalf("OTEL_EXPORTER_OTLP_ENDPOINT has double slash: %q", ep)
+func TestGenerateOtelPythonEnvVars_NonDefaultPort(t *testing.T) {
+	vars := generateOtelPythonEnvVars("http://127.0.0.1:4320", "svc")
+	if vars["OTEL_EXPORTER_OTLP_ENDPOINT"] != "http://127.0.0.1:4320" {
+		t.Fatalf("OTEL_EXPORTER_OTLP_ENDPOINT = %q, want http://127.0.0.1:4320", vars["OTEL_EXPORTER_OTLP_ENDPOINT"])
 	}
 }
 
 func TestGenerateEnvExportScript_AllKeysPresent(t *testing.T) {
-	vars := generateOtelPythonEnvVars("https://abc123.live.dynatrace.com", "dt0c01.test", "my-svc")
+	vars := generateOtelPythonEnvVars("http://127.0.0.1:4318", "my-svc")
 	script := GenerateEnvExportScript(vars)
 	for k := range vars {
 		if !strings.Contains(script, k) {

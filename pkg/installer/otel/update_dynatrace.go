@@ -149,15 +149,6 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 	}
 	connectedSvcs := detectConnectedServices(origData, excludePIDs)
 	if len(connectedSvcs) > 0 {
-		// Services that currently export directly to a Dynatrace tenant must be
-		// routed through the local collector so that data reaches all configured
-		// export destinations (both the existing and newly added exporter).
-		collectorEndpoint := fmt.Sprintf("http://localhost:%d", otlpHTTPPortFromConfig(configPath))
-		for i := range connectedSvcs {
-			if _, changed := retargetEnvToCollector(connectedSvcs[i].env, collectorEndpoint); changed {
-				connectedSvcs[i].collectorEndpoint = collectorEndpoint
-			}
-		}
 		fmt.Println()
 		printConnectedServices(connectedSvcs)
 		fmt.Println()
@@ -253,11 +244,6 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 	}
 
 	display.ColorOK.Println("  ✓ Collector restarted and verified.")
-
-	if len(connectedSvcs) > 0 {
-		fmt.Println()
-		restartConnectedServices(connectedSvcs)
-	}
 
 	installer.WatchIngest(envURL, platformTok, startTime.UTC().Format(installer.IngestTimeFormat))
 	return nil

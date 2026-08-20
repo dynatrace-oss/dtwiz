@@ -440,7 +440,7 @@ func TestDetectAllProjects_IncludesWhenUnlocked(t *testing.T) {
 }
 
 func TestCreateRuntimePlan(t *testing.T) {
-	apiURL := "https://tenant.live.dynatrace.com"
+	const httpPort = 4318
 	token := "test-token"
 	envURL := "https://tenant.apps.dynatrace.com"
 	platformToken := "platform-token"
@@ -454,7 +454,7 @@ func TestCreateRuntimePlan(t *testing.T) {
 		plan := createRuntimePlan(detectedProject{
 			ScannedProject: ScannedProject{Path: projectDir, Markers: []string{"main.py"}},
 			Runtime:        "Python",
-		}, apiURL, token, envURL, platformToken)
+		}, httpPort, token, envURL, platformToken)
 
 		pythonPlan, ok := plan.(*PythonInstrumentationPlan)
 		if !ok {
@@ -477,7 +477,7 @@ func TestCreateRuntimePlan(t *testing.T) {
 		plan := createRuntimePlan(detectedProject{
 			ScannedProject: ScannedProject{Path: projectDir, Markers: []string{"requirements.txt"}},
 			Runtime:        "Python",
-		}, apiURL, token, envURL, platformToken)
+		}, httpPort, token, envURL, platformToken)
 
 		if plan != nil {
 			t.Fatalf("expected nil plan, got %T", plan)
@@ -490,7 +490,7 @@ func TestCreateRuntimePlan(t *testing.T) {
 		plan := createRuntimePlan(detectedProject{
 			ScannedProject: ScannedProject{Path: projectDir, Markers: []string{"pom.xml"}},
 			Runtime:        "Java",
-		}, apiURL, token, envURL, platformToken)
+		}, httpPort, token, envURL, platformToken)
 
 		javaPlan, ok := plan.(*JavaInstrumentationPlan)
 		if !ok {
@@ -514,7 +514,7 @@ func TestCreateRuntimePlan(t *testing.T) {
 		plan := createRuntimePlan(detectedProject{
 			ScannedProject: ScannedProject{Path: projectDir, Markers: []string{"package.json"}},
 			Runtime:        "Node.js",
-		}, apiURL, token, envURL, platformToken)
+		}, httpPort, token, envURL, platformToken)
 
 		nodePlan, ok := plan.(*NodeInstrumentationPlan)
 		if !ok {
@@ -534,7 +534,7 @@ func TestCreateRuntimePlan(t *testing.T) {
 		plan := createRuntimePlan(detectedProject{
 			ScannedProject: ScannedProject{Path: projectDir, Markers: []string{"package.json"}},
 			Runtime:        "Node.js",
-		}, apiURL, token, envURL, platformToken)
+		}, httpPort, token, envURL, platformToken)
 
 		if plan != nil {
 			t.Fatalf("expected nil plan, got %T", plan)
@@ -548,7 +548,7 @@ func TestCreateRuntimePlan(t *testing.T) {
 			ScannedProject: ScannedProject{Path: projectDir, Markers: []string{"go.mod"}},
 			Runtime:        "Go",
 			ModuleName:     "github.com/example/svc",
-		}, apiURL, token, envURL, platformToken)
+		}, httpPort, token, envURL, platformToken)
 
 		goPlan, ok := plan.(*GoInstrumentationPlan)
 		if !ok {
@@ -559,11 +559,28 @@ func TestCreateRuntimePlan(t *testing.T) {
 		}
 	})
 
+	t.Run("go plan uses collector endpoint from httpPort", func(t *testing.T) {
+		projectDir := t.TempDir()
+
+		plan := createRuntimePlan(detectedProject{
+			ScannedProject: ScannedProject{Path: projectDir, Markers: []string{"go.mod"}},
+			Runtime:        "Go",
+		}, 4320, token, envURL, platformToken)
+
+		goPlan, ok := plan.(*GoInstrumentationPlan)
+		if !ok {
+			t.Fatalf("expected GoInstrumentationPlan, got %T", plan)
+		}
+		if got := goPlan.EnvVars["OTEL_EXPORTER_OTLP_ENDPOINT"]; got != "http://127.0.0.1:4320" {
+			t.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT = %q, want http://127.0.0.1:4320", got)
+		}
+	})
+
 	t.Run("unknown runtime returns nil", func(t *testing.T) {
 		plan := createRuntimePlan(detectedProject{
 			ScannedProject: ScannedProject{Path: t.TempDir()},
 			Runtime:        "RubyTubey",
-		}, apiURL, token, envURL, platformToken)
+		}, httpPort, token, envURL, platformToken)
 
 		if plan != nil {
 			t.Fatalf("expected nil plan, got %T", plan)

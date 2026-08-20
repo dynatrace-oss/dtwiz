@@ -180,8 +180,9 @@ func DetectJavaPlan(envURL, token string) *JavaInstrumentationPlan {
 		return nil
 	}
 
+	collectorEndpoint := fmt.Sprintf("http://127.0.0.1:%d", otlpHTTPPortFromConfig(findExistingCollectorConfig()))
 	proj := detectedProject{ScannedProject: *sel, Runtime: "Java"}
-	plan := buildJavaInstrumentationPlan(proj, installer.APIURL(envURL), token, envURL)
+	plan := buildJavaInstrumentationPlan(proj, collectorEndpoint, token, envURL)
 	if jp, ok := plan.(*JavaInstrumentationPlan); ok {
 		return jp
 	}
@@ -206,12 +207,12 @@ func (p *JavaInstrumentationPlan) PrintPlanSteps() {
 	}
 }
 
-func buildJavaInstrumentationPlan(proj detectedProject, apiURL, token, envURL string) InstrumentationPlan {
+func buildJavaInstrumentationPlan(proj detectedProject, collectorEndpoint, token, envURL string) InstrumentationPlan {
 	if mm := detectMultiModule(proj.Path); mm != nil {
-		return buildMultiModulePlan(mm, proj.ScannedProject, apiURL, token, envURL)
+		return buildMultiModulePlan(mm, proj.ScannedProject, collectorEndpoint, token, envURL)
 	}
 	svcName := projectServiceName(proj.Path)
-	envVars := generateBaseOtelEnvVars(apiURL, token, svcName)
+	envVars := generateBaseOtelEnvVars(collectorEndpoint, svcName)
 	entrypoints := detectJavaEntrypoints(proj.Path)
 	var entrypointCmd string
 	if len(entrypoints) > 0 {
@@ -307,8 +308,6 @@ func InstallOtelJava(envURL, token, serviceName, projectPath string, dryRun bool
 		return err
 	}
 
-	apiURL := installer.APIURL(envURL)
-
 	if serviceName == "" {
 		serviceName = "my-service"
 	}
@@ -343,15 +342,17 @@ func InstallOtelJava(envURL, token, serviceName, projectPath string, dryRun bool
 		proj = *sel
 	}
 
+	collectorEndpoint := fmt.Sprintf("http://127.0.0.1:%d", otlpHTTPPortFromConfig(findExistingCollectorConfig()))
+
 	if serviceName == "my-service" {
 		serviceName = projectServiceName(proj.Path)
 	}
 	logger.Debug("java instrumentation target", "project", proj.Path, "service", serviceName)
-	envVars = generateBaseOtelEnvVars(apiURL, token, serviceName)
+	envVars = generateBaseOtelEnvVars(collectorEndpoint, serviceName)
 
 	if mm := detectMultiModule(proj.Path); mm != nil {
 		logger.Debug("multi-module project detected", "tool", mm.BuildTool)
-		plan := buildMultiModulePlan(mm, proj, apiURL, token, envURL)
+		plan := buildMultiModulePlan(mm, proj, collectorEndpoint, token, envURL)
 
 		fmt.Println()
 		display.Header("Java multi-module instrumentation plan")
@@ -388,6 +389,7 @@ func InstallOtelJava(envURL, token, serviceName, projectPath string, dryRun bool
 		if err := plan.executeMultiModule(); err != nil {
 			return err
 		}
+		warnIfCollectorUnreachable(collectorEndpoint)
 		return nil
 	}
 
@@ -492,6 +494,7 @@ func InstallOtelJava(envURL, token, serviceName, projectPath string, dryRun bool
 	}
 
 	updateOtelCollectorIfPresent(envURL, token, dryRun)
+	warnIfCollectorUnreachable(collectorEndpoint)
 
 	return nil
 }

@@ -440,6 +440,40 @@ func TestPipelinesSectionStart(t *testing.T) {
 	}
 }
 
+func TestWarnIfCollectorUnreachable_NoListener(t *testing.T) {
+	// Pick a port that nothing is listening on by binding and immediately closing.
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := l.Addr().(*net.TCPAddr).Port
+	l.Close()
+
+	endpoint := fmt.Sprintf("http://127.0.0.1:%d", port)
+	out := captureStdout(t, func() { warnIfCollectorUnreachable(endpoint) })
+	if !strings.Contains(out, "Warning") {
+		t.Errorf("expected warning in output when collector not reachable, got: %q", out)
+	}
+	if !strings.Contains(out, fmt.Sprintf("127.0.0.1:%d", port)) {
+		t.Errorf("expected port in warning output, got: %q", out)
+	}
+}
+
+func TestWarnIfCollectorUnreachable_Listening(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	port := l.Addr().(*net.TCPAddr).Port
+
+	endpoint := fmt.Sprintf("http://127.0.0.1:%d", port)
+	out := captureStdout(t, func() { warnIfCollectorUnreachable(endpoint) })
+	if strings.Contains(out, "Warning") {
+		t.Errorf("expected no warning when collector is reachable, got: %q", out)
+	}
+}
+
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 	r, w, err := os.Pipe()

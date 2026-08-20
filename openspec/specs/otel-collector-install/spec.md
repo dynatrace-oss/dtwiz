@@ -15,43 +15,43 @@ point that holds Dynatrace credentials and handles forwarding.
 
 When `dtwiz` sets up auto-instrumentation for any supported runtime, the generated environment for the
 instrumented process SHALL set `OTEL_EXPORTER_OTLP_ENDPOINT` to the local collector's HTTP OTLP endpoint
-(`http://localhost:<port>`). No Dynatrace API URL SHALL appear in the app's OTLP endpoint variable.
+(`http://127.0.0.1:<port>`). No Dynatrace API URL SHALL appear in the app's OTLP endpoint variable.
 
 #### Scenario: Java app instrumented via `install otel` (bundled)
 
 - **GIVEN** `dtwiz install otel` is run and a Java project is selected
 - **WHEN** the instrumented process is launched
-- **THEN** `OTEL_EXPORTER_OTLP_ENDPOINT` is set to `http://localhost:<collectorHTTPPort>`
+- **THEN** `OTEL_EXPORTER_OTLP_ENDPOINT` is set to `http://127.0.0.1:<collectorHTTPPort>`
 
 #### Scenario: Node.js app instrumented via `install otel` (bundled)
 
 - **GIVEN** `dtwiz install otel` is run and a Node.js project is selected
 - **WHEN** the instrumented process is launched
-- **THEN** `OTEL_EXPORTER_OTLP_ENDPOINT` is set to `http://localhost:<collectorHTTPPort>`
+- **THEN** `OTEL_EXPORTER_OTLP_ENDPOINT` is set to `http://127.0.0.1:<collectorHTTPPort>`
 
 #### Scenario: Python app instrumented via `install otel` (bundled)
 
 - **GIVEN** `dtwiz install otel` is run and a Python project is selected
 - **WHEN** the instrumented process is launched
-- **THEN** `OTEL_EXPORTER_OTLP_ENDPOINT` is set to `http://localhost:<collectorHTTPPort>`
+- **THEN** `OTEL_EXPORTER_OTLP_ENDPOINT` is set to `http://127.0.0.1:<collectorHTTPPort>`
 
 #### Scenario: Java app instrumented via `install otel-java` (standalone)
 
 - **GIVEN** `dtwiz install otel-java` is run and a Java project is selected
 - **WHEN** the instrumented process is launched
-- **THEN** `OTEL_EXPORTER_OTLP_ENDPOINT` is set to `http://localhost:<collectorHTTPPort>`
+- **THEN** `OTEL_EXPORTER_OTLP_ENDPOINT` is set to `http://127.0.0.1:<collectorHTTPPort>`
 
 #### Scenario: Node.js app instrumented via `install otel-node` (standalone)
 
 - **GIVEN** `dtwiz install otel-node` is run and a Node.js project is selected
 - **WHEN** the instrumented process is launched
-- **THEN** `OTEL_EXPORTER_OTLP_ENDPOINT` is set to `http://localhost:<collectorHTTPPort>`
+- **THEN** `OTEL_EXPORTER_OTLP_ENDPOINT` is set to `http://127.0.0.1:<collectorHTTPPort>`
 
 #### Scenario: Python app instrumented via `install otel-python` (standalone)
 
 - **GIVEN** `dtwiz install otel-python` is run and a Python project is selected
 - **WHEN** the instrumented process is launched
-- **THEN** `OTEL_EXPORTER_OTLP_ENDPOINT` is set to `http://localhost:<collectorHTTPPort>`
+- **THEN** `OTEL_EXPORTER_OTLP_ENDPOINT` is set to `http://127.0.0.1:<collectorHTTPPort>`
 
 ---
 
@@ -84,19 +84,27 @@ instrumentation:
 
 - **GIVEN** port 4318 is occupied at install time, so the collector is configured to use port 4320
 - **WHEN** `dtwiz install otel` instruments an application
-- **THEN** `OTEL_EXPORTER_OTLP_ENDPOINT` is set to `http://localhost:4320`
+- **THEN** `OTEL_EXPORTER_OTLP_ENDPOINT` is set to `http://127.0.0.1:4320`
 
 #### Scenario: Standalone flow — collector installed on a non-default port
 
 - **GIVEN** a collector is installed with OTLP HTTP on port 4320 (as recorded in its config file)
 - **WHEN** `dtwiz install otel-java` instruments an application
-- **THEN** `OTEL_EXPORTER_OTLP_ENDPOINT` is set to `http://localhost:4320`
+- **THEN** `OTEL_EXPORTER_OTLP_ENDPOINT` is set to `http://127.0.0.1:4320`
 
 #### Scenario: Standalone flow — no collector config found, fallback to 4318
 
 - **GIVEN** no dtwiz-managed collector config file exists on disk
 - **WHEN** `dtwiz install otel-java` instruments an application
-- **THEN** `OTEL_EXPORTER_OTLP_ENDPOINT` is set to `http://localhost:4318`
+- **THEN** `OTEL_EXPORTER_OTLP_ENDPOINT` is set to `http://127.0.0.1:4318`
+
+#### Scenario: Standalone flow — no collector listening on the resolved port
+
+- **GIVEN** the resolved collector port (from config or fallback) has nothing listening on it
+- **WHEN** `dtwiz install otel-java` (or `otel-node` / `otel-python`) completes instrumentation
+- **THEN** the install succeeds (env vars are written, startup script is updated)
+- **THEN** a clear warning is printed: the collector is not reachable on that port and telemetry will not reach Dynatrace until a collector is started
+- **THEN** the process exits with a non-error exit code
 
 ---
 
@@ -109,7 +117,7 @@ the displayed `OTEL_EXPORTER_OTLP_ENDPOINT` SHALL point to the local collector, 
 
 - **GIVEN** `dtwiz install otel` selects a Go project
 - **WHEN** the environment variable guidance is printed
-- **THEN** `OTEL_EXPORTER_OTLP_ENDPOINT` is shown as `http://localhost:<collectorHTTPPort>`
+- **THEN** `OTEL_EXPORTER_OTLP_ENDPOINT` is shown as `http://127.0.0.1:<collectorHTTPPort>`
 - **THEN** no Dynatrace token is shown in `OTEL_EXPORTER_OTLP_HEADERS`
 
 ---
