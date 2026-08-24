@@ -9,12 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.5.0] - 2026-08-24
 
-### Added
-
-- `install oneagent`: Windows installs can now run the OneAgent installer silently, passing the quiet install options needed for unattended setup
-
 ### Changed
 
+- `install oneagent`: Windows installs can now run the OneAgent installer silently, passing the quiet install options needed for unattended setup
 - `install otel`: auto-instrumented Go, Java, Node.js, and Python applications now export telemetry through the local Dynatrace OTel Collector instead of sending directly to Dynatrace; standalone runtime setup warns when the collector endpoint cannot be reached
 - Documentation: updated required Dynatrace token scopes, including Fleet Management public-address read access and RUM scopes needed for frontend monitoring setup
 
