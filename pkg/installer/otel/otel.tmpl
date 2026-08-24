@@ -171,7 +171,7 @@ processors:
       - key: dt.host_group.id
         value: "{{ .HostGroupID }}"
         action: upsert
-  filter:
+  filter/idle-cpu-usage:
     metrics:
       datapoint:
         - metric.name == "system.cpu.utilization" and attributes["state"] == "idle"
@@ -294,7 +294,7 @@ service:
         - host_metrics/5m
         - host_metrics/1h
       processors:
-        - filter
+        - filter/idle-cpu-usage
         - resource/add-host-group-id
         - resource_detection/system
         - transform

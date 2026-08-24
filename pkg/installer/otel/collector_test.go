@@ -233,7 +233,7 @@ func TestGenerateOtelConfig_Combined_ExperimentalEnabled(t *testing.T) {
 	if !ok {
 		t.Fatal("combined config missing metrics/host pipeline")
 	}
-	wantProcessors := []string{"filter", "resource/add-host-group-id", "resource_detection/system", "transform", "filter/delete-metrics", "cumulative_to_delta"}
+	wantProcessors := []string{"filter/idle-cpu-usage", "resource/add-host-group-id", "resource_detection/system", "transform", "filter/delete-metrics", "cumulative_to_delta"}
 	if len(hostPipeline.Processors) != len(wantProcessors) {
 		t.Errorf("metrics/host processors: got %v, want %v", hostPipeline.Processors, wantProcessors)
 	} else {
