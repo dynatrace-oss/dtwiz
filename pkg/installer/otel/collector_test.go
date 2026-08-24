@@ -196,6 +196,16 @@ func TestGenerateOtelConfig_AppOnly_Default(t *testing.T) {
 	if _, ok := parsed.Service.Pipelines["metrics"]; !ok {
 		t.Error("app-only config must contain metrics pipeline")
 	}
+	tracesPipeline, tracesOk := parsed.Service.Pipelines["traces"]
+	if !tracesOk {
+		t.Fatal("app-only config missing traces pipeline")
+	}
+	for _, p := range tracesPipeline.Processors {
+		if p == "resource_detection" {
+			t.Errorf("app-only config traces pipeline must not contain resource_detection processor, got %v", tracesPipeline.Processors)
+			break
+		}
+	}
 }
 
 func TestGenerateOtelConfig_Combined_ExperimentalEnabled(t *testing.T) {
@@ -267,8 +277,19 @@ func TestGenerateOtelConfig_Combined_ExperimentalEnabled(t *testing.T) {
 	if _, ok := parsed.Service.Pipelines["metrics/apps"]; !ok {
 		t.Error("combined config missing metrics/apps pipeline")
 	}
-	if _, ok := parsed.Service.Pipelines["traces"]; !ok {
-		t.Error("combined config missing traces pipeline")
+	tracesPipeline, tracesOk := parsed.Service.Pipelines["traces"]
+	if !tracesOk {
+		t.Fatal("combined config missing traces pipeline")
+	}
+	hasResourceDetectionInTraces := false
+	for _, p := range tracesPipeline.Processors {
+		if p == "resource_detection" {
+			hasResourceDetectionInTraces = true
+			break
+		}
+	}
+	if !hasResourceDetectionInTraces {
+		t.Errorf("combined config traces pipeline missing resource_detection processor, got %v", tracesPipeline.Processors)
 	}
 	if _, ok := parsed.Service.Pipelines["logs"]; !ok {
 		t.Error("combined config missing logs pipeline")
