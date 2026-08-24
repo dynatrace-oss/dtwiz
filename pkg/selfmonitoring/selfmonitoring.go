@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
+	"github.com/dynatrace-oss/dtwiz/pkg/version"
 )
 
 const (
@@ -31,6 +32,7 @@ func SendEvent(classicURL, token string) error {
 
 	req.Header.Set("Authorization", authHeader(token))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "dtwiz/"+version.Version+";sfmid="+headerValue)
 	req.Header.Set(headerKey, headerValue)
 
 	resp, err := http.DefaultClient.Do(req)
