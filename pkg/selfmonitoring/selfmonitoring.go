@@ -5,6 +5,7 @@ package selfmonitoring
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -13,8 +14,8 @@ import (
 
 const (
 	headerKey   = "dtwiz-monitoring"
-	headerValue = "ingest-started"
-	eventBody   = `{"eventType":"CUSTOM_INFO","title":"dtwiz self-monitoring","properties":{"monitoring-event":"ingest-started"}}`
+	headerValue = "dtwiz-start"
+	eventBody   = `{"eventType":"CUSTOM_INFO","title":"dtwiz started","properties":{"monitoring-event":"dtwiz-start"}}`
 )
 
 // SendEvent ingests a self-monitoring event into the given classic Dynatrace environment.
@@ -38,11 +39,13 @@ func SendEvent(classicURL, token string) error {
 	}
 	defer resp.Body.Close()
 
+	body, _ := io.ReadAll(resp.Body)
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("unexpected status %d", resp.StatusCode)
+		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
 	}
 
-	logger.Debug("selfmonitoring: event sent to %s", url)
+	logger.Debug(fmt.Sprintf("selfmonitoring: event sent to %s (status %d): %s", url, resp.StatusCode, string(body)))
 	return nil
 }
 

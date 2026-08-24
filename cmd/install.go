@@ -3,8 +3,6 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -18,7 +16,6 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
-	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 )
 
 var installDryRun bool
@@ -43,20 +40,7 @@ var installCmd = &cobra.Command{
 		logger.Debug("logging: debug")
 		featureflags.ApplyCLIOverrides(cmd.Flags())
 		installer.AutoConfirm = installAutoConfirm
-	},
-	PersistentPostRun: func(cmd *cobra.Command, args []string) {
-		env := os.Getenv("DTWIZ_SELF_MONITORING_POC")
-		if !strings.EqualFold(env, "true") && env != "1" {
-			return
-		}
-		envURL, _, platformTok, err := getDtEnvironment()
-		if err != nil {
-			logger.Debug("selfmonitoring: could not resolve credentials: %v", err)
-			return
-		}
-		if err := selfmonitoring.SendEvent(installer.APIURL(envURL), platformTok); err != nil {
-			logger.Debug("selfmonitoring: %v", err)
-		}
+		fireSelfMonitoringStart()
 	},
 }
 

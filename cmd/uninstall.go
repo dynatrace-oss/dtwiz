@@ -32,6 +32,7 @@ var uninstallCmd = &cobra.Command{
 		logger.Debug("logging: debug")
 		featureflags.ApplyCLIOverrides(cmd.Flags())
 		installer.AutoConfirm = uninstallAutoConfirm
+		fireSelfMonitoringStart()
 	},
 }
 
