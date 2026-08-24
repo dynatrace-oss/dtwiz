@@ -263,12 +263,12 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: []
+      processors: [{{- if .HostMonitoring }}resource_detection{{- end }}]
       exporters: [otlp_http]
 {{- if .HostMonitoring }}
     metrics/apps:
       receivers: [otlp]
-      processors: [cumulative_to_delta]
+      processors: [resource_detection, cumulative_to_delta]
       exporters: [otlp_http]
     metrics/host:
       receivers: [hostmetrics/10s, hostmetrics/5m, hostmetrics/1h]
