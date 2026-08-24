@@ -14,7 +14,7 @@ receivers:
       http:
         endpoint: 0.0.0.0:{{ .HTTPPort }}
 {{- if .HostMonitoring }}
-  hostmetrics/10s:
+  host_metrics/10s:
     collection_interval: 10s
     scrapers:
       cpu:
@@ -39,7 +39,7 @@ receivers:
             enabled: false
           system.cpu.load_average.15m:
             enabled: false
-  hostmetrics/5m:
+  host_metrics/5m:
     collection_interval: 5m
     scrapers:
       cpu:
@@ -123,7 +123,7 @@ receivers:
             enabled: true
           process.disk.io:
             enabled: true
-  hostmetrics/1h:
+  host_metrics/1h:
     collection_interval: 1h
     scrapers:
       memory:
@@ -218,7 +218,7 @@ processors:
     metric_statements:
       - context: datapoint
         statements:
-          - set(resource.attributes["low-memory-process"], "true") where metric.name == "process.memory.usage" and value_int < 1048576 and resource.attributes["process.executable.name"] != nil
+          - set(resource.attributes["low-memory-process"], "true") where metric.name == "process.memory.usage" and datapoint.value_int < 1048576 and resource.attributes["process.executable.name"] != nil
       - context: resource
         statements:
           - replace_pattern(resource.attributes["process.command_line"], " ", "_")

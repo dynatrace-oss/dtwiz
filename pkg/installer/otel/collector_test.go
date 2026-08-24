@@ -219,7 +219,7 @@ func TestGenerateOtelConfig_Combined_ExperimentalEnabled(t *testing.T) {
 	cfg := generatedConfig.content
 	parsed := parseOtelConfig(t, cfg)
 
-	for _, recv := range []string{"hostmetrics/10s", "hostmetrics/5m", "hostmetrics/1h"} {
+	for _, recv := range []string{"host_metrics/10s", "host_metrics/5m", "host_metrics/1h"} {
 		if _, ok := parsed.Receivers[recv]; !ok {
 			t.Errorf("combined config missing receiver %q", recv)
 		}
