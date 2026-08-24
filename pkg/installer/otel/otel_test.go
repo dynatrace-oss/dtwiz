@@ -848,6 +848,10 @@ const testOtelExtension = "com.dynatrace.extension.opentelemetry"
 //   - installCode:  HTTP status for POST /extensions/{name} (hub install).
 //   - activateCode: HTTP status for POST /extensions/{name}/environment-configuration.
 func otelExtSrv(t *testing.T, getResp string, installCode, activateCode int) *httptest.Server {
+	return otelExtSrvWithActiveVersion(t, getResp, installCode, activateCode, "3.1.1")
+}
+
+func otelExtSrvWithActiveVersion(t *testing.T, getResp string, installCode, activateCode int, activeVersion string) *httptest.Server {
 	t.Helper()
 	getCount := 0
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -866,6 +870,13 @@ func otelExtSrv(t *testing.T, getResp string, installCode, activateCode int) *ht
 		case r.Method == http.MethodPost && r.URL.Path == ext:
 			w.WriteHeader(installCode)
 			_, _ = w.Write([]byte(`{"extensionName":"` + testOtelExtension + `","version":"3.1.1"}`))
+		case r.Method == http.MethodGet && r.URL.Path == ext+"/environment-configuration":
+			if activeVersion == "" {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"version":"` + activeVersion + `"}`))
 		case r.Method == http.MethodPost && r.URL.Path == ext+"/environment-configuration":
 			w.WriteHeader(activateCode)
 			if activateCode < 300 {
@@ -947,6 +958,9 @@ func TestActivateHostMonitoringExtension_FreshInstall_InstallsThenActivates(t *t
 		case r.Method == http.MethodPost && r.URL.Path == ext:
 			w.WriteHeader(http.StatusAccepted)
 			_, _ = w.Write([]byte(`{"extensionName":"` + testOtelExtension + `","version":"3.1.1"}`))
+		case r.Method == http.MethodGet && r.URL.Path == ext+"/environment-configuration":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"version":"3.1.1"}`))
 		case r.Method == http.MethodPost && r.URL.Path == ext+"/environment-configuration":
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"version":"3.1.1"}`))
@@ -991,6 +1005,9 @@ func otelDeleteSrv(t *testing.T, getResp string, deactivateCode, deleteCode int)
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ext := "/platform/extensions/v2/extensions/" + testOtelExtension
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == ext+"/environment-configuration":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"version":"3.1.1"}`))
 		case r.Method == http.MethodDelete && r.URL.Path == ext+"/environment-configuration":
 			w.WriteHeader(deactivateCode)
 		case r.Method == http.MethodGet && r.URL.Path == ext:
@@ -1261,7 +1278,7 @@ func TestBuildExtensionActivationPreview_NotInstalled(t *testing.T) {
 
 func TestBuildExtensionActivationPreview_InstalledNotActive(t *testing.T) {
 	getResp := `{"items":[{"version":"3.1.1","extensionName":"` + testOtelExtension + `","active":false}]}`
-	srv := otelExtSrv(t, getResp, http.StatusAccepted, http.StatusOK)
+	srv := otelExtSrvWithActiveVersion(t, getResp, http.StatusAccepted, http.StatusOK, "")
 	defer srv.Close()
 
 	status, err := buildExtensionActivationPreview(srv.URL, "dt0s16.test")

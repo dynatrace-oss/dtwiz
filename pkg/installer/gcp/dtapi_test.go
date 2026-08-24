@@ -284,6 +284,8 @@ func newMonitoringTestServer(t *testing.T, opts monitoringServerOpts) *httptest.
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == extensionAPI+"/environment-configuration":
+			_, _ = w.Write([]byte(`{"version":"1.2.0"}`))
 		case r.Method == http.MethodGet && r.URL.Path == extensionAPI:
 			if opts.noVersions {
 				_, _ = w.Write([]byte(`{"items":[]}`))
@@ -481,6 +483,11 @@ func TestSDKDeleteMonitoring_HappyPath(t *testing.T) {
 
 func TestSDKInstallExtension_AlreadyInstalled(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == extensionAPI+"/environment-configuration" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"version":"1.2.0"}`))
+			return
+		}
 		if r.Method == http.MethodGet && r.URL.Path == extensionAPI {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"items":[{"version":"1.2.0"}]}`))
