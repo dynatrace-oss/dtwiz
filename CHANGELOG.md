@@ -7,10 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-08-24
+
+### Added
+
+- `install oneagent`: Windows installs can now run the OneAgent installer silently, passing the quiet install options needed for unattended setup
+
+### Changed
+
+- `install otel`: auto-instrumented Go, Java, Node.js, and Python applications now export telemetry through the local Dynatrace OTel Collector instead of sending directly to Dynatrace; standalone runtime setup warns when the collector endpoint cannot be reached
+- Documentation: updated required Dynatrace token scopes, including Fleet Management public-address read access and RUM scopes needed for frontend monitoring setup
+
 ### Fixed
 
+- `install otel` (experimental): host-monitoring journald logs now flow through the main logs pipeline, preserving the resource attributes needed for Dynatrace to associate those logs with the monitored host
 - `install otel`: fixed port allocation incorrectly reporting an occupied port as free, which could cause the newly started collector to exit immediately with `exit status 1`
 - `install otel` / `update otel`: post-install verification now targets the OTel Collector's actual OTLP HTTP port instead of always assuming the default, which previously caused verification to silently probe or post to the wrong port whenever the default port was unavailable and a different one was allocated
+- `install otel`: clarified the message shown when a detected Node.js project uses an unsupported runtime for auto-instrumentation
 
 ## [1.4.0] - 2026-08-17
 
@@ -494,7 +507,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.1.0...v1.2.0
