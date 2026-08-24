@@ -254,7 +254,8 @@ processors:
 
 service:
 {{- if .HostMonitoring }}
-  extensions: [health_check]
+  extensions:
+    - health_check
 {{- end }}
   telemetry:
     metrics:
@@ -266,28 +267,65 @@ service:
                 port: {{ .MetricsPort }}
   pipelines:
     traces:
-      receivers: [otlp]
-      processors: [{{- if .HostMonitoring }}resource/add-host-group-id, resource_detection/system{{- end }}]
-      exporters: [otlp_http]
+      receivers:
+        - otlp
+{{- if .HostMonitoring }}
+      processors:
+        - resource/add-host-group-id
+        - resource_detection/system
+{{- else }}
+      processors: []
+{{- end }}
+      exporters:
+        - otlp_http
 {{- if .HostMonitoring }}
     metrics/apps:
-      receivers: [otlp]
-      processors: [resource/add-host-group-id, resource_detection/system, cumulative_to_delta]
-      exporters: [otlp_http]
+      receivers:
+        - otlp
+      processors:
+        - resource/add-host-group-id
+        - resource_detection/system
+        - cumulative_to_delta
+      exporters:
+        - otlp_http
     metrics/host:
-      receivers: [host_metrics/10s, host_metrics/5m, host_metrics/1h]
-      processors: [filter, resource/add-host-group-id, resource_detection/system, transform, filter/delete-metrics, cumulative_to_delta]
-      exporters: [otlp_http]
+      receivers:
+        - host_metrics/10s
+        - host_metrics/5m
+        - host_metrics/1h
+      processors:
+        - filter
+        - resource/add-host-group-id
+        - resource_detection/system
+        - transform
+        - filter/delete-metrics
+        - cumulative_to_delta
+      exporters:
+        - otlp_http
 {{- else }}
     metrics:
-      receivers: [otlp]
-      processors: [cumulative_to_delta]
-      exporters: [otlp_http]
+      receivers:
+        - otlp
+      processors:
+        - cumulative_to_delta
+      exporters:
+        - otlp_http
 {{- end }}
     logs:
-      receivers: [otlp{{- if and .HostMonitoring .IncludeJournald }}, journald{{- end }}]
-      processors: [{{- if .HostMonitoring }}resource/add-host-group-id, resource_detection/system{{- end }}]
-      exporters: [otlp_http]
+      receivers:
+        - otlp
+{{- if and .HostMonitoring .IncludeJournald }}
+        - journald
+{{- end }}
+{{- if .HostMonitoring }}
+      processors:
+        - resource/add-host-group-id
+        - resource_detection/system
+{{- else }}
+      processors: []
+{{- end }}
+      exporters:
+        - otlp_http
 
 exporters:
   otlp_http:
