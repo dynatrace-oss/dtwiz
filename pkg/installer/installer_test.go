@@ -2,10 +2,40 @@ package installer
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
+func TestMaskSecret(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		input  string
+		secret string
+		want   string
+	}{
+		{name: "empty secret leaves input unchanged", input: "abc", secret: "", want: "abc"},
+		{name: "single occurrence", input: "token=secret", secret: "secret", want: "token=***"},
+		{name: "multiple occurrences", input: "secret and secret", secret: "secret", want: "*** and ***"},
+		{name: "no occurrence", input: "visible", secret: "secret", want: "visible"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := MaskSecret(tt.input, tt.secret); got != tt.want {
+				t.Fatalf("MaskSecret() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestAuthHeader(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		token string
 		want  string
@@ -16,14 +46,21 @@ func TestAuthHeader(t *testing.T) {
 		{"", "Bearer "},
 	}
 	for _, tt := range tests {
-		got := AuthHeader(tt.token)
-		if got != tt.want {
-			t.Errorf("AuthHeader(%q) = %q, want %q", tt.token, got, tt.want)
-		}
+		tt := tt
+		t.Run(tt.token, func(t *testing.T) {
+			t.Parallel()
+
+			got := AuthHeader(tt.token)
+			if got != tt.want {
+				t.Errorf("AuthHeader(%q) = %q, want %q", tt.token, got, tt.want)
+			}
+		})
 	}
 }
 
 func TestAPIURL(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		input string
 		want  string
@@ -41,14 +78,21 @@ func TestAPIURL(t *testing.T) {
 		{"https://abc123.live.dynatrace.com/", "https://abc123.live.dynatrace.com"},
 	}
 	for _, tt := range tests {
-		got := APIURL(tt.input)
-		if got != tt.want {
-			t.Errorf("APIURL(%q) = %q, want %q", tt.input, got, tt.want)
-		}
+		tt := tt
+		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+
+			got := APIURL(tt.input)
+			if got != tt.want {
+				t.Errorf("APIURL(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
 	}
 }
 
 func TestAppsURL(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		input string
 		want  string
@@ -62,14 +106,21 @@ func TestAppsURL(t *testing.T) {
 		{"https://custom.example.com", "https://custom.example.com"},
 	}
 	for _, tt := range tests {
-		got := AppsURL(tt.input)
-		if got != tt.want {
-			t.Errorf("AppsURL(%q) = %q, want %q", tt.input, got, tt.want)
-		}
+		tt := tt
+		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+
+			got := AppsURL(tt.input)
+			if got != tt.want {
+				t.Errorf("AppsURL(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
 	}
 }
 
 func TestExtractTenantID(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		input string
 		want  string
@@ -84,18 +135,62 @@ func TestExtractTenantID(t *testing.T) {
 		{"https://my-managed.example.com/e/abc12345/", "abc12345"},
 	}
 	for _, tt := range tests {
-		got := ExtractTenantID(tt.input)
-		if got != tt.want {
-			t.Errorf("ExtractTenantID(%q) = %q, want %q", tt.input, got, tt.want)
-		}
+		tt := tt
+		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+
+			got := ExtractTenantID(tt.input)
+			if got != tt.want {
+				t.Errorf("ExtractTenantID(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
 	}
 }
 
 func TestIngestTimeFormat_IsRFC3339(t *testing.T) {
+	t.Parallel()
+
 	// Go's reference time is Mon Jan 2 15:04:05 MST 2006 → RFC3339: "2006-01-02T15:04:05Z"
 	const wantRFC3339 = "2006-01-02T15:04:05Z"
 	if IngestTimeFormat != wantRFC3339 {
 		t.Errorf("IngestTimeFormat = %q, want RFC3339 reference value %q", IngestTimeFormat, wantRFC3339)
+	}
+}
+
+func TestRunCommandWithExitCode_EmptyCommand(t *testing.T) {
+	t.Parallel()
+
+	code, err := RunCommandWithExitCode(nil, true)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if err == nil || !strings.Contains(err.Error(), "empty command") {
+		t.Fatalf("error = %v, want empty command", err)
+	}
+}
+
+func TestIsNotFoundErr(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		msg  string
+		want bool
+	}{
+		{msg: "resource not found", want: true},
+		{msg: "The resource does not exist", want: true},
+		{msg: "NOT_FOUND", want: true},
+		{msg: "permission denied", want: false},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.msg, func(t *testing.T) {
+			t.Parallel()
+
+			if got := IsNotFoundErr(errors.New(tt.msg)); got != tt.want {
+				t.Fatalf("IsNotFoundErr(%q) = %v, want %v", tt.msg, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -166,6 +261,8 @@ func TestShouldProceed_UserDeclines(t *testing.T) {
 }
 
 func TestMergePathEntries(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		desc    string
 		current string
@@ -210,7 +307,10 @@ func TestMergePathEntries(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
+		c := c
 		t.Run(c.desc, func(t *testing.T) {
+			t.Parallel()
+
 			got := mergePathEntries(c.current, c.newPath)
 			if got != c.want {
 				t.Errorf("mergePathEntries(%q, %q) = %q, want %q", c.current, c.newPath, got, c.want)

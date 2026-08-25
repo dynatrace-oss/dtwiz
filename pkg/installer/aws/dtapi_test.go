@@ -25,6 +25,8 @@ func newTestDTClient(t *testing.T, serverURL string) *sdkDTClient {
 // Mirrors `dtctl enable aws monitoring` — without this step the CloudFormation
 // stack is deployed but no data ever flows.
 func TestEnableMonitoringConfig_FlipsTopLevelAndCredentials(t *testing.T) {
+	t.Parallel()
+
 	const objectID = "abc-123"
 	const configPath = "/platform/extensions/v2/extensions/" + extensionName + "/monitoring-configurations/" + objectID
 
@@ -100,6 +102,8 @@ func TestEnableMonitoringConfig_FlipsTopLevelAndCredentials(t *testing.T) {
 }
 
 func TestEnableMonitoringConfig_PropagatesGetError(t *testing.T) {
+	t.Parallel()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = w.Write([]byte(`{"error":{"code":404,"message":"not found"}}`))
@@ -120,6 +124,8 @@ func TestEnableMonitoringConfig_PropagatesGetError(t *testing.T) {
 // installed" path: a 404 from the version check is treated as absence and
 // InstallFromHub is called.
 func TestInstallExtension_NotFoundTriggersInstall(t *testing.T) {
+	t.Parallel()
+
 	path := "/platform/extensions/v2/extensions/" + extensionName
 	var installCalled bool
 
@@ -160,6 +166,8 @@ func TestInstallExtension_NotFoundTriggersInstall(t *testing.T) {
 // timeout or auth failure during the version check being silently swallowed
 // and turned into a confusing double-install attempt.
 func TestInstallExtension_PropagatesNonNotFoundError(t *testing.T) {
+	t.Parallel()
+
 	path := "/platform/extensions/v2/extensions/" + extensionName
 	var installCalled bool
 
@@ -194,6 +202,8 @@ func TestInstallExtension_PropagatesNonNotFoundError(t *testing.T) {
 // TestFindExistingMonitoringConfig_NotFoundReturnsEmpty verifies the normal
 // "extension not installed yet" path: a 404 is treated as no existing config.
 func TestFindExistingMonitoringConfig_NotFoundReturnsEmpty(t *testing.T) {
+	t.Parallel()
+
 	path := "/platform/extensions/v2/extensions/" + extensionName + "/monitoring-configurations"
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -219,6 +229,8 @@ func TestFindExistingMonitoringConfig_NotFoundReturnsEmpty(t *testing.T) {
 // real failure (e.g. network timeout, auth error) being misclassified as
 // "extension not installed" and silently swallowed.
 func TestFindExistingMonitoringConfig_PropagatesOtherErrors(t *testing.T) {
+	t.Parallel()
+
 	path := "/platform/extensions/v2/extensions/" + extensionName + "/monitoring-configurations"
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -233,5 +245,91 @@ func TestFindExistingMonitoringConfig_PropagatesOtherErrors(t *testing.T) {
 	dtc := newTestDTClient(t, srv.URL)
 	if _, err := dtc.findExistingMonitoringConfig("111111111111"); err == nil {
 		t.Fatal("expected error to propagate for a non-404 failure")
+	}
+}
+
+func TestCreateMonitoringConfig_BuildsQuickStartConfig(t *testing.T) {
+	t.Parallel()
+
+	path := "/platform/extensions/v2/extensions/" + extensionName + "/monitoring-configurations"
+	var receivedPOST map[string]any
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != path {
+			t.Errorf("unexpected path %q", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.Method != http.MethodPost {
+			t.Errorf("unexpected method %q", r.Method)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if err := json.NewDecoder(r.Body).Decode(&receivedPOST); err != nil {
+			t.Errorf("decode POST body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"objectId":"created-config-id"}`))
+	}))
+	defer srv.Close()
+
+	dtc := newTestDTClient(t, srv.URL)
+	id, err := dtc.createMonitoringConfig("111111111111", "eu-west-1", "1.2.3")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if id != "created-config-id" {
+		t.Fatalf("objectId = %q, want created-config-id", id)
+	}
+	if got, _ := receivedPOST["scope"].(string); got != "integration-aws" {
+		t.Fatalf("scope = %q, want integration-aws", got)
+	}
+
+	value, ok := receivedPOST["value"].(map[string]any)
+	if !ok {
+		t.Fatalf("value missing in POST body")
+	}
+	if enabled, _ := value["enabled"].(bool); enabled {
+		t.Errorf("value.enabled = %v, want false until CloudFormation deploy completes", value["enabled"])
+	}
+	if got, _ := value["version"].(string); got != "1.2.3" {
+		t.Errorf("version = %q, want 1.2.3", got)
+	}
+	if got, _ := value["activationContext"].(string); got != "DATA_ACQUISITION" {
+		t.Errorf("activationContext = %q, want DATA_ACQUISITION", got)
+	}
+
+	aws, ok := value["aws"].(map[string]any)
+	if !ok {
+		t.Fatalf("aws missing in POST body")
+	}
+	if got, _ := aws["deploymentRegion"].(string); got != "eu-west-1" {
+		t.Errorf("deploymentRegion = %q, want eu-west-1", got)
+	}
+	if got, _ := aws["configurationMode"].(string); got != "QUICK_START" {
+		t.Errorf("configurationMode = %q, want QUICK_START", got)
+	}
+	if got, _ := aws["deploymentMode"].(string); got != "AUTOMATED" {
+		t.Errorf("deploymentMode = %q, want AUTOMATED", got)
+	}
+
+	creds, ok := aws["credentials"].([]any)
+	if !ok || len(creds) != 1 {
+		t.Fatalf("credentials missing or wrong length: %v", aws["credentials"])
+	}
+	credential, ok := creds[0].(map[string]any)
+	if !ok {
+		t.Fatalf("credential is not an object: %v", creds[0])
+	}
+	if got, _ := credential["accountId"].(string); got != "111111111111" {
+		t.Errorf("credential.accountId = %q, want 111111111111", got)
+	}
+	if enabled, _ := credential["enabled"].(bool); enabled {
+		t.Errorf("credential.enabled = %v, want false until CloudFormation deploy completes", credential["enabled"])
+	}
+
+	regions, ok := aws["regionFiltering"].([]any)
+	if !ok || len(regions) != 1 || regions[0] != "eu-west-1" {
+		t.Errorf("regionFiltering = %v, want [eu-west-1]", aws["regionFiltering"])
 	}
 }

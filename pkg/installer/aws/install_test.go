@@ -1,8 +1,14 @@
 package aws
 
-import "testing"
+import (
+	"reflect"
+	"strings"
+	"testing"
+)
 
 func TestMaskTokenArgs(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name   string
 		args   []string
@@ -36,7 +42,10 @@ func TestMaskTokenArgs(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			got := maskTokenArgs(tt.args, tt.tokens...)
 			if len(got) != len(tt.want) {
 				t.Fatalf("maskTokenArgs(%v, %v) = %v, want %v", tt.args, tt.tokens, got, tt.want)
@@ -47,5 +56,76 @@ func TestMaskTokenArgs(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestBuildDeployArgs(t *testing.T) {
+	t.Parallel()
+
+	cfg := awsStackConfig{
+		StackName:          "dynatrace-data-acquisition",
+		DynatraceURL:       "https://abc123.apps.dynatrace.com",
+		SettingsToken:      "settings-token",
+		IngestToken:        "ingest-token",
+		MonitoringConfigID: "monitoring-config-id",
+		LogsEnabled:        "TRUE",
+		LogsRegions:        "eu-west-1,us-east-1",
+		EventsEnabled:      "FALSE",
+		EventsRegions:      "ap-southeast-2,eu-central-1",
+		EventBridgeBusName: "custom-bus",
+		EventSources:       "aws.health,aws.ec2",
+		UseCMK:             "FALSE",
+	}
+
+	got := buildDeployArgs(cfg, "/tmp/da-aws-activation.yaml")
+	want := []string{
+		"cloudformation", "deploy",
+		"--stack-name", "dynatrace-data-acquisition",
+		"--template-file", "/tmp/da-aws-activation.yaml",
+		"--capabilities", "CAPABILITY_NAMED_IAM",
+		"--parameter-overrides",
+		"pDynatraceUrl=https://abc123.apps.dynatrace.com",
+		"pDtApiToken=settings-token",
+		"pDtIngestToken=ingest-token",
+		"pMonitoringConfigId=monitoring-config-id",
+		"pDtLogsIngestEnabled=TRUE",
+		"pDtLogsIngestRegions=eu-west-1,us-east-1",
+		"pDtEventsIngestEnabled=FALSE",
+		"pDtEventsIngestRegions=ap-southeast-2,eu-central-1",
+		"pEventBridgeBusName=custom-bus",
+		"pEventSources=aws.health,aws.ec2",
+		"pUseCMK=FALSE",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("buildDeployArgs() = %#v, want %#v", got, want)
+	}
+}
+
+func TestFormatDeployCmd(t *testing.T) {
+	t.Parallel()
+
+	got := formatDeployCmd([]string{
+		"cloudformation", "deploy",
+		"--stack-name", "dynatrace-data-acquisition",
+		"--template-file", "/tmp/da-aws-activation.yaml",
+		"--capabilities", "CAPABILITY_NAMED_IAM",
+		"--parameter-overrides",
+		"pDynatraceUrl=https://abc123.apps.dynatrace.com",
+		"pDtLogsIngestRegions=eu-west-1,us-east-1",
+	})
+
+	wantContains := []string{
+		"cloudformation deploy \\",
+		"\n        --stack-name dynatrace-data-acquisition \\",
+		"\n        --template-file /tmp/da-aws-activation.yaml \\",
+		"\n        --capabilities CAPABILITY_NAMED_IAM \\",
+		"\n        --parameter-overrides \\",
+		"\n            pDynatraceUrl=https://abc123.apps.dynatrace.com \\",
+		"\n            pDtLogsIngestRegions=eu-west-1,us-east-1",
+	}
+	for _, want := range wantContains {
+		if !strings.Contains(got, want) {
+			t.Fatalf("formatDeployCmd() = %q, want substring %q", got, want)
+		}
 	}
 }
