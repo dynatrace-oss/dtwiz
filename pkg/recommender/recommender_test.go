@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fatih/color"
+
 	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/recommender"
@@ -176,6 +178,46 @@ func TestFormatRecommendations_NonEmpty(t *testing.T) {
 	if result == "" {
 		t.Error("FormatRecommendations should not return empty string for non-empty recs")
 	}
+}
+
+func TestFormatRecommendations_NumbersOnlyActionableRecommendations(t *testing.T) {
+	origNoColor := color.NoColor
+	color.NoColor = true
+	t.Cleanup(func() { color.NoColor = origNoColor })
+
+	recs := []recommender.Recommendation{
+		{Method: recommender.MethodAlreadyInstalled, Title: "OneAgent already running", Done: true},
+		{Method: recommender.MethodOtelCollector, Title: "Install OpenTelemetry Collector"},
+		{Method: recommender.MethodDocker, Title: "Docker OneAgent", ComingSoon: true},
+		{Method: recommender.MethodNotSupported, Title: "Unsupported platform"},
+		{Method: recommender.MethodAWS, Title: "AWS cloud services"},
+	}
+
+	result := recommender.FormatRecommendations(recs)
+	installLine := lineContaining(result, "Install OpenTelemetry Collector")
+	awsLine := lineContaining(result, "AWS cloud services")
+	doneLine := lineContaining(result, "OneAgent already running")
+	comingSoonLine := lineContaining(result, "Docker OneAgent")
+	unsupportedLine := lineContaining(result, "Unsupported platform")
+
+	if !strings.Contains(installLine, " 1 ") {
+		t.Fatalf("first actionable recommendation line = %q, want numbered 1", installLine)
+	}
+	if !strings.Contains(awsLine, " 2 ") {
+		t.Fatalf("second actionable recommendation line = %q, want numbered 2", awsLine)
+	}
+	if strings.Contains(doneLine, " 1 ") || strings.Contains(comingSoonLine, " 2 ") || strings.Contains(unsupportedLine, " 2 ") {
+		t.Fatalf("non-actionable recommendations should not consume menu numbers:\n%s", result)
+	}
+}
+
+func lineContaining(s, needle string) string {
+	for _, line := range strings.Split(s, "\n") {
+		if strings.Contains(line, needle) {
+			return line
+		}
+	}
+	return ""
 }
 
 func TestGenerateRecommendations_OtelCollectorNotRunning(t *testing.T) {
