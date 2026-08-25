@@ -756,11 +756,47 @@ func TestSDKInstallExtension_FreshInstall(t *testing.T) {
 
 // ─── isExtensionActive ───────────────────────────────────────────────────────
 
-func TestSDKIsExtensionActive_Active(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+type extensionActiveServerOpts struct {
+	envConfigStatus int
+	envConfigBody   string
+}
+
+func newExtensionActiveTestServer(t *testing.T, opts extensionActiveServerOpts) *httptest.Server {
+	t.Helper()
+	versionRequests := 0
+	envConfigRequests := 0
+	t.Cleanup(func() {
+		if versionRequests != 1 {
+			t.Errorf("extension version requests = %d, want 1", versionRequests)
+		}
+		if envConfigRequests != 1 {
+			t.Errorf("environment-configuration requests = %d, want 1", envConfigRequests)
+		}
+	})
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[{"version":"1.2.0","active":true}]}`))
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == extensionAPI:
+			versionRequests++
+			_, _ = w.Write([]byte(`{"items":[{"version":"1.2.0"}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == extensionAPI+"/environment-configuration":
+			envConfigRequests++
+			if opts.envConfigStatus != 0 {
+				w.WriteHeader(opts.envConfigStatus)
+			}
+			if opts.envConfigBody != "" {
+				_, _ = w.Write([]byte(opts.envConfigBody))
+			}
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		}
 	}))
+}
+
+func TestSDKIsExtensionActive_Active(t *testing.T) {
+	srv := newExtensionActiveTestServer(t, extensionActiveServerOpts{
+		envConfigBody: `{"version":"1.2.0"}`,
+	})
 	defer srv.Close()
 
 	active, err := newTestSDKClient(t, srv.URL).isExtensionActive()
@@ -768,15 +804,15 @@ func TestSDKIsExtensionActive_Active(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !active {
-		t.Error("expected active=true when extension version has active:true")
+		t.Error("expected active=true when environment configuration points to installed version")
 	}
 }
 
 func TestSDKIsExtensionActive_NotActive(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[{"version":"1.2.0"}]}`))
-	}))
+	srv := newExtensionActiveTestServer(t, extensionActiveServerOpts{
+		envConfigStatus: http.StatusNotFound,
+		envConfigBody:   `{"error":{"code":404,"message":"Environment configuration not found"}}`,
+	})
 	defer srv.Close()
 
 	active, err := newTestSDKClient(t, srv.URL).isExtensionActive()
@@ -784,6 +820,22 @@ func TestSDKIsExtensionActive_NotActive(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if active {
-		t.Error("expected active=false when active field is absent")
+		t.Error("expected active=false when environment configuration is absent")
+	}
+}
+
+func TestSDKIsExtensionActive_SecondaryRequestFailure(t *testing.T) {
+	srv := newExtensionActiveTestServer(t, extensionActiveServerOpts{
+		envConfigStatus: http.StatusInternalServerError,
+		envConfigBody:   `{"error":{"message":"temporary failure"}}`,
+	})
+	defer srv.Close()
+
+	active, err := newTestSDKClient(t, srv.URL).isExtensionActive()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if active {
+		t.Error("expected active=false when environment configuration lookup fails")
 	}
 }
