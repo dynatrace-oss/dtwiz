@@ -43,6 +43,7 @@ type otelConfigData struct {
 	IncludeJournald bool
 	HealthCheckPort int
 	CloudProvider   string // "aws" | "azure" | "gcp" | ""
+	Debug           bool
 }
 
 type generatedOtelConfig struct {
@@ -723,6 +724,7 @@ func generateOtelConfig(apiURL, token string, opts ...otelConfigOpt) (generatedO
 		MetricsPort: metricsPort,
 		GRPCPort:    grpcPort,
 		HTTPPort:    httpPort,
+		Debug:       logger.IsDebug(),
 	}
 
 	healthCheckPort := findFreePort(13133)
