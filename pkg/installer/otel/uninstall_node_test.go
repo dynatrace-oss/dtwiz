@@ -18,7 +18,7 @@ func TestNodeProcessDescription(t *testing.T) {
 		{
 			name: "working directory with relative entrypoint",
 			info: otelProcessInfo{workingDir: filepath.Join(projectDir, ".otel"), command: "node ../services/frontend/server.js"},
-			want: filepath.Join(projectDir) + "  frontend",
+			want: projectDir + "  frontend",
 		},
 		{
 			name: "framework command falls back to project name",
