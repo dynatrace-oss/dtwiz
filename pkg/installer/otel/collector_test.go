@@ -1,7 +1,10 @@
 package otel
 
 import (
+	"archive/tar"
+	"archive/zip"
 	"bytes"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"net"
@@ -254,6 +257,141 @@ func TestDetectConfigFromArgs(t *testing.T) {
 				t.Errorf("detectConfigFromArgs(%q) = %q, want %q", tc.args, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestExtractFromTarGz_ExtractsNestedBinaryByBaseName(t *testing.T) {
+	archivePath := filepath.Join(t.TempDir(), "collector.tar.gz")
+	writeTestTarGz(t, archivePath, "dist/dynatrace-otel-collector", "collector-binary")
+	destPath := filepath.Join(t.TempDir(), "dynatrace-otel-collector")
+
+	if err := extractFromTarGz(archivePath, "dynatrace-otel-collector", destPath); err != nil {
+		t.Fatalf("extractFromTarGz() returned error: %v", err)
+	}
+	assertFileContent(t, destPath, "collector-binary")
+}
+
+func TestExtractFromTarGz_ReturnsErrorWhenBinaryMissing(t *testing.T) {
+	archivePath := filepath.Join(t.TempDir(), "collector.tar.gz")
+	writeTestTarGz(t, archivePath, "dist/not-the-collector", "nope")
+	destPath := filepath.Join(t.TempDir(), "dynatrace-otel-collector")
+
+	err := extractFromTarGz(archivePath, "dynatrace-otel-collector", destPath)
+	if err == nil {
+		t.Fatal("expected error when collector binary is missing from tar.gz archive")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("error = %q, want not found", err)
+	}
+}
+
+func TestExtractFromZip_ExtractsNestedBinaryByBaseName(t *testing.T) {
+	archivePath := filepath.Join(t.TempDir(), "collector.zip")
+	writeTestZip(t, archivePath, "dist/dynatrace-otel-collector.exe", "collector-binary")
+	destPath := filepath.Join(t.TempDir(), "dynatrace-otel-collector.exe")
+
+	if err := extractFromZip(archivePath, "dynatrace-otel-collector.exe", destPath); err != nil {
+		t.Fatalf("extractFromZip() returned error: %v", err)
+	}
+	assertFileContent(t, destPath, "collector-binary")
+}
+
+func TestContainersFromRuntimeResolvesHostMountedConfig(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell stub uses Unix shebang")
+	}
+
+	hostDir := t.TempDir()
+	cliPath := filepath.Join(t.TempDir(), "docker")
+	script := fmt.Sprintf(`#!/bin/sh
+if [ "$1" = "ps" ]; then
+  printf 'abc123\tdynatrace/dynatrace-otel-collector:latest\tdtwiz-otel\n'
+  exit 0
+fi
+if [ "$1" = "inspect" ]; then
+  printf '%%s\n' '[{"Config":{"Entrypoint":["otelcol"],"Cmd":["--config=/etc/otel/config.yaml"]},"Mounts":[{"Type":"bind","Source":%q,"Destination":"/etc/otel"}]}]'
+  exit 0
+fi
+exit 1
+`, hostDir)
+	if err := os.WriteFile(cliPath, []byte(script), 0755); err != nil {
+		t.Fatalf("write fake container CLI: %v", err)
+	}
+
+	collectors := containersFromRuntime(cliPath)
+	if len(collectors) != 1 {
+		t.Fatalf("containersFromRuntime() returned %d collectors, want 1: %#v", len(collectors), collectors)
+	}
+	collector := collectors[0]
+	if collector.containerName != "dtwiz-otel" || collector.containerRuntime != cliPath {
+		t.Fatalf("collector identity = %#v, want fake CLI and container name", collector)
+	}
+	if collector.configPath != filepath.Join(hostDir, "config.yaml") {
+		t.Fatalf("configPath = %q, want host-mounted config path", collector.configPath)
+	}
+	if collector.containerConfigPath != "/etc/otel/config.yaml" {
+		t.Fatalf("containerConfigPath = %q, want /etc/otel/config.yaml", collector.containerConfigPath)
+	}
+	if !collector.isDynatrace {
+		t.Fatal("expected Dynatrace collector image to be marked as Dynatrace")
+	}
+}
+
+func writeTestTarGz(t *testing.T, archivePath, memberName, content string) {
+	t.Helper()
+	f, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatalf("create tar.gz: %v", err)
+	}
+	gz := gzip.NewWriter(f)
+	tw := tar.NewWriter(gz)
+	if err := tw.WriteHeader(&tar.Header{Name: memberName, Mode: 0755, Size: int64(len(content))}); err != nil {
+		t.Fatalf("write tar header: %v", err)
+	}
+	if _, err := tw.Write([]byte(content)); err != nil {
+		t.Fatalf("write tar body: %v", err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("close tar writer: %v", err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatalf("close gzip writer: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("close archive: %v", err)
+	}
+}
+
+func writeTestZip(t *testing.T, archivePath, memberName, content string) {
+	t.Helper()
+	f, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatalf("create zip: %v", err)
+	}
+	zw := zip.NewWriter(f)
+	w, err := zw.Create(memberName)
+	if err != nil {
+		t.Fatalf("create zip member: %v", err)
+	}
+	if _, err := w.Write([]byte(content)); err != nil {
+		t.Fatalf("write zip member: %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close zip writer: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("close zip: %v", err)
+	}
+}
+
+func assertFileContent(t *testing.T, path, want string) {
+	t.Helper()
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read extracted file: %v", err)
+	}
+	if string(got) != want {
+		t.Fatalf("extracted file content = %q, want %q", string(got), want)
 	}
 }
 

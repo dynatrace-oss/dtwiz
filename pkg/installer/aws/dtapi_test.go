@@ -16,6 +16,7 @@ func newTestDTClient(t *testing.T, serverURL string) *sdkDTClient {
 	if err != nil {
 		t.Fatalf("create test client: %v", err)
 	}
+	ec.C.HTTP().SetRetryCount(0)
 	return &sdkDTClient{ExtensionClient: ec}
 }
 
@@ -199,6 +200,59 @@ func TestInstallExtension_PropagatesNonNotFoundError(t *testing.T) {
 	}
 }
 
+func TestIsExtensionActive_UsesAWSExtensionName(t *testing.T) {
+	t.Parallel()
+
+	path := "/platform/extensions/v2/extensions/" + extensionName
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != path {
+			t.Errorf("unexpected path %q", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.Method != http.MethodGet {
+			t.Errorf("unexpected method %q", r.Method)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[{"version":"1.0.0","active":false},{"version":"1.1.0","active":true}]}`))
+	}))
+	defer srv.Close()
+
+	active, err := newTestDTClient(t, srv.URL).isExtensionActive()
+	if err != nil {
+		t.Fatalf("isExtensionActive() returned error: %v", err)
+	}
+	if !active {
+		t.Fatal("isExtensionActive() = false, want true when any AWS extension version is active")
+	}
+}
+
+func TestLatestExtensionVersion_UsesHighestInstalledAWSVersion(t *testing.T) {
+	t.Parallel()
+
+	path := "/platform/extensions/v2/extensions/" + extensionName
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != path {
+			t.Errorf("unexpected path %q", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[{"version":"1.9.0"},{"version":"1.10.0"},{"version":"1.2.0"}]}`))
+	}))
+	defer srv.Close()
+
+	version, err := newTestDTClient(t, srv.URL).latestExtensionVersion()
+	if err != nil {
+		t.Fatalf("latestExtensionVersion() returned error: %v", err)
+	}
+	if version != "1.10.0" {
+		t.Fatalf("latestExtensionVersion() = %q, want 1.10.0", version)
+	}
+}
+
 // TestFindExistingMonitoringConfig_NotFoundReturnsEmpty verifies the normal
 // "extension not installed yet" path: a 404 is treated as no existing config.
 func TestFindExistingMonitoringConfig_NotFoundReturnsEmpty(t *testing.T) {
@@ -245,6 +299,60 @@ func TestFindExistingMonitoringConfig_PropagatesOtherErrors(t *testing.T) {
 	dtc := newTestDTClient(t, srv.URL)
 	if _, err := dtc.findExistingMonitoringConfig("111111111111"); err == nil {
 		t.Fatal("expected error to propagate for a non-404 failure")
+	}
+}
+
+func TestFindExistingMonitoringConfig_MatchesAccountID(t *testing.T) {
+	t.Parallel()
+
+	path := "/platform/extensions/v2/extensions/" + extensionName + "/monitoring-configurations"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != path {
+			t.Errorf("unexpected path %q", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"items": [
+				{"objectId":"ignored-malformed","value":"not-json"},
+				{"objectId":"wrong-account","value":{"aws":{"credentials":[{"accountId":"222222222222"}]}}},
+				{"objectId":"matching-config","value":{"aws":{"credentials":[{"accountId":"111111111111"}]}}}
+			]
+		}`))
+	}))
+	defer srv.Close()
+
+	id, err := newTestDTClient(t, srv.URL).findExistingMonitoringConfig("111111111111")
+	if err != nil {
+		t.Fatalf("findExistingMonitoringConfig() returned error: %v", err)
+	}
+	if id != "matching-config" {
+		t.Fatalf("findExistingMonitoringConfig() = %q, want matching-config", id)
+	}
+}
+
+func TestDeleteMonitoringConfig_UsesAWSExtensionName(t *testing.T) {
+	t.Parallel()
+
+	path := "/platform/extensions/v2/extensions/" + extensionName + "/monitoring-configurations/config-123"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != path {
+			t.Errorf("unexpected path %q", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.Method != http.MethodDelete {
+			t.Errorf("unexpected method %q", r.Method)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	if err := newTestDTClient(t, srv.URL).deleteMonitoringConfig("config-123"); err != nil {
+		t.Fatalf("deleteMonitoringConfig() returned error: %v", err)
 	}
 }
 
