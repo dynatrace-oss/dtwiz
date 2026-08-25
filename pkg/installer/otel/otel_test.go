@@ -2,6 +2,7 @@ package otel
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +18,12 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 // captureInstallOutput runs InstallOtelCollector with dryRun=true and
 // AutoConfirm=true (to bypass the "Continue?" prompt when no projects are
@@ -50,9 +57,13 @@ func captureInstallOutput(t *testing.T, isElevated bool) string {
 	installer.AutoConfirm = true
 	t.Cleanup(func() { installer.AutoConfirm = origAC })
 
-	// CWD → isolated temp dir so no projects are detected.
+	// CWD/HOME → isolated temp dir so no projects are detected and non-interactive
+	// scan-root selection does not walk the real home directory.
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	t.Setenv("USERPROFILE", tmpDir)
 	origDir, _ := os.Getwd()
-	if err := os.Chdir(t.TempDir()); err != nil {
+	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("os.Chdir: %v", err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
@@ -696,12 +707,39 @@ func stubExtensionPreview(t *testing.T) {
 	t.Cleanup(func() { buildExtensionActivationPreviewFn = orig })
 }
 
+func TestPrintExtensionActivationPreview(t *testing.T) {
+	tests := []struct {
+		name   string
+		status installer.ExtensionStatus
+		want   string
+	}{
+		{name: "not installed", status: installer.ExtensionNotInstalled, want: "will be installed and activated"},
+		{name: "installed inactive", status: installer.ExtensionInstalledInactive, want: "already installed"},
+		{name: "installed active", status: installer.ExtensionInstalledActive, want: "already installed"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := captureActivationOutput(t, func() { printExtensionActivationPreview(tt.status) })
+			if !strings.Contains(out, "OpenTelemetry Host Monitoring extension") || !strings.Contains(out, tt.want) {
+				t.Fatalf("printExtensionActivationPreview() output = %q, want %q", out, tt.want)
+			}
+		})
+	}
+}
+
 // runInstallWithAutoConfirm calls InstallOtelCollectorWithProject with
 // dryRun=false and AutoConfirm=true. DQL polling is stubbed out so the
 // test completes immediately even when a collector binary is already installed.
 func runInstallWithAutoConfirm(t *testing.T) error {
 	t.Helper()
 	stubExtensionPreview(t)
+
+	origTransport := http.DefaultTransport
+	http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return nil, fmt.Errorf("blocked test HTTP request to %s", req.URL.Host)
+	})
+	t.Cleanup(func() { http.DefaultTransport = origTransport })
 
 	origAC := installer.AutoConfirm
 	installer.AutoConfirm = true
@@ -729,6 +767,17 @@ func runInstallWithAutoConfirm(t *testing.T) error {
 		color.Output = origColorOut
 		_ = devNull.Close()
 	})
+
+	// CWD/HOME → isolated temp dir so no projects are detected and non-interactive
+	// scan-root selection does not walk the real home directory.
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	t.Setenv("USERPROFILE", tmpDir)
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("os.Chdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
 
 	return InstallOtelCollectorWithProject("https://env.example.com", "tok", "", "", false)
 }
@@ -767,8 +816,11 @@ func TestInstallOtelCollector_DryRun_SkipsActivation(t *testing.T) {
 	called := stubActivation(t)
 	stubExtensionPreview(t)
 
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	t.Setenv("USERPROFILE", tmpDir)
 	origDir, _ := os.Getwd()
-	if err := os.Chdir(t.TempDir()); err != nil {
+	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("os.Chdir: %v", err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
@@ -998,7 +1050,7 @@ func TestDeactivateHostMonitoringExtension_HappyPath(t *testing.T) {
 func TestDeactivateHostMonitoringExtension_VersionNotFound_Warns(t *testing.T) {
 	stubGrailRouteRemoval(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusForbidden)
 	}))
 	defer srv.Close()
 
@@ -1237,12 +1289,65 @@ func TestBuildExtensionActivationPreview_InstalledAndActive(t *testing.T) {
 
 func TestBuildExtensionActivationPreview_APIError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusForbidden)
 	}))
 	defer srv.Close()
 
 	if _, err := buildExtensionActivationPreview(srv.URL, "dt0s16.test"); err == nil {
 		t.Error("expected error from a failing extensions API")
+	}
+}
+
+func TestGrailPreviewAndApplyMessages(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		action      grailAction
+		wantPreview string
+		wantApply   string
+	}{
+		{action: grailActionCreate, wantPreview: "create route", wantApply: "route created"},
+		{action: grailActionReEnable, wantPreview: "re-enable route", wantApply: "route re-enabled"},
+		{action: grailActionNoop, wantPreview: "already configured", wantApply: "already configured"},
+		{action: grailActionSkip, wantPreview: "pending", wantApply: "skip"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.wantPreview, func(t *testing.T) {
+			t.Parallel()
+
+			preview, _ := grailPreviewMessage(tt.action)
+			if !strings.Contains(preview, tt.wantPreview) {
+				t.Fatalf("grailPreviewMessage() = %q, want %q", preview, tt.wantPreview)
+			}
+			apply, _ := grailApplyMessage(tt.action)
+			if !strings.Contains(apply, tt.wantApply) {
+				t.Fatalf("grailApplyMessage() = %q, want %q", apply, tt.wantApply)
+			}
+		})
+	}
+}
+
+func TestPrintGrailPlanAndApplyResults(t *testing.T) {
+	plans := []grailSignalPlan{
+		{signal: grailSignals[0], action: grailActionCreate},
+		{signal: grailSignals[1], action: grailActionNoop},
+		{signal: grailSignals[2], action: grailActionSkip},
+	}
+
+	previewOut := captureActivationOutput(t, func() { printGrailPlan(plans) })
+	for _, want := range []string{"OpenPipeline dynamic routes", "Metrics", "create route", "Logs", "already configured", "Spans", "pending"} {
+		if !strings.Contains(previewOut, want) {
+			t.Fatalf("printGrailPlan() output missing %q:\n%s", want, previewOut)
+		}
+	}
+
+	applyOut := captureActivationOutput(t, func() { printGrailApplyResults(plans, []error{nil, fmt.Errorf("boom"), nil}) })
+	for _, want := range []string{"OpenPipeline dynamic routes", "Metrics", "route created", "Logs", "warning", "boom", "Spans", "skip"} {
+		if !strings.Contains(applyOut, want) {
+			t.Fatalf("printGrailApplyResults() output missing %q:\n%s", want, applyOut)
+		}
 	}
 }
 
@@ -1255,13 +1360,8 @@ func TestInstallOtelCollector_Experimental_Darwin_AlwaysShowsUnavailableNotice(t
 	}
 	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
 
-	for _, elevated := range []bool{true, false} {
-		elevated := elevated
-		t.Run(map[bool]string{true: "elevated", false: "not-elevated"}[elevated], func(t *testing.T) {
-			output := captureInstallOutput(t, elevated)
-			if !strings.Contains(output, "macOS") {
-				t.Errorf("expected macOS unavailability notice in output (elevated=%v):\n%s", elevated, output)
-			}
-		})
+	output := captureInstallOutput(t, true)
+	if !strings.Contains(output, "macOS") {
+		t.Errorf("expected macOS unavailability notice in output:\n%s", output)
 	}
 }

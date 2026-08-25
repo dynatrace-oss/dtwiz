@@ -39,6 +39,158 @@ func TestOtelCollectorInstallDir(t *testing.T) {
 	}
 }
 
+func TestOtelPlatformAssetName_CurrentPlatform(t *testing.T) {
+	t.Parallel()
+
+	got, err := otelPlatformAssetName("v1.2.3")
+	if err != nil {
+		t.Fatalf("otelPlatformAssetName() returned error: %v", err)
+	}
+	if !strings.Contains(got, "dynatrace-otel-collector_1.2.3_") {
+		t.Fatalf("asset name = %q, want versioned collector asset", got)
+	}
+	if runtime.GOOS == "windows" {
+		if !strings.HasSuffix(got, ".zip") {
+			t.Fatalf("Windows asset = %q, want .zip", got)
+		}
+	} else if !strings.HasSuffix(got, ".tar.gz") {
+		t.Fatalf("non-Windows asset = %q, want .tar.gz", got)
+	}
+}
+
+func TestLooksLikeOtelCollector(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		want bool
+	}{
+		{name: "dynatrace-otel-collector", want: true},
+		{name: "otelcorecol", want: true},
+		{name: "otelcol-contrib", want: true},
+		{name: "opentelemetry-collector", want: true},
+		{name: "not-a-collector", want: false},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := looksLikeOtelCollector(tt.name); got != tt.want {
+				t.Fatalf("looksLikeOtelCollector(%q) = %v, want %v", tt.name, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsDynatraceOtelCollector(t *testing.T) {
+	t.Parallel()
+
+	if !isDynatraceOtelCollector(filepath.Join("/opt", "dynatrace-otel-collector")) {
+		t.Fatal("expected Dynatrace collector binary to match")
+	}
+	if isDynatraceOtelCollector(filepath.Join("/opt", "otelcol")) {
+		t.Fatal("expected upstream collector binary not to match Dynatrace collector")
+	}
+}
+
+func TestSelectCollector(t *testing.T) {
+	instances := []collectorInstance{
+		{pid: 111, binaryPath: "/usr/bin/otelcol", configPath: "/etc/otel/config.yaml"},
+		{containerRuntime: "docker", containerName: "otel-container", containerConfigPath: "/etc/otelcol/config.yaml"},
+	}
+	setTestStdin(t, "2\n")
+
+	selected, err := selectCollector(instances)
+	if err != nil {
+		t.Fatalf("selectCollector() returned error: %v", err)
+	}
+	if selected == nil || selected.containerName != "otel-container" {
+		t.Fatalf("selected = %#v, want second collector", selected)
+	}
+}
+
+func TestSelectCollector_NoInstances(t *testing.T) {
+	selected, err := selectCollector(nil)
+	if err != nil || selected != nil {
+		t.Fatalf("selectCollector(nil) = (%#v, %v), want nil, nil", selected, err)
+	}
+}
+
+func TestSelectCollector_InvalidInputCancels(t *testing.T) {
+	setTestStdin(t, "not-a-number\n")
+
+	selected, err := selectCollector([]collectorInstance{{pid: 111, binaryPath: "/usr/bin/otelcol"}})
+	if selected != nil || err == nil {
+		t.Fatalf("selectCollector() = (%#v, %v), want cancel error", selected, err)
+	}
+}
+
+func TestSelectCollectorForUninstall_AutoConfirmSelectsAll(t *testing.T) {
+	orig := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = orig })
+
+	instances := []collectorInstance{{pid: 111}, {pid: 222}}
+	selected, err := selectCollectorForUninstall(instances)
+	if err != nil {
+		t.Fatalf("selectCollectorForUninstall() returned error: %v", err)
+	}
+	if len(selected) != 2 {
+		t.Fatalf("selected = %#v, want all collectors", selected)
+	}
+}
+
+func TestSelectCollectorForUninstall_UserChoices(t *testing.T) {
+	instances := []collectorInstance{{pid: 111}, {pid: 222}}
+
+	tests := []struct {
+		name      string
+		input     string
+		wantPIDs  []int
+		wantError bool
+	}{
+		{name: "single collector", input: "2\n", wantPIDs: []int{222}},
+		{name: "all collectors", input: "3\n", wantPIDs: []int{111, 222}},
+		{name: "cancel", input: "0\n", wantError: true},
+		{name: "invalid", input: "wat\n", wantError: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setTestStdin(t, tt.input)
+			selected, err := selectCollectorForUninstall(instances)
+			if tt.wantError {
+				if err == nil {
+					t.Fatalf("selectCollectorForUninstall() error = nil, want error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("selectCollectorForUninstall() returned error: %v", err)
+			}
+			if len(selected) != len(tt.wantPIDs) {
+				t.Fatalf("selected = %#v, want PIDs %v", selected, tt.wantPIDs)
+			}
+			for i, wantPID := range tt.wantPIDs {
+				if selected[i].pid != wantPID {
+					t.Fatalf("selected[%d].pid = %d, want %d", i, selected[i].pid, wantPID)
+				}
+			}
+		})
+	}
+}
+
+func TestOtelReleaseURL(t *testing.T) {
+	t.Parallel()
+
+	got := otelReleaseURL("v1.2.3", "collector.tar.gz")
+	want := "https://github.com/Dynatrace/dynatrace-otel-collector/releases/download/v1.2.3/collector.tar.gz"
+	if got != want {
+		t.Fatalf("otelReleaseURL() = %q, want %q", got, want)
+	}
+}
+
 func TestFindFreePort_ReturnsFreePort(t *testing.T) {
 	port := findFreePort(8888)
 	if port < 8888 {
@@ -633,6 +785,38 @@ func captureStdout(t *testing.T, fn func()) string {
 		t.Fatal(err)
 	}
 	return buf.String()
+}
+
+func TestFormatPIDs(t *testing.T) {
+	t.Parallel()
+
+	got := formatPIDs([]runningCollector{{pid: 123}, {pid: 456}, {pid: 789}})
+	if got != "123, 456, 789" {
+		t.Fatalf("formatPIDs() = %q, want comma-separated PIDs", got)
+	}
+}
+
+func TestCollectorPlanPrintDryRun(t *testing.T) {
+	cp := &collectorPlan{
+		installDir:    "/tmp/opentelemetry",
+		binaryPath:    "/tmp/opentelemetry/dynatrace-otel-collector",
+		configPath:    "/tmp/opentelemetry/config.yaml",
+		configPreview: "receivers:\n  otlp:\nexporters:\n  otlphttp:\n    headers:\n      Authorization: Api-Token ***\n",
+	}
+
+	out := captureStdout(t, cp.printDryRun)
+	for _, want := range []string{
+		"[dry-run] Would install Dynatrace OpenTelemetry Collector",
+		"Install dir:  /tmp/opentelemetry",
+		"Binary:       /tmp/opentelemetry/dynatrace-otel-collector",
+		"Config:       /tmp/opentelemetry/config.yaml",
+		"Ingest token: (configured)",
+		"Authorization: Api-Token ***",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("printDryRun() output missing %q:\n%s", want, out)
+		}
+	}
 }
 
 func buildPreviewConfig(headLines, middleLines int, withPipelines bool) string {

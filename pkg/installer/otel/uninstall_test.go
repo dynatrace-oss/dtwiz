@@ -7,8 +7,90 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/test/helpers"
 )
+
+func TestPrintCollectorUninstallPreview(t *testing.T) {
+	processes := []otelProcessInfo{{pid: 1234, binaryPath: "/opt/otel/dynatrace-otel-collector"}}
+	dirs := []string{"/opt/otel"}
+
+	out := captureActivationOutput(t, func() { printCollectorUninstallPreview(processes, dirs) })
+	for _, want := range []string{"OTel Collector", "Processes that will be killed", "kill PID 1234", "/opt/otel/dynatrace-otel-collector", "Directories that will be removed", "rm -rf /opt/otel"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("printCollectorUninstallPreview() output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestPrintCollectorUninstallPreview_EmptySections(t *testing.T) {
+	out := captureActivationOutput(t, func() { printCollectorUninstallPreview(nil, []string{"/opt/otel"}) })
+	if !strings.Contains(out, "No running collector processes found") || !strings.Contains(out, "rm -rf /opt/otel") {
+		t.Fatalf("preview output = %q", out)
+	}
+
+	out = captureActivationOutput(t, func() { printCollectorUninstallPreview([]otelProcessInfo{{pid: 1234}}, nil) })
+	if !strings.Contains(out, "kill PID 1234") || !strings.Contains(out, "No installation directories found") {
+		t.Fatalf("preview output = %q", out)
+	}
+}
+
+func TestPromptUninstallDecision(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  uninstallDecision
+	}{
+		{name: "default all", input: "\n", want: uninstallAll},
+		{name: "explicit all", input: "1\n", want: uninstallAll},
+		{name: "collector only", input: "2\n", want: uninstallCollectorOnly},
+		{name: "cancel", input: "3\n", want: uninstallCancelled},
+		{name: "invalid cancels", input: "wat\n", want: uninstallCancelled},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setTestStdin(t, tt.input)
+			got, err := promptUninstallDecision()
+			if err != nil {
+				t.Fatalf("promptUninstallDecision() returned error: %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("promptUninstallDecision() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPromptUninstallDecision_AutoConfirm(t *testing.T) {
+	orig := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = orig })
+
+	got, err := promptUninstallDecision()
+	if err != nil {
+		t.Fatalf("promptUninstallDecision() returned error: %v", err)
+	}
+	if got != uninstallAll {
+		t.Fatalf("promptUninstallDecision() = %v, want uninstallAll", got)
+	}
+}
+
+func TestCollectorToProcessInfo(t *testing.T) {
+	t.Parallel()
+
+	info := collectorToProcessInfo(collectorInstance{
+		pid:                 1234,
+		binaryPath:          filepath.Join("/opt", "otel", "dynatrace-otel-collector"),
+		configPath:          "/opt/otel/config.yaml",
+		containerRuntime:    "docker",
+		containerName:       "otel-container",
+		containerConfigPath: "/etc/otelcol/config.yaml",
+	})
+	if info.pid != 1234 || info.binaryPath != filepath.Join("/opt", "otel", "dynatrace-otel-collector") || info.installDir != filepath.Join("/opt", "otel") || info.containerName != "otel-container" {
+		t.Fatalf("collectorToProcessInfo() = %#v", info)
+	}
+}
 
 func TestFindNodeOtelDirs_Found(t *testing.T) {
 	dir := t.TempDir()
