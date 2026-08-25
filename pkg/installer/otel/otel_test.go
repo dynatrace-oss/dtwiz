@@ -1360,8 +1360,18 @@ func TestInstallOtelCollector_Experimental_Darwin_AlwaysShowsUnavailableNotice(t
 	}
 	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
 
-	output := captureInstallOutput(t, true)
-	if !strings.Contains(output, "macOS") {
-		t.Errorf("expected macOS unavailability notice in output:\n%s", output)
+	for _, tt := range []struct {
+		name       string
+		isElevated bool
+	}{
+		{name: "elevated", isElevated: true},
+		{name: "not elevated", isElevated: false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			output := captureInstallOutput(t, tt.isElevated)
+			if !strings.Contains(output, "macOS") {
+				t.Errorf("expected macOS unavailability notice in output:\n%s", output)
+			}
+		})
 	}
 }

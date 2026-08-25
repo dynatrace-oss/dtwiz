@@ -289,7 +289,7 @@ func TestCreateMonitoringConfig_BuildsQuickStartConfig(t *testing.T) {
 	if !ok {
 		t.Fatalf("value missing in POST body")
 	}
-	if enabled, _ := value["enabled"].(bool); enabled {
+	if enabled, ok := value["enabled"].(bool); !ok || enabled {
 		t.Errorf("value.enabled = %v, want false until CloudFormation deploy completes", value["enabled"])
 	}
 	if got, _ := value["version"].(string); got != "1.2.3" {
@@ -324,7 +324,7 @@ func TestCreateMonitoringConfig_BuildsQuickStartConfig(t *testing.T) {
 	if got, _ := credential["accountId"].(string); got != "111111111111" {
 		t.Errorf("credential.accountId = %q, want 111111111111", got)
 	}
-	if enabled, _ := credential["enabled"].(bool); enabled {
+	if enabled, ok := credential["enabled"].(bool); !ok || enabled {
 		t.Errorf("credential.enabled = %v, want false until CloudFormation deploy completes", credential["enabled"])
 	}
 
