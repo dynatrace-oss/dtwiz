@@ -14,7 +14,7 @@ receivers:
       http:
         endpoint: 0.0.0.0:{{ .HTTPPort }}
 {{- if .HostMonitoring }}
-  hostmetrics/10s:
+  host_metrics/10s:
     collection_interval: 10s
     scrapers:
       cpu:
@@ -39,7 +39,7 @@ receivers:
             enabled: false
           system.cpu.load_average.15m:
             enabled: false
-  hostmetrics/5m:
+  host_metrics/5m:
     collection_interval: 5m
     scrapers:
       cpu:
@@ -123,7 +123,7 @@ receivers:
             enabled: true
           process.disk.io:
             enabled: true
-  hostmetrics/1h:
+  host_metrics/1h:
     collection_interval: 1h
     scrapers:
       memory:
@@ -166,12 +166,16 @@ processors:
   cumulative_to_delta:
     max_staleness: 25h
 {{- if .HostMonitoring }}
-
-  filter:
+  resource/add-host-group-id:
+    attributes:
+      - key: dt.host_group.id
+        value: "{{ .HostGroupID }}"
+        action: upsert
+  filter/idle-cpu-usage:
     metrics:
       datapoint:
         - metric.name == "system.cpu.utilization" and attributes["state"] == "idle"
-  resource_detection:
+  resource_detection/system:
     detectors: ["system"]
     system:
       resource_attributes:
@@ -212,13 +216,22 @@ processors:
   transform:
     error_mode: ignore
     metric_statements:
+      # Tag processes using less than 1 MB of memory so filter/delete-metrics
+      # can drop their series entirely in the next pipeline step.
       - context: datapoint
         statements:
-          - set(resource.attributes["low-memory-process"], "true") where metric.name == "process.memory.usage" and value_int < 1048576 and resource.attributes["process.executable.name"] != nil
+          - set(resource.attributes["low-memory-process"], "true") where metric.name == "process.memory.usage" and datapoint.value_int < 1048576 and resource.attributes["process.executable.name"] != nil
+
+      # Normalize resource attributes: collapse host.ip from an array to a single
+      # string, and replace spaces in process.command_line with underscores so it
+      # is safe to use as a Dynatrace dimension value.
       - context: resource
         statements:
           - replace_pattern(resource.attributes["process.command_line"], " ", "_")
           - set(resource.attributes["host.ip"], resource.attributes["host.ip"][0]) where resource.attributes["host.ip"] != nil
+
+      # Drop high-cardinality process attributes and empty/redundant dimensions from
+      # network and filesystem metrics to keep Dynatrace series counts manageable.
       - context: datapoint
         statements:
           - delete_key(resource.attributes, "process.cgroup") where IsMatch(metric.name, "^process\\..*")
@@ -234,6 +247,11 @@ processors:
           - delete_key(datapoint.attributes, "device") where IsMatch(metric.name, "^system\\.filesystem\\..*")
           - delete_key(datapoint.attributes, "mode") where IsMatch(metric.name, "^system\\.filesystem\\..*")
           - delete_key(datapoint.attributes, "type") where IsMatch(metric.name, "^system\\.filesystem\\..*")
+
+      # Aggregate system.cpu.utilization into a single host-level value:
+      #   1. Sum per-CPU values, keeping "cpu" so step 2 can target it.
+      #   2. Drop the "cpu" label.
+      #   3. Average the remaining values into one.
       - context: metric
         statements:
           - aggregate_on_attributes("sum", ["cpu"]) where metric.name == "system.cpu.utilization"
@@ -250,7 +268,8 @@ processors:
 
 service:
 {{- if .HostMonitoring }}
-  extensions: [health_check]
+  extensions:
+    - health_check
 {{- end }}
   telemetry:
     metrics:
@@ -262,28 +281,65 @@ service:
                 port: {{ .MetricsPort }}
   pipelines:
     traces:
-      receivers: [otlp]
-      processors: [{{- if .HostMonitoring }}resource_detection{{- end }}]
-      exporters: [otlp_http]
+      receivers:
+        - otlp
+{{- if .HostMonitoring }}
+      processors:
+        - resource/add-host-group-id
+        - resource_detection/system
+{{- else }}
+      processors: []
+{{- end }}
+      exporters:
+        - otlp_http
 {{- if .HostMonitoring }}
     metrics/apps:
-      receivers: [otlp]
-      processors: [resource_detection, cumulative_to_delta]
-      exporters: [otlp_http]
+      receivers:
+        - otlp
+      processors:
+        - resource/add-host-group-id
+        - resource_detection/system
+        - cumulative_to_delta
+      exporters:
+        - otlp_http
     metrics/host:
-      receivers: [hostmetrics/10s, hostmetrics/5m, hostmetrics/1h]
-      processors: [filter, resource_detection, transform, filter/delete-metrics, cumulative_to_delta]
-      exporters: [otlp_http]
+      receivers:
+        - host_metrics/10s
+        - host_metrics/5m
+        - host_metrics/1h
+      processors:
+        - filter/idle-cpu-usage
+        - resource/add-host-group-id
+        - resource_detection/system
+        - transform
+        - filter/delete-metrics
+        - cumulative_to_delta
+      exporters:
+        - otlp_http
 {{- else }}
     metrics:
-      receivers: [otlp]
-      processors: [cumulative_to_delta]
-      exporters: [otlp_http]
+      receivers:
+        - otlp
+      processors:
+        - cumulative_to_delta
+      exporters:
+        - otlp_http
 {{- end }}
     logs:
-      receivers: [otlp{{- if and .HostMonitoring .IncludeJournald }}, journald{{- end }}]
-      processors: [{{- if .HostMonitoring }}resource_detection{{- end }}]
-      exporters: [otlp_http]
+      receivers:
+        - otlp
+{{- if and .HostMonitoring .IncludeJournald }}
+        - journald
+{{- end }}
+{{- if .HostMonitoring }}
+      processors:
+        - resource/add-host-group-id
+        - resource_detection/system
+{{- else }}
+      processors: []
+{{- end }}
+      exporters:
+        - otlp_http
 
 exporters:
   otlp_http:
