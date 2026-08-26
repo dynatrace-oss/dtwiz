@@ -185,6 +185,19 @@ func TestPrintAlignedStatusLine_PadsLabelToWidth(t *testing.T) {
 	}
 }
 
+func TestPrintAlignedStatusLines_ComputesSharedLabelWidth(t *testing.T) {
+	got := helpers.CaptureOutput(t, func() {
+		PrintAlignedStatusLines(ColorDefault, "Short", "ok", "Longer Label", "ready", "Dangling")
+	})
+	want := "  Short:         ok\n  Longer Label:  ready\n"
+	if got != want {
+		t.Errorf("PrintAlignedStatusLines() = %q, want %q", got, want)
+	}
+	if strings.Contains(got, "Dangling") {
+		t.Errorf("PrintAlignedStatusLines() printed incomplete label/value pair: %q", got)
+	}
+}
+
 func TestPrintln_IndentsAndFormats(t *testing.T) {
 	got := helpers.CaptureStdout(t, func() {
 		Println("hello %s", "world")

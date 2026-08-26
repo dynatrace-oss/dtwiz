@@ -165,7 +165,7 @@ func cleanExitedManagedProcess(name string) *ManagedProcess {
 }
 
 func runningManagedProcess(name string) *ManagedProcess {
-	return &ManagedProcess{Name: name, PID: 999999, LogName: name + ".log", exitResultCh: make(chan error, 1)}
+	return &ManagedProcess{Name: name, PID: 999999, LogName: name + ".log", portDetector: func(int) string { return "8080" }, exitResultCh: make(chan error, 1)}
 }
 
 func TestStartManagedProcess_CleanExit(t *testing.T) {

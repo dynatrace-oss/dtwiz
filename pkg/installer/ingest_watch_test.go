@@ -1,9 +1,11 @@
 package installer
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/fatih/color"
 )
@@ -178,6 +180,109 @@ func TestParseNodes_CloudDetailsEmptyWhenNoCloudEntities(t *testing.T) {
 	cloud, _ := parseNodes(resp)
 	if cloud.Details != "" {
 		t.Errorf("cloud.Details must be empty when no cloud entities present, got %q", cloud.Details)
+	}
+}
+
+func TestParseServices(t *testing.T) {
+	resp := &dqlResponse{}
+	for _, name := range []string{"checkout", "catalog", "payment", "shipping", "frontend", "worker"} {
+		resp.Result.Records = append(resp.Result.Records, map[string]interface{}{"name": name})
+	}
+
+	sec := parseServices(resp)
+	if sec.Count != 6 {
+		t.Fatalf("service count = %d, want 6", sec.Count)
+	}
+	if sec.Link == "" {
+		t.Fatal("service link must be set")
+	}
+	if !strings.Contains(sec.Details, "checkout, catalog, payment, shipping, frontend +1 more") {
+		t.Fatalf("service details = %q", sec.Details)
+	}
+}
+
+func TestParseServices_Empty(t *testing.T) {
+	if got := parseServices(nil); got.Count != 0 || got.Details != "" || got.Link == "" {
+		t.Fatalf("parseServices(nil) = %#v, want empty section with link", got)
+	}
+}
+
+func TestParseRelationships(t *testing.T) {
+	resp := &dqlResponse{}
+	for _, row := range []struct {
+		typeName string
+		count    interface{}
+	}{
+		{typeName: "CALLS", count: float64(1200)},
+		{typeName: "RUNS_ON", count: json.Number("25")},
+		{typeName: "IGNORED", count: 0},
+	} {
+		resp.Result.Records = append(resp.Result.Records, map[string]interface{}{"type": row.typeName, "count": row.count})
+	}
+
+	sec := parseRelationships(resp)
+	if sec.Count != 1225 {
+		t.Fatalf("relationship count = %d, want 1225", sec.Count)
+	}
+	if !strings.Contains(sec.Details, "1,200 calls") || !strings.Contains(sec.Details, "25 runs on") {
+		t.Fatalf("relationship details = %q", sec.Details)
+	}
+}
+
+func TestParseExceptions(t *testing.T) {
+	sec := parseExceptions(&dqlResponse{Result: struct {
+		Records []map[string]interface{} `json:"records"`
+	}{Records: []map[string]interface{}{{"count": "42"}}}})
+	if sec.Count != 42 {
+		t.Fatalf("exception count = %d, want 42", sec.Count)
+	}
+	if sec.Link == "" {
+		t.Fatal("exception link must be set")
+	}
+}
+
+func TestFormatElapsed(t *testing.T) {
+	tests := []struct {
+		duration time.Duration
+		want     string
+	}{
+		{duration: 3 * time.Second, want: "3s"},
+		{duration: 65 * time.Second, want: "1m 5s"},
+	}
+	for _, tt := range tests {
+		if got := formatElapsed(tt.duration); got != tt.want {
+			t.Fatalf("formatElapsed(%s) = %q, want %q", tt.duration, got, tt.want)
+		}
+	}
+}
+
+func TestFormatCountAndToInt(t *testing.T) {
+	if got := formatCount(1234567); got != "1,234,567" {
+		t.Fatalf("formatCount() = %q, want 1,234,567", got)
+	}
+	for _, tt := range []struct {
+		input interface{}
+		want  int
+	}{
+		{input: float64(12), want: 12},
+		{input: json.Number("34"), want: 34},
+		{input: 56, want: 56},
+		{input: "78", want: 78},
+		{input: "bad", want: 0},
+		{input: nil, want: 0},
+	} {
+		if got := toInt(tt.input); got != tt.want {
+			t.Fatalf("toInt(%#v) = %d, want %d", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestTermHyperlink(t *testing.T) {
+	if got := termHyperlink("https://example.com", "Example", false); got != "Example (https://example.com)" {
+		t.Fatalf("plain hyperlink = %q", got)
+	}
+	if got := termHyperlink("https://example.com", "Example", true); !strings.Contains(got, "\033]8;;https://example.com") || !strings.Contains(got, "Example") {
+		t.Fatalf("tty hyperlink = %q", got)
 	}
 }
 

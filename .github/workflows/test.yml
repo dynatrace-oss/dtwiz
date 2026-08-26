@@ -9,7 +9,7 @@ on:
 
 # Minimum test coverage percentage required to pass CI.
 env:
-  COVERAGE_THRESHOLD: 50
+  COVERAGE_THRESHOLD: 60
 
 jobs:
   test:

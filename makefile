@@ -17,7 +17,7 @@ build:
 install:
 	$(GO) install .
 
-COVERAGE_THRESHOLD ?= 50
+COVERAGE_THRESHOLD ?= 60
 
 test:
 	$(GO) test ./pkg/... -coverprofile=coverage.out

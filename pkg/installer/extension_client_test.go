@@ -1,10 +1,13 @@
 package installer
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/dynatrace-oss/dtctl/sdk/httpclient"
 )
 
 const testExtensionName = "com.dynatrace.extension.test-ext"
@@ -22,6 +25,8 @@ func newTestExtensionClient(t *testing.T, serverURL string) *ExtensionClient {
 // ─── cmpSemver ─────────────────────────────────────────────────────────────
 
 func TestCmpSemver(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		a, b string
 		want int
@@ -37,8 +42,79 @@ func TestCmpSemver(t *testing.T) {
 		{"", "", 0},
 	}
 	for _, tc := range cases {
-		if got := cmpSemver(tc.a, tc.b); got != tc.want {
-			t.Errorf("cmpSemver(%q, %q) = %d, want %d", tc.a, tc.b, got, tc.want)
+		tc := tc
+		t.Run(tc.a+"/"+tc.b, func(t *testing.T) {
+			t.Parallel()
+
+			if got := cmpSemver(tc.a, tc.b); got != tc.want {
+				t.Errorf("cmpSemver(%q, %q) = %d, want %d", tc.a, tc.b, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseConstraintViolations(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{
+		"error": {
+			"message": "Constraints violated.",
+			"constraintViolations": [
+				{"path":"value.enabled","message":"must not be null"},
+				{"path":"value.aws.credentials[0].accountId","message":"invalid account"}
+			]
+		}
+	}`)
+
+	got := ParseConstraintViolations(body)
+	if len(got) != 2 {
+		t.Fatalf("ParseConstraintViolations() returned %d violations, want 2", len(got))
+	}
+	if got[0].Path != "value.enabled" || got[0].Message != "must not be null" {
+		t.Fatalf("first violation = %#v, want value.enabled message", got[0])
+	}
+	if got[1].Path != "value.aws.credentials[0].accountId" || got[1].Message != "invalid account" {
+		t.Fatalf("second violation = %#v, want account message", got[1])
+	}
+}
+
+func TestParseConstraintViolations_InvalidBody(t *testing.T) {
+	t.Parallel()
+
+	if got := ParseConstraintViolations([]byte(`not-json`)); got != nil {
+		t.Fatalf("ParseConstraintViolations(invalid) = %#v, want nil", got)
+	}
+}
+
+func TestFormatConstraintViolations(t *testing.T) {
+	t.Parallel()
+
+	got := FormatConstraintViolations([]ConstraintViolation{
+		{Path: "value.enabled", Message: "must not be null"},
+		{Path: "value.aws.credentials[0].accountId", Message: "invalid account"},
+	})
+	want := "value.enabled: must not be null; value.aws.credentials[0].accountId: invalid account"
+	if got != want {
+		t.Fatalf("FormatConstraintViolations() = %q, want %q", got, want)
+	}
+}
+
+func TestWithScopeHint(t *testing.T) {
+	t.Parallel()
+
+	if err := WithScopeHint(nil, "settings:objects:read"); err != nil {
+		t.Fatalf("WithScopeHint(nil) = %v, want nil", err)
+	}
+
+	orig := errors.New("boom")
+	if got := WithScopeHint(orig, "settings:objects:read"); !errors.Is(got, orig) || strings.Contains(got.Error(), "platform token") {
+		t.Fatalf("WithScopeHint(non-auth) = %v, want original without scope hint", got)
+	}
+
+	for _, err := range []error{httpclient.ErrForbidden, httpclient.ErrUnauthorized} {
+		got := WithScopeHint(err, "settings:objects:write")
+		if !errors.Is(got, err) || !strings.Contains(got.Error(), "settings:objects:write") {
+			t.Fatalf("WithScopeHint(%v) = %v, want wrapped scope hint", err, got)
 		}
 	}
 }
