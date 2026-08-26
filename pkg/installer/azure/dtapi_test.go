@@ -2,10 +2,14 @@ package azure
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/internal/extensiontest"
 )
 
 func newTestSDKClient(t *testing.T, serverURL string) *sdkDTClient {
@@ -363,78 +367,83 @@ type monitoringServerOpts struct {
 	noEssential    bool
 	postErr        bool
 	putErr         bool
-	captureBody    interface{}
-	capturePutPath *string
 }
 
-func newMonitoringTestServer(t *testing.T, opts monitoringServerOpts) *httptest.Server {
+func newMonitoringTestClient(t *testing.T, opts monitoringServerOpts) (*sdkDTClient, *extensiontest.FakeExtensionAPI) {
 	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == extensionAPI+"/environment-configuration":
-			_, _ = w.Write([]byte(`{"version":"1.2.0"}`))
-		case r.Method == http.MethodGet && r.URL.Path == extensionAPI:
-			if opts.versionErr {
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-			if opts.noVersions {
-				_, _ = w.Write([]byte(`{"items":[]}`))
-				return
-			}
-			_, _ = w.Write([]byte(`{"items":[{"version":"1.2.0"}]}`))
-		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/schema"):
-			if opts.schemaErr {
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-			if opts.emptyLocations {
-				_, _ = w.Write([]byte(`{"enums":{"FeatureSetsType":{"items":[{"value":"compute_essential"}]}}}`))
-				return
-			}
-			if opts.noEssential {
-				_, _ = w.Write([]byte(`{"enums":{"dynatrace.datasource.azure:location":{"items":[{"value":"eastus"}]},"FeatureSetsType":{"items":[{"value":"compute_premium"}]}}}`))
-				return
-			}
-			_, _ = w.Write([]byte(stockDAAzureSchemaJSON))
-		case r.Method == http.MethodPost && r.URL.Path == monitoringAPI:
-			if opts.postErr {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			if opts.captureBody != nil {
-				_ = json.NewDecoder(r.Body).Decode(opts.captureBody)
-			}
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"objectId":"mon-001"}`))
-		case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, monitoringAPI+"/"):
-			if opts.putErr {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			if opts.capturePutPath != nil {
-				*opts.capturePutPath = r.URL.Path
-			}
-			if opts.captureBody != nil {
-				_ = json.NewDecoder(r.Body).Decode(opts.captureBody)
-			}
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"objectId":"mon-001"}`))
-		default:
-			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
+	sdk := &extensiontest.FakeExtensionAPI{
+		Versions:  monitoringTestVersions(opts),
+		GetErr:    monitoringTestVersionErr(opts),
+		Schema:    monitoringTestSchema(opts),
+		SchemaErr: monitoringTestSchemaErr(opts),
+		CreateErr: monitoringTestCreateErr(opts),
+		UpdateErr: monitoringTestUpdateErr(opts),
+	}
+	return newExtensionTestClient(sdk), sdk
+}
+
+func newExtensionTestClient(sdk *extensiontest.FakeExtensionAPI) *sdkDTClient {
+	return &sdkDTClient{ExtensionClient: &installer.ExtensionClient{Extension: sdk}}
+}
+
+func monitoringTestCreateErr(opts monitoringServerOpts) error {
+	if opts.postErr {
+		return errors.New("400 bad request")
+	}
+	return nil
+}
+
+func monitoringTestUpdateErr(opts monitoringServerOpts) error {
+	if opts.putErr {
+		return errors.New("400 bad request")
+	}
+	return nil
+}
+
+func monitoringTestVersions(opts monitoringServerOpts) []extensiontest.Version {
+	if opts.noVersions || opts.versionErr {
+		return nil
+	}
+	return extensiontest.Versions("1.2.0")
+}
+
+func monitoringTestVersionErr(opts monitoringServerOpts) error {
+	if opts.versionErr {
+		return errors.New("temporary failure")
+	}
+	return nil
+}
+
+func monitoringTestSchema(opts monitoringServerOpts) json.RawMessage {
+	switch {
+	case opts.emptyLocations:
+		return json.RawMessage(`{"enums":{"FeatureSetsType":{"items":[{"value":"compute_essential"}]}}}`)
+	case opts.noEssential:
+		return json.RawMessage(`{"enums":{"dynatrace.datasource.azure:location":{"items":[{"value":"eastus"}]},"FeatureSetsType":{"items":[{"value":"compute_premium"}]}}}`)
+	default:
+		return json.RawMessage(stockDAAzureSchemaJSON)
+	}
+}
+
+func monitoringTestSchemaErr(opts monitoringServerOpts) error {
+	if opts.schemaErr {
+		return errors.New("temporary failure")
+	}
+	return nil
 }
 
 func TestSDKCreateMonitoring_HappyPath(t *testing.T) {
 	var body map[string]interface{}
-	srv := newMonitoringTestServer(t, monitoringServerOpts{captureBody: &body})
-	defer srv.Close()
+	dtc, sdk := newMonitoringTestClient(t, monitoringServerOpts{})
 
-	if err := newTestSDKClient(t, srv.URL).createMonitoring("cfg-name", "conn-obj-001", "client-app-001", "sub-abc123"); err != nil {
+	if err := dtc.createMonitoring("cfg-name", "conn-obj-001", "client-app-001", "sub-abc123"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if !sdk.CreateCalled {
+		t.Fatal("expected CreateMonitoringConfiguration to be called")
+	}
+	if err := extensiontest.DecodeBody(sdk.CreateBody, &body); err != nil {
+		t.Fatalf("decode monitoring body: %v", err)
 	}
 
 	if body["scope"] != "integration-azure" {
@@ -494,33 +503,29 @@ func TestSDKCreateMonitoring_HappyPath(t *testing.T) {
 }
 
 func TestSDKCreateMonitoring_VersionFetchFails(t *testing.T) {
-	srv := newMonitoringTestServer(t, monitoringServerOpts{versionErr: true})
-	defer srv.Close()
-	if err := newTestSDKClient(t, srv.URL).createMonitoring("cfg", "conn", "client", "sub"); err == nil {
+	dtc, _ := newMonitoringTestClient(t, monitoringServerOpts{versionErr: true})
+	if err := dtc.createMonitoring("cfg", "conn", "client", "sub"); err == nil {
 		t.Fatal("expected error when version fetch fails, got nil")
 	}
 }
 
 func TestSDKCreateMonitoring_NoVersions(t *testing.T) {
-	srv := newMonitoringTestServer(t, monitoringServerOpts{noVersions: true})
-	defer srv.Close()
-	if err := newTestSDKClient(t, srv.URL).createMonitoring("cfg", "conn", "client", "sub"); err == nil {
+	dtc, _ := newMonitoringTestClient(t, monitoringServerOpts{noVersions: true})
+	if err := dtc.createMonitoring("cfg", "conn", "client", "sub"); err == nil {
 		t.Fatal("expected error for no versions, got nil")
 	}
 }
 
 func TestSDKCreateMonitoring_SchemaFetchFails(t *testing.T) {
-	srv := newMonitoringTestServer(t, monitoringServerOpts{schemaErr: true})
-	defer srv.Close()
-	if err := newTestSDKClient(t, srv.URL).createMonitoring("cfg", "conn", "client", "sub"); err == nil {
+	dtc, _ := newMonitoringTestClient(t, monitoringServerOpts{schemaErr: true})
+	if err := dtc.createMonitoring("cfg", "conn", "client", "sub"); err == nil {
 		t.Fatal("expected error when schema fetch fails, got nil")
 	}
 }
 
 func TestSDKCreateMonitoring_NoLocations(t *testing.T) {
-	srv := newMonitoringTestServer(t, monitoringServerOpts{emptyLocations: true})
-	defer srv.Close()
-	err := newTestSDKClient(t, srv.URL).createMonitoring("cfg", "conn", "client", "sub")
+	dtc, _ := newMonitoringTestClient(t, monitoringServerOpts{emptyLocations: true})
+	err := dtc.createMonitoring("cfg", "conn", "client", "sub")
 	if err == nil {
 		t.Fatal("expected error for no locations, got nil")
 	}
@@ -530,9 +535,8 @@ func TestSDKCreateMonitoring_NoLocations(t *testing.T) {
 }
 
 func TestSDKCreateMonitoring_NoEssentialFeatureSets(t *testing.T) {
-	srv := newMonitoringTestServer(t, monitoringServerOpts{noEssential: true})
-	defer srv.Close()
-	err := newTestSDKClient(t, srv.URL).createMonitoring("cfg", "conn", "client", "sub")
+	dtc, _ := newMonitoringTestClient(t, monitoringServerOpts{noEssential: true})
+	err := dtc.createMonitoring("cfg", "conn", "client", "sub")
 	if err == nil {
 		t.Fatal("expected error for no essential feature sets, got nil")
 	}
@@ -542,9 +546,8 @@ func TestSDKCreateMonitoring_NoEssentialFeatureSets(t *testing.T) {
 }
 
 func TestSDKCreateMonitoring_PostFails(t *testing.T) {
-	srv := newMonitoringTestServer(t, monitoringServerOpts{postErr: true})
-	defer srv.Close()
-	err := newTestSDKClient(t, srv.URL).createMonitoring("cfg", "conn", "client", "sub")
+	dtc, _ := newMonitoringTestClient(t, monitoringServerOpts{postErr: true})
+	err := dtc.createMonitoring("cfg", "conn", "client", "sub")
 	if err == nil {
 		t.Fatal("expected error when POST fails, got nil")
 	}
@@ -557,17 +560,18 @@ func TestSDKCreateMonitoring_PostFails(t *testing.T) {
 
 func TestSDKUpdateMonitoring_HappyPath(t *testing.T) {
 	var body map[string]interface{}
-	var putPath string
-	srv := newMonitoringTestServer(t, monitoringServerOpts{captureBody: &body, capturePutPath: &putPath})
-	defer srv.Close()
+	dtc, sdk := newMonitoringTestClient(t, monitoringServerOpts{})
 
-	if err := newTestSDKClient(t, srv.URL).updateMonitoring("mon-existing-1", "cfg-name", "conn-obj-001", "client-app-001", "sub-abc123"); err != nil {
+	if err := dtc.updateMonitoring("mon-existing-1", "cfg-name", "conn-obj-001", "client-app-001", "sub-abc123"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	// PUT must target the existing config ID, not a bare POST collection URL.
-	if !strings.HasSuffix(putPath, "/mon-existing-1") {
-		t.Errorf("PUT path = %q, want suffix /mon-existing-1", putPath)
+	if sdk.UpdateConfigID != "mon-existing-1" {
+		t.Errorf("update config ID = %q, want mon-existing-1", sdk.UpdateConfigID)
+	}
+	if err := extensiontest.DecodeBody(sdk.UpdateBody, &body); err != nil {
+		t.Fatalf("decode monitoring body: %v", err)
 	}
 	// Shares the create body builder: same schema-derived defaults.
 	val, _ := body["value"].(map[string]interface{})
@@ -580,18 +584,16 @@ func TestSDKUpdateMonitoring_HappyPath(t *testing.T) {
 }
 
 func TestSDKUpdateMonitoring_PutFails(t *testing.T) {
-	srv := newMonitoringTestServer(t, monitoringServerOpts{putErr: true})
-	defer srv.Close()
-	err := newTestSDKClient(t, srv.URL).updateMonitoring("mon-1", "cfg", "conn", "client", "sub")
+	dtc, _ := newMonitoringTestClient(t, monitoringServerOpts{putErr: true})
+	err := dtc.updateMonitoring("mon-1", "cfg", "conn", "client", "sub")
 	if err == nil {
 		t.Fatal("expected error when PUT fails, got nil")
 	}
 }
 
 func TestSDKUpdateMonitoring_EmptyEnumsFailFast(t *testing.T) {
-	srv := newMonitoringTestServer(t, monitoringServerOpts{noEssential: true})
-	defer srv.Close()
-	err := newTestSDKClient(t, srv.URL).updateMonitoring("mon-1", "cfg", "conn", "client", "sub")
+	dtc, _ := newMonitoringTestClient(t, monitoringServerOpts{noEssential: true})
+	err := dtc.updateMonitoring("mon-1", "cfg", "conn", "client", "sub")
 	if err == nil {
 		t.Fatal("expected error for no essential feature sets, got nil")
 	}
@@ -603,19 +605,12 @@ func TestSDKUpdateMonitoring_EmptyEnumsFailFast(t *testing.T) {
 // ─── findAllMonitoringConfigs ─────────────────────────────────────────────────
 
 func TestSDKFindAllMonitoringConfigs_Found(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != monitoringAPI {
-			t.Errorf("path = %q, want %q", r.URL.Path, monitoringAPI)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[
-			{"objectId":"mon-001","value":{"description":"my-config"}},
-			{"objectId":"mon-002","value":{"description":"other-config"}}
-		]}`))
-	}))
-	defer srv.Close()
+	sdk := &extensiontest.FakeExtensionAPI{MonitoringConfigs: []extensiontest.MonitoringConfiguration{
+		{ObjectID: "mon-001", Value: []byte(`{"description":"my-config"}`)},
+		{ObjectID: "mon-002", Value: []byte(`{"description":"other-config"}`)},
+	}}
 
-	ids, err := newTestSDKClient(t, srv.URL).findAllMonitoringConfigs("my-config")
+	ids, err := newExtensionTestClient(sdk).findAllMonitoringConfigs("my-config")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -625,13 +620,9 @@ func TestSDKFindAllMonitoringConfigs_Found(t *testing.T) {
 }
 
 func TestSDKFindAllMonitoringConfigs_NotFound(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[]}`))
-	}))
-	defer srv.Close()
+	sdk := &extensiontest.FakeExtensionAPI{}
 
-	ids, err := newTestSDKClient(t, srv.URL).findAllMonitoringConfigs("missing")
+	ids, err := newExtensionTestClient(sdk).findAllMonitoringConfigs("missing")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -641,12 +632,9 @@ func TestSDKFindAllMonitoringConfigs_NotFound(t *testing.T) {
 }
 
 func TestSDKFindAllMonitoringConfigs_ServerError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
-	}))
-	defer srv.Close()
+	sdk := &extensiontest.FakeExtensionAPI{ListErr: errors.New("401 unauthorized")}
 
-	_, err := newTestSDKClient(t, srv.URL).findAllMonitoringConfigs("my-config")
+	_, err := newExtensionTestClient(sdk).findAllMonitoringConfigs("my-config")
 	if err == nil {
 		t.Fatal("expected error for 401, got nil")
 	}
@@ -658,184 +646,32 @@ func TestSDKFindAllMonitoringConfigs_ServerError(t *testing.T) {
 // ─── deleteMonitoring ─────────────────────────────────────────────────────────
 
 func TestSDKDeleteMonitoring_HappyPath(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodDelete {
-			t.Errorf("method = %q, want DELETE", r.Method)
-		}
-		if want := monitoringAPI + "/mon-001"; r.URL.Path != want {
-			t.Errorf("path = %q, want %q", r.URL.Path, want)
-		}
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer srv.Close()
+	sdk := &extensiontest.FakeExtensionAPI{}
 
-	if err := newTestSDKClient(t, srv.URL).deleteMonitoring("mon-001"); err != nil {
+	if err := newExtensionTestClient(sdk).deleteMonitoring("mon-001"); err != nil {
 		t.Errorf("unexpected error: %v", err)
+	}
+	if !sdk.DeleteCalled {
+		t.Fatal("expected DeleteMonitoringConfiguration to be called")
+	}
+	if sdk.DeleteConfigID != "mon-001" {
+		t.Errorf("delete config ID = %q, want mon-001", sdk.DeleteConfigID)
 	}
 }
 
 func TestSDKDeleteMonitoring_NotFound(t *testing.T) {
 	// 404 means the config is already gone — deleteMonitoring must treat it as success.
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer srv.Close()
+	sdk := &extensiontest.FakeExtensionAPI{DeleteErr: errors.New("404 not found")}
 
-	if err := newTestSDKClient(t, srv.URL).deleteMonitoring("mon-001"); err != nil {
+	if err := newExtensionTestClient(sdk).deleteMonitoring("mon-001"); err != nil {
 		t.Errorf("404 must be treated as already-deleted (success), got: %v", err)
 	}
 }
 
 func TestSDKDeleteMonitoring_ServerError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer srv.Close()
+	sdk := &extensiontest.FakeExtensionAPI{DeleteErr: errors.New("500 internal server error")}
 
-	if err := newTestSDKClient(t, srv.URL).deleteMonitoring("mon-001"); err == nil {
+	if err := newExtensionTestClient(sdk).deleteMonitoring("mon-001"); err == nil {
 		t.Fatal("expected error for 500, got nil")
-	}
-}
-
-// ─── installExtension ────────────────────────────────────────────────────────
-
-func TestSDKInstallExtension_AlreadyInstalled(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet && r.URL.Path == extensionAPI+"/environment-configuration" {
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"version":"1.2.0"}`))
-			return
-		}
-		if r.Method == http.MethodGet && r.URL.Path == extensionAPI {
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"items":[{"version":"1.2.0"}]}`))
-			return
-		}
-		t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
-	}))
-	defer srv.Close()
-
-	fresh, err := newTestSDKClient(t, srv.URL).installExtension()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if fresh {
-		t.Error("expected fresh=false for already-installed extension")
-	}
-}
-
-func TestSDKInstallExtension_FreshInstall(t *testing.T) {
-	installCalled := false
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == extensionAPI:
-			w.WriteHeader(http.StatusNotFound)
-			_, _ = w.Write([]byte(`{"error":{"code":404,"message":"Extension not found"}}`))
-		case r.Method == http.MethodPost && r.URL.Path == extensionAPI:
-			installCalled = true
-			w.WriteHeader(http.StatusAccepted)
-			_, _ = w.Write([]byte(`{"extensionName":"com.dynatrace.extension.da-azure","version":"1.2.0"}`))
-		default:
-			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
-		}
-	}))
-	defer srv.Close()
-
-	fresh, err := newTestSDKClient(t, srv.URL).installExtension()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !fresh {
-		t.Error("expected fresh=true after hub install")
-	}
-	if !installCalled {
-		t.Error("expected InstallFromHub to be called")
-	}
-}
-
-// ─── isExtensionActive ───────────────────────────────────────────────────────
-
-type extensionActiveServerOpts struct {
-	envConfigStatus int
-	envConfigBody   string
-}
-
-func newExtensionActiveTestServer(t *testing.T, opts extensionActiveServerOpts) *httptest.Server {
-	t.Helper()
-	versionRequests := 0
-	envConfigRequests := 0
-	t.Cleanup(func() {
-		if versionRequests != 1 {
-			t.Errorf("extension version requests = %d, want 1", versionRequests)
-		}
-		if envConfigRequests != 1 {
-			t.Errorf("environment-configuration requests = %d, want 1", envConfigRequests)
-		}
-	})
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == extensionAPI:
-			versionRequests++
-			_, _ = w.Write([]byte(`{"items":[{"version":"1.2.0"}]}`))
-		case r.Method == http.MethodGet && r.URL.Path == extensionAPI+"/environment-configuration":
-			envConfigRequests++
-			if opts.envConfigStatus != 0 {
-				w.WriteHeader(opts.envConfigStatus)
-			}
-			if opts.envConfigBody != "" {
-				_, _ = w.Write([]byte(opts.envConfigBody))
-			}
-		default:
-			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
-		}
-	}))
-}
-
-func TestSDKIsExtensionActive_Active(t *testing.T) {
-	srv := newExtensionActiveTestServer(t, extensionActiveServerOpts{
-		envConfigBody: `{"version":"1.2.0"}`,
-	})
-	defer srv.Close()
-
-	active, err := newTestSDKClient(t, srv.URL).isExtensionActive()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !active {
-		t.Error("expected active=true when environment configuration points to installed version")
-	}
-}
-
-func TestSDKIsExtensionActive_NotActive(t *testing.T) {
-	srv := newExtensionActiveTestServer(t, extensionActiveServerOpts{
-		envConfigStatus: http.StatusNotFound,
-		envConfigBody:   `{"error":{"code":404,"message":"Environment configuration not found"}}`,
-	})
-	defer srv.Close()
-
-	active, err := newTestSDKClient(t, srv.URL).isExtensionActive()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if active {
-		t.Error("expected active=false when environment configuration is absent")
-	}
-}
-
-func TestSDKIsExtensionActive_SecondaryRequestFailure(t *testing.T) {
-	srv := newExtensionActiveTestServer(t, extensionActiveServerOpts{
-		envConfigStatus: http.StatusInternalServerError,
-		envConfigBody:   `{"error":{"message":"temporary failure"}}`,
-	})
-	defer srv.Close()
-
-	active, err := newTestSDKClient(t, srv.URL).isExtensionActive()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if active {
-		t.Error("expected active=false when environment configuration lookup fails")
 	}
 }

@@ -30,6 +30,21 @@ var activateHostMonitoringExtensionFn = activateHostMonitoringExtension
 // deactivateHostMonitoringExtensionFn is overridable in tests.
 var deactivateHostMonitoringExtensionFn = deactivateHostMonitoringExtension
 
+type extensionManager interface {
+	EnsureInstalled(extensionName string) (bool, error)
+	LatestExtensionVersion(extensionName string) (string, error)
+	ActivateExtension(extensionName, version string) error
+	DeactivateExtension(extensionName string) error
+	DeleteExtensionVersion(extensionName, version string) error
+	GetStatus(extensionName string) (installer.ExtensionStatus, error)
+}
+
+var newExtensionManagerFn = newExtensionManager
+
+func newExtensionManager(envURL, platformToken string) (extensionManager, error) {
+	return installer.NewExtensionClient(envURL, platformToken)
+}
+
 // removeHostMonitoringGrailRoutesFn is overridable in tests.
 var removeHostMonitoringGrailRoutesFn = removeHostMonitoringGrailRoutes
 
@@ -61,7 +76,7 @@ func removeHostMonitoringGrailRoutes(envURL, platformToken string) {
 // installed from the Dynatrace Hub and its environment configuration is activated.
 // All errors are advisory: a failure logs a warning and returns without aborting the install.
 func activateHostMonitoringExtension(envURL, platformToken string) {
-	ec, err := installer.NewExtensionClient(envURL, platformToken)
+	ec, err := newExtensionManagerFn(envURL, platformToken)
 	if err != nil {
 		logger.Debug("failed to create extension client for host monitoring activation", "error", err)
 		fmt.Println("  Warning: could not connect to extensions API; host entity creation may not be available.")
@@ -94,7 +109,7 @@ var buildExtensionActivationPreviewFn = buildExtensionActivationPreview
 // Monitoring extension without changing anything, so its status can be shown
 // in the install preview alongside the OpenPipeline route plan.
 func buildExtensionActivationPreview(envURL, platformToken string) (installer.ExtensionStatus, error) {
-	ec, err := installer.NewExtensionClient(envURL, platformToken)
+	ec, err := newExtensionManagerFn(envURL, platformToken)
 	if err != nil {
 		return 0, fmt.Errorf("create extension client: %w", err)
 	}
@@ -129,7 +144,7 @@ func printExtensionActivationPreview(status installer.ExtensionStatus) {
 // the uninstall.
 func deactivateHostMonitoringExtension(envURL, platformToken string) {
 	removeHostMonitoringGrailRoutesFn(envURL, platformToken)
-	ec, err := installer.NewExtensionClient(envURL, platformToken)
+	ec, err := newExtensionManagerFn(envURL, platformToken)
 	if err != nil {
 		logger.Debug("failed to create extension client for host monitoring deactivation", "error", err)
 		fmt.Println("  Warning: could not connect to extensions API; OTel Host Monitoring extension was not removed.")
