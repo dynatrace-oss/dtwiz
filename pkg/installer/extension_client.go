@@ -317,8 +317,7 @@ func (e *ExtensionClient) FetchExtensionSchema(extensionName, version string) (*
 func (e *ExtensionClient) IsExtensionActive(extensionName string) (bool, error) {
 	_, found, err := e.activeExtensionVersion(extensionName)
 	if err != nil {
-		logger.Debug("extension active version lookup failed", "extension", extensionName, "error", err)
-		return false, nil
+		return false, fmt.Errorf("check extension active: %w", err)
 	}
 	return found, nil
 }
@@ -350,8 +349,7 @@ func (e *ExtensionClient) GetStatus(extensionName string) (ExtensionStatus, erro
 	}
 	_, found, err := e.activeExtensionVersion(extensionName)
 	if err != nil {
-		logger.Debug("extension active version lookup failed", "extension", extensionName, "error", err)
-		return ExtensionInstalledInactive, nil
+		return ExtensionInstalledInactive, fmt.Errorf("check extension active: %w", err)
 	}
 	if found {
 		return ExtensionInstalledActive, nil

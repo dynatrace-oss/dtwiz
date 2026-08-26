@@ -433,15 +433,12 @@ func TestExtensionClientIsExtensionActive_NotActive(t *testing.T) {
 	}
 }
 
-func TestExtensionClientIsExtensionActive_ActiveLookupFailureIsInactive(t *testing.T) {
+func TestExtensionClientIsExtensionActive_ActiveLookupFailurePropagates(t *testing.T) {
 	sdk := &extensiontest.FakeExtensionAPI{ActiveErr: errors.New("temporary failure")}
 
-	active, err := newTestExtensionClientWithSDK(sdk).IsExtensionActive(testExtensionName)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if active {
-		t.Error("expected active=false when environment configuration lookup fails")
+	_, err := newTestExtensionClientWithSDK(sdk).IsExtensionActive(testExtensionName)
+	if err == nil {
+		t.Fatal("expected error when environment configuration lookup fails, got nil")
 	}
 }
 
