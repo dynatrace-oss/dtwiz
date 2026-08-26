@@ -472,8 +472,8 @@ func TestGenerateOtelConfig_DefaultIncludesHostMonitoring(t *testing.T) {
 	cfg := generatedConfig.content
 	parsed := parseOtelConfig(t, cfg)
 
-	if _, ok := parsed.Receivers["hostmetrics/10s"]; !ok {
-		t.Error("default config must contain hostmetrics/10s receiver")
+	if _, ok := parsed.Receivers["host_metrics/10s"]; !ok {
+		t.Error("default config must contain host_metrics/10s receiver")
 	}
 	if runtime.GOOS == "linux" {
 		if _, ok := parsed.Receivers["journald"]; !ok {
@@ -488,29 +488,34 @@ func TestGenerateOtelConfig_DefaultIncludesHostMonitoring(t *testing.T) {
 	if _, ok := parsed.Service.Pipelines["metrics/host"]; !ok {
 		t.Error("default config must contain metrics/host pipeline")
 	}
-	if runtime.GOOS == "linux" {
-		if _, ok := parsed.Service.Pipelines["logs/host"]; !ok {
-			t.Error("default config must contain logs/host pipeline on Linux")
-		}
-	} else if _, ok := parsed.Service.Pipelines["logs/host"]; ok {
-		t.Error("default config must not contain logs/host pipeline on non-Linux")
+	if _, ok := parsed.Service.Pipelines["logs/host"]; ok {
+		t.Error("default config must not contain logs/host pipeline")
 	}
 	if _, ok := parsed.Service.Pipelines["metrics/apps"]; !ok {
 		t.Error("default config must contain metrics/apps pipeline")
 	}
 	tracesPipeline, tracesOk := parsed.Service.Pipelines["traces"]
 	if !tracesOk {
-		t.Fatal("app-only config missing traces pipeline")
+		t.Fatal("default config missing traces pipeline")
 	}
-	for _, p := range tracesPipeline.Processors {
-		if p == "resource_detection/system" {
-			t.Errorf("app-only config traces pipeline must not contain resource_detection processor, got %v", tracesPipeline.Processors)
-			break
+	wantTracesProcessors := []string{"resource/add-host-group-id", "resource_detection/system"}
+	for _, want := range wantTracesProcessors {
+		found := false
+		for _, p := range tracesPipeline.Processors {
+			if p == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("default config traces pipeline missing %q processor, got %v", want, tracesPipeline.Processors)
 		}
 	}
 }
 
 func TestGenerateOtelConfig_Combined_Default(t *testing.T) {
+	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
+
 	generatedConfig, err := generateOtelConfig("https://env.example.com", "mytoken")
 	if err != nil {
 		t.Fatalf("generateOtelConfig: %v", err)
@@ -621,19 +626,25 @@ func TestGenerateOtelConfig_JournaldConsistency(t *testing.T) {
 	parsed := parseOtelConfig(t, cfg)
 
 	_, receiverDefined := parsed.Receivers["journald"]
-	logsPipeline, logsExists := parsed.Service.Pipelines["logs"]
 	var pipelineReferences bool
-	if logsExists {
-		for _, r := range logsPipeline.Receivers {
+	for _, name := range []string{"logs", "logs/host"} {
+		pipeline, ok := parsed.Service.Pipelines[name]
+		if !ok {
+			continue
+		}
+		for _, r := range pipeline.Receivers {
 			if r == "journald" {
 				pipelineReferences = true
 				break
 			}
 		}
+		if pipelineReferences {
+			break
+		}
 	}
 
 	if receiverDefined != pipelineReferences {
-		t.Errorf("journald receiver defined=%v but logs pipeline reference=%v — guards must stay in sync",
+		t.Errorf("journald receiver defined=%v but pipeline reference=%v — guards must stay in sync",
 			receiverDefined, pipelineReferences)
 	}
 }
@@ -710,7 +721,7 @@ func TestGenerateOtelConfig_HostGroupID_ProcessorPresent(t *testing.T) {
 	}
 }
 
-func TestGenerateOtelConfig_HostGroupID_AppOnly_Absent(t *testing.T) {
+func TestGenerateOtelConfig_HostGroupID_DefaultPresent(t *testing.T) {
 	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
 	t.Setenv("DTWIZ_EXPERIMENTAL", "")
 
@@ -720,18 +731,24 @@ func TestGenerateOtelConfig_HostGroupID_AppOnly_Absent(t *testing.T) {
 	}
 	parsed := parseOtelConfig(t, cfg.content)
 
-	if _, ok := parsed.Processors["resource/add-host-group-id"]; ok {
-		t.Error("standard-mode config must not contain resource/add-host-group-id processor")
+	if _, ok := parsed.Processors["resource/add-host-group-id"]; !ok {
+		t.Error("default config must contain resource/add-host-group-id processor")
 	}
-	for _, name := range []string{"traces", "metrics", "logs"} {
+	for _, name := range []string{"traces", "metrics/apps", "metrics/host", "logs"} {
 		pipeline, ok := parsed.Service.Pipelines[name]
 		if !ok {
+			t.Errorf("pipeline %q not found", name)
 			continue
 		}
+		found := false
 		for _, p := range pipeline.Processors {
 			if p == "resource/add-host-group-id" {
-				t.Errorf("pipeline %q must not reference resource/add-host-group-id in standard mode", name)
+				found = true
+				break
 			}
+		}
+		if !found {
+			t.Errorf("pipeline %q missing resource/add-host-group-id processor in default config", name)
 		}
 	}
 }

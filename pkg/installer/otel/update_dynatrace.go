@@ -100,7 +100,6 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 	}
 
 	experimentalEnabled := featureflags.IsEnabled(featureflags.Experimental)
-	cfgData.HostMonitoring = true
 	cfgData.IncludeJournald = runtime.GOOS == "linux"
 	cfgData.HealthCheckPort = healthCheckPort
 

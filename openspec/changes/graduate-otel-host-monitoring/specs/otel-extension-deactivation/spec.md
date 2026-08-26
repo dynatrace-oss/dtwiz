@@ -1,3 +1,5 @@
+# OTel Extension Deactivation
+
 ## MODIFIED Requirements
 
 ### Requirement: OTel uninstall lets the user choose whether to remove the host monitoring extension
@@ -86,6 +88,6 @@ When `dtwiz uninstall otel` runs, the uninstall preview SHALL include a line ide
 
 ### Requirement: Uninstall preview includes extension removal when experimental is enabled
 
-**Reason**: Extension and route cleanup is released and is now part of the default `dtwiz uninstall otel` flow.
+**Reason**: Extension and route cleanup is released and is now part of the regular `dtwiz uninstall otel` flow.
 
-**Migration**: Use `Uninstall preview includes extension removal` for the default preview behavior. `--experimental` and `DTWIZ_EXPERIMENTAL=true` are no longer required for the extension and route removal preview.
+**Migration**: Use `Uninstall preview includes extension removal` for the regular preview behavior. `--experimental` and `DTWIZ_EXPERIMENTAL=true` are no longer required for the extension and route removal preview.

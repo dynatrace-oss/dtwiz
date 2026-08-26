@@ -1,3 +1,5 @@
+# Design
+
 ## Context
 
 OTel host monitoring currently affects several parts of the OTel flow: collector config generation, install messaging, tenant extension activation, OpenPipeline route setup, uninstall cleanup, and Dynatrace collector config regeneration. These behaviors are complete but are guarded by `featureflags.Experimental`, which also controls unrelated experimental features.
@@ -6,7 +8,7 @@ OTel host monitoring currently affects several parts of the OTel flow: collector
 
 Goals:
 
-- Make host monitoring the default behavior for `dtwiz install otel`.
+- Make host monitoring part of the standard `dtwiz install otel` behavior.
 - Preserve dry-run safety: previews may be shown, but no extension activation, route writes, process changes, or file changes occur during dry run.
 - Preserve user choice on uninstall by keeping the Delete all / Only collector / Cancel prompt.
 - Leave unrelated `Experimental` flag behavior unchanged.
@@ -14,7 +16,7 @@ Goals:
 Non-goals:
 
 - Making `install docker`, `install demo`, or `update otel` generally available.
-- Changing the host-monitoring collector template shape.
+- Changing the host-monitoring collector payload beyond making it unconditional.
 - Changing tenant API failure semantics; extension and route failures remain advisory during install/uninstall.
 
 ## Decisions
@@ -22,7 +24,8 @@ Non-goals:
 - Remove `Experimental` checks only from OTel host-monitoring behavior. The feature flag remains registered for other experimental commands.
 - Keep platform-token checks around tenant previews and writes. If no platform token is available, local collector installation continues with warnings/debug output as today.
 - For uninstall, always render the extension/routes removal preview and use the host monitoring removal prompt. Selecting Only collector keeps the extension and routes on the tenant.
-- For `update otel`, regenerated Dynatrace collector configs include host-monitoring settings by default even though the `update otel` command itself remains experimental.
+- Remove the remaining collector-template conditionals so host-monitoring sections are always rendered, while journald remains conditional on platform support.
+- For `update otel`, regenerated Dynatrace collector configs always include host-monitoring settings even though the `update otel` command itself remains experimental.
 
 ## Risks / Trade-offs
 

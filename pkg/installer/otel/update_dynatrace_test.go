@@ -307,7 +307,6 @@ func TestUpdateDynatraceCollector_ConfigUpToDate_StillRunsPrerequisites(t *testi
 		GRPCPort:        4317,
 		HTTPPort:        4318,
 		MetricsPort:     8888,
-		HostMonitoring:  true,
 		IncludeJournald: runtime.GOOS == "linux",
 		HealthCheckPort: 13133,
 	}

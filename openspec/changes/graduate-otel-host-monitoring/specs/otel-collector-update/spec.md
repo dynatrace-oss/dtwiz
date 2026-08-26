@@ -1,3 +1,5 @@
+# OTel Collector Update
+
 ## MODIFIED Requirements
 
 ### Requirement: Dynatrace OTel Collector config is regenerated from the install template
@@ -11,7 +13,7 @@ Existing OTLP receiver port assignments SHALL be preserved from the current conf
 - `service.telemetry.metrics.readers[0].pull.exporter.prometheus.port` (default 8888)
 - `extensions.health_check.endpoint` (default 13133)
 
-The regenerated config SHALL include host-monitoring collector settings by default.
+The regenerated config SHALL always include host-monitoring collector settings.
 
 If the freshly rendered config is byte-identical to the existing file, the update prints `Collector configuration is up to date.` and returns `ErrUpToDate`. The `cmd/update.go` handler treats `ErrUpToDate` the same as `ErrInstallCancelled`: clean exit, no error printed, and `WatchIngest` is not called.
 

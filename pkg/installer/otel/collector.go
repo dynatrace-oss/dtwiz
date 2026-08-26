@@ -40,7 +40,6 @@ type otelConfigData struct {
 	MetricsPort     int
 	GRPCPort        int
 	HTTPPort        int
-	HostMonitoring  bool
 	IncludeJournald bool
 	HealthCheckPort int
 }
@@ -727,7 +726,6 @@ func generateOtelConfig(apiURL, token string) (generatedOtelConfig, error) {
 	for healthCheckPort == grpcPort || healthCheckPort == httpPort || healthCheckPort == metricsPort {
 		healthCheckPort = findFreePort(healthCheckPort + 1)
 	}
-	data.HostMonitoring = true
 	data.IncludeJournald = runtime.GOOS == "linux"
 	data.HealthCheckPort = healthCheckPort
 	logger.Debug("otel config ports", "grpc", grpcPort, "http", httpPort, "metrics", metricsPort, "health_check", healthCheckPort)

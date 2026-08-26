@@ -1,3 +1,5 @@
+# OTel Extension Activation
+
 ## MODIFIED Requirements
 
 ### Requirement: OTel install ensures host monitoring extension is active
