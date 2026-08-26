@@ -68,6 +68,17 @@
       "console": "integratedTerminal"
     },
     {
+      "name": "dtwiz update otel (experimental)",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "args": ["update", "otel", "--experimental"],
+      "envFile": "${workspaceFolder}/.env",
+      "env": {},
+      "console": "integratedTerminal"
+    },
+    {
       "name": "dtwiz install kubernetes (dry-run)",
       "type": "go",
       "request": "launch",
