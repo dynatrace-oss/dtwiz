@@ -261,9 +261,11 @@ func TestUpdateDynatraceCollector_ConfigUpToDate_StillRunsPrerequisites(t *testi
 	// Write the exact config that renderOtelTemplate would produce so bytes.Equal is true.
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.yaml")
+	hostname, _ := os.Hostname()
 	cfgData := otelConfigData{
 		Endpoint:        strings.TrimRight(installer.APIURL("https://env.example.com"), "/"),
 		AuthHeader:      installer.AuthHeader("tok"),
+		HostGroupID:     hostname,
 		GRPCPort:        4317,
 		HTTPPort:        4318,
 		MetricsPort:     8888,
@@ -303,6 +305,38 @@ func TestUpdateDynatraceCollector_ConfigUpToDate_StillRunsPrerequisites(t *testi
 	}
 	if len(fc.putCalls)+len(fc.createCalls) == 0 {
 		t.Error("expected applyGrailPlan to make route calls even when config is up to date")
+	}
+}
+
+func TestUpdateDynatraceCollector_HostGroupIDPopulated(t *testing.T) {
+	// Regression: update path must populate HostGroupID; previously it was left
+	// empty, silently erasing dt.host_group.id on every update.
+	configPath := writeDynatraceConfig(t)
+	stubDynatraceExtensionPreview(t)
+	stubGrailRoutePlans(t)
+	stubActivation(t)
+	stubWaitForPipelines(t)
+
+	origAC := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = origAC })
+
+	captureUpdateOutput(t, func() {
+		if err := updateDynatraceCollector(configPath, nil, "https://env.example.com", "tok", "dt0s16.test", false); err != nil {
+			t.Fatalf("updateDynatraceCollector: %v", err)
+		}
+	})
+
+	written, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	hostname, _ := os.Hostname()
+	if hostname == "" {
+		t.Skip("os.Hostname() returned empty — cannot assert")
+	}
+	if !strings.Contains(string(written), hostname) {
+		t.Errorf("rendered config does not contain hostname %q in dt.host_group.id:\n%s", hostname, written)
 	}
 }
 

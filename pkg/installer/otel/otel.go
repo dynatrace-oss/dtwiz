@@ -173,6 +173,53 @@ func deactivateHostMonitoringExtension(envURL, platformToken string) {
 	display.ColorOK.Println("  ✓ OTel Host Monitoring extension removed")
 }
 
+// buildTenantPrerequisitePreview shows extension and route previews.
+// Returns nil values when no platform token is available or preview setup fails.
+func buildTenantPrerequisitePreview(envURL, platformToken string) (grailRouteClient, []grailSignalPlan) {
+	if platformToken == "" {
+		logger.Debug("platform token not provided, skipping extension and route previews")
+		return nil, nil
+	}
+	if status, err := buildExtensionActivationPreviewFn(envURL, platformToken); err != nil {
+		fmt.Println()
+		display.PrintWarning("OTel Host Monitoring extension", err)
+	} else {
+		fmt.Println()
+		printExtensionActivationPreview(status)
+	}
+	c, plans, err := buildGrailRoutePlansFn(envURL, platformToken)
+	if err != nil {
+		fmt.Println()
+		display.PrintWarning("OpenPipeline routes", err)
+		return nil, nil
+	}
+	fmt.Println()
+	printGrailPlan(plans)
+	return c, plans
+}
+
+// applyGrailRoutes waits for host-monitoring pipelines, rebuilds the route plan,
+// and falls back to the preview snapshot if rebuilding fails.
+func applyGrailRoutes(grailC grailRouteClient, grailPlans []grailSignalPlan) {
+	if grailC == nil {
+		return
+	}
+	if err := waitForGrailPipelinesFn(context.Background(), grailC, time.Sleep); err != nil {
+		logger.Debug("OTel host-monitoring pipelines did not appear within the wait bound", "error", err)
+	}
+	if freshPlans, err := buildGrailPlans(context.Background(), grailC); err != nil {
+		logger.Debug("failed to rebuild Grail route plans after extension activation, applying preview snapshot", "error", err)
+	} else {
+		grailPlans = freshPlans
+	}
+	logger.Debug("applying Grail route plans", "count", len(grailPlans))
+	applyErrs := make([]error, len(grailPlans))
+	for i, p := range grailPlans {
+		applyErrs[i] = applyGrailPlan(context.Background(), grailC, p)
+	}
+	printGrailApplyResults(grailPlans, applyErrs)
+}
+
 type InstrumentationPlan interface {
 	Runtime() string
 	PrintPlanSteps()
@@ -526,35 +573,7 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		plan.PrintPlanSteps()
 	}
 
-	// Show what the extension activation step (run after confirmation, below)
-	// will do: it runs first, before the collector install and route plan.
-	if platformToken == "" {
-		logger.Debug("platform token not provided, skipping extension activation preview")
-	} else if status, err := buildExtensionActivationPreviewFn(envURL, platformToken); err != nil {
-		fmt.Println()
-		display.PrintWarning("OTel Host Monitoring extension", err)
-	} else {
-		fmt.Println()
-		printExtensionActivationPreview(status)
-	}
-
-	// Build and show the OpenPipeline route plan as part of the install preview.
-	// Routes are applied after the collector install without a separate prompt.
-	var grailC grailRouteClient
-	var grailPlans []grailSignalPlan
-	if platformToken == "" {
-		logger.Debug("platform token not provided, skipping OpenPipeline route plan")
-	} else {
-		if c, plans, err := buildGrailRoutePlans(envURL, platformToken); err != nil {
-			fmt.Println()
-			display.PrintWarning("OpenPipeline routes", err)
-		} else {
-			grailC = c
-			grailPlans = plans
-			fmt.Println()
-			printGrailPlan(plans)
-		}
-	}
+	grailC, grailPlans := buildTenantPrerequisitePreview(envURL, platformToken)
 
 	fmt.Println()
 
@@ -573,7 +592,6 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 	}
 	fmt.Println()
 
-	// Extension activation only runs after the user confirms (dryRun exits above).
 	if platformToken != "" {
 		activateHostMonitoringExtensionFn(envURL, platformToken)
 	}
@@ -589,31 +607,7 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		}
 	}
 
-	// Rebuild the route plan right before applying instead of reusing the preview-time
-	// snapshot: extension activation (above) may have just made the pipeline exist, and
-	// applying the stale pre-confirmation plan would skip routes that are now creatable
-	// in this same run. Falls back to the preview snapshot if the rebuild itself fails.
-	if grailC != nil {
-		// Give the pipeline a bounded chance to appear before rebuilding the plan. If it's
-		// already there (the common case, since pipelines provision on extension install,
-		// not activation), this succeeds on the first check with no meaningful cost; if the
-		// extension was just hub-installed (async, 202 Accepted), this is what gives it
-		// time to show up so the route still gets created in this same run.
-		if err := waitForGrailPipelinesFn(context.Background(), grailC, time.Sleep); err != nil {
-			logger.Debug("OTel host-monitoring pipelines did not appear within the wait bound", "error", err)
-		}
-		if freshPlans, err := buildGrailPlans(context.Background(), grailC); err != nil {
-			logger.Debug("failed to rebuild Grail route plans after extension activation, applying preview snapshot", "error", err)
-		} else {
-			grailPlans = freshPlans
-		}
-		logger.Debug("applying Grail route plans", "count", len(grailPlans))
-		applyErrs := make([]error, len(grailPlans))
-		for i, p := range grailPlans {
-			applyErrs[i] = applyGrailPlan(context.Background(), grailC, p)
-		}
-		printGrailApplyResults(grailPlans, applyErrs)
-	}
+	applyGrailRoutes(grailC, grailPlans)
 
 	return nil
 }

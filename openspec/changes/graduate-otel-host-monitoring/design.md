@@ -8,7 +8,7 @@ OTel host monitoring currently affects several parts of the OTel flow: collector
 
 Goals:
 
-- Make host monitoring part of the standard `dtwiz install otel` behavior.
+- Make host monitoring part of the standard `dtwiz install otel` and `dtwiz install otel-collector` behavior.
 - Preserve dry-run safety: previews may be shown, but no extension activation, route writes, process changes, or file changes occur during dry run.
 - Preserve user choice on uninstall by keeping the Delete all / Only collector / Cancel prompt.
 - Leave unrelated `Experimental` flag behavior unchanged.

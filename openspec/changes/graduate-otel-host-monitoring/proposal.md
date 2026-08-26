@@ -21,6 +21,7 @@ None.
 ### Modified Capabilities
 
 - `otel-host-monitoring`: host monitoring is no longer gated by `Experimental`.
+- `otel-host-group-id`: the generated collector config now includes `resource/add-host-group-id` in the regular install flow.
 - `otel-extension-activation`: extension activation runs in the regular install flow.
 - `otel-host-monitoring-grail-routes`: route setup runs in the regular install flow.
 - `otel-extension-deactivation`: uninstall always offers the host monitoring removal choice.

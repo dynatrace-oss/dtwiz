@@ -1042,6 +1042,8 @@ func InstallOtelCollectorOnly(envURL, token, platformToken string, dryRun bool) 
 
 	cp.printConfigPreview(sep)
 
+	grailC, grailPlans := buildTenantPrerequisitePreview(envURL, platformToken)
+
 	fmt.Println()
 	ok, err := installer.ConfirmProceed("  Proceed with installation?")
 	if err != nil {
@@ -1053,5 +1055,15 @@ func InstallOtelCollectorOnly(envURL, token, platformToken string, dryRun bool) 
 	}
 	fmt.Println()
 
-	return cp.execute(envURL, platformToken, false)
+	if platformToken != "" {
+		activateHostMonitoringExtensionFn(envURL, platformToken)
+	}
+
+	if err := cp.execute(envURL, platformToken, false); err != nil {
+		return err
+	}
+
+	applyGrailRoutes(grailC, grailPlans)
+
+	return nil
 }

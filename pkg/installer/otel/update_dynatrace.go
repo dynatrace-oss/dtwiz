@@ -2,7 +2,6 @@ package otel
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"net"
 	"os"
@@ -90,9 +89,11 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 	grpcPort, httpPort, metricsPort, healthCheckPort := portsFromConfig(configPath)
 	logger.Debug("existing collector ports", "grpc", grpcPort, "http", httpPort, "metrics", metricsPort, "health_check", healthCheckPort)
 
+	hostname, _ := os.Hostname()
 	cfgData := otelConfigData{
 		Endpoint:    strings.TrimRight(apiURL, "/"),
 		AuthHeader:  installer.AuthHeader(token),
+		HostGroupID: hostname,
 		GRPCPort:    grpcPort,
 		HTTPPort:    httpPort,
 		MetricsPort: metricsPort,
@@ -160,29 +161,7 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 		display.PrintSectionDivider()
 	}
 
-	if platformTok != "" {
-		if status, err := buildExtensionActivationPreviewFn(envURL, platformTok); err != nil {
-			fmt.Println()
-			display.PrintWarning("OTel Host Monitoring extension", err)
-		} else {
-			fmt.Println()
-			printExtensionActivationPreview(status)
-		}
-	}
-
-	var grailC grailRouteClient
-	var grailPlans []grailSignalPlan
-	if platformTok != "" {
-		if c, plans, err := buildGrailRoutePlansFn(envURL, platformTok); err != nil {
-			fmt.Println()
-			display.PrintWarning("OpenPipeline routes", err)
-		} else {
-			grailC = c
-			grailPlans = plans
-			fmt.Println()
-			printGrailPlan(plans)
-		}
-	}
+	grailC, grailPlans := buildTenantPrerequisitePreview(envURL, platformTok)
 
 	if dryRun {
 		display.ColorDefault.Println("  [dry-run] No changes made.")
@@ -208,22 +187,7 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 		activateHostMonitoringExtensionFn(envURL, platformTok)
 	}
 
-	if grailC != nil {
-		if err := waitForGrailPipelinesFn(context.Background(), grailC, time.Sleep); err != nil {
-			logger.Debug("OTel host-monitoring pipelines did not appear within the wait bound", "error", err)
-		}
-		if freshPlans, err := buildGrailPlans(context.Background(), grailC); err != nil {
-			logger.Debug("failed to rebuild Grail route plans after extension activation, applying preview snapshot", "error", err)
-		} else {
-			grailPlans = freshPlans
-		}
-		logger.Debug("applying Grail route plans", "count", len(grailPlans))
-		applyErrs := make([]error, len(grailPlans))
-		for i, p := range grailPlans {
-			applyErrs[i] = applyGrailPlan(context.Background(), grailC, p)
-		}
-		printGrailApplyResults(grailPlans, applyErrs)
-	}
+	applyGrailRoutes(grailC, grailPlans)
 
 	if !configChanged {
 		display.ColorOK.Println("  Collector configuration is up to date.")
