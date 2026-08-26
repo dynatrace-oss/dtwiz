@@ -61,6 +61,8 @@ var setupCmd = &cobra.Command{
 
 		fmt.Println()
 		display.Header("Recommendations — What do you want to monitor?")
+		fmt.Println("  Monitor Logs, Metrics, Traces of:")
+		fmt.Println()
 		recs := recommender.GenerateRecommendations(info)
 
 		// Collect actionable (non-done, non-not-supported, non-coming-soon) recommendations.

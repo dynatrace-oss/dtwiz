@@ -88,9 +88,10 @@ func TestSystemInfoSummary_WithDetectedCloudAndRuntimeSignals(t *testing.T) {
 		"account=111111111111  region=eu-west-1  services: Lambda (2), RDS (1)",
 		"subscription=sub-123  services: VMs (5)",
 		"project=project-123  services: Cloud Run (6)",
+		"This host:",
 		"OneAgent:",
 		"running",
-		"Services:",
+		"Runtimes:",
 		"nginx, redis",
 	} {
 		if !strings.Contains(summary, want) {
