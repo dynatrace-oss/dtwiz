@@ -1,6 +1,6 @@
 module github.com/dynatrace-oss/dtwiz
 
-go 1.26.4
+go 1.26.6
 
 require (
 	github.com/dynatrace-oss/dtctl/sdk v0.38.0
