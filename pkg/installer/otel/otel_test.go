@@ -2,10 +2,10 @@ package otel
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -838,45 +838,68 @@ func TestInstallOtelCollector_DryRun_SkipsActivation(t *testing.T) {
 
 // ── activateHostMonitoringExtension unit tests ────────────────────────────────
 
-const testOtelExtension = "com.dynatrace.extension.opentelemetry"
+type fakeExtensionManager struct {
+	ensureFresh   bool
+	ensureErr     error
+	version       string
+	versionErr    error
+	activateErr   error
+	deactivateErr error
+	deleteErr     error
+	status        installer.ExtensionStatus
+	statusErr     error
+	calls         []string
+}
 
-// otelExtSrv builds a minimal httptest.Server that handles the three extension
-// API calls made by activateHostMonitoringExtension.
-//
-//   - getResp:      JSON body for GET /extensions/{name} (versions list). If empty,
-//     the server returns 404 to simulate "not installed".
-//   - installCode:  HTTP status for POST /extensions/{name} (hub install).
-//   - activateCode: HTTP status for POST /extensions/{name}/environment-configuration.
-func otelExtSrv(t *testing.T, getResp string, installCode, activateCode int) *httptest.Server {
+func (f *fakeExtensionManager) EnsureInstalled(extensionName string) (bool, error) {
+	f.calls = append(f.calls, "EnsureInstalled:"+extensionName)
+	return f.ensureFresh, f.ensureErr
+}
+
+func (f *fakeExtensionManager) LatestExtensionVersion(extensionName string) (string, error) {
+	f.calls = append(f.calls, "LatestExtensionVersion:"+extensionName)
+	return f.version, f.versionErr
+}
+
+func (f *fakeExtensionManager) ActivateExtension(extensionName, version string) error {
+	f.calls = append(f.calls, "ActivateExtension:"+extensionName+":"+version)
+	return f.activateErr
+}
+
+func (f *fakeExtensionManager) DeactivateExtension(extensionName string) error {
+	f.calls = append(f.calls, "DeactivateExtension:"+extensionName)
+	return f.deactivateErr
+}
+
+func (f *fakeExtensionManager) DeleteExtensionVersion(extensionName, version string) error {
+	f.calls = append(f.calls, "DeleteExtensionVersion:"+extensionName+":"+version)
+	return f.deleteErr
+}
+
+func (f *fakeExtensionManager) GetStatus(extensionName string) (installer.ExtensionStatus, error) {
+	f.calls = append(f.calls, "GetStatus:"+extensionName)
+	return f.status, f.statusErr
+}
+
+func stubExtensionManager(t *testing.T, manager extensionManager, err error) {
 	t.Helper()
-	getCount := 0
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ext := "/platform/extensions/v2/extensions/" + testOtelExtension
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == ext:
-			getCount++
-			if getResp == "" {
-				// Simulate extension not found: SDK surfaces this as a plain error message.
-				w.WriteHeader(http.StatusNotFound)
-				_, _ = w.Write([]byte(`{"error":{"message":"extension \"` + testOtelExtension + `\" not found"}}`))
-			} else {
-				w.Header().Set("Content-Type", "application/json")
-				_, _ = w.Write([]byte(getResp))
-			}
-		case r.Method == http.MethodPost && r.URL.Path == ext:
-			w.WriteHeader(installCode)
-			_, _ = w.Write([]byte(`{"extensionName":"` + testOtelExtension + `","version":"3.1.1"}`))
-		case r.Method == http.MethodPost && r.URL.Path == ext+"/environment-configuration":
-			w.WriteHeader(activateCode)
-			if activateCode < 300 {
-				_, _ = w.Write([]byte(`{"version":"3.1.1"}`))
-			}
-		default:
-			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
-			w.WriteHeader(http.StatusInternalServerError)
+	orig := newExtensionManagerFn
+	newExtensionManagerFn = func(_, _ string) (extensionManager, error) {
+		return manager, err
+	}
+	t.Cleanup(func() { newExtensionManagerFn = orig })
+}
+
+func assertStringSlicesEqual(t *testing.T, got, want []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("calls = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("calls = %v, want %v", got, want)
 		}
-		_ = getCount
-	}))
+	}
 }
 
 func captureActivationOutput(t *testing.T, fn func()) string {
@@ -913,12 +936,11 @@ func captureActivationOutput(t *testing.T, fn func()) string {
 }
 
 func TestActivateHostMonitoringExtension_AlreadyInstalled_Activates(t *testing.T) {
-	getResp := `{"items":[{"version":"3.1.1","extensionName":"` + testOtelExtension + `","active":false}]}`
-	srv := otelExtSrv(t, getResp, http.StatusAccepted, http.StatusOK)
-	defer srv.Close()
+	fake := &fakeExtensionManager{version: "3.1.1"}
+	stubExtensionManager(t, fake, nil)
 
 	out := captureActivationOutput(t, func() {
-		activateHostMonitoringExtension(srv.URL, "dt0s16.test")
+		activateHostMonitoringExtension("https://env.example.com", "dt0s16.test")
 	})
 
 	if !strings.Contains(out, "✓ OTel Host Monitoring extension active") {
@@ -927,51 +949,37 @@ func TestActivateHostMonitoringExtension_AlreadyInstalled_Activates(t *testing.T
 	if strings.Contains(out, "Warning:") {
 		t.Errorf("unexpected warning in output: %s", out)
 	}
+	assertStringSlicesEqual(t, fake.calls, []string{
+		"EnsureInstalled:" + otelHostMonitoringExtension,
+		"LatestExtensionVersion:" + otelHostMonitoringExtension,
+		"ActivateExtension:" + otelHostMonitoringExtension + ":3.1.1",
+	})
 }
 
 func TestActivateHostMonitoringExtension_FreshInstall_InstallsThenActivates(t *testing.T) {
-	// First GET returns 404 (not installed); subsequent GETs return a version.
-	callCount := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ext := "/platform/extensions/v2/extensions/" + testOtelExtension
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == ext:
-			callCount++
-			if callCount == 1 {
-				w.WriteHeader(http.StatusNotFound)
-				_, _ = w.Write([]byte(`{"error":{"message":"extension \"` + testOtelExtension + `\" not found"}}`))
-			} else {
-				w.Header().Set("Content-Type", "application/json")
-				_, _ = w.Write([]byte(`{"items":[{"version":"3.1.1","extensionName":"` + testOtelExtension + `"}]}`))
-			}
-		case r.Method == http.MethodPost && r.URL.Path == ext:
-			w.WriteHeader(http.StatusAccepted)
-			_, _ = w.Write([]byte(`{"extensionName":"` + testOtelExtension + `","version":"3.1.1"}`))
-		case r.Method == http.MethodPost && r.URL.Path == ext+"/environment-configuration":
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"version":"3.1.1"}`))
-		default:
-			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
-		}
-	}))
-	defer srv.Close()
+	fake := &fakeExtensionManager{ensureFresh: true, version: "3.1.1"}
+	stubExtensionManager(t, fake, nil)
 
 	out := captureActivationOutput(t, func() {
-		activateHostMonitoringExtension(srv.URL, "dt0s16.test")
+		activateHostMonitoringExtension("https://env.example.com", "dt0s16.test")
 	})
 
 	if !strings.Contains(out, "✓ OTel Host Monitoring extension active") {
 		t.Errorf("expected success message in output, got: %s", out)
 	}
+	assertStringSlicesEqual(t, fake.calls, []string{
+		"EnsureInstalled:" + otelHostMonitoringExtension,
+		"LatestExtensionVersion:" + otelHostMonitoringExtension,
+		"ActivateExtension:" + otelHostMonitoringExtension + ":3.1.1",
+	})
 }
 
 func TestActivateHostMonitoringExtension_ActivationFails_WarnsAndContinues(t *testing.T) {
-	getResp := `{"items":[{"version":"3.1.1","extensionName":"` + testOtelExtension + `"}]}`
-	srv := otelExtSrv(t, getResp, http.StatusAccepted, http.StatusInternalServerError)
-	defer srv.Close()
+	fake := &fakeExtensionManager{version: "3.1.1", activateErr: errors.New("activate failed")}
+	stubExtensionManager(t, fake, nil)
 
 	out := captureActivationOutput(t, func() {
-		activateHostMonitoringExtension(srv.URL, "dt0s16.test")
+		activateHostMonitoringExtension("https://env.example.com", "dt0s16.test")
 	})
 
 	if !strings.Contains(out, "Warning: could not activate OTel Host Monitoring extension; host entity creation may not be available.") {
@@ -980,33 +988,6 @@ func TestActivateHostMonitoringExtension_ActivationFails_WarnsAndContinues(t *te
 }
 
 // ── deactivateHostMonitoringExtension unit tests ─────────────────────────────
-
-// otelDeleteSrv builds a minimal httptest.Server that handles the three extension
-// API calls made by deactivateHostMonitoringExtension:
-//   - DELETE /extensions/{name}/environment-configuration → deactivateCode HTTP status
-//   - GET    /extensions/{name}                           → versions list (getResp JSON)
-//   - DELETE /extensions/{name}/{ver}                     → deleteCode HTTP status
-func otelDeleteSrv(t *testing.T, getResp string, deactivateCode, deleteCode int) *httptest.Server {
-	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ext := "/platform/extensions/v2/extensions/" + testOtelExtension
-		switch {
-		case r.Method == http.MethodDelete && r.URL.Path == ext+"/environment-configuration":
-			w.WriteHeader(deactivateCode)
-		case r.Method == http.MethodGet && r.URL.Path == ext:
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(getResp))
-		case r.Method == http.MethodDelete && r.URL.Path == ext+"/3.1.1":
-			w.WriteHeader(deleteCode)
-			if deleteCode < 300 {
-				_, _ = w.Write([]byte(`{"extensionName":"` + testOtelExtension + `","version":"3.1.1"}`))
-			}
-		default:
-			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
-			w.WriteHeader(http.StatusInternalServerError)
-		}
-	}))
-}
 
 // stubGrailRouteRemoval replaces removeHostMonitoringGrailRoutesFn for the
 // duration of the test with a no-op so deactivation tests don't hit the
@@ -1031,12 +1012,11 @@ func stubDeactivation(t *testing.T) *bool {
 
 func TestDeactivateHostMonitoringExtension_HappyPath(t *testing.T) {
 	stubGrailRouteRemoval(t)
-	getResp := `{"items":[{"version":"3.1.1","extensionName":"` + testOtelExtension + `"}]}`
-	srv := otelDeleteSrv(t, getResp, http.StatusNoContent, http.StatusAccepted)
-	defer srv.Close()
+	fake := &fakeExtensionManager{version: "3.1.1"}
+	stubExtensionManager(t, fake, nil)
 
 	out := captureActivationOutput(t, func() {
-		deactivateHostMonitoringExtension(srv.URL, "dt0s16.test")
+		deactivateHostMonitoringExtension("https://env.example.com", "dt0s16.test")
 	})
 
 	if !strings.Contains(out, "✓ OTel Host Monitoring extension removed") {
@@ -1045,17 +1025,20 @@ func TestDeactivateHostMonitoringExtension_HappyPath(t *testing.T) {
 	if strings.Contains(out, "Warning:") {
 		t.Errorf("unexpected warning in output: %s", out)
 	}
+	assertStringSlicesEqual(t, fake.calls, []string{
+		"DeactivateExtension:" + otelHostMonitoringExtension,
+		"LatestExtensionVersion:" + otelHostMonitoringExtension,
+		"DeleteExtensionVersion:" + otelHostMonitoringExtension + ":3.1.1",
+	})
 }
 
 func TestDeactivateHostMonitoringExtension_VersionNotFound_Warns(t *testing.T) {
 	stubGrailRouteRemoval(t)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusForbidden)
-	}))
-	defer srv.Close()
+	fake := &fakeExtensionManager{deactivateErr: errors.New("deactivate failed")}
+	stubExtensionManager(t, fake, nil)
 
 	out := captureActivationOutput(t, func() {
-		deactivateHostMonitoringExtension(srv.URL, "dt0s16.test")
+		deactivateHostMonitoringExtension("https://env.example.com", "dt0s16.test")
 	})
 
 	if !strings.Contains(out, "Warning: could not deactivate OTel Host Monitoring extension; extension was not removed.") {
@@ -1065,12 +1048,11 @@ func TestDeactivateHostMonitoringExtension_VersionNotFound_Warns(t *testing.T) {
 
 func TestDeactivateHostMonitoringExtension_DeleteFails_Warns(t *testing.T) {
 	stubGrailRouteRemoval(t)
-	getResp := `{"items":[{"version":"3.1.1","extensionName":"` + testOtelExtension + `"}]}`
-	srv := otelDeleteSrv(t, getResp, http.StatusNoContent, http.StatusForbidden)
-	defer srv.Close()
+	fake := &fakeExtensionManager{version: "3.1.1", deleteErr: errors.New("delete failed")}
+	stubExtensionManager(t, fake, nil)
 
 	out := captureActivationOutput(t, func() {
-		deactivateHostMonitoringExtension(srv.URL, "dt0s16.test")
+		deactivateHostMonitoringExtension("https://env.example.com", "dt0s16.test")
 	})
 
 	if !strings.Contains(out, "Warning: could not remove OTel Host Monitoring extension; please remove it manually.") {
@@ -1084,12 +1066,11 @@ func TestDeactivateHostMonitoringExtension_CallsGrailRouteRemoval(t *testing.T) 
 	removeHostMonitoringGrailRoutesFn = func(_, _ string) { grailCalled = true }
 	t.Cleanup(func() { removeHostMonitoringGrailRoutesFn = orig })
 
-	getResp := `{"items":[{"version":"3.1.1","extensionName":"` + testOtelExtension + `"}]}`
-	srv := otelDeleteSrv(t, getResp, http.StatusNoContent, http.StatusAccepted)
-	defer srv.Close()
+	fake := &fakeExtensionManager{version: "3.1.1"}
+	stubExtensionManager(t, fake, nil)
 
 	captureActivationOutput(t, func() {
-		deactivateHostMonitoringExtension(srv.URL, "dt0s16.test")
+		deactivateHostMonitoringExtension("https://env.example.com", "dt0s16.test")
 	})
 
 	if !grailCalled {
@@ -1247,10 +1228,10 @@ func TestUninstallOtelCollector_DryRun_SkipsDeactivation(t *testing.T) {
 // ── buildExtensionActivationPreview unit tests ────────────────────────────────
 
 func TestBuildExtensionActivationPreview_NotInstalled(t *testing.T) {
-	srv := otelExtSrv(t, "" /* not installed */, http.StatusAccepted, http.StatusOK)
-	defer srv.Close()
+	fake := &fakeExtensionManager{status: installer.ExtensionNotInstalled}
+	stubExtensionManager(t, fake, nil)
 
-	status, err := buildExtensionActivationPreview(srv.URL, "dt0s16.test")
+	status, err := buildExtensionActivationPreview("https://env.example.com", "dt0s16.test")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1260,11 +1241,10 @@ func TestBuildExtensionActivationPreview_NotInstalled(t *testing.T) {
 }
 
 func TestBuildExtensionActivationPreview_InstalledNotActive(t *testing.T) {
-	getResp := `{"items":[{"version":"3.1.1","extensionName":"` + testOtelExtension + `","active":false}]}`
-	srv := otelExtSrv(t, getResp, http.StatusAccepted, http.StatusOK)
-	defer srv.Close()
+	fake := &fakeExtensionManager{status: installer.ExtensionInstalledInactive}
+	stubExtensionManager(t, fake, nil)
 
-	status, err := buildExtensionActivationPreview(srv.URL, "dt0s16.test")
+	status, err := buildExtensionActivationPreview("https://env.example.com", "dt0s16.test")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1274,11 +1254,10 @@ func TestBuildExtensionActivationPreview_InstalledNotActive(t *testing.T) {
 }
 
 func TestBuildExtensionActivationPreview_InstalledAndActive(t *testing.T) {
-	getResp := `{"items":[{"version":"3.1.1","extensionName":"` + testOtelExtension + `","active":true}]}`
-	srv := otelExtSrv(t, getResp, http.StatusAccepted, http.StatusOK)
-	defer srv.Close()
+	fake := &fakeExtensionManager{status: installer.ExtensionInstalledActive}
+	stubExtensionManager(t, fake, nil)
 
-	status, err := buildExtensionActivationPreview(srv.URL, "dt0s16.test")
+	status, err := buildExtensionActivationPreview("https://env.example.com", "dt0s16.test")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1288,12 +1267,10 @@ func TestBuildExtensionActivationPreview_InstalledAndActive(t *testing.T) {
 }
 
 func TestBuildExtensionActivationPreview_APIError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusForbidden)
-	}))
-	defer srv.Close()
+	fake := &fakeExtensionManager{statusErr: errors.New("status failed")}
+	stubExtensionManager(t, fake, nil)
 
-	if _, err := buildExtensionActivationPreview(srv.URL, "dt0s16.test"); err == nil {
+	if _, err := buildExtensionActivationPreview("https://env.example.com", "dt0s16.test"); err == nil {
 		t.Error("expected error from a failing extensions API")
 	}
 }

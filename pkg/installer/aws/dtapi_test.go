@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/internal/extensiontest"
 )
 
 func newTestDTClient(t *testing.T, serverURL string) *sdkDTClient {
@@ -18,6 +19,10 @@ func newTestDTClient(t *testing.T, serverURL string) *sdkDTClient {
 	}
 	ec.C.HTTP().SetRetryCount(0)
 	return &sdkDTClient{ExtensionClient: ec}
+}
+
+func newTestDTClientWithSDK(sdk installer.ExtensionAPI) *sdkDTClient {
+	return &sdkDTClient{ExtensionClient: &installer.ExtensionClient{Extension: sdk}}
 }
 
 // TestEnableMonitoringConfig_FlipsTopLevelAndCredentials drives the full
@@ -203,24 +208,8 @@ func TestInstallExtension_PropagatesNonNotFoundError(t *testing.T) {
 func TestIsExtensionActive_UsesAWSExtensionName(t *testing.T) {
 	t.Parallel()
 
-	path := "/platform/extensions/v2/extensions/" + extensionName
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != path {
-			t.Errorf("unexpected path %q", r.URL.Path)
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		if r.Method != http.MethodGet {
-			t.Errorf("unexpected method %q", r.Method)
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[{"version":"1.0.0","active":false},{"version":"1.1.0","active":true}]}`))
-	}))
-	defer srv.Close()
-
-	active, err := newTestDTClient(t, srv.URL).isExtensionActive()
+	sdk := &extensiontest.FakeExtensionAPI{ActiveVersion: "1.1.0"}
+	active, err := newTestDTClientWithSDK(sdk).isExtensionActive()
 	if err != nil {
 		t.Fatalf("isExtensionActive() returned error: %v", err)
 	}
@@ -232,19 +221,8 @@ func TestIsExtensionActive_UsesAWSExtensionName(t *testing.T) {
 func TestLatestExtensionVersion_UsesHighestInstalledAWSVersion(t *testing.T) {
 	t.Parallel()
 
-	path := "/platform/extensions/v2/extensions/" + extensionName
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != path {
-			t.Errorf("unexpected path %q", r.URL.Path)
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[{"version":"1.9.0"},{"version":"1.10.0"},{"version":"1.2.0"}]}`))
-	}))
-	defer srv.Close()
-
-	version, err := newTestDTClient(t, srv.URL).latestExtensionVersion()
+	sdk := &extensiontest.FakeExtensionAPI{Versions: extensiontest.Versions("1.9.0", "1.10.0", "1.2.0")}
+	version, err := newTestDTClientWithSDK(sdk).latestExtensionVersion()
 	if err != nil {
 		t.Fatalf("latestExtensionVersion() returned error: %v", err)
 	}

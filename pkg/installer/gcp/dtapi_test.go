@@ -7,6 +7,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/internal/extensiontest"
 )
 
 func newTestSDKClient(t *testing.T, serverURL string) *sdkDTClient {
@@ -270,73 +273,76 @@ const stockDAGCPSchemaJSON = `{"enums":{
 }}`
 
 type monitoringServerOpts struct {
-	noVersions     bool
-	schemaErr      bool
-	noEssential    bool
-	postErr        bool
-	putErr         bool
-	captureBody    any
-	capturePutPath *string
+	noVersions  bool
+	schemaErr   bool
+	noEssential bool
+	postErr     bool
+	putErr      bool
 }
 
-func newMonitoringTestServer(t *testing.T, opts monitoringServerOpts) *httptest.Server {
+func newMonitoringTestClient(t *testing.T, opts monitoringServerOpts) (*sdkDTClient, *extensiontest.FakeExtensionAPI) {
 	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == extensionAPI:
-			if opts.noVersions {
-				_, _ = w.Write([]byte(`{"items":[]}`))
-				return
-			}
-			_, _ = w.Write([]byte(`{"items":[{"version":"1.2.0"}]}`))
-		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/schema"):
-			if opts.schemaErr {
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-			if opts.noEssential {
-				_, _ = w.Write([]byte(`{"enums":{"FeatureSetsType":{"items":[{"value":"compute_engine_premium"}]}}}`))
-				return
-			}
-			_, _ = w.Write([]byte(stockDAGCPSchemaJSON))
-		case r.Method == http.MethodPost && r.URL.Path == monitoringAPI:
-			if opts.postErr {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			if opts.captureBody != nil {
-				_ = json.NewDecoder(r.Body).Decode(opts.captureBody)
-			}
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"objectId":"mon-001"}`))
-		case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, monitoringAPI+"/"):
-			if opts.putErr {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			if opts.capturePutPath != nil {
-				*opts.capturePutPath = r.URL.Path
-			}
-			if opts.captureBody != nil {
-				_ = json.NewDecoder(r.Body).Decode(opts.captureBody)
-			}
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"objectId":"mon-001"}`))
-		default:
-			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
+	sdk := &extensiontest.FakeExtensionAPI{
+		Versions:  monitoringTestVersions(opts),
+		Schema:    monitoringTestSchema(opts),
+		SchemaErr: monitoringTestSchemaErr(opts),
+		CreateErr: monitoringTestCreateErr(opts),
+		UpdateErr: monitoringTestUpdateErr(opts),
+	}
+	return newExtensionTestClient(sdk), sdk
+}
+
+func newExtensionTestClient(sdk *extensiontest.FakeExtensionAPI) *sdkDTClient {
+	return &sdkDTClient{ExtensionClient: &installer.ExtensionClient{Extension: sdk}}
+}
+
+func monitoringTestCreateErr(opts monitoringServerOpts) error {
+	if opts.postErr {
+		return errors.New("400 bad request")
+	}
+	return nil
+}
+
+func monitoringTestUpdateErr(opts monitoringServerOpts) error {
+	if opts.putErr {
+		return errors.New("400 bad request")
+	}
+	return nil
+}
+
+func monitoringTestVersions(opts monitoringServerOpts) []extensiontest.Version {
+	if opts.noVersions {
+		return nil
+	}
+	return extensiontest.Versions("1.2.0")
+}
+
+func monitoringTestSchema(opts monitoringServerOpts) json.RawMessage {
+	if opts.noEssential {
+		return json.RawMessage(`{"enums":{"FeatureSetsType":{"items":[{"value":"compute_engine_premium"}]}}}`)
+	}
+	return json.RawMessage(stockDAGCPSchemaJSON)
+}
+
+func monitoringTestSchemaErr(opts monitoringServerOpts) error {
+	if opts.schemaErr {
+		return errors.New("temporary failure")
+	}
+	return nil
 }
 
 func TestSDKCreateMonitoring_HappyPath(t *testing.T) {
 	var body map[string]any
-	srv := newMonitoringTestServer(t, monitoringServerOpts{captureBody: &body})
-	defer srv.Close()
+	dtc, sdk := newMonitoringTestClient(t, monitoringServerOpts{})
 
-	if err := newTestSDKClient(t, srv.URL).createMonitoring("cfg-name", "conn-obj-001", "dtwiz-gcp@my-project.iam.gserviceaccount.com", "my-project"); err != nil {
+	if err := dtc.createMonitoring("cfg-name", "conn-obj-001", "dtwiz-gcp@my-project.iam.gserviceaccount.com", "my-project"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if !sdk.CreateCalled {
+		t.Fatal("expected CreateMonitoringConfiguration to be called")
+	}
+	if err := extensiontest.DecodeBody(sdk.CreateBody, &body); err != nil {
+		t.Fatalf("decode monitoring body: %v", err)
 	}
 
 	if body["scope"] != monitoringScope {
@@ -391,17 +397,15 @@ func TestSDKCreateMonitoring_HappyPath(t *testing.T) {
 }
 
 func TestSDKCreateMonitoring_NoVersions(t *testing.T) {
-	srv := newMonitoringTestServer(t, monitoringServerOpts{noVersions: true})
-	defer srv.Close()
-	if err := newTestSDKClient(t, srv.URL).createMonitoring("cfg", "conn", "sa", "proj"); err == nil {
+	dtc, _ := newMonitoringTestClient(t, monitoringServerOpts{noVersions: true})
+	if err := dtc.createMonitoring("cfg", "conn", "sa", "proj"); err == nil {
 		t.Fatal("expected error for no versions, got nil")
 	}
 }
 
 func TestSDKCreateMonitoring_NoEssentialFeatureSets(t *testing.T) {
-	srv := newMonitoringTestServer(t, monitoringServerOpts{noEssential: true})
-	defer srv.Close()
-	err := newTestSDKClient(t, srv.URL).createMonitoring("cfg", "conn", "sa", "proj")
+	dtc, _ := newMonitoringTestClient(t, monitoringServerOpts{noEssential: true})
+	err := dtc.createMonitoring("cfg", "conn", "sa", "proj")
 	if err == nil {
 		t.Fatal("expected error for no essential feature sets, got nil")
 	}
@@ -411,9 +415,8 @@ func TestSDKCreateMonitoring_NoEssentialFeatureSets(t *testing.T) {
 }
 
 func TestSDKCreateMonitoring_PostFails(t *testing.T) {
-	srv := newMonitoringTestServer(t, monitoringServerOpts{postErr: true})
-	defer srv.Close()
-	if err := newTestSDKClient(t, srv.URL).createMonitoring("cfg", "conn", "sa", "proj"); err == nil {
+	dtc, _ := newMonitoringTestClient(t, monitoringServerOpts{postErr: true})
+	if err := dtc.createMonitoring("cfg", "conn", "sa", "proj"); err == nil {
 		t.Fatal("expected error when POST fails, got nil")
 	}
 }
@@ -422,34 +425,28 @@ func TestSDKCreateMonitoring_PostFails(t *testing.T) {
 
 func TestSDKUpdateMonitoring_HappyPath(t *testing.T) {
 	var body map[string]any
-	var putPath string
-	srv := newMonitoringTestServer(t, monitoringServerOpts{captureBody: &body, capturePutPath: &putPath})
-	defer srv.Close()
+	dtc, sdk := newMonitoringTestClient(t, monitoringServerOpts{})
 
-	if err := newTestSDKClient(t, srv.URL).updateMonitoring("mon-existing-1", "cfg-name", "conn-obj-001", "sa@p.iam.gserviceaccount.com", "my-project"); err != nil {
+	if err := dtc.updateMonitoring("mon-existing-1", "cfg-name", "conn-obj-001", "sa@p.iam.gserviceaccount.com", "my-project"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.HasSuffix(putPath, "/mon-existing-1") {
-		t.Errorf("PUT path = %q, want suffix /mon-existing-1", putPath)
+	if sdk.UpdateConfigID != "mon-existing-1" {
+		t.Errorf("update config ID = %q, want mon-existing-1", sdk.UpdateConfigID)
+	}
+	if err := extensiontest.DecodeBody(sdk.UpdateBody, &body); err != nil {
+		t.Fatalf("decode monitoring body: %v", err)
 	}
 }
 
 // ─── findAllMonitoringConfigs ─────────────────────────────────────────────────
 
 func TestSDKFindAllMonitoringConfigs_Found(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != monitoringAPI {
-			t.Errorf("path = %q, want %q", r.URL.Path, monitoringAPI)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[
-			{"objectId":"mon-001","value":{"description":"my-config"}},
-			{"objectId":"mon-002","value":{"description":"other-config"}}
-		]}`))
-	}))
-	defer srv.Close()
+	sdk := &extensiontest.FakeExtensionAPI{MonitoringConfigs: []extensiontest.MonitoringConfiguration{
+		{ObjectID: "mon-001", Value: []byte(`{"description":"my-config"}`)},
+		{ObjectID: "mon-002", Value: []byte(`{"description":"other-config"}`)},
+	}}
 
-	ids, err := newTestSDKClient(t, srv.URL).findAllMonitoringConfigs("my-config")
+	ids, err := newExtensionTestClient(sdk).findAllMonitoringConfigs("my-config")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -461,104 +458,15 @@ func TestSDKFindAllMonitoringConfigs_Found(t *testing.T) {
 // ─── deleteMonitoring ─────────────────────────────────────────────────────────
 
 func TestSDKDeleteMonitoring_HappyPath(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodDelete {
-			t.Errorf("method = %q, want DELETE", r.Method)
-		}
-		if want := monitoringAPI + "/mon-001"; r.URL.Path != want {
-			t.Errorf("path = %q, want %q", r.URL.Path, want)
-		}
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer srv.Close()
+	sdk := &extensiontest.FakeExtensionAPI{}
 
-	if err := newTestSDKClient(t, srv.URL).deleteMonitoring("mon-001"); err != nil {
+	if err := newExtensionTestClient(sdk).deleteMonitoring("mon-001"); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-}
-
-// ─── installExtension ────────────────────────────────────────────────────────
-
-func TestSDKInstallExtension_AlreadyInstalled(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet && r.URL.Path == extensionAPI {
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"items":[{"version":"1.2.0"}]}`))
-			return
-		}
-		t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
-	}))
-	defer srv.Close()
-
-	fresh, err := newTestSDKClient(t, srv.URL).installExtension()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if !sdk.DeleteCalled {
+		t.Fatal("expected DeleteMonitoringConfiguration to be called")
 	}
-	if fresh {
-		t.Error("expected fresh=false for already-installed extension")
-	}
-}
-
-func TestSDKInstallExtension_FreshInstall(t *testing.T) {
-	installCalled := false
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == extensionAPI:
-			w.WriteHeader(http.StatusNotFound)
-			_, _ = w.Write([]byte(`{"error":{"code":404,"message":"Extension not found"}}`))
-		case r.Method == http.MethodPost && r.URL.Path == extensionAPI:
-			installCalled = true
-			w.WriteHeader(http.StatusAccepted)
-			_, _ = w.Write([]byte(`{"extensionName":"com.dynatrace.extension.da-gcp","version":"1.2.0"}`))
-		default:
-			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
-		}
-	}))
-	defer srv.Close()
-
-	fresh, err := newTestSDKClient(t, srv.URL).installExtension()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !fresh {
-		t.Error("expected fresh=true after hub install")
-	}
-	if !installCalled {
-		t.Error("expected InstallFromHub to be called")
-	}
-}
-
-// ─── isExtensionActive ───────────────────────────────────────────────────────
-
-func TestSDKIsExtensionActive_Active(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[{"version":"1.2.0","active":true}]}`))
-	}))
-	defer srv.Close()
-
-	active, err := newTestSDKClient(t, srv.URL).isExtensionActive()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !active {
-		t.Error("expected active=true when extension version has active:true")
-	}
-}
-
-func TestSDKIsExtensionActive_NotActive(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[{"version":"1.2.0"}]}`))
-	}))
-	defer srv.Close()
-
-	active, err := newTestSDKClient(t, srv.URL).isExtensionActive()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if active {
-		t.Error("expected active=false when active field is absent")
+	if sdk.DeleteConfigID != "mon-001" {
+		t.Errorf("delete config ID = %q, want mon-001", sdk.DeleteConfigID)
 	}
 }

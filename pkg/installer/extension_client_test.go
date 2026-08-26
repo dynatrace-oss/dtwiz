@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/dynatrace-oss/dtctl/sdk/httpclient"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/internal/extensiontest"
 )
 
 const testExtensionName = "com.dynatrace.extension.test-ext"
@@ -20,6 +22,10 @@ func newTestExtensionClient(t *testing.T, serverURL string) *ExtensionClient {
 	}
 	e.C.HTTP().SetRetryCount(0)
 	return e
+}
+
+func newTestExtensionClientWithSDK(sdk ExtensionAPI) *ExtensionClient {
+	return &ExtensionClient{Extension: sdk}
 }
 
 // ─── cmpSemver ─────────────────────────────────────────────────────────────
@@ -295,50 +301,74 @@ func TestExtensionClientDeleteConnection_404IsIdempotent(t *testing.T) {
 // ─── InstallExtension ───────────────────────────────────────────────────────
 
 func TestExtensionClientInstallExtension_HappyPath(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Errorf("method = %q, want POST", r.Method)
-		}
-		wantPath := "/platform/extensions/v2/extensions/" + testExtensionName
-		if r.URL.Path != wantPath {
-			t.Errorf("path = %q, want %q", r.URL.Path, wantPath)
-		}
-		if got := r.URL.Query().Get("version"); got != "1.2.3" {
-			t.Errorf("version query = %q, want 1.2.3", got)
-		}
-		w.WriteHeader(http.StatusAccepted)
-		_, _ = w.Write([]byte(`{"extensionName":"` + testExtensionName + `","version":"1.2.3"}`))
-	}))
-	defer srv.Close()
+	sdk := &extensiontest.FakeExtensionAPI{}
 
-	if err := newTestExtensionClient(t, srv.URL).InstallExtension(testExtensionName, "1.2.3"); err != nil {
+	if err := newTestExtensionClientWithSDK(sdk).InstallExtension(testExtensionName, "1.2.3"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if !sdk.InstallCalled {
+		t.Fatal("expected InstallFromHub to be called")
+	}
+	if sdk.InstallVersion != "1.2.3" {
+		t.Errorf("install version = %q, want 1.2.3", sdk.InstallVersion)
 	}
 }
 
 func TestExtensionClientInstallExtension_AlreadyInstalledIsSuccess(t *testing.T) {
 	for _, status := range []int{http.StatusBadRequest, http.StatusConflict} {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(status)
-			_, _ = w.Write([]byte(`{"error":{"message":"extension already installed"}}`))
-		}))
-		if err := newTestExtensionClient(t, srv.URL).InstallExtension(testExtensionName, "1.2.3"); err != nil {
+		sdk := &extensiontest.FakeExtensionAPI{InstallErr: extensiontest.APIError(status, "extension already installed")}
+		if err := newTestExtensionClientWithSDK(sdk).InstallExtension(testExtensionName, "1.2.3"); err != nil {
 			t.Errorf("status %d should be idempotent success, got: %v", status, err)
 		}
-		srv.Close()
+	}
+}
+
+// ─── EnsureInstalled ────────────────────────────────────────────────────────
+
+func TestExtensionClientEnsureInstalled_AlreadyInstalled(t *testing.T) {
+	sdk := &extensiontest.FakeExtensionAPI{Versions: extensiontest.Versions("1.2.0")}
+
+	fresh, err := newTestExtensionClientWithSDK(sdk).EnsureInstalled(testExtensionName)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fresh {
+		t.Error("expected fresh=false for already-installed extension")
+	}
+}
+
+func TestExtensionClientEnsureInstalled_NotFoundInstalls(t *testing.T) {
+	sdk := &extensiontest.FakeExtensionAPI{GetErr: extensiontest.NotFound(testExtensionName)}
+
+	fresh, err := newTestExtensionClientWithSDK(sdk).EnsureInstalled(testExtensionName)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !fresh {
+		t.Error("expected fresh=true after hub install")
+	}
+	if !sdk.InstallCalled {
+		t.Error("expected InstallFromHub to be called")
+	}
+}
+
+func TestExtensionClientEnsureInstalled_PropagatesVersionCheckError(t *testing.T) {
+	sdk := &extensiontest.FakeExtensionAPI{GetErr: errors.New("temporary failure")}
+
+	if _, err := newTestExtensionClientWithSDK(sdk).EnsureInstalled(testExtensionName); err == nil {
+		t.Fatal("expected error for version-check failure")
+	}
+	if sdk.InstallCalled {
+		t.Error("InstallFromHub must not be called when the version check fails")
 	}
 }
 
 // ─── LatestExtensionVersion ──────────────────────────────────────────────────
 
 func TestExtensionClientLatestExtensionVersion_HappyPath(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[{"version":"1.2.0"},{"version":"1.0.0"},{"version":"1.1.3"}]}`))
-	}))
-	defer srv.Close()
+	sdk := &extensiontest.FakeExtensionAPI{Versions: extensiontest.Versions("1.2.0", "1.0.0", "1.1.3")}
 
-	v, err := newTestExtensionClient(t, srv.URL).LatestExtensionVersion(testExtensionName)
+	v, err := newTestExtensionClientWithSDK(sdk).LatestExtensionVersion(testExtensionName)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -348,13 +378,9 @@ func TestExtensionClientLatestExtensionVersion_HappyPath(t *testing.T) {
 }
 
 func TestExtensionClientLatestExtensionVersion_Empty(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[]}`))
-	}))
-	defer srv.Close()
+	sdk := &extensiontest.FakeExtensionAPI{}
 
-	_, err := newTestExtensionClient(t, srv.URL).LatestExtensionVersion(testExtensionName)
+	_, err := newTestExtensionClientWithSDK(sdk).LatestExtensionVersion(testExtensionName)
 	if err == nil {
 		t.Fatal("expected error for empty versions, got nil")
 	}
@@ -364,40 +390,64 @@ func TestExtensionClientLatestExtensionVersion_Empty(t *testing.T) {
 // regression where items are present but every version string is empty: the
 // filtered slice is empty and indexing versions[0] would panic.
 func TestExtensionClientLatestExtensionVersion_AllBlankVersions(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[{"version":""},{"version":""}]}`))
-	}))
-	defer srv.Close()
+	sdk := &extensiontest.FakeExtensionAPI{Versions: extensiontest.Versions("", "")}
 
-	_, err := newTestExtensionClient(t, srv.URL).LatestExtensionVersion(testExtensionName)
+	_, err := newTestExtensionClientWithSDK(sdk).LatestExtensionVersion(testExtensionName)
 	if err == nil {
 		t.Fatal("expected error for all-blank versions, got nil")
 	}
 }
 
 func TestExtensionClientLatestExtensionVersion_ServerError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer srv.Close()
+	sdk := &extensiontest.FakeExtensionAPI{GetErr: errors.New("temporary failure")}
 
-	_, err := newTestExtensionClient(t, srv.URL).LatestExtensionVersion(testExtensionName)
+	_, err := newTestExtensionClientWithSDK(sdk).LatestExtensionVersion(testExtensionName)
 	if err == nil {
 		t.Fatal("expected error for 500, got nil")
+	}
+}
+
+// ─── IsExtensionActive ───────────────────────────────────────────────────────
+
+func TestExtensionClientIsExtensionActive_Active(t *testing.T) {
+	sdk := &extensiontest.FakeExtensionAPI{ActiveVersion: "1.2.0"}
+
+	active, err := newTestExtensionClientWithSDK(sdk).IsExtensionActive(testExtensionName)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !active {
+		t.Error("expected active=true when environment configuration exists")
+	}
+}
+
+func TestExtensionClientIsExtensionActive_NotActive(t *testing.T) {
+	sdk := &extensiontest.FakeExtensionAPI{}
+
+	active, err := newTestExtensionClientWithSDK(sdk).IsExtensionActive(testExtensionName)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if active {
+		t.Error("expected active=false when environment configuration is absent")
+	}
+}
+
+func TestExtensionClientIsExtensionActive_ActiveLookupFailurePropagates(t *testing.T) {
+	sdk := &extensiontest.FakeExtensionAPI{ActiveErr: errors.New("temporary failure")}
+
+	_, err := newTestExtensionClientWithSDK(sdk).IsExtensionActive(testExtensionName)
+	if err == nil {
+		t.Fatal("expected error when environment configuration lookup fails, got nil")
 	}
 }
 
 // ─── GetStatus ────────────────────────────────────────────────────────────────
 
 func TestExtensionClientGetStatus_NotInstalled(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-		_, _ = w.Write([]byte(`{"error":{"message":"extension \"` + testExtensionName + `\" not found"}}`))
-	}))
-	defer srv.Close()
+	sdk := &extensiontest.FakeExtensionAPI{GetErr: extensiontest.NotFound(testExtensionName)}
 
-	status, err := newTestExtensionClient(t, srv.URL).GetStatus(testExtensionName)
+	status, err := newTestExtensionClientWithSDK(sdk).GetStatus(testExtensionName)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -407,13 +457,9 @@ func TestExtensionClientGetStatus_NotInstalled(t *testing.T) {
 }
 
 func TestExtensionClientGetStatus_InstalledInactive(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[{"version":"1.2.0","active":false}]}`))
-	}))
-	defer srv.Close()
+	sdk := &extensiontest.FakeExtensionAPI{Versions: extensiontest.Versions("1.2.0")}
 
-	status, err := newTestExtensionClient(t, srv.URL).GetStatus(testExtensionName)
+	status, err := newTestExtensionClientWithSDK(sdk).GetStatus(testExtensionName)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -423,13 +469,9 @@ func TestExtensionClientGetStatus_InstalledInactive(t *testing.T) {
 }
 
 func TestExtensionClientGetStatus_InstalledActive(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[{"version":"1.2.0","active":true}]}`))
-	}))
-	defer srv.Close()
+	sdk := &extensiontest.FakeExtensionAPI{Versions: extensiontest.Versions("1.2.0"), ActiveVersion: "1.2.0"}
 
-	status, err := newTestExtensionClient(t, srv.URL).GetStatus(testExtensionName)
+	status, err := newTestExtensionClientWithSDK(sdk).GetStatus(testExtensionName)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -439,12 +481,9 @@ func TestExtensionClientGetStatus_InstalledActive(t *testing.T) {
 }
 
 func TestExtensionClientGetStatus_ServerError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer srv.Close()
+	sdk := &extensiontest.FakeExtensionAPI{GetErr: errors.New("temporary failure")}
 
-	if _, err := newTestExtensionClient(t, srv.URL).GetStatus(testExtensionName); err == nil {
+	if _, err := newTestExtensionClientWithSDK(sdk).GetStatus(testExtensionName); err == nil {
 		t.Fatal("expected error for 500, got nil")
 	}
 }
@@ -452,20 +491,12 @@ func TestExtensionClientGetStatus_ServerError(t *testing.T) {
 // ─── FetchExtensionSchema / EnumValues ───────────────────────────────────────
 
 func TestExtensionClientFetchExtensionSchema_HappyPath(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		want := "/platform/extensions/v2/extensions/" + testExtensionName + "/1.2.0/schema"
-		if r.URL.Path != want {
-			t.Errorf("path = %q, want %q", r.URL.Path, want)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"enums":{
+	sdk := &extensiontest.FakeExtensionAPI{Schema: []byte(`{"enums":{
 			"someLocationEnum":{"items":[{"value":"eastus"},{"value":"westeurope"}]},
 			"FeatureSetsType":{"items":[{"value":"essential_one"},{"value":""}]}
-		}}`))
-	}))
-	defer srv.Close()
+		}}`)}
 
-	schema, err := newTestExtensionClient(t, srv.URL).FetchExtensionSchema(testExtensionName, "1.2.0")
+	schema, err := newTestExtensionClientWithSDK(sdk).FetchExtensionSchema(testExtensionName, "1.2.0")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -485,12 +516,9 @@ func TestExtensionClientFetchExtensionSchema_HappyPath(t *testing.T) {
 }
 
 func TestExtensionClientFetchExtensionSchema_ServerError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer srv.Close()
+	sdk := &extensiontest.FakeExtensionAPI{SchemaErr: errors.New("schema not found")}
 
-	_, err := newTestExtensionClient(t, srv.URL).FetchExtensionSchema(testExtensionName, "1.2.0")
+	_, err := newTestExtensionClientWithSDK(sdk).FetchExtensionSchema(testExtensionName, "1.2.0")
 	if err == nil {
 		t.Fatal("expected error for 404, got nil")
 	}
@@ -499,20 +527,12 @@ func TestExtensionClientFetchExtensionSchema_ServerError(t *testing.T) {
 // ─── FindAllMonitoringConfigs / DeleteMonitoringConfiguration ────────────────
 
 func TestExtensionClientFindAllMonitoringConfigs_Found(t *testing.T) {
-	wantPath := "/platform/extensions/v2/extensions/" + testExtensionName + "/monitoring-configurations"
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != wantPath {
-			t.Errorf("path = %q, want %q", r.URL.Path, wantPath)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[
-			{"objectId":"mon-001","value":{"description":"my-config"}},
-			{"objectId":"mon-002","value":{"description":"other-config"}}
-		]}`))
-	}))
-	defer srv.Close()
+	sdk := &extensiontest.FakeExtensionAPI{MonitoringConfigs: []extensiontest.MonitoringConfiguration{
+		{ObjectID: "mon-001", Value: []byte(`{"description":"my-config"}`)},
+		{ObjectID: "mon-002", Value: []byte(`{"description":"other-config"}`)},
+	}}
 
-	ids, err := newTestExtensionClient(t, srv.URL).FindAllMonitoringConfigs(testExtensionName, "my-config")
+	ids, err := newTestExtensionClientWithSDK(sdk).FindAllMonitoringConfigs(testExtensionName, "my-config")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -522,35 +542,25 @@ func TestExtensionClientFindAllMonitoringConfigs_Found(t *testing.T) {
 }
 
 func TestExtensionClientDeleteMonitoringConfiguration_HappyPath(t *testing.T) {
-	wantPath := "/platform/extensions/v2/extensions/" + testExtensionName + "/monitoring-configurations/mon-001"
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodDelete {
-			t.Errorf("method = %q, want DELETE", r.Method)
-		}
-		if r.URL.Path != wantPath {
-			t.Errorf("path = %q, want %q", r.URL.Path, wantPath)
-		}
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer srv.Close()
+	sdk := &extensiontest.FakeExtensionAPI{}
 
-	if err := newTestExtensionClient(t, srv.URL).DeleteMonitoringConfiguration(testExtensionName, "mon-001"); err != nil {
+	if err := newTestExtensionClientWithSDK(sdk).DeleteMonitoringConfiguration(testExtensionName, "mon-001"); err != nil {
 		t.Errorf("unexpected error: %v", err)
+	}
+	if !sdk.DeleteCalled {
+		t.Fatal("expected DeleteMonitoringConfiguration to be called")
+	}
+	if sdk.DeleteConfigID != "mon-001" {
+		t.Errorf("delete config ID = %q, want mon-001", sdk.DeleteConfigID)
 	}
 }
 
-// The extension API's DeleteMonitoringConfiguration does not surface 404s as
-// httpclient.ErrNotFound (unlike the settings API used by DeleteConnection), so
-// this currently returns an error rather than treating it as already-deleted.
 func TestExtensionClientDeleteMonitoringConfiguration_ServerError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer srv.Close()
+	sdk := &extensiontest.FakeExtensionAPI{DeleteErr: errors.New("delete failed")}
 
-	err := newTestExtensionClient(t, srv.URL).DeleteMonitoringConfiguration(testExtensionName, "mon-001")
+	err := newTestExtensionClientWithSDK(sdk).DeleteMonitoringConfiguration(testExtensionName, "mon-001")
 	if err == nil {
-		t.Fatal("expected error for 404, got nil")
+		t.Fatal("expected error for delete failure, got nil")
 	}
 }
 

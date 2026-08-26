@@ -27,7 +27,22 @@ import (
 type ExtensionClient struct {
 	C         *httpclient.Client
 	Settings  *settings.Handler
-	Extension *extension.Handler
+	Extension ExtensionAPI
+}
+
+// ExtensionAPI is the dtctl SDK extension surface used by dtwiz. Tests can
+// replace it with a fake so unit tests assert our behavior without depending on
+// the SDK handler's internal HTTP request sequence.
+type ExtensionAPI interface {
+	Get(ctx context.Context, extensionName string) (*extension.ExtensionVersionList, error)
+	GetActiveVersion(ctx context.Context, extensionName string) (string, error)
+	InstallFromHub(ctx context.Context, extensionName, version string) (*extension.ExtensionVersion, error)
+	ListMonitoringConfigurations(ctx context.Context, extensionName, version string, chunkSize int64) (*extension.MonitoringConfigurationList, error)
+	GetMonitoringConfiguration(ctx context.Context, extensionName, configID string) (*extension.MonitoringConfiguration, error)
+	CreateMonitoringConfiguration(ctx context.Context, extensionName string, body extension.MonitoringConfigurationCreate) (*extension.MonitoringConfiguration, error)
+	UpdateMonitoringConfiguration(ctx context.Context, extensionName, configID string, body extension.MonitoringConfigurationCreate) (*extension.MonitoringConfiguration, error)
+	DeleteMonitoringConfiguration(ctx context.Context, extensionName, configID string) error
+	GetMonitoringConfigurationSchema(ctx context.Context, extensionName, version string) (json.RawMessage, error)
 }
 
 // NewExtensionClient builds an ExtensionClient authenticated against the
@@ -296,19 +311,15 @@ func (e *ExtensionClient) FetchExtensionSchema(extensionName, version string) (*
 	return &schema, nil
 }
 
-// IsExtensionActive reports whether any installed version of extensionName has Active == true.
-// The DT hub install is asynchronous (202 Accepted); this is the readiness signal.
+// IsExtensionActive reports whether extensionName has an active environment
+// configuration. The DT hub install is asynchronous (202 Accepted); this is the
+// readiness signal.
 func (e *ExtensionClient) IsExtensionActive(extensionName string) (bool, error) {
-	versionList, err := e.Extension.Get(context.Background(), extensionName)
+	_, found, err := e.activeExtensionVersion(extensionName)
 	if err != nil {
-		return false, fmt.Errorf("get extension versions: %w", err)
+		return false, fmt.Errorf("check extension active: %w", err)
 	}
-	for _, item := range versionList.Items {
-		if item.Active {
-			return true, nil
-		}
-	}
-	return false, nil
+	return found, nil
 }
 
 // ExtensionStatus is the read-only install/activation state of an extension,
@@ -325,17 +336,23 @@ const (
 // installed and active, with a single API call. Unlike EnsureInstalled/ActivateExtension,
 // it never installs or activates anything, so it's safe to call from a preview.
 func (e *ExtensionClient) GetStatus(extensionName string) (ExtensionStatus, error) {
-	versionList, err := e.Extension.Get(context.Background(), extensionName)
+	versions, err := e.listExtensionVersions(extensionName)
 	if err != nil {
 		if IsExtensionNotFound(err, extensionName) {
 			return ExtensionNotInstalled, nil
 		}
 		return ExtensionNotInstalled, fmt.Errorf("get extension versions: %w", err)
 	}
-	for _, item := range versionList.Items {
-		if item.Active {
-			return ExtensionInstalledActive, nil
-		}
+	if len(versions) == 0 {
+		logger.Debug("extension has no installed versions", "extension", extensionName)
+		return ExtensionNotInstalled, nil
+	}
+	_, found, err := e.activeExtensionVersion(extensionName)
+	if err != nil {
+		return ExtensionInstalledInactive, fmt.Errorf("check extension active: %w", err)
+	}
+	if found {
+		return ExtensionInstalledActive, nil
 	}
 	return ExtensionInstalledInactive, nil
 }
@@ -387,15 +404,15 @@ func WithScopeHint(err error, scope string) error {
 
 // LatestExtensionVersion returns the highest semver version installed for extensionName.
 func (e *ExtensionClient) LatestExtensionVersion(extensionName string) (string, error) {
-	versionList, err := e.Extension.Get(context.Background(), extensionName)
+	versionsList, err := e.listExtensionVersions(extensionName)
 	if err != nil {
 		return "", fmt.Errorf("get extension versions: %w", err)
 	}
-	if len(versionList.Items) == 0 {
+	if len(versionsList) == 0 {
 		return "", fmt.Errorf("no versions found for extension %s", extensionName)
 	}
-	versions := make([]string, 0, len(versionList.Items))
-	for _, item := range versionList.Items {
+	versions := make([]string, 0, len(versionsList))
+	for _, item := range versionsList {
 		if item.Version != "" {
 			versions = append(versions, item.Version)
 		}
@@ -407,6 +424,25 @@ func (e *ExtensionClient) LatestExtensionVersion(extensionName string) (string, 
 		return cmpSemver(versions[i], versions[j]) > 0
 	})
 	return versions[0], nil
+}
+
+func (e *ExtensionClient) listExtensionVersions(extensionName string) ([]extension.ExtensionVersion, error) {
+	versionList, err := e.Extension.Get(context.Background(), extensionName)
+	if err != nil {
+		return nil, err
+	}
+	return versionList.Items, nil
+}
+
+func (e *ExtensionClient) activeExtensionVersion(extensionName string) (string, bool, error) {
+	version, err := e.Extension.GetActiveVersion(context.Background(), extensionName)
+	if err != nil {
+		return "", false, err
+	}
+	if version == "" {
+		return "", false, nil
+	}
+	return version, true, nil
 }
 
 // cmpSemver compares two dotted version strings numerically, segment by segment
