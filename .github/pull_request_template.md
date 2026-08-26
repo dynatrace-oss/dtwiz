@@ -18,4 +18,6 @@
 - [ ] I have tested these changes locally.
 - [ ] I updated OpenSpec and other documentation where necessary.
 - [ ] I added or updated tests where appropriate.
+- [ ] I have run `make test-integration` locally.
+- [ ] I have updated the changelog if necessary.
 - [ ] I followed the existing code style and conventions.
