@@ -773,7 +773,8 @@ func (cp *collectorPlan) printConfigPreview(sep string) {
 	const headLines = 20
 
 	label := filepath.Base(cp.configPath)
-	lines := strings.Split(strings.TrimRight(cp.configPreview, "\n"), "\n")
+	normalized := strings.ReplaceAll(cp.configPreview, "\r\n", "\n")
+	lines := strings.Split(strings.TrimRight(normalized, "\n"), "\n")
 
 	fmt.Println()
 	fmt.Printf("  %s\n", sep)
