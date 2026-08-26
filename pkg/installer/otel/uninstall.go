@@ -336,7 +336,7 @@ func collectorToProcessInfo(c collectorInstance) otelProcessInfo {
 // lets the user select which to remove, then kills the selected process(es) and
 // deletes their installation directories.  It also removes dtwiz-installed
 // runtime instrumentation artifacts (Node.js, Python, Java).
-// When the experimental flag is enabled, it also removes the OTel Host Monitoring
+// If the user selects "Delete all", it also removes the OTel Host Monitoring
 // extension from the tenant after local cleanup completes.
 func UninstallOtelCollector(envURL, platformToken string, dryRun bool) error {
 	display.Header("Dynatrace OTel Collector Uninstall")

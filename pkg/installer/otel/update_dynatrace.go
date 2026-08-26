@@ -15,7 +15,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
-	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
@@ -99,7 +98,6 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 		MetricsPort: metricsPort,
 	}
 
-	experimentalEnabled := featureflags.IsEnabled(featureflags.Experimental)
 	cfgData.IncludeJournald = runtime.GOOS == "linux"
 	cfgData.HealthCheckPort = healthCheckPort
 
@@ -112,8 +110,8 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 	configChanged := !bytes.Equal(origData, updatedData)
 
 	// When the config is already current and tenant-side prerequisites are not
-	// in scope (no experimental flag or no platform token), there is nothing to do.
-	if !configChanged && !(experimentalEnabled && platformTok != "") {
+	// in scope (no platform token), there is nothing to do.
+	if !configChanged && platformTok == "" {
 		display.ColorOK.Println("  Collector configuration is up to date.")
 		return ErrUpToDate
 	}
@@ -162,7 +160,7 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 		display.PrintSectionDivider()
 	}
 
-	if experimentalEnabled && platformTok != "" {
+	if platformTok != "" {
 		if status, err := buildExtensionActivationPreviewFn(envURL, platformTok); err != nil {
 			fmt.Println()
 			display.PrintWarning("OTel Host Monitoring extension", err)
@@ -174,7 +172,7 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 
 	var grailC grailRouteClient
 	var grailPlans []grailSignalPlan
-	if experimentalEnabled && platformTok != "" {
+	if platformTok != "" {
 		if c, plans, err := buildGrailRoutePlansFn(envURL, platformTok); err != nil {
 			fmt.Println()
 			display.PrintWarning("OpenPipeline routes", err)
@@ -206,7 +204,7 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 	}
 	fmt.Println()
 
-	if experimentalEnabled && platformTok != "" {
+	if platformTok != "" {
 		activateHostMonitoringExtensionFn(envURL, platformTok)
 	}
 

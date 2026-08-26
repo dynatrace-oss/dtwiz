@@ -14,7 +14,6 @@ import (
 
 	"github.com/fatih/color"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 )
 
@@ -162,8 +161,7 @@ func runUpdateDynatrace(t *testing.T, configPath, platformTok string, dryRun boo
 	return updateDynatraceCollector(configPath, nil, "https://env.example.com", "tok", platformTok, dryRun)
 }
 
-func TestUpdateDynatraceCollector_Experimental_ShowsPreviewSections(t *testing.T) {
-	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
+func TestUpdateDynatraceCollector_ShowsPreviewSections(t *testing.T) {
 	configPath := writeDynatraceConfig(t)
 	stubDynatraceExtensionPreview(t)
 	stubGrailRoutePlans(t)
@@ -180,41 +178,7 @@ func TestUpdateDynatraceCollector_Experimental_ShowsPreviewSections(t *testing.T
 	}
 }
 
-func TestUpdateDynatraceCollector_NoExperimental_SkipsPreviewSections(t *testing.T) {
-	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
-	t.Setenv("DTWIZ_EXPERIMENTAL", "")
-	configPath := writeDynatraceConfig(t)
-
-	extCalled := false
-	orig := buildExtensionActivationPreviewFn
-	t.Cleanup(func() { buildExtensionActivationPreviewFn = orig })
-	buildExtensionActivationPreviewFn = func(_, _ string) (installer.ExtensionStatus, error) {
-		extCalled = true
-		return 0, nil
-	}
-
-	grailCalled := false
-	origGrail := buildGrailRoutePlansFn
-	t.Cleanup(func() { buildGrailRoutePlansFn = origGrail })
-	buildGrailRoutePlansFn = func(_, _ string) (grailRouteClient, []grailSignalPlan, error) {
-		grailCalled = true
-		return nil, nil, fmt.Errorf("should not be called")
-	}
-
-	captureUpdateOutput(t, func() {
-		_ = runUpdateDynatrace(t, configPath, "dt0s16.test", true /* dryRun */)
-	})
-
-	if extCalled {
-		t.Error("expected buildExtensionActivationPreviewFn NOT to be called when experimental is disabled")
-	}
-	if grailCalled {
-		t.Error("expected buildGrailRoutePlansFn NOT to be called when experimental is disabled")
-	}
-}
-
 func TestUpdateDynatraceCollector_NoToken_SkipsPreviewSections(t *testing.T) {
-	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
 	configPath := writeDynatraceConfig(t)
 
 	extCalled := false
@@ -245,8 +209,7 @@ func TestUpdateDynatraceCollector_NoToken_SkipsPreviewSections(t *testing.T) {
 	}
 }
 
-func TestUpdateDynatraceCollector_Experimental_PostConfirmation(t *testing.T) {
-	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
+func TestUpdateDynatraceCollector_PostConfirmation(t *testing.T) {
 	configPath := writeDynatraceConfig(t)
 	stubDynatraceExtensionPreview(t)
 	fc := stubGrailRoutePlans(t)
@@ -273,7 +236,6 @@ func TestUpdateDynatraceCollector_Experimental_PostConfirmation(t *testing.T) {
 }
 
 func TestUpdateDynatraceCollector_DryRun_SkipsPostConfirmation(t *testing.T) {
-	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
 	configPath := writeDynatraceConfig(t)
 	stubDynatraceExtensionPreview(t)
 	fc := stubGrailRoutePlans(t)
@@ -296,8 +258,6 @@ func TestUpdateDynatraceCollector_DryRun_SkipsPostConfirmation(t *testing.T) {
 }
 
 func TestUpdateDynatraceCollector_ConfigUpToDate_StillRunsPrerequisites(t *testing.T) {
-	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
-
 	// Write the exact config that renderOtelTemplate would produce so bytes.Equal is true.
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.yaml")
@@ -347,7 +307,6 @@ func TestUpdateDynatraceCollector_ConfigUpToDate_StillRunsPrerequisites(t *testi
 }
 
 func TestUpdateDynatraceCollector_ExtensionPreviewFailure(t *testing.T) {
-	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
 	configPath := writeDynatraceConfig(t)
 	stubGrailRoutePlans(t)
 
