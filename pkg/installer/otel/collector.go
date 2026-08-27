@@ -25,7 +25,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
-	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
@@ -41,7 +40,6 @@ type otelConfigData struct {
 	MetricsPort     int
 	GRPCPort        int
 	HTTPPort        int
-	HostMonitoring  bool
 	IncludeJournald bool
 	HealthCheckPort int
 }
@@ -702,7 +700,7 @@ func renderOtelTemplate(data otelConfigData) (string, error) {
 }
 
 // generateOtelConfig renders otel.tmpl and returns the config plus its OTLP HTTP port.
-// Ports are selected from the canonical defaults; Experimental adds host monitoring.
+// Ports are selected from the canonical defaults.
 func generateOtelConfig(apiURL, token string) (generatedOtelConfig, error) {
 	grpcPort := findFreePort(4317)
 	httpPort := findFreePort(4318)
@@ -724,18 +722,13 @@ func generateOtelConfig(apiURL, token string) (generatedOtelConfig, error) {
 		HTTPPort:    httpPort,
 	}
 
-	if featureflags.IsEnabled(featureflags.Experimental) {
-		healthCheckPort := findFreePort(13133)
-		for healthCheckPort == grpcPort || healthCheckPort == httpPort || healthCheckPort == metricsPort {
-			healthCheckPort = findFreePort(healthCheckPort + 1)
-		}
-		data.HostMonitoring = true
-		data.IncludeJournald = runtime.GOOS == "linux"
-		data.HealthCheckPort = healthCheckPort
-		logger.Debug("otel config ports", "grpc", grpcPort, "http", httpPort, "metrics", metricsPort, "health_check", healthCheckPort)
-	} else {
-		logger.Debug("otel config ports", "grpc", grpcPort, "http", httpPort, "metrics", metricsPort)
+	healthCheckPort := findFreePort(13133)
+	for healthCheckPort == grpcPort || healthCheckPort == httpPort || healthCheckPort == metricsPort {
+		healthCheckPort = findFreePort(healthCheckPort + 1)
 	}
+	data.IncludeJournald = runtime.GOOS == "linux"
+	data.HealthCheckPort = healthCheckPort
+	logger.Debug("otel config ports", "grpc", grpcPort, "http", httpPort, "metrics", metricsPort, "health_check", healthCheckPort)
 
 	rendered, err := renderOtelTemplate(data)
 	if err != nil {
@@ -780,7 +773,8 @@ func (cp *collectorPlan) printConfigPreview(sep string) {
 	const headLines = 20
 
 	label := filepath.Base(cp.configPath)
-	lines := strings.Split(strings.TrimRight(cp.configPreview, "\n"), "\n")
+	normalized := strings.ReplaceAll(cp.configPreview, "\r\n", "\n")
+	lines := strings.Split(strings.TrimRight(normalized, "\n"), "\n")
 
 	fmt.Println()
 	fmt.Printf("  %s\n", sep)
@@ -1048,6 +1042,8 @@ func InstallOtelCollectorOnly(envURL, token, platformToken string, dryRun bool) 
 
 	cp.printConfigPreview(sep)
 
+	grailC, grailPlans := buildTenantPrerequisitePreview(envURL, platformToken)
+
 	fmt.Println()
 	ok, err := installer.ConfirmProceed("  Proceed with installation?")
 	if err != nil {
@@ -1059,5 +1055,15 @@ func InstallOtelCollectorOnly(envURL, token, platformToken string, dryRun bool) 
 	}
 	fmt.Println()
 
-	return cp.execute(envURL, platformToken, false)
+	if platformToken != "" {
+		activateHostMonitoringExtensionFn(envURL, platformToken)
+	}
+
+	if err := cp.execute(envURL, platformToken, false); err != nil {
+		return err
+	}
+
+	applyGrailRoutes(grailC, grailPlans)
+
+	return nil
 }

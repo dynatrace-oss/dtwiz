@@ -10,20 +10,11 @@ Define how `dtwiz install otel` sets up dynamic Smartscape-on-Grail routes after
 
 After the managed OTel Collector host-monitoring install completes successfully, `install otel` SHALL ensure a dynamic route exists for each of metrics, logs, and spans that routes OpenTelemetry host telemetry into the OTel host monitoring extension's pipeline, using the documented matching conditions.
 
-#### Scenario: All three routes created when absent
+#### Scenario: Routes set up during install
 
 - **GIVEN** the OTel host monitoring extension's pipeline exists for metrics, logs, and spans
-- **AND** no equivalent dynamic route yet targets that pipeline for any of the three signal types
-- **WHEN** `install otel` finishes installing the host-monitoring collector
-- **THEN** a dynamic route SHALL be created for metrics with the condition `matchesValue(metric.key, {"system.*", "process.*"}) AND isNotNull(host.id)`
-- **AND** a dynamic route SHALL be created for logs with the condition `isNotNull(host.id) and isNotNull(host.name) and matchesValue(dt.openpipeline.source, "/api/v2/otlp/v1/logs")`
-- **AND** a dynamic route SHALL be created for spans with the condition `isNotNull(host.id) and isNotNull(host.name) and matchesValue(telemetry.sdk.name, {"opentelemetry", "odin", "otel"})`
-- **AND** each route SHALL target the OTel host monitoring extension's pipeline for its signal type
-
-#### Scenario: Route target resolved per environment
-
-- **WHEN** `install otel` sets up the routes on a given environment
-- **THEN** the route for each signal type SHALL target the pipeline provided by the OTel host monitoring extension for that signal type in the current environment
+- **WHEN** `install otel` runs without `--dry-run`
+- **THEN** dtwiz sets up the three dynamic routes as described in this capability
 
 ### Requirement: Route setup is additive and idempotent
 
@@ -140,24 +131,6 @@ The install preview SHALL show the current state of the OTel host monitoring ext
 - **WHEN** `install otel` builds the extension activation preview
 - **THEN** no extension install or activation call SHALL be made
 - **AND** this holds even when `--dry-run` is passed
-
-### Requirement: Route setup is gated behind the experimental flag
-
-`install otel` SHALL only set up OpenPipeline dynamic routes when the `--experimental` flag or `DTWIZ_EXPERIMENTAL=true` environment variable is enabled. When the flag is not enabled, `install otel` SHALL make no OpenPipeline changes and SHALL behave exactly as it did before this change.
-
-#### Scenario: Routes not touched when flag disabled
-
-- **GIVEN** `--experimental` is not set and `DTWIZ_EXPERIMENTAL` is not `true`
-- **WHEN** `install otel` runs
-- **THEN** no OpenPipeline dynamic route SHALL be read or written
-- **AND** no route preview or route confirmation prompt SHALL be shown
-
-#### Scenario: Routes set up when flag enabled
-
-- **GIVEN** `--experimental` is passed or `DTWIZ_EXPERIMENTAL=true` is set
-- **AND** the host-monitoring collector install has completed successfully
-- **WHEN** `install otel` runs without `--dry-run`
-- **THEN** dtwiz SHALL set up the three dynamic routes as described in the requirements above
 
 ### Requirement: Dynamic routes are checked and set up after Dynatrace collector update
 

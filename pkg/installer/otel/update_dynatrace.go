@@ -2,7 +2,6 @@ package otel
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"net"
 	"os"
@@ -15,7 +14,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
-	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
@@ -91,20 +89,18 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 	grpcPort, httpPort, metricsPort, healthCheckPort := portsFromConfig(configPath)
 	logger.Debug("existing collector ports", "grpc", grpcPort, "http", httpPort, "metrics", metricsPort, "health_check", healthCheckPort)
 
+	hostname, _ := os.Hostname()
 	cfgData := otelConfigData{
 		Endpoint:    strings.TrimRight(apiURL, "/"),
 		AuthHeader:  installer.AuthHeader(token),
+		HostGroupID: hostname,
 		GRPCPort:    grpcPort,
 		HTTPPort:    httpPort,
 		MetricsPort: metricsPort,
 	}
 
-	experimentalEnabled := featureflags.IsEnabled(featureflags.Experimental)
-	if experimentalEnabled {
-		cfgData.HostMonitoring = true
-		cfgData.IncludeJournald = runtime.GOOS == "linux"
-		cfgData.HealthCheckPort = healthCheckPort
-	}
+	cfgData.IncludeJournald = runtime.GOOS == "linux"
+	cfgData.HealthCheckPort = healthCheckPort
 
 	freshConfig, err := renderOtelTemplate(cfgData)
 	if err != nil {
@@ -115,8 +111,8 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 	configChanged := !bytes.Equal(origData, updatedData)
 
 	// When the config is already current and tenant-side prerequisites are not
-	// in scope (no experimental flag or no platform token), there is nothing to do.
-	if !configChanged && !(experimentalEnabled && platformTok != "") {
+	// in scope (no platform token), there is nothing to do.
+	if !configChanged && platformTok == "" {
 		display.ColorOK.Println("  Collector configuration is up to date.")
 		return ErrUpToDate
 	}
@@ -165,29 +161,7 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 		display.PrintSectionDivider()
 	}
 
-	if experimentalEnabled && platformTok != "" {
-		if status, err := buildExtensionActivationPreviewFn(envURL, platformTok); err != nil {
-			fmt.Println()
-			display.PrintWarning("OTel Host Monitoring extension", err)
-		} else {
-			fmt.Println()
-			printExtensionActivationPreview(status)
-		}
-	}
-
-	var grailC grailRouteClient
-	var grailPlans []grailSignalPlan
-	if experimentalEnabled && platformTok != "" {
-		if c, plans, err := buildGrailRoutePlansFn(envURL, platformTok); err != nil {
-			fmt.Println()
-			display.PrintWarning("OpenPipeline routes", err)
-		} else {
-			grailC = c
-			grailPlans = plans
-			fmt.Println()
-			printGrailPlan(plans)
-		}
-	}
+	grailC, grailPlans := buildTenantPrerequisitePreview(envURL, platformTok)
 
 	if dryRun {
 		display.ColorDefault.Println("  [dry-run] No changes made.")
@@ -209,26 +183,11 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 	}
 	fmt.Println()
 
-	if experimentalEnabled && platformTok != "" {
+	if platformTok != "" {
 		activateHostMonitoringExtensionFn(envURL, platformTok)
 	}
 
-	if grailC != nil {
-		if err := waitForGrailPipelinesFn(context.Background(), grailC, time.Sleep); err != nil {
-			logger.Debug("OTel host-monitoring pipelines did not appear within the wait bound", "error", err)
-		}
-		if freshPlans, err := buildGrailPlans(context.Background(), grailC); err != nil {
-			logger.Debug("failed to rebuild Grail route plans after extension activation, applying preview snapshot", "error", err)
-		} else {
-			grailPlans = freshPlans
-		}
-		logger.Debug("applying Grail route plans", "count", len(grailPlans))
-		applyErrs := make([]error, len(grailPlans))
-		for i, p := range grailPlans {
-			applyErrs[i] = applyGrailPlan(context.Background(), grailC, p)
-		}
-		printGrailApplyResults(grailPlans, applyErrs)
-	}
+	applyGrailRoutes(grailC, grailPlans)
 
 	if !configChanged {
 		display.ColorOK.Println("  Collector configuration is up to date.")

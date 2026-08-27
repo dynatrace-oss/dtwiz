@@ -1,11 +1,9 @@
 # Dynatrace OTel Collector configuration
 # Docs: https://docs.dynatrace.com/docs/ingest-from/opentelemetry/collector/configuration
-{{- if .HostMonitoring }}
 # Host monitoring reference: https://github.com/Dynatrace/dynatrace-otel-collector/blob/main/config_examples/host-metrics.yaml
 extensions:
   health_check:
     endpoint: 0.0.0.0:{{ .HealthCheckPort }}
-{{ end }}
 receivers:
   otlp:
     protocols:
@@ -13,7 +11,6 @@ receivers:
         endpoint: 0.0.0.0:{{ .GRPCPort }}
       http:
         endpoint: 0.0.0.0:{{ .HTTPPort }}
-{{- if .HostMonitoring }}
   host_metrics/10s:
     collection_interval: 10s
     scrapers:
@@ -160,12 +157,10 @@ receivers:
         from: body.MESSAGE
         to: body.message
 {{- end }}
-{{- end }}
 
 processors:
   cumulative_to_delta:
     max_staleness: 25h
-{{- if .HostMonitoring }}
   resource/add-host-group-id:
     attributes:
       - key: dt.host_group.id
@@ -264,13 +259,10 @@ processors:
   filter/delete-metrics:
     metric_conditions:
       - resource.attributes["low-memory-process"] != nil
-{{- end }}
 
 service:
-{{- if .HostMonitoring }}
   extensions:
     - health_check
-{{- end }}
   telemetry:
     metrics:
       readers:
@@ -283,16 +275,11 @@ service:
     traces:
       receivers:
         - otlp
-{{- if .HostMonitoring }}
       processors:
         - resource/add-host-group-id
         - resource_detection/system
-{{- else }}
-      processors: []
-{{- end }}
       exporters:
         - otlp_http
-{{- if .HostMonitoring }}
     metrics/apps:
       receivers:
         - otlp
@@ -316,28 +303,15 @@ service:
         - cumulative_to_delta
       exporters:
         - otlp_http
-{{- else }}
-    metrics:
-      receivers:
-        - otlp
-      processors:
-        - cumulative_to_delta
-      exporters:
-        - otlp_http
-{{- end }}
     logs:
       receivers:
         - otlp
-{{- if and .HostMonitoring .IncludeJournald }}
+{{- if .IncludeJournald }}
         - journald
 {{- end }}
-{{- if .HostMonitoring }}
       processors:
         - resource/add-host-group-id
         - resource_detection/system
-{{- else }}
-      processors: []
-{{- end }}
       exporters:
         - otlp_http
 

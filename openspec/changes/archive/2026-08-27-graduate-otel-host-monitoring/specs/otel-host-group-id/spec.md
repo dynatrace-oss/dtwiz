@@ -1,10 +1,6 @@
-# OTel Host Group ID Spec
+# otel-host-group-id
 
-## Purpose
-
-Define how the managed OTel Collector sets the `dt.host_group.id` resource attribute for host-monitoring telemetry.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Collector config sets dt.host_group.id on host monitoring telemetry
 

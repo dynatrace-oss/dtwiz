@@ -461,7 +461,7 @@ func parseOtelConfig(t *testing.T, cfg string) otelConfigYAML {
 	return parsed
 }
 
-func TestGenerateOtelConfig_AppOnly_Default(t *testing.T) {
+func TestGenerateOtelConfig_DefaultIncludesHostMonitoring(t *testing.T) {
 	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
 	t.Setenv("DTWIZ_EXPERIMENTAL", "")
 
@@ -472,34 +472,48 @@ func TestGenerateOtelConfig_AppOnly_Default(t *testing.T) {
 	cfg := generatedConfig.content
 	parsed := parseOtelConfig(t, cfg)
 
-	if _, ok := parsed.Receivers["hostmetrics/10s"]; ok {
-		t.Error("app-only config must not contain hostmetrics/10s receiver")
+	if _, ok := parsed.Receivers["host_metrics/10s"]; !ok {
+		t.Error("default config must contain host_metrics/10s receiver")
 	}
-	if _, ok := parsed.Receivers["journald"]; ok {
-		t.Error("app-only config must not contain journald receiver")
+	if runtime.GOOS == "linux" {
+		if _, ok := parsed.Receivers["journald"]; !ok {
+			t.Error("default config must contain journald receiver on Linux")
+		}
+	} else if _, ok := parsed.Receivers["journald"]; ok {
+		t.Error("default config must not contain journald receiver on non-Linux")
 	}
-	if _, ok := parsed.Extensions["health_check"]; ok {
-		t.Error("app-only config must not contain health_check extension")
+	if _, ok := parsed.Extensions["health_check"]; !ok {
+		t.Error("default config must contain health_check extension")
 	}
-	if _, ok := parsed.Service.Pipelines["metrics/host"]; ok {
-		t.Error("app-only config must not contain metrics/host pipeline")
+	if _, ok := parsed.Service.Pipelines["metrics/host"]; !ok {
+		t.Error("default config must contain metrics/host pipeline")
 	}
-	if _, ok := parsed.Service.Pipelines["metrics"]; !ok {
-		t.Error("app-only config must contain metrics pipeline")
+	if _, ok := parsed.Service.Pipelines["logs/host"]; ok {
+		t.Error("default config must not contain logs/host pipeline")
+	}
+	if _, ok := parsed.Service.Pipelines["metrics/apps"]; !ok {
+		t.Error("default config must contain metrics/apps pipeline")
 	}
 	tracesPipeline, tracesOk := parsed.Service.Pipelines["traces"]
 	if !tracesOk {
-		t.Fatal("app-only config missing traces pipeline")
+		t.Fatal("default config missing traces pipeline")
 	}
-	for _, p := range tracesPipeline.Processors {
-		if p == "resource_detection/system" {
-			t.Errorf("app-only config traces pipeline must not contain resource_detection processor, got %v", tracesPipeline.Processors)
-			break
+	wantTracesProcessors := []string{"resource/add-host-group-id", "resource_detection/system"}
+	for _, want := range wantTracesProcessors {
+		found := false
+		for _, p := range tracesPipeline.Processors {
+			if p == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("default config traces pipeline missing %q processor, got %v", want, tracesPipeline.Processors)
 		}
 	}
 }
 
-func TestGenerateOtelConfig_Combined_ExperimentalEnabled(t *testing.T) {
+func TestGenerateOtelConfig_Combined_Default(t *testing.T) {
 	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
 
 	generatedConfig, err := generateOtelConfig("https://env.example.com", "mytoken")
@@ -587,9 +601,9 @@ func TestGenerateOtelConfig_Combined_ExperimentalEnabled(t *testing.T) {
 	}
 }
 
-func TestGenerateOtelConfig_Combined_EnvVar(t *testing.T) {
+func TestGenerateOtelConfig_DefaultIgnoresExperimentalEnvVar(t *testing.T) {
 	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
-	t.Setenv("DTWIZ_EXPERIMENTAL", "true")
+	t.Setenv("DTWIZ_EXPERIMENTAL", "")
 
 	generatedConfig, err := generateOtelConfig("https://env.example.com", "mytoken")
 	if err != nil {
@@ -599,13 +613,11 @@ func TestGenerateOtelConfig_Combined_EnvVar(t *testing.T) {
 	parsed := parseOtelConfig(t, cfg)
 
 	if _, ok := parsed.Service.Pipelines["metrics/host"]; !ok {
-		t.Error("expected metrics/host pipeline when DTWIZ_EXPERIMENTAL=true")
+		t.Error("expected metrics/host pipeline by default")
 	}
 }
 
 func TestGenerateOtelConfig_JournaldConsistency(t *testing.T) {
-	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
-
 	generatedConfig, err := generateOtelConfig("https://env.example.com", "mytoken")
 	if err != nil {
 		t.Fatalf("generateOtelConfig: %v", err)
@@ -614,37 +626,35 @@ func TestGenerateOtelConfig_JournaldConsistency(t *testing.T) {
 	parsed := parseOtelConfig(t, cfg)
 
 	_, receiverDefined := parsed.Receivers["journald"]
-	logsPipeline, logsExists := parsed.Service.Pipelines["logs"]
 	var pipelineReferences bool
-	if logsExists {
-		for _, r := range logsPipeline.Receivers {
+	for _, name := range []string{"logs", "logs/host"} {
+		pipeline, ok := parsed.Service.Pipelines[name]
+		if !ok {
+			continue
+		}
+		for _, r := range pipeline.Receivers {
 			if r == "journald" {
 				pipelineReferences = true
 				break
 			}
 		}
+		if pipelineReferences {
+			break
+		}
 	}
 
 	if receiverDefined != pipelineReferences {
-		t.Errorf("journald receiver defined=%v but logs pipeline reference=%v — guards must stay in sync",
+		t.Errorf("journald receiver defined=%v but pipeline reference=%v — guards must stay in sync",
 			receiverDefined, pipelineReferences)
 	}
 }
 
 func TestGenerateOtelConfig_ValidYAML(t *testing.T) {
-	for _, experimental := range []bool{false, true} {
-		experimental := experimental
-		name := "app-only"
-		if experimental {
-			name = "combined"
-		}
-		t.Run(name, func(t *testing.T) {
-			if experimental {
-				featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
-			} else {
-				featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
-				t.Setenv("DTWIZ_EXPERIMENTAL", "")
-			}
+	for _, envVal := range []string{"", "true"} {
+		envVal := envVal
+		t.Run("experimental-env-"+envVal, func(t *testing.T) {
+			featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
+			t.Setenv("DTWIZ_EXPERIMENTAL", envVal)
 			generatedConfig, err := generateOtelConfig("https://env.example.com", "mytoken")
 			if err != nil {
 				t.Fatalf("generateOtelConfig: %v", err)
@@ -659,8 +669,6 @@ func TestGenerateOtelConfig_ValidYAML(t *testing.T) {
 }
 
 func TestGenerateOtelConfig_PreviewTruncation(t *testing.T) {
-	featureflags.SetCLIOverrideForTest(t, featureflags.Experimental, true)
-
 	generatedConfig, err := generateOtelConfig("https://env.example.com", "mytoken")
 	if err != nil {
 		t.Fatalf("generateOtelConfig: %v", err)
@@ -668,7 +676,7 @@ func TestGenerateOtelConfig_PreviewTruncation(t *testing.T) {
 	cfg := generatedConfig.content
 	lines := strings.Split(strings.TrimRight(cfg, "\n"), "\n")
 	if len(lines) <= 20 {
-		t.Errorf("experimental config has %d lines, expected more than 20 so truncation is exercised", len(lines))
+		t.Errorf("host-monitoring config has %d lines, expected more than 20 so truncation is exercised", len(lines))
 	}
 }
 
@@ -713,7 +721,7 @@ func TestGenerateOtelConfig_HostGroupID_ProcessorPresent(t *testing.T) {
 	}
 }
 
-func TestGenerateOtelConfig_HostGroupID_AppOnly_Absent(t *testing.T) {
+func TestGenerateOtelConfig_HostGroupID_DefaultPresent(t *testing.T) {
 	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
 	t.Setenv("DTWIZ_EXPERIMENTAL", "")
 
@@ -723,18 +731,24 @@ func TestGenerateOtelConfig_HostGroupID_AppOnly_Absent(t *testing.T) {
 	}
 	parsed := parseOtelConfig(t, cfg.content)
 
-	if _, ok := parsed.Processors["resource/add-host-group-id"]; ok {
-		t.Error("standard-mode config must not contain resource/add-host-group-id processor")
+	if _, ok := parsed.Processors["resource/add-host-group-id"]; !ok {
+		t.Error("default config must contain resource/add-host-group-id processor")
 	}
-	for _, name := range []string{"traces", "metrics", "logs"} {
+	for _, name := range []string{"traces", "metrics/apps", "metrics/host", "logs"} {
 		pipeline, ok := parsed.Service.Pipelines[name]
 		if !ok {
+			t.Errorf("pipeline %q not found", name)
 			continue
 		}
+		found := false
 		for _, p := range pipeline.Processors {
 			if p == "resource/add-host-group-id" {
-				t.Errorf("pipeline %q must not reference resource/add-host-group-id in standard mode", name)
+				found = true
+				break
 			}
+		}
+		if !found {
+			t.Errorf("pipeline %q missing resource/add-host-group-id processor in default config", name)
 		}
 	}
 }

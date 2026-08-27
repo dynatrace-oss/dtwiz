@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
-	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
@@ -337,7 +336,7 @@ func collectorToProcessInfo(c collectorInstance) otelProcessInfo {
 // lets the user select which to remove, then kills the selected process(es) and
 // deletes their installation directories.  It also removes dtwiz-installed
 // runtime instrumentation artifacts (Node.js, Python, Java).
-// When the experimental flag is enabled, it also removes the OTel Host Monitoring
+// If the user selects "Delete all", it also removes the OTel Host Monitoring
 // extension from the tenant after local cleanup completes.
 func UninstallOtelCollector(envURL, platformToken string, dryRun bool) error {
 	display.Header("Dynatrace OTel Collector Uninstall")
@@ -454,16 +453,14 @@ func UninstallOtelCollector(envURL, platformToken string, dryRun bool) error {
 		fmt.Println()
 	}
 
-	if featureflags.IsEnabled(featureflags.Experimental) {
-		fmt.Println("  Extension and OpenPipeline routes that will be removed from tenant:")
+	fmt.Println("  Extension and OpenPipeline routes that will be removed from tenant:")
+	fmt.Printf("    ")
+	display.ColorError.Printf("delete  %s\n", otelHostMonitoringExtension)
+	for _, sig := range grailSignals {
 		fmt.Printf("    ")
-		display.ColorError.Printf("delete  %s\n", otelHostMonitoringExtension)
-		for _, sig := range grailSignals {
-			fmt.Printf("    ")
-			display.ColorError.Printf("delete  OpenPipeline %s route\n", sig.displayName)
-		}
-		fmt.Println()
+		display.ColorError.Printf("delete  OpenPipeline %s route\n", sig.displayName)
 	}
+	fmt.Println()
 
 	display.ColorMuted.Println("  " + strings.Repeat("─", 50))
 
@@ -473,26 +470,15 @@ func UninstallOtelCollector(envURL, platformToken string, dryRun bool) error {
 	}
 
 	var removeExtension bool
-	if featureflags.IsEnabled(featureflags.Experimental) {
-		decision, err := promptUninstallDecisionFn()
-		if err != nil {
-			return err
-		}
-		if decision == uninstallCancelled {
-			display.ColorDefault.Println("  Uninstall cancelled.")
-			return nil
-		}
-		removeExtension = decision == uninstallAll
-	} else {
-		ok, err := installer.ConfirmProceed("  Proceed with uninstall?")
-		if err != nil {
-			return fmt.Errorf("reading confirmation: %w", err)
-		}
-		if !ok {
-			display.ColorDefault.Println("  Uninstall cancelled.")
-			return nil
-		}
+	decision, err := promptUninstallDecisionFn()
+	if err != nil {
+		return err
 	}
+	if decision == uninstallCancelled {
+		display.ColorDefault.Println("  Uninstall cancelled.")
+		return nil
+	}
+	removeExtension = decision == uninstallAll
 	fmt.Println()
 
 	killCollectorProcesses(processes)
