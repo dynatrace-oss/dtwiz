@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `setup`, `analyze`, `status`: system analysis now labels the platform line `This host:` instead of `Platform:`, removing the collision with `Platform Token:` in `status` output
+- `setup`, `analyze`, `status`: the OneAgent line now appears directly below OpenTelemetry, so both monitoring-status lines sit together near the top of the analysis instead of being separated by the container and cloud lines
+- `setup`, `analyze`, `status`: the `Services:` line is now labelled `Runtimes:`, matching what it actually detects — runtimes installed on PATH, not running services
+- `setup`, `recommend`: the recommendation list is now introduced by `Monitor Logs, Metrics, Traces of:`, stating once what every option ingests
+- `setup`, `recommend`: recommendation titles now read `This host and its services (via …)`, distinguishing the existing-collector, new-collector, and OneAgent options that previously all opened with `This machine's services`
+
 ## [1.5.1] - 2026-08-24
 
 ### Fixed

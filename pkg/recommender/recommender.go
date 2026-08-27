@@ -71,7 +71,7 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 		recs = append(recs, Recommendation{
 			Method:   MethodOtelUpdate,
 			Priority: 0,
-			Title:    "This machine's services (update existing OpenTelemetry Collector)",
+			Title:    "This host and its services (via existing OpenTelemetry Collector)",
 			Description: fmt.Sprintf(
 				"An OpenTelemetry Collector is running%s. Add the Dynatrace OTLP exporter to send telemetry to Dynatrace.",
 				configHint,
@@ -89,7 +89,7 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 	recs = append(recs, Recommendation{
 		Method:        MethodOtelCollector,
 		Priority:      0,
-		Title:         "This machine's services (via new OpenTelemetry Collector)",
+		Title:         "This host and its services (via new OpenTelemetry Collector)",
 		Description:   "Deploy the Dynatrace OpenTelemetry Collector to ingest traces, metrics, and logs via OTLP.",
 		Prerequisites: []string{"Dynatrace API token with ingest scopes"},
 		Steps: []string{
@@ -138,7 +138,7 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 		recs = append(recs, Recommendation{
 			Method:        MethodOneAgent,
 			Priority:      40,
-			Title:         "This machine's services (via OneAgent)",
+			Title:         "This host and its services (via OneAgent)",
 			Description:   "No container runtime detected. Install OneAgent directly for full-stack host monitoring.",
 			Prerequisites: []string{"Root/Administrator privileges", "Dynatrace API token"},
 			Steps: []string{
@@ -215,7 +215,8 @@ func FormatRecommendations(recs []Recommendation) string {
 
 	var sb strings.Builder
 	sb.WriteString(recHeader.Sprint("  Recommendations — What do you want to monitor?") + "\n")
-	sb.WriteString(recMuted.Sprint("  "+strings.Repeat("─", 42)) + "\n\n")
+	sb.WriteString(recMuted.Sprint("  "+strings.Repeat("─", 42)) + "\n")
+	sb.WriteString("  Monitor Logs, Metrics, Traces of:\n\n")
 
 	n := 0
 	for _, r := range recs {

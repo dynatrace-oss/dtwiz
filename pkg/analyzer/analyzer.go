@@ -178,7 +178,7 @@ func (s *SystemInfo) Summary() string {
 		osName = string(s.Platform)
 	}
 	sb.WriteString(fmt.Sprintf("  %s %s  %s  (%s)\n",
-		label("Platform"), osName, s.Arch, s.Hostname))
+		label("This host"), osName, s.Arch, s.Hostname))
 
 	if s.OtelCollector {
 		var line string
@@ -191,6 +191,20 @@ func (s *SystemInfo) Summary() string {
 	} else {
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
 			label("OpenTelemetry"),
+			display.ColorMuted.Sprint("<none>")))
+	}
+
+	switch {
+	case s.OneAgentRunning:
+		sb.WriteString(fmt.Sprintf("  %s running\n",
+			label("OneAgent")))
+	case s.Platform == PlatformDarwin:
+		sb.WriteString(fmt.Sprintf("  %s %s\n",
+			label("OneAgent"),
+			display.ColorMuted.Sprint("<none>")+display.ColorMuted.Sprint(" (macOS not supported)")))
+	default:
+		sb.WriteString(fmt.Sprintf("  %s %s\n",
+			label("OneAgent"),
 			display.ColorMuted.Sprint("<none>")))
 	}
 
@@ -281,27 +295,13 @@ func (s *SystemInfo) Summary() string {
 			display.ColorMuted.Sprint(gcpNoneMsg)))
 	}
 
-	switch {
-	case s.OneAgentRunning:
-		sb.WriteString(fmt.Sprintf("  %s running\n",
-			label("OneAgent")))
-	case s.Platform == PlatformDarwin:
-		sb.WriteString(fmt.Sprintf("  %s %s\n",
-			label("OneAgent"),
-			display.ColorMuted.Sprint("<none>")+display.ColorMuted.Sprint(" (macOS not supported)")))
-	default:
-		sb.WriteString(fmt.Sprintf("  %s %s\n",
-			label("OneAgent"),
-			display.ColorMuted.Sprint("<none>")))
-	}
-
 	if len(s.Services) > 0 {
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
-			label("Services"),
+			label("Runtimes"),
 			strings.Join(s.Services, ", ")))
 	} else {
 		sb.WriteString(fmt.Sprintf("  %s %s\n",
-			label("Services"),
+			label("Runtimes"),
 			display.ColorMuted.Sprint("<none>")))
 	}
 
