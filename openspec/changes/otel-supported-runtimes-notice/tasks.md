@@ -2,7 +2,7 @@
 
 - [x] 1.1 Add `visibleWidth()` helper in `pkg/display/print.go` that strips ANSI color and OSC 8 hyperlink escape sequences before measuring rune length
 - [x] 1.2 Update `PrintInfoBox`'s padding calculation to use `visibleWidth()` instead of raw `len([]rune(line))`
-- [x] 1.3 Add/verify unit tests in `pkg/display/print_test.go` covering plain-text and blank-separator rows (`TestPrintInfoBox_RendersContentRow`, `TestPrintInfoBox_BlankLineRendersEmptyRow`)
+- [x] 1.3 Add/verify unit tests in `pkg/display/print_test.go` covering plain-text, hyperlink, and blank-separator rows (`TestPrintInfoBox_RendersContentRow`, `TestPrintInfoBox_HyperlinkLine_BorderAligned`, `TestPrintInfoBox_BlankLineRendersEmptyRow`)
 
 ## 2. OTel install notice
 
