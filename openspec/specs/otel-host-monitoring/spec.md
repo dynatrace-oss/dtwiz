@@ -83,8 +83,8 @@ When host monitoring may be incomplete due to insufficient privileges or platfor
 - **THEN** the output SHALL note that some per-process metrics require Administrator or Debug privilege
 
 #### Scenario: macOS platform limitation notice
-
 - **GIVEN** the target platform is macOS
 - **WHEN** `install otel` configures host monitoring
 - **THEN** the output SHALL note that `system.processes.created` and `process.disk.io` are unavailable on macOS regardless of privilege level
+
 
