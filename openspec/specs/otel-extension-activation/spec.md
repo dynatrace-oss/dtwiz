@@ -3,9 +3,7 @@
 ## Purpose
 
 Ensure the Dynatrace OpenTelemetry Host Monitoring extension is installed and active on a tenant before the OTel Collector starts, so that host and process entities are created and Infrastructure & Operations visualizations appear.
-
 ## Requirements
-
 ### Requirement: Extension activation
 
 The system SHALL provide a way to activate a specific version of a Dynatrace extension in an environment. Activating a version that is already active SHALL be treated as success.
@@ -30,42 +28,36 @@ The system SHALL provide a way to activate a specific version of a Dynatrace ext
 
 ### Requirement: OTel install ensures host monitoring extension is active
 
-When `dtwiz install otel` runs with the experimental flag enabled, the installer SHALL ensure the OpenTelemetry Host Monitoring extension is installed and active in the tenant before the OTel Collector starts. If the extension cannot be installed or activated, the installer SHALL warn the user and proceed rather than abort.
+When `dtwiz install otel` runs, the installer SHALL ensure the OpenTelemetry Host Monitoring extension is installed and active in the tenant before the OTel Collector starts. If the extension cannot be installed or activated, the installer SHALL warn the user and proceed rather than abort.
 
 #### Scenario: Extension not present on tenant
 
-- **GIVEN** the experimental flag is enabled and the extension is not installed on the tenant
+- **GIVEN** the extension is not installed on the tenant
 - **WHEN** the user runs `dtwiz install otel`
 - **THEN** the extension is installed and activated, and the OTel Collector install continues
 
 #### Scenario: Extension already installed and active
 
-- **GIVEN** the experimental flag is enabled and the extension is already installed and active
+- **GIVEN** the extension is already installed and active
 - **WHEN** the user runs `dtwiz install otel`
 - **THEN** the OTel Collector install proceeds without re-installing or re-activating the extension
 
 #### Scenario: Extension installed but not active
 
-- **GIVEN** the experimental flag is enabled and the extension is installed but not yet active
+- **GIVEN** the extension is installed but not yet active
 - **WHEN** the user runs `dtwiz install otel`
 - **THEN** the extension is activated and the OTel Collector install continues
 
 #### Scenario: Extension activation fails
 
-- **GIVEN** the experimental flag is enabled and activation fails
+- **GIVEN** activation fails
 - **WHEN** the user runs `dtwiz install otel`
 - **THEN** the user sees a warning and the OTel Collector install continues
 
-#### Scenario: Experimental flag disabled
-
-- **GIVEN** the experimental flag is not enabled
-- **WHEN** the user runs `dtwiz install otel`
-- **THEN** no extension install or activation is attempted
-
 #### Scenario: Dry run
 
-- **GIVEN** the experimental flag is enabled
-- **WHEN** the user runs `dtwiz install otel --dry-run`
+- **GIVEN** the user runs `dtwiz install otel --dry-run`
+- **WHEN** the install preview is rendered
 - **THEN** no extension install or activation occurs
 
 ### Requirement: OTel Dynatrace collector update ensures host monitoring extension is active
@@ -152,3 +144,4 @@ When `dtwiz update otel` runs on a Dynatrace-managed OTel Collector with the exp
 - **WHEN** `dtwiz update otel` builds the extension activation preview
 - **THEN** no extension install or activation call is made
 - **AND** this holds even when `--dry-run` is passed
+

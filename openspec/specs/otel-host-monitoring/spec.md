@@ -3,9 +3,7 @@
 ## Purpose
 
 Define how `dtwiz install otel` configures host monitoring via the Dynatrace OpenTelemetry Host Monitoring extension.
-
 ## Requirements
-
 ### Requirement: Host monitoring is configured during OTel Collector install
 
 `install otel` SHALL configure the managed OTel Collector to collect host-level signals in addition to application signals, using the Dynatrace Host Monitoring reference configuration.
@@ -88,25 +86,3 @@ When host monitoring may be incomplete due to insufficient privileges or platfor
 - **WHEN** `install otel` configures host monitoring
 - **THEN** the output SHALL note that `system.processes.created` and `process.disk.io` are unavailable on macOS regardless of privilege level
 
-### Requirement: Host monitoring is gated behind the experimental flag until fully implemented and tested
-
-`install otel` SHALL only generate host monitoring pipelines and show the privilege notice when the `--experimental` flag or `DTWIZ_EXPERIMENTAL=true` environment variable is enabled, following the same convention used for `install docker` and `update otel`. When the flag is not enabled, `install otel` SHALL behave exactly as it did before this change.
-
-#### Scenario: Host monitoring disabled by default
-
-- **GIVEN** `--experimental` is not set and `DTWIZ_EXPERIMENTAL` is not `true`
-- **WHEN** `install otel` generates the managed collector configuration
-- **THEN** the configuration SHALL contain only the application pipelines that existed before this change
-- **AND** it SHALL NOT include `hostmetrics`, `journald`, or `health_check` receivers/extensions, host pipelines, or a privilege notice
-
-#### Scenario: Host monitoring enabled via the experimental flag
-
-- **GIVEN** `--experimental` is passed or `DTWIZ_EXPERIMENTAL=true` is set
-- **WHEN** `install otel` runs
-- **THEN** dtwiz SHALL configure host monitoring as described in the requirements above
-
-#### Scenario: Discoverability notice when disabled
-
-- **GIVEN** `--experimental` is not set and `DTWIZ_EXPERIMENTAL` is not `true`
-- **WHEN** `install otel` runs
-- **THEN** the output SHALL display an informational box directing the user to the OpenTelemetry Host Monitoring documentation to activate host monitoring manually
