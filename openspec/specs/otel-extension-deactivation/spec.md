@@ -61,4 +61,3 @@ When `dtwiz uninstall otel` runs, the uninstall preview SHALL include a line ide
 - **THEN** the preview shows the extension that would be removed
 - **THEN** no prompt is shown
 - **THEN** no extension removal API call is made
-

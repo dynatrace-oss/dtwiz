@@ -24,8 +24,7 @@ The generated OTel Collector configuration SHALL include a `resource/add-host-gr
 - **THEN** `dt.host_group.id` is overwritten with the machine hostname (upsert semantics)
 
 #### Scenario: hostname resolution failure
+
 - **GIVEN** the machine hostname cannot be resolved at install time
 - **WHEN** the OTel Collector configuration is generated
 - **THEN** `dt.host_group.id` is set to an empty string and config generation succeeds without error
-
-

@@ -325,4 +325,3 @@ manually. A service restart failure does not abort the overall update.
 - **WHEN** the update flow runs
 - **THEN** the connected services section is omitted from the preview
 - **THEN** no service restarts are attempted after the collector is restarted
-

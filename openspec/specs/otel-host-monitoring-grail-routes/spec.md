@@ -218,4 +218,3 @@ When `dtwiz update otel` runs on a Dynatrace-managed OTel Collector with the exp
 - **WHEN** `dtwiz update otel` applies routes after confirmation
 - **THEN** the update waits, up to a bounded number of attempts, for at least one signal's pipeline to become available before evaluating the final route plan
 - **AND** a pipeline already present is found on the first attempt without unnecessary delay
-

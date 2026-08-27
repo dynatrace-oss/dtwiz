@@ -146,4 +146,3 @@ When `dtwiz update otel` runs on a Dynatrace-managed OTel Collector with the exp
 - **WHEN** `dtwiz update otel` builds the extension activation preview
 - **THEN** no extension install or activation call is made
 - **AND** this holds even when `--dry-run` is passed
-
