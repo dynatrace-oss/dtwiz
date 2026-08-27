@@ -3,7 +3,9 @@
 ## Purpose
 
 Define how `dtwiz install otel` configures host monitoring via the Dynatrace OpenTelemetry Host Monitoring extension.
+
 ## Requirements
+
 ### Requirement: Host monitoring is configured during OTel Collector install
 
 `install otel` SHALL configure the managed OTel Collector to collect host-level signals in addition to application signals, using the Dynatrace Host Monitoring reference configuration.

@@ -3,7 +3,9 @@
 ## Purpose
 
 Define how the managed OTel Collector sets the `dt.host_group.id` resource attribute for host-monitoring telemetry.
+
 ## Requirements
+
 ### Requirement: Collector config sets dt.host_group.id on host monitoring telemetry
 
 The generated OTel Collector configuration SHALL include a `resource/add-host-group-id` processor in the regular `dtwiz install otel` flow. This processor SHALL upsert the `dt.host_group.id` resource attribute to the hostname of the machine on which `dtwiz` is run, and SHALL be applied to all generated pipelines (`metrics/apps`, `metrics/host`, `traces`, `logs`).

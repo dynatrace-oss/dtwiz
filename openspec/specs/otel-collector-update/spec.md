@@ -7,7 +7,9 @@ OTLP exporter, then restarts the affected collector. When `--config` is omitted,
 running-collector picker is shown so the user can select which instance to patch.
 
 ---
+
 ## Requirements
+
 ### Requirement: When `--config` is omitted, show running collector picker
 
 When `dtwiz update otel` is run without `--config`, or when `dtwiz setup` selects the OTel-update path, `UpdateOtelConfigInteractive` SHALL be called. It SHALL discover all running OTel Collector processes (Dynatrace and upstream, including containers) and present them in a numbered selection list. `UpdateOtelConfig` SHALL return an error when called with an empty `configPath`; callers without a known path SHALL use `UpdateOtelConfigInteractive`.

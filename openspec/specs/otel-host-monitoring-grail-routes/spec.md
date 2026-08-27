@@ -3,7 +3,9 @@
 ## Purpose
 
 Define how `dtwiz install otel` sets up dynamic Smartscape-on-Grail routes after a host-monitoring install.
+
 ## Requirements
+
 ### Requirement: Dynamic routes for Smartscape on Grail are set up after host-monitoring install
 
 After the managed OTel Collector host-monitoring install completes successfully, `install otel` SHALL ensure a dynamic route exists for each of metrics, logs, and spans that routes OpenTelemetry host telemetry into the OTel host monitoring extension's pipeline, using the documented matching conditions.

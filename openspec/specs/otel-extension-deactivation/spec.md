@@ -3,7 +3,9 @@
 ## Purpose
 
 Define how `dtwiz uninstall otel` handles the host monitoring extension: offering the user a choice to remove it or leave it in place.
+
 ## Requirements
+
 ### Requirement: OTel uninstall lets the user choose whether to remove the host monitoring extension
 
 When `dtwiz uninstall otel` runs, the simple yes/no confirmation is replaced by a three-option prompt: **Delete all** (default), **Only collector**, and **Cancel**. The extension is removed only when the user selects Delete all. If the extension cannot be removed, the uninstaller SHALL warn the user and complete the uninstall normally.

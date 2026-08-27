@@ -3,7 +3,9 @@
 ## Purpose
 
 Ensure the Dynatrace OpenTelemetry Host Monitoring extension is installed and active on a tenant before the OTel Collector starts, so that host and process entities are created and Infrastructure & Operations visualizations appear.
+
 ## Requirements
+
 ### Requirement: Extension activation
 
 The system SHALL provide a way to activate a specific version of a Dynatrace extension in an environment. Activating a version that is already active SHALL be treated as success.
