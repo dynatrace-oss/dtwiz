@@ -1,3 +1,5 @@
+# Tasks: clarify-analysis-and-recommendation-wording
+
 ## 1. System Analysis block
 
 - [x] 1.1 Rename the operating-system label in `Summary()` from `Platform` to `This host` in `pkg/analyzer/analyzer.go`

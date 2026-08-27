@@ -1,3 +1,5 @@
+# Proposal: clarify-analysis-and-recommendation-wording
+
 ## Why
 
 Moderated user testing of the Dynatrace QuickStart flow (three participants, 24.08.2026) produced a most-severe finding: a participant chose OneAgent over OpenTelemetry, had his entire laptop instrumented instead of his project, and afterwards stated he "had no basis to choose between OneAgent and OpenTelemetry" — he picked on name recognition alone.

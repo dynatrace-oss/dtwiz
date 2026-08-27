@@ -1,3 +1,5 @@
+# Design: clarify-analysis-and-recommendation-wording
+
 ## Context
 
 `dtwiz setup` prints two blocks back to back: the System Analysis produced by `analyzer.SystemInfo.Summary()`, then the recommendation list. Together they are the only information a first-time user has when choosing an ingestion method, and the moderated testing round showed both blocks failing at that job.
