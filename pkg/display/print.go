@@ -14,8 +14,9 @@ import (
 // on-screen width calculations.
 var ansiEscapeSequence = regexp.MustCompile("\x1b(?:\\[[0-9;]*[a-zA-Z]|\\][^\x07\x1b]*(?:\x07|\x1b\\\\))")
 
-// visibleWidth returns the number of runes s occupies on screen, ignoring
-// ANSI/OSC 8 escape sequences.
+// visibleWidth returns the rune count of s after stripping ANSI/OSC 8 escape
+// sequences. It is used to keep PrintInfoBox borders aligned when lines
+// contain invisible escape bytes.
 func visibleWidth(s string) int {
 	return len([]rune(ansiEscapeSequence.ReplaceAllString(s, "")))
 }
