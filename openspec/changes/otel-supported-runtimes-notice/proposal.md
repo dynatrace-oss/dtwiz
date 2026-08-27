@@ -1,3 +1,5 @@
+# Proposal: OTel Supported-Runtimes Notice
+
 ## Why
 
 Users running `dtwiz install otel` without `--project` see a list of detected projects and a bare `Select a project to instrument [1-N]:` prompt, with no indication of which runtimes dtwiz can actually auto-instrument. Runtimes outside that set (PHP, C++, .NET, Elixir, Erlang, Go, Ruby, Rust) have no supported path forward from the prompt itself, leaving users to guess or search docs. Fixing this surfaced a real bug in the shared `display.PrintInfoBox` helper: it measured line width by rune count, so any line containing an OSC 8 hyperlink or ANSI color escape sequence broke the box's right-border alignment.

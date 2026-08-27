@@ -1,3 +1,5 @@
+# Tasks
+
 ## 1. Display package fix
 
 - [x] 1.1 Add `visibleWidth()` helper in `pkg/display/print.go` that strips ANSI color and OSC 8 hyperlink escape sequences before measuring rune length

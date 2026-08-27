@@ -1,3 +1,5 @@
+# Spec: OTel Project Scan
+
 ## ADDED Requirements
 
 ### Requirement: Supported-runtimes notice shown before project selection

@@ -1,3 +1,5 @@
+# Design
+
 ## Context
 
 `dtwiz install otel` without `--project` scans for projects, prints a numbered list, and prompts `Select a project to instrument [1-N]:` in a loop (retrying if the chosen project can't be auto-instrumented). Auto-instrumentation only covers Python, Java, and Node.js; other runtimes have no path forward from this prompt. The shared `display.PrintInfoBox` helper renders a bordered box by padding each line to a fixed width using `len([]rune(line))`.
@@ -5,11 +7,13 @@
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Tell the user, at the point of decision, which runtimes are auto-instrumented and where to find manual walkthroughs for the rest.
 - Do not reprint the notice on every retry of the selection loop.
 - Fix `PrintInfoBox` so lines containing OSC 8 hyperlinks or ANSI color codes still render with an aligned right border.
 
 **Non-Goals:**
+
 - Adding auto-instrumentation support for any additional runtime.
 - Changing the AWS Lambda install flow's own info box content (only the shared padding bug is fixed, which incidentally corrects that box's alignment too).
 - General ANSI-aware text wrapping/truncation inside `PrintInfoBox` — only width measurement changes.
