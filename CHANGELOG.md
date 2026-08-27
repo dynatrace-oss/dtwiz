@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-08-27
+
 ### Changed
 
 - `setup`, `analyze`, `status`: system analysis now labels the platform line `This host:` instead of `Platform:`, removing the collision with `Platform Token:` in `status` output
@@ -14,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `setup`, `analyze`, `status`: the `Services:` line is now labelled `Runtimes:`, matching what it actually detects — runtimes installed on PATH, not running services
 - `setup`, `recommend`: the recommendation list is now introduced by `Monitor Logs, Metrics, Traces of:`, stating once what every option ingests
 - `setup`, `recommend`: recommendation titles now read `This host and its services (via …)`, distinguishing the existing-collector, new-collector, and OneAgent options that previously all opened with `This machine's services`
+- `install otel`: OTel host monitoring is now part of the regular install flow. Generated Dynatrace collector configs always include the host-monitoring pipelines and the `resource/add-host-group-id` processor, and the host monitoring extension plus OpenPipeline routes are reconciled without `--experimental`
+- `uninstall otel`: the host-monitoring cleanup choice is now part of the regular uninstall flow; the preview always shows tenant-side cleanup and the prompt now offers `Delete all`, `Only collector`, or `Cancel`
+- `update otel` (experimental): Dynatrace-managed collector configs are now regenerated from the install template instead of patching exporter settings in place, preserving the existing OTLP receiver, metrics, and health-check ports while reconciling host-monitoring settings
+
+### Fixed
+
+- `update otel` (experimental): when a platform token is available, tenant-side host-monitoring prerequisites are now reconciled even if the collector config is already current instead of exiting before the extension and OpenPipeline routes are checked
+- `update otel` (experimental): regenerated Dynatrace collector configs now preserve the `dt.host_group.id` resource attribute used to associate telemetry with the monitored host
 
 ## [1.5.1] - 2026-08-24
 
@@ -518,7 +528,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.5.1...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/dynatrace-oss/dtwiz/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.3.0...v1.4.0
