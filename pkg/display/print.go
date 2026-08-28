@@ -3,10 +3,23 @@ package display
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/fatih/color"
 )
+
+// ansiEscapeSequence matches ANSI CSI codes (e.g. color SGR sequences) and
+// OSC 8 hyperlink wrappers, so their invisible bytes can be excluded from
+// on-screen width calculations.
+var ansiEscapeSequence = regexp.MustCompile("\x1b(?:\\[[0-9;]*[a-zA-Z]|\\][^\x07\x1b]*(?:\x07|\x1b\\\\))")
+
+// visibleWidth returns the rune count of s after stripping ANSI/OSC 8 escape
+// sequences. It is used to keep PrintInfoBox borders aligned when lines
+// contain invisible escape bytes.
+func visibleWidth(s string) int {
+	return len([]rune(ansiEscapeSequence.ReplaceAllString(s, "")))
+}
 
 const (
 	DividerLineLength int = 50
@@ -101,8 +114,9 @@ func hyperlink(text, url string, tty bool) string {
 }
 
 // PrintInfoBox renders a bordered info box. Pass an empty string to insert a
-// blank separator row. Lines must not contain ANSI escape sequences — callers
-// are responsible for stripping or avoiding them so padding is correct.
+// blank separator row. Lines may contain ANSI color codes or OSC 8
+// hyperlinks (e.g. from Hyperlink) — their invisible bytes are excluded from
+// the padding calculation so the border stays aligned.
 func PrintInfoBox(lines ...string) {
 	const boxWidth = 97
 	top := "┌" + strings.Repeat("─", boxWidth) + "┐"
@@ -113,7 +127,7 @@ func PrintInfoBox(lines ...string) {
 			fmt.Println("  │" + strings.Repeat(" ", boxWidth) + "│")
 			continue
 		}
-		spaces := boxWidth - 2 - len([]rune(line))
+		spaces := boxWidth - 2 - visibleWidth(line)
 		if spaces < 0 {
 			spaces = 0
 		}

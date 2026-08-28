@@ -157,6 +157,27 @@ func TestPrintInfoBox_RendersContentRow(t *testing.T) {
 	_ = boxWidth
 }
 
+func TestPrintInfoBox_HyperlinkLine_BorderAligned(t *testing.T) {
+	link := hyperlink("OpenTelemetry walkthroughs", "https://docs.dynatrace.com/docs/ingest-from/opentelemetry/walkthroughs", true)
+	got := helpers.CaptureStdout(t, func() {
+		PrintInfoBox("plain line", link)
+	})
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("PrintInfoBox(2 lines) produced %d lines, want 4 (top, 2 content, bottom)", len(lines))
+	}
+	borderWidth := len([]rune(lines[0]))
+	plainRowWidth := len([]rune(lines[1]))
+	hyperlinkRowVisibleWidth := visibleWidth(lines[2])
+	if plainRowWidth != borderWidth {
+		t.Errorf("plain row width %d differs from border width %d", plainRowWidth, borderWidth)
+	}
+	if hyperlinkRowVisibleWidth != borderWidth {
+		t.Errorf("hyperlink row visible width %d differs from border width %d — right border would render out of alignment once the terminal renders the escape codes",
+			hyperlinkRowVisibleWidth, borderWidth)
+	}
+}
+
 func TestPrintInfoBox_BlankLineRendersEmptyRow(t *testing.T) {
 	got := helpers.CaptureStdout(t, func() {
 		PrintInfoBox("line one", "", "line two")

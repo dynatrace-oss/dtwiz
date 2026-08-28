@@ -351,6 +351,23 @@ func detectAllProjects(runtimes []runtimeInfo, roots []string) []detectedProject
 	return all
 }
 
+const openTelemetryWalkthroughsURL = "https://docs.dynatrace.com/docs/ingest-from/opentelemetry/walkthroughs"
+
+// printSupportedRuntimesInfoBox tells the user which runtimes dtwiz can
+// auto-instrument and where to find manual walkthroughs for the rest.
+func printSupportedRuntimesInfoBox() {
+	linkText := openTelemetryWalkthroughsURL
+	if display.StdoutSupportsHyperlinks() {
+		linkText = display.Hyperlink("OpenTelemetry walkthroughs", openTelemetryWalkthroughsURL)
+	}
+	display.PrintInfoBox(
+		"(i) dtwiz automatically instruments Python, Java, and Node.js projects.",
+		"",
+		"To instrument PHP, C++, .NET, Elixir, Erlang, Go, Ruby, or Rust, follow the walkthroughs:",
+		linkText,
+	)
+}
+
 func printProjectList(projects []detectedProject) {
 	for i, p := range projects {
 		line := fmt.Sprintf("  [%d]  %s  %s  (%s)", i+1, p.Runtime, p.Path, strings.Join(p.Markers, ", "))
@@ -523,10 +540,17 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 				return installer.ErrInstallCancelled
 			}
 		} else {
+			infoBoxShown := false
 			for {
 				display.ColorMessage.Println("  Detected projects:")
 				display.PrintSectionDivider()
 				printProjectList(projects)
+
+				if !infoBoxShown {
+					fmt.Println()
+					printSupportedRuntimesInfoBox()
+					infoBoxShown = true
+				}
 
 				selected, ok := selectProject(projects)
 				if !ok {
