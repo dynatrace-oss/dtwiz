@@ -16,6 +16,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/environment"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -411,7 +412,7 @@ func selectProject(projects []detectedProject) (detectedProject, bool) {
 
 func createRuntimePlan(proj detectedProject, httpPort int, token, envURL, platformToken string) InstrumentationPlan {
 	collectorEndpoint := fmt.Sprintf("http://127.0.0.1:%d", httpPort)
-	svcName := projectServiceName(proj.Path)
+	svcName := environment.ProjectServiceName(proj.Path)
 
 	switch proj.Runtime {
 	case "Python":
@@ -435,7 +436,7 @@ func createRuntimePlan(proj detectedProject, httpPort int, token, envURL, platfo
 		}
 		return &GoInstrumentationPlan{
 			Project: goProj,
-			EnvVars: generateBaseOtelEnvVars(collectorEndpoint, svcName),
+			EnvVars: environment.GenerateBaseOtelEnvVars(collectorEndpoint, svcName),
 		}
 	}
 	return nil

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/environment"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -145,8 +146,8 @@ func buildMultiModulePlan(mm *MultiModuleProject, proj ScannedProject, collector
 
 	subs := make([]SubModulePlan, len(mm.Modules))
 	for i, mod := range mm.Modules {
-		svcName := normalizeServiceName(mod.Name)
-		envVars := generateBaseOtelEnvVars(collectorEndpoint, svcName)
+		svcName := environment.NormalizeServiceName(mod.Name)
+		envVars := environment.GenerateBaseOtelEnvVars(collectorEndpoint, svcName)
 
 		var launchCmd string
 		entrypoints := detectJavaEntrypoints(mod.Path)

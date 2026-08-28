@@ -32,6 +32,26 @@ type otelCase struct {
 func TestOTelAutoInstrumentation(t *testing.T) {
 	integration.Parallelize(t)
 
+	env := integration.SetupIntegration(t)
+
+	// The language-specific installers now route telemetry through a local OTel
+	// Collector (http://127.0.0.1:4318). Install it once here so all parallel
+	// language subtests share the same running collector.
+	origAC := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = origAC })
+
+	t.Log("installing OTel Collector for auto-instrumentation tests")
+	if err := otel.InstallOtelCollectorOnly(env.EnvURL, env.ClassicToken, env.PlatformToken, false); err != nil {
+		t.Fatalf("InstallOtelCollectorOnly: %v", err)
+	}
+	t.Cleanup(func() {
+		t.Log("uninstalling OTel Collector")
+		if err := otel.UninstallOtelCollector(env.EnvURL, env.PlatformToken, false); err != nil {
+			t.Logf("warning: UninstallOtelCollector: %v", err)
+		}
+	})
+
 	cases := []otelCase{
 		{
 			lang:    "python",

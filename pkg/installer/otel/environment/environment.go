@@ -1,4 +1,4 @@
-package otel
+package environment
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 
 const otelExporterOTLPHeadersEnvVar = "OTEL_EXPORTER_OTLP_HEADERS"
 
-func generateBaseOtelEnvVars(collectorEndpoint, serviceName string) map[string]string {
+func GenerateBaseOtelEnvVars(collectorEndpoint, serviceName string) map[string]string {
 	return map[string]string{
 		"OTEL_SERVICE_NAME":                                 serviceName,
 		"OTEL_EXPORTER_OTLP_ENDPOINT":                       collectorEndpoint,
@@ -21,7 +21,7 @@ func generateBaseOtelEnvVars(collectorEndpoint, serviceName string) map[string]s
 	}
 }
 
-func projectServiceName(projectPath string) string {
+func ProjectServiceName(projectPath string) string {
 	baseName := filepath.Base(projectPath)
 	// filepath.Base("/") returns "/" on Unix and "\\" on Windows; treat either as root.
 	if baseName == "" || baseName == "." || strings.Trim(baseName, `/\`) == "" {
@@ -34,13 +34,13 @@ func projectServiceName(projectPath string) string {
 // separators, e.g. "ui/web" from a Maven nested module path) into a value that
 // is safe to use as an OTEL_SERVICE_NAME and as a filename fragment.
 // Forward-slash, back-slash, and colon characters are replaced with "-".
-func normalizeServiceName(name string) string {
+func NormalizeServiceName(name string) string {
 	r := strings.NewReplacer("/", "-", "\\", "-", ":", "-")
 	return r.Replace(name)
 }
 
 func GenerateEnvExportScript(envVars map[string]string) string {
-	lines := formatEnvExportLines(envVars)
+	lines := FormatEnvExportLines(envVars)
 	if len(lines) == 0 {
 		return ""
 	}
@@ -48,7 +48,7 @@ func GenerateEnvExportScript(envVars map[string]string) string {
 	return strings.Join(lines, "\n") + "\n"
 }
 
-func formatEnvExportLines(envVars map[string]string) []string {
+func FormatEnvExportLines(envVars map[string]string) []string {
 	keys := make([]string, 0, len(envVars))
 	for key := range envVars {
 		keys = append(keys, key)
@@ -63,7 +63,7 @@ func formatEnvExportLines(envVars map[string]string) []string {
 	return lines
 }
 
-func formatEnvVars(envVars map[string]string) []string {
+func FormatEnvVars(envVars map[string]string) []string {
 	keys := make([]string, 0, len(envVars))
 	for key := range envVars {
 		keys = append(keys, key)
@@ -77,7 +77,7 @@ func formatEnvVars(envVars map[string]string) []string {
 	return formatted
 }
 
-func formatPrintableEnvVars(envVars map[string]string) []string {
+func FormatPrintableEnvVars(envVars map[string]string) []string {
 	keys := make([]string, 0, len(envVars))
 	for key := range envVars {
 		keys = append(keys, key)

@@ -13,6 +13,7 @@ import (
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/environment"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -132,13 +133,13 @@ func buildInstrumentedCmd(ep JavaEntrypoint, agentPath, projectPath string, envV
 			finalEnvVars[k] = v
 		}
 		finalEnvVars["JAVA_TOOL_OPTIONS"] = "-javaagent:" + agentPath
-		cmd.Env = append(os.Environ(), formatEnvVars(finalEnvVars)...)
+		cmd.Env = append(os.Environ(), environment.FormatEnvVars(finalEnvVars)...)
 		cmd.Dir = projectPath
 		return cmd
 	}
 
 	cmd.Dir = projectPath
-	cmd.Env = append(os.Environ(), formatEnvVars(envVars)...)
+	cmd.Env = append(os.Environ(), environment.FormatEnvVars(envVars)...)
 	return cmd
 }
 
@@ -202,7 +203,7 @@ func (p *JavaInstrumentationPlan) PrintPlanSteps() {
 		fmt.Printf("     Launch:     (entrypoint will be detected at execution time)\n")
 	}
 	fmt.Printf("     Agent JAR:  %s\n", otelJavaAgentURL)
-	for _, line := range formatPrintableEnvVars(p.EnvVars) {
+	for _, line := range environment.FormatPrintableEnvVars(p.EnvVars) {
 		fmt.Printf("     %s\n", line)
 	}
 }
@@ -211,8 +212,8 @@ func buildJavaInstrumentationPlan(proj detectedProject, collectorEndpoint, token
 	if mm := detectMultiModule(proj.Path); mm != nil {
 		return buildMultiModulePlan(mm, proj.ScannedProject, collectorEndpoint, token, envURL)
 	}
-	svcName := projectServiceName(proj.Path)
-	envVars := generateBaseOtelEnvVars(collectorEndpoint, svcName)
+	svcName := environment.ProjectServiceName(proj.Path)
+	envVars := environment.GenerateBaseOtelEnvVars(collectorEndpoint, svcName)
 	entrypoints := detectJavaEntrypoints(proj.Path)
 	var entrypointCmd string
 	if len(entrypoints) > 0 {
@@ -272,7 +273,7 @@ func (p *JavaInstrumentationPlan) Execute() error {
 		}
 	}
 
-	svcName := projectServiceName(p.Project.Path)
+	svcName := environment.ProjectServiceName(p.Project.Path)
 	displayCmd := displayInstrumentedCmd(*ep, agentPath)
 
 	logPath := filepath.Join(p.Project.Path, svcName+".log")
@@ -345,10 +346,10 @@ func InstallOtelJava(envURL, token, serviceName, projectPath string, dryRun bool
 	collectorEndpoint := fmt.Sprintf("http://127.0.0.1:%d", otlpHTTPPortFromConfig(findExistingCollectorConfig()))
 
 	if serviceName == "my-service" {
-		serviceName = projectServiceName(proj.Path)
+		serviceName = environment.ProjectServiceName(proj.Path)
 	}
 	logger.Debug("java instrumentation target", "project", proj.Path, "service", serviceName)
-	envVars = generateBaseOtelEnvVars(collectorEndpoint, serviceName)
+	envVars = environment.GenerateBaseOtelEnvVars(collectorEndpoint, serviceName)
 
 	if mm := detectMultiModule(proj.Path); mm != nil {
 		logger.Debug("multi-module project detected", "tool", mm.BuildTool)
@@ -431,7 +432,7 @@ func InstallOtelJava(envURL, token, serviceName, projectPath string, dryRun bool
 	fmt.Printf("  Agent JAR:  %s\n", otelJavaAgentURL)
 	fmt.Println()
 	fmt.Println("  Environment variables:")
-	for _, line := range formatPrintableEnvVars(envVars) {
+	for _, line := range environment.FormatPrintableEnvVars(envVars) {
 		fmt.Printf("    %s\n", line)
 	}
 	var pidStr string

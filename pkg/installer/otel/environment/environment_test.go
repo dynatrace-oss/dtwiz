@@ -1,4 +1,4 @@
-package otel
+package environment
 
 import (
 	"strings"
@@ -19,7 +19,7 @@ func TestProjectServiceName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
-			got := projectServiceName(tt.path)
+			got := ProjectServiceName(tt.path)
 			if got != tt.want {
 				t.Errorf("projectServiceName(%q) = %q, want %q", tt.path, got, tt.want)
 			}
@@ -43,16 +43,16 @@ func TestNormalizeServiceName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := normalizeServiceName(tt.in)
+			got := NormalizeServiceName(tt.in)
 			if got != tt.want {
-				t.Errorf("normalizeServiceName(%q) = %q, want %q", tt.in, got, tt.want)
+				t.Errorf("NormalizeServiceName(%q) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
 	}
 }
 
 func TestGenerateBaseOtelEnvVars(t *testing.T) {
-	envVars := generateBaseOtelEnvVars("http://127.0.0.1:4318", "my-svc")
+	envVars := GenerateBaseOtelEnvVars("http://127.0.0.1:4318", "my-svc")
 
 	wantEndpoint := "http://127.0.0.1:4318"
 	if got := envVars["OTEL_EXPORTER_OTLP_ENDPOINT"]; got != wantEndpoint {
@@ -83,7 +83,7 @@ func TestGenerateBaseOtelEnvVars(t *testing.T) {
 }
 
 func TestGenerateBaseOtelEnvVars_NonDefaultPort(t *testing.T) {
-	envVars := generateBaseOtelEnvVars("http://127.0.0.1:4320", "svc")
+	envVars := GenerateBaseOtelEnvVars("http://127.0.0.1:4320", "svc")
 	want := "http://127.0.0.1:4320"
 	if got := envVars["OTEL_EXPORTER_OTLP_ENDPOINT"]; got != want {
 		t.Errorf("ENDPOINT = %q, want %q (non-default port should be preserved)", got, want)
@@ -95,7 +95,7 @@ func TestFormatEnvVars(t *testing.T) {
 		"FOO": "bar",
 		"BAZ": "qux",
 	}
-	got := formatEnvVars(m)
+	got := FormatEnvVars(m)
 	want := []string{"BAZ=qux", "FOO=bar"}
 	if len(got) != len(want) {
 		t.Fatalf("formatEnvVars length = %d, want %d", len(got), len(want))
@@ -108,7 +108,7 @@ func TestFormatEnvVars(t *testing.T) {
 }
 
 func TestFormatEnvVars_Empty(t *testing.T) {
-	got := formatEnvVars(map[string]string{})
+	got := FormatEnvVars(map[string]string{})
 	if len(got) != 0 {
 		t.Errorf("formatEnvVars(empty) = %v, want empty", got)
 	}
@@ -151,7 +151,7 @@ func TestFormatPrintableEnvVars(t *testing.T) {
 		"OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
 	}
 
-	got := formatPrintableEnvVars(envVars)
+	got := FormatPrintableEnvVars(envVars)
 	want := []string{
 		"OTEL_EXPORTER_OTLP_HEADERS=Authorization=Api-Token%20<redacted>",
 		"OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf",
