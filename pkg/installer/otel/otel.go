@@ -199,11 +199,12 @@ func buildTenantPrerequisitePreview(envURL, platformToken string) (grailRouteCli
 	return c, plans
 }
 
-// applyGrailRoutes waits for host-monitoring pipelines, rebuilds the route plan,
-// and falls back to the preview snapshot if rebuilding fails.
-func applyGrailRoutes(grailC grailRouteClient, grailPlans []grailSignalPlan) {
+// reconcileGrailRoutes waits for host-monitoring pipelines, rebuilds the route
+// plan, falls back to the preview snapshot if rebuilding fails, and returns the
+// final plans with their per-signal apply errors.
+func reconcileGrailRoutes(grailC grailRouteClient, grailPlans []grailSignalPlan) ([]grailSignalPlan, []error) {
 	if grailC == nil {
-		return
+		return nil, nil
 	}
 	if err := waitForGrailPipelinesFn(context.Background(), grailC, time.Sleep); err != nil {
 		logger.Debug("OTel host-monitoring pipelines did not appear within the wait bound", "error", err)
@@ -218,12 +219,32 @@ func applyGrailRoutes(grailC grailRouteClient, grailPlans []grailSignalPlan) {
 	for i, p := range grailPlans {
 		applyErrs[i] = applyGrailPlan(context.Background(), grailC, p)
 	}
-	validations := grailRouteValidations(grailPlans, applyErrs)
+	return grailPlans, applyErrs
+}
+
+func applyGrailRoutes(grailC grailRouteClient, grailPlans []grailSignalPlan) {
+	plans, applyErrs := reconcileGrailRoutes(grailC, grailPlans)
+	if plans == nil {
+		return
+	}
+	printGrailApplyResults(plans, grailApplyErrsWithValidation(plans, applyErrs, nil))
+}
+
+// applyAndValidateGrailRoutes is the install-only path: after shared route
+// reconciliation, it performs bounded readback validation before printing
+// final route results.
+func applyAndValidateGrailRoutes(grailC grailRouteClient, grailPlans []grailSignalPlan) {
+	plans, applyErrs := reconcileGrailRoutes(grailC, grailPlans)
+	if plans == nil {
+		return
+	}
+
+	validations := grailRouteValidations(plans, applyErrs)
 	validationErr := waitForGrailRoutesAppliedFn(context.Background(), grailC, validations, time.Sleep)
 	if validationErr != nil {
 		logger.Debug("OpenPipeline routes were not visible after apply", "error", validationErr)
 	}
-	printGrailApplyResults(grailPlans, grailApplyErrsWithValidation(grailPlans, applyErrs, validationErr))
+	printGrailApplyResults(plans, grailApplyErrsWithValidation(plans, applyErrs, validationErr))
 }
 
 type InstrumentationPlan interface {
@@ -627,7 +648,7 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 	if platformToken != "" {
 		activateHostMonitoringExtensionFn(envURL, platformToken)
 	}
-	applyGrailRoutes(grailC, grailPlans)
+	applyAndValidateGrailRoutes(grailC, grailPlans)
 
 	if err := executeCollectorPlanFn(cp, envURL, platformToken, plan != nil); err != nil {
 		return err

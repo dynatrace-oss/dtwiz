@@ -1062,7 +1062,7 @@ func InstallOtelCollectorOnly(envURL, token, platformToken string, dryRun bool) 
 	if platformToken != "" {
 		activateHostMonitoringExtensionFn(envURL, platformToken)
 	}
-	applyGrailRoutes(grailC, grailPlans)
+	applyAndValidateGrailRoutes(grailC, grailPlans)
 
 	if err := executeCollectorPlanFn(cp, envURL, platformToken, false); err != nil {
 		return err
