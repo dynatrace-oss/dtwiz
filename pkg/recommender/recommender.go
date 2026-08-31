@@ -201,7 +201,7 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 			Steps: []string{
 				"dtwiz install oneagent",
 			},
-			DetectionInfo: fmt.Sprintf("%s %s", platformName(system.Platform), system.Arch),
+			DetectionInfo: hostDetectionInfo(system),
 		})
 	}
 
