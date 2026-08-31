@@ -6,6 +6,25 @@ import (
 	"testing"
 )
 
+// chdirTemp creates a temp dir, changes into it, and registers a cleanup to
+// restore the original working directory before t.TempDir cleans up the dir.
+// On Windows, the process must release the directory before it can be deleted.
+func chdirTemp(t *testing.T) string {
+	t.Helper()
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	// Register AFTER TempDir so this cleanup runs FIRST (LIFO), releasing the
+	// directory handle before TempDir's own cleanup tries to remove it.
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	return dir
+}
+
 func TestShortenPath_HomePrefix(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -52,11 +71,8 @@ func TestShortenPath_HomeItself(t *testing.T) {
 }
 
 func TestDetectProject_GoProject(t *testing.T) {
-	dir := t.TempDir()
+	dir := chdirTemp(t)
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module test"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
 
@@ -73,11 +89,8 @@ func TestDetectProject_GoProject(t *testing.T) {
 }
 
 func TestDetectProject_NodeProject(t *testing.T) {
-	dir := t.TempDir()
+	dir := chdirTemp(t)
 	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte("{}"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
 
@@ -94,11 +107,8 @@ func TestDetectProject_NodeProject(t *testing.T) {
 }
 
 func TestDetectProject_PythonProject(t *testing.T) {
-	dir := t.TempDir()
+	dir := chdirTemp(t)
 	if err := os.WriteFile(filepath.Join(dir, "requirements.txt"), []byte("flask"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
 
@@ -115,11 +125,8 @@ func TestDetectProject_PythonProject(t *testing.T) {
 }
 
 func TestDetectProject_JavaProject(t *testing.T) {
-	dir := t.TempDir()
+	dir := chdirTemp(t)
 	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte("<project/>"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
 
@@ -136,10 +143,7 @@ func TestDetectProject_JavaProject(t *testing.T) {
 }
 
 func TestDetectProject_EmptyDirectory(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
+	chdirTemp(t)
 
 	_, techs := detectProject()
 	if len(techs) != 0 {
@@ -148,14 +152,11 @@ func TestDetectProject_EmptyDirectory(t *testing.T) {
 }
 
 func TestDetectProject_MultipleTechs(t *testing.T) {
-	dir := t.TempDir()
+	dir := chdirTemp(t)
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module test"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte("{}"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
 
@@ -166,15 +167,12 @@ func TestDetectProject_MultipleTechs(t *testing.T) {
 }
 
 func TestDetectProject_DuplicateTechDetectedOnce(t *testing.T) {
-	dir := t.TempDir()
+	dir := chdirTemp(t)
 	// Both requirements.txt and pyproject.toml → should produce exactly one Python entry.
 	if err := os.WriteFile(filepath.Join(dir, "requirements.txt"), []byte("flask"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "pyproject.toml"), []byte("[tool]"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
 
