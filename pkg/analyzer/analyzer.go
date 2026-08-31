@@ -149,6 +149,8 @@ type SystemInfo struct {
 	GCP              *GCPInfo         `json:"gcp,omitempty"`
 	GCPConfigured    bool             `json:"gcp_configured,omitempty"`
 	Services         []string         `json:"services"`
+	ProjectTechs     []ProjectTech    `json:"project_techs,omitempty"`
+	ProjectDir       string           `json:"project_dir,omitempty"`
 }
 
 func (s *SystemInfo) AzureDetected() bool { return s.Azure != nil && s.Azure.Available }
@@ -410,6 +412,15 @@ func AnalyzeSystem() (*SystemInfo, error) {
 		svcs := detectServices()
 		mu.Lock()
 		info.Services = svcs
+		mu.Unlock()
+		return nil
+	})
+
+	run(func() error {
+		dir, techs := detectProject()
+		mu.Lock()
+		info.ProjectDir = dir
+		info.ProjectTechs = techs
 		mu.Unlock()
 		return nil
 	})
