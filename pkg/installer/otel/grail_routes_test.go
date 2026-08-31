@@ -72,6 +72,9 @@ func (f *fakeGrailClient) getRoutingEntries(_ context.Context, schemaID string) 
 
 func (f *fakeGrailClient) putRoutingEntries(_ context.Context, objectID, schemaVersion string, entries []routingEntry) error {
 	f.putCalls = append(f.putCalls, putCall{objectID: objectID, schemaVersion: schemaVersion, entries: entries})
+	if f.putErr != nil {
+		return f.putErr
+	}
 	if f.routing != nil {
 		for schemaID, obj := range f.routing {
 			if obj.objectID == objectID {
@@ -82,7 +85,7 @@ func (f *fakeGrailClient) putRoutingEntries(_ context.Context, objectID, schemaV
 			}
 		}
 	}
-	return f.putErr
+	return nil
 }
 
 func (f *fakeGrailClient) createRoutingObject(_ context.Context, schemaID string, entries []routingEntry) error {
@@ -566,6 +569,33 @@ func TestApplyGrailPlan_CreatesRoutingObjectWhenAbsent(t *testing.T) {
 	}
 	if !e.Enabled || e.PipelineType != "custom" || e.Matcher != grailMatcherMetrics || e.Description != grailPipelineName {
 		t.Errorf("created entry has unexpected fields: %+v", e)
+	}
+}
+
+func TestApplyGrailPlan_PutFailureDoesNotUpdateRoutingState(t *testing.T) {
+	c := happyFakeClient()
+	c.putErr = fmt.Errorf("simulated put failure")
+	metricsSig := grailSignals[0]
+	plan := grailSignalPlan{
+		signal:        metricsSig,
+		action:        grailActionCreate,
+		pipelineObjID: pipelineObjID(metricsSig.pipelineSchema),
+		routingObjID:  "route-obj-" + metricsSig.name,
+		schemaVersion: "1",
+		entries:       nil,
+		entryIdx:      -1,
+	}
+
+	if err := applyGrailPlan(context.Background(), c, plan); err == nil {
+		t.Fatal("expected applyGrailPlan to return put error")
+	}
+
+	_, _, entries, err := c.getRoutingEntries(context.Background(), metricsSig.routingSchema)
+	if err != nil {
+		t.Fatalf("getRoutingEntries() error = %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("routing entries after failed PUT = %d, want 0", len(entries))
 	}
 }
 
