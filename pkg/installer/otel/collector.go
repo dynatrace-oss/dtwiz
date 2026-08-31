@@ -1064,7 +1064,7 @@ func InstallOtelCollectorOnly(envURL, token, platformToken string, dryRun bool) 
 	}
 	applyAndValidateGrailRoutes(grailC, grailPlans)
 
-	if err := executeCollectorPlanFn(cp, envURL, platformToken, false); err != nil {
+	if err := executeCollectorPlanFn(cp, envURL, platformToken, false /* skipVerification */); err != nil {
 		return err
 	}
 

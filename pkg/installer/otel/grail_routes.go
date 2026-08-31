@@ -4,6 +4,7 @@ package otel
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -398,7 +399,8 @@ func grailApplyErrsWithValidation(plans []grailSignalPlan, applyErrs []error, va
 	if validationErr == nil {
 		return finalErrs
 	}
-	validation, ok := validationErr.(*grailRouteValidationError)
+	var validation *grailRouteValidationError
+	ok := errors.As(validationErr, &validation)
 	for i, p := range plans {
 		if finalErrs[i] != nil || p.action == grailActionSkip {
 			continue
