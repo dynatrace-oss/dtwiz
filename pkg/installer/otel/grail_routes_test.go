@@ -72,11 +72,27 @@ func (f *fakeGrailClient) getRoutingEntries(_ context.Context, schemaID string) 
 
 func (f *fakeGrailClient) putRoutingEntries(_ context.Context, objectID, schemaVersion string, entries []routingEntry) error {
 	f.putCalls = append(f.putCalls, putCall{objectID: objectID, schemaVersion: schemaVersion, entries: entries})
+	if f.routing != nil {
+		for schemaID, obj := range f.routing {
+			if obj.objectID == objectID {
+				obj.schemaVersion = schemaVersion
+				obj.entries = entries
+				f.routing[schemaID] = obj
+				break
+			}
+		}
+	}
 	return f.putErr
 }
 
 func (f *fakeGrailClient) createRoutingObject(_ context.Context, schemaID string, entries []routingEntry) error {
 	f.createCalls = append(f.createCalls, createCall{schemaID: schemaID, entries: entries})
+	if f.routing != nil {
+		f.routing[schemaID] = fakeRoutingObj{objectID: "created-" + schemaID, schemaVersion: "1", entries: entries}
+	}
+	if f.absentRouting != nil {
+		delete(f.absentRouting, schemaID)
+	}
 	return nil
 }
 
@@ -532,6 +548,37 @@ func TestApplyGrailPlan_CreatesRoutingObjectWhenAbsent(t *testing.T) {
 	}
 	if !e.Enabled || e.PipelineType != "custom" || e.Matcher != grailMatcherMetrics || e.Description != grailPipelineName {
 		t.Errorf("created entry has unexpected fields: %+v", e)
+	}
+}
+
+func TestWaitForGrailRoutesApplied_ReadsBackEnabledRoutes(t *testing.T) {
+	c := happyFakeClient()
+	plans, err := buildGrailPlans(context.Background(), c)
+	if err != nil {
+		t.Fatalf("buildGrailPlans() error = %v", err)
+	}
+	applyErrs := make([]error, len(plans))
+	for i, p := range plans {
+		applyErrs[i] = applyGrailPlan(context.Background(), c, p)
+	}
+	validations := grailRouteValidations(plans, applyErrs)
+	if len(validations) != len(grailSignals) {
+		t.Fatalf("validations = %d, want %d", len(validations), len(grailSignals))
+	}
+	if err := waitForGrailRoutesApplied(context.Background(), c, validations, func(time.Duration) {}); err != nil {
+		t.Fatalf("waitForGrailRoutesApplied() error = %v", err)
+	}
+}
+
+func TestWaitForGrailRoutesApplied_TimesOutWhenRouteNotVisible(t *testing.T) {
+	c := happyFakeClient()
+	validations := []grailRouteValidation{{signal: grailSignals[0], pipelineObjID: pipelineObjID(grailSignals[0].pipelineSchema)}}
+	err := waitForGrailRoutesApplied(context.Background(), c, validations, func(time.Duration) {})
+	if err == nil {
+		t.Fatal("expected an error when the route never becomes visible")
+	}
+	if !strings.Contains(err.Error(), "routes not visible as enabled") {
+		t.Fatalf("error = %v, want missing route message", err)
 	}
 }
 

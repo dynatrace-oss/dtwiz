@@ -88,6 +88,11 @@ type grailSignalPlan struct {
 	entryIdx      int            // index in entries of the matching entry (ReEnable only); -1 otherwise
 }
 
+type grailRouteValidation struct {
+	signal        grailSignal
+	pipelineObjID string
+}
+
 // grailRouteClient abstracts the Dynatrace API calls needed for route
 // reconciliation. The interface exists for unit-test injection.
 type grailRouteClient interface {
@@ -315,6 +320,51 @@ func printGrailApplyResults(plans []grailSignalPlan, errs []error) {
 		display.PrintStatusLine(p.signal.displayName, msg, colorFn)
 	}
 	fmt.Println()
+}
+
+func grailRouteValidations(plans []grailSignalPlan, errs []error) []grailRouteValidation {
+	validations := make([]grailRouteValidation, 0, len(plans))
+	for i, p := range plans {
+		if p.action == grailActionSkip || p.pipelineObjID == "" {
+			continue
+		}
+		if i < len(errs) && errs[i] != nil {
+			continue
+		}
+		validations = append(validations, grailRouteValidation{signal: p.signal, pipelineObjID: p.pipelineObjID})
+	}
+	return validations
+}
+
+var waitForGrailRoutesAppliedFn = waitForGrailRoutesApplied
+
+func waitForGrailRoutesApplied(ctx context.Context, c grailRouteClient, validations []grailRouteValidation, sleeper func(time.Duration)) error {
+	if len(validations) == 0 {
+		return nil
+	}
+	return installer.Retry(sleeper, installer.RetryConfig{
+		MaxAttempts: installer.ExtensionActiveMaxAttempts,
+		Delay:       func(int) time.Duration { return installer.ExtensionActiveRetryDelay },
+		OnRetry: func(attempt int, _ time.Duration, _ error) {
+			logger.Debug("OpenPipeline routes not yet visible after apply, polling", "attempt", attempt)
+		},
+	}, func() error {
+		missing := make([]string, 0)
+		for _, validation := range validations {
+			_, _, entries, err := c.getRoutingEntries(ctx, validation.signal.routingSchema)
+			if err != nil {
+				return fmt.Errorf("validate %s route: %w", validation.signal.name, err)
+			}
+			found, _, enabled := findRoutingEntry(entries, validation.pipelineObjID)
+			if !found || !enabled {
+				missing = append(missing, validation.signal.name)
+			}
+		}
+		if len(missing) > 0 {
+			return fmt.Errorf("routes not visible as enabled: %s", strings.Join(missing, ", "))
+		}
+		return nil
+	})
 }
 
 // grailPreviewMessage is shown before extension activation runs, so a skip here is never

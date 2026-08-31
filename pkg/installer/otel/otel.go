@@ -219,6 +219,11 @@ func applyGrailRoutes(grailC grailRouteClient, grailPlans []grailSignalPlan) {
 		applyErrs[i] = applyGrailPlan(context.Background(), grailC, p)
 	}
 	printGrailApplyResults(grailPlans, applyErrs)
+	validations := grailRouteValidations(grailPlans, applyErrs)
+	if err := waitForGrailRoutesAppliedFn(context.Background(), grailC, validations, time.Sleep); err != nil {
+		logger.Debug("OpenPipeline routes were not visible after apply", "error", err)
+		fmt.Printf("  Warning: OpenPipeline route validation failed: %v\n", err)
+	}
 }
 
 type InstrumentationPlan interface {
@@ -442,6 +447,8 @@ func createRuntimePlan(proj detectedProject, httpPort int, token, envURL, platfo
 	return nil
 }
 
+var createRuntimePlanFn = createRuntimePlan
+
 // inferRuntimeFromPath returns "Java", "Node.js", "Python", or "" based on which
 // marker files or directories are present directly inside path.
 func inferRuntimeFromPath(path string) string {
@@ -523,7 +530,7 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 			matchProcessesToProjects(projects, detectPythonProcesses())
 		}
 		proj := detectedProject{ScannedProject: projects[0], Runtime: runtime}
-		plan = createRuntimePlan(proj, cp.httpPort, token, envURL, platformToken)
+		plan = createRuntimePlanFn(proj, cp.httpPort, token, envURL, platformToken)
 	} else {
 		roots, err := selectScanRoots()
 		if err != nil {
@@ -557,7 +564,7 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 				if !ok {
 					break
 				}
-				plan = createRuntimePlan(selected, cp.httpPort, token, envURL, platformToken)
+				plan = createRuntimePlanFn(selected, cp.httpPort, token, envURL, platformToken)
 				if plan != nil {
 					break
 				}
@@ -620,8 +627,9 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 	if platformToken != "" {
 		activateHostMonitoringExtensionFn(envURL, platformToken)
 	}
+	applyGrailRoutes(grailC, grailPlans)
 
-	if err := cp.execute(envURL, platformToken, plan != nil); err != nil {
+	if err := executeCollectorPlanFn(cp, envURL, platformToken, plan != nil); err != nil {
 		return err
 	}
 
@@ -631,8 +639,6 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 			return err
 		}
 	}
-
-	applyGrailRoutes(grailC, grailPlans)
 
 	return nil
 }
