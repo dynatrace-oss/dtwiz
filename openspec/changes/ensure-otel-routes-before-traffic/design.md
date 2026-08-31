@@ -2,7 +2,7 @@
 
 ## Context
 
-`dtwiz install otel` currently builds a route preview before confirmation, activates the OpenTelemetry Host Monitoring extension after confirmation, starts the collector, optionally verifies it with a synthetic OTLP log, optionally starts application instrumentation, and only then applies OpenPipeline dynamic routes. The logs route matcher requires host attributes and sends matching OTLP logs into the OTel Host Monitoring pipeline. If a first-run verification log is emitted before the route exists, the verification still proves ingestion but not host-monitoring assignment.
+`dtwiz install otel` currently builds a route preview before confirmation, then activates the OpenTelemetry Host Monitoring extension after confirmation. After that, the flow splits: if the user does not select a project, dtwiz starts the collector and sends a synthetic OTLP verification log; if the user selects a project, dtwiz starts the collector, skips the synthetic verification log, and starts the selected application with OTel instrumentation. In both branches, OpenPipeline dynamic routes are applied only after collector verification or application instrumentation has already had a chance to emit telemetry. The logs route matcher requires host attributes and sends matching OTLP logs into the OTel Host Monitoring pipeline. If a first-run verification log is emitted before the route exists, the verification still proves ingestion but not host-monitoring assignment.
 
 The collector config already adds system resource detection to the logs pipeline, so the local payload has the attributes needed by the route. The gap is ordering.
 

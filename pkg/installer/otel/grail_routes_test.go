@@ -274,6 +274,24 @@ func TestBuildGrailPlans_DisabledEntry(t *testing.T) {
 	}
 }
 
+func TestFindRoutingEntry_PrefersEnabledDuplicate(t *testing.T) {
+	entries := []routingEntry{
+		{Enabled: false, PipelineID: "pipe-1", Matcher: "old"},
+		{Enabled: true, PipelineID: "pipe-1", Matcher: "new"},
+	}
+
+	found, idx, enabled := findRoutingEntry(entries, "pipe-1")
+	if !found {
+		t.Fatal("expected to find matching entry")
+	}
+	if idx != 1 {
+		t.Fatalf("idx = %d, want 1", idx)
+	}
+	if !enabled {
+		t.Fatal("expected enabled duplicate to be preferred")
+	}
+}
+
 func TestBuildGrailPlans_PipelineNotFound(t *testing.T) {
 	c := happyFakeClient()
 	// Remove logs and spans pipelines.
@@ -570,6 +588,21 @@ func TestWaitForGrailRoutesApplied_ReadsBackEnabledRoutes(t *testing.T) {
 	}
 }
 
+func TestGrailRouteValidations_SkipsNoopPlans(t *testing.T) {
+	plans := []grailSignalPlan{
+		{signal: grailSignals[0], action: grailActionNoop, pipelineObjID: "pipe-metrics"},
+		{signal: grailSignals[1], action: grailActionCreate, pipelineObjID: "pipe-logs"},
+	}
+
+	validations := grailRouteValidations(plans, make([]error, len(plans)))
+	if len(validations) != 1 {
+		t.Fatalf("validations = %d, want 1", len(validations))
+	}
+	if validations[0].signal.name != grailSignals[1].name {
+		t.Fatalf("validated signal = %s, want %s", validations[0].signal.name, grailSignals[1].name)
+	}
+}
+
 func TestWaitForGrailRoutesApplied_TimesOutWhenRouteNotVisible(t *testing.T) {
 	c := happyFakeClient()
 	validations := []grailRouteValidation{{signal: grailSignals[0], pipelineObjID: pipelineObjID(grailSignals[0].pipelineSchema)}}
@@ -596,11 +629,22 @@ func TestGrailApplyErrsWithValidation_MarksOnlyFailedSignals(t *testing.T) {
 	if finalErrs[0] != nil {
 		t.Fatalf("metrics error = %v, want nil", finalErrs[0])
 	}
-	if finalErrs[1] == nil || !strings.Contains(finalErrs[1].Error(), "route validation failed") {
+	if finalErrs[1] == nil || !strings.Contains(finalErrs[1].Error(), "route validation inconclusive") || !strings.Contains(finalErrs[1].Error(), "may become active shortly") {
 		t.Fatalf("logs error = %v, want validation failure", finalErrs[1])
 	}
 	if finalErrs[2] != nil {
 		t.Fatalf("spans error = %v, want nil", finalErrs[2])
+	}
+}
+
+func TestGrailApplyErrsWithValidation_DifferentiatesSetupFailure(t *testing.T) {
+	plans := []grailSignalPlan{{signal: grailSignals[0], action: grailActionCreate}}
+	applyErrs := []error{errors.New("settings api rejected request")}
+
+	finalErrs := grailApplyErrsWithValidation(plans, applyErrs, nil)
+
+	if finalErrs[0] == nil || !strings.Contains(finalErrs[0].Error(), "route setup failed") {
+		t.Fatalf("error = %v, want setup failure", finalErrs[0])
 	}
 }
 
