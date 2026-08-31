@@ -2,7 +2,7 @@
 
 ## MODIFIED Requirements
 
-### Requirement: Dynamic routes for Smartscape on Grail are set up before OTel install telemetry is emitted
+### Requirement: Dynamic routes for Smartscape on Grail are set up after host-monitoring install
 
 When an OTel install flow has the tenant credentials needed to manage OpenPipeline routes, it SHALL attempt to set up the OpenTelemetry Host Monitoring dynamic routes after the user confirms and before the install emits verification telemetry or starts selected application instrumentation. Before telemetry is emitted, the install SHALL validate, with a bounded wait, that routes successfully applied by the install are visible as enabled. Final route status output SHALL be printed after validation, so successful create or re-enable messages are only shown after the corresponding route is visible as enabled. Route setup and validation failures SHALL remain advisory, but their warning messages SHALL be distinct: route setup failures indicate that creating or re-enabling the route failed, while route visibility validation failures indicate that the write succeeded but the route was not confirmed visible yet and may become active later.
 
