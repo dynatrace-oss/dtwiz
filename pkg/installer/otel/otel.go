@@ -218,12 +218,12 @@ func applyGrailRoutes(grailC grailRouteClient, grailPlans []grailSignalPlan) {
 	for i, p := range grailPlans {
 		applyErrs[i] = applyGrailPlan(context.Background(), grailC, p)
 	}
-	printGrailApplyResults(grailPlans, applyErrs)
 	validations := grailRouteValidations(grailPlans, applyErrs)
-	if err := waitForGrailRoutesAppliedFn(context.Background(), grailC, validations, time.Sleep); err != nil {
-		logger.Debug("OpenPipeline routes were not visible after apply", "error", err)
-		fmt.Printf("  Warning: OpenPipeline route validation failed: %v\n", err)
+	validationErr := waitForGrailRoutesAppliedFn(context.Background(), grailC, validations, time.Sleep)
+	if validationErr != nil {
+		logger.Debug("OpenPipeline routes were not visible after apply", "error", validationErr)
 	}
+	printGrailApplyResults(grailPlans, grailApplyErrsWithValidation(grailPlans, applyErrs, validationErr))
 }
 
 type InstrumentationPlan interface {

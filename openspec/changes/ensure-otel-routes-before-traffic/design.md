@@ -1,3 +1,5 @@
+# Design: Ensure OTel Routes Before Traffic
+
 ## Context
 
 `dtwiz install otel` currently builds a route preview before confirmation, activates the OpenTelemetry Host Monitoring extension after confirmation, starts the collector, optionally verifies it with a synthetic OTLP log, optionally starts application instrumentation, and only then applies OpenPipeline dynamic routes. The logs route matcher requires host attributes and sends matching OTLP logs into the OTel Host Monitoring pipeline. If a first-run verification log is emitted before the route exists, the verification still proves ingestion but not host-monitoring assignment.

@@ -1,3 +1,5 @@
+# Proposal: Ensure OTel Routes Before Traffic
+
 ## Why
 
 `dtwiz install otel` can send its collector verification log before the OpenPipeline dynamic routes for OTel Host Monitoring are applied. On a first install, that log can be ingested before host-monitoring routing is ready, so it may not be associated with the host entity it came from.

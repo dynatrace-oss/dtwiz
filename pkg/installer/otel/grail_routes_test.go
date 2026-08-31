@@ -582,6 +582,28 @@ func TestWaitForGrailRoutesApplied_TimesOutWhenRouteNotVisible(t *testing.T) {
 	}
 }
 
+func TestGrailApplyErrsWithValidation_MarksOnlyFailedSignals(t *testing.T) {
+	plans := []grailSignalPlan{
+		{signal: grailSignals[0], action: grailActionCreate},
+		{signal: grailSignals[1], action: grailActionCreate},
+		{signal: grailSignals[2], action: grailActionCreate},
+	}
+	applyErrs := make([]error, len(plans))
+	validationErr := &grailRouteValidationError{signalErrors: map[string]error{grailSignals[1].name: nil}}
+
+	finalErrs := grailApplyErrsWithValidation(plans, applyErrs, validationErr)
+
+	if finalErrs[0] != nil {
+		t.Fatalf("metrics error = %v, want nil", finalErrs[0])
+	}
+	if finalErrs[1] == nil || !strings.Contains(finalErrs[1].Error(), "route validation failed") {
+		t.Fatalf("logs error = %v, want validation failure", finalErrs[1])
+	}
+	if finalErrs[2] != nil {
+		t.Fatalf("spans error = %v, want nil", finalErrs[2])
+	}
+}
+
 // TestBuildGrailPlans_RoutingObjectAbsent verifies that when checkPipeline
 // succeeds but the routing singleton is absent, the signal still plans as create
 // with an empty routingObjID (to be POST-created on apply).

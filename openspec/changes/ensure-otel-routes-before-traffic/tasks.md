@@ -1,3 +1,5 @@
+# Tasks: Ensure OTel Routes Before Traffic
+
 ## 1. OpenSpec Artifacts
 
 - [x] 1.1 Create proposal, design, and delta spec for ordering route setup before OTel install telemetry.

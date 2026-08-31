@@ -93,6 +93,37 @@ type grailRouteValidation struct {
 	pipelineObjID string
 }
 
+type grailRouteValidationError struct {
+	signalErrors map[string]error
+}
+
+func (e *grailRouteValidationError) Error() string {
+	if e == nil || len(e.signalErrors) == 0 {
+		return "routes not visible as enabled"
+	}
+	signals := make([]string, 0, len(e.signalErrors))
+	for _, sig := range grailSignals {
+		if _, ok := e.signalErrors[sig.name]; ok {
+			signals = append(signals, sig.name)
+		}
+	}
+	return fmt.Sprintf("routes not visible as enabled: %s", strings.Join(signals, ", "))
+}
+
+func (e *grailRouteValidationError) signalError(signal string) error {
+	if e == nil {
+		return nil
+	}
+	cause, ok := e.signalErrors[signal]
+	if !ok {
+		return nil
+	}
+	if cause != nil {
+		return fmt.Errorf("route validation failed: %w", cause)
+	}
+	return fmt.Errorf("route validation failed: not visible as enabled")
+}
+
 // grailRouteClient abstracts the Dynatrace API calls needed for route
 // reconciliation. The interface exists for unit-test injection.
 type grailRouteClient interface {
@@ -336,6 +367,26 @@ func grailRouteValidations(plans []grailSignalPlan, errs []error) []grailRouteVa
 	return validations
 }
 
+func grailApplyErrsWithValidation(plans []grailSignalPlan, applyErrs []error, validationErr error) []error {
+	finalErrs := make([]error, len(plans))
+	copy(finalErrs, applyErrs)
+	if validationErr == nil {
+		return finalErrs
+	}
+	validation, ok := validationErr.(*grailRouteValidationError)
+	for i, p := range plans {
+		if finalErrs[i] != nil || p.action == grailActionSkip {
+			continue
+		}
+		if ok {
+			finalErrs[i] = validation.signalError(p.signal.name)
+		} else {
+			finalErrs[i] = fmt.Errorf("route validation failed: %w", validationErr)
+		}
+	}
+	return finalErrs
+}
+
 var waitForGrailRoutesAppliedFn = waitForGrailRoutesApplied
 
 func waitForGrailRoutesApplied(ctx context.Context, c grailRouteClient, validations []grailRouteValidation, sleeper func(time.Duration)) error {
@@ -349,19 +400,20 @@ func waitForGrailRoutesApplied(ctx context.Context, c grailRouteClient, validati
 			logger.Debug("OpenPipeline routes not yet visible after apply, polling", "attempt", attempt)
 		},
 	}, func() error {
-		missing := make([]string, 0)
+		signalErrs := map[string]error{}
 		for _, validation := range validations {
 			_, _, entries, err := c.getRoutingEntries(ctx, validation.signal.routingSchema)
 			if err != nil {
-				return fmt.Errorf("validate %s route: %w", validation.signal.name, err)
+				signalErrs[validation.signal.name] = fmt.Errorf("read route: %w", err)
+				continue
 			}
 			found, _, enabled := findRoutingEntry(entries, validation.pipelineObjID)
 			if !found || !enabled {
-				missing = append(missing, validation.signal.name)
+				signalErrs[validation.signal.name] = nil
 			}
 		}
-		if len(missing) > 0 {
-			return fmt.Errorf("routes not visible as enabled: %s", strings.Join(missing, ", "))
+		if len(signalErrs) > 0 {
+			return &grailRouteValidationError{signalErrors: signalErrs}
 		}
 		return nil
 	})

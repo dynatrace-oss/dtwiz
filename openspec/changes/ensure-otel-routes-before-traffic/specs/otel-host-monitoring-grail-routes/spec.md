@@ -1,8 +1,10 @@
+# Spec: OTel Host Monitoring Grail Routes
+
 ## MODIFIED Requirements
 
 ### Requirement: Dynamic routes for Smartscape on Grail are set up before OTel install telemetry is emitted
 
-When an OTel install flow has the tenant credentials needed to manage OpenPipeline routes, it SHALL attempt to set up the OpenTelemetry Host Monitoring dynamic routes after the user confirms and before the install emits verification telemetry or starts selected application instrumentation. Before telemetry is emitted, the install SHALL validate, with a bounded wait, that routes successfully applied by the install are visible as enabled. Route setup and validation failures SHALL remain advisory: the user is warned and the install continues.
+When an OTel install flow has the tenant credentials needed to manage OpenPipeline routes, it SHALL attempt to set up the OpenTelemetry Host Monitoring dynamic routes after the user confirms and before the install emits verification telemetry or starts selected application instrumentation. Before telemetry is emitted, the install SHALL validate, with a bounded wait, that routes successfully applied by the install are visible as enabled. Final route status output SHALL be printed after validation, so successful create or re-enable messages are only shown after the corresponding route is visible as enabled. Route setup and validation failures SHALL remain advisory: the user is warned and the install continues.
 
 #### Scenario: Collector-only install sends verification after routes are applied
 
@@ -27,7 +29,7 @@ When an OTel install flow has the tenant credentials needed to manage OpenPipeli
 - **GIVEN** a route create or re-enable operation succeeds
 - **AND** the route is not visible as enabled before the bounded validation wait ends
 - **WHEN** the install validates route setup
-- **THEN** the user sees a warning that route validation failed
+- **THEN** the final route status output shows a warning for the affected signal instead of a successful create or re-enable message
 - **AND** the collector install continues
 - **AND** verification or selected application instrumentation proceeds after the warning
 
