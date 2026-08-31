@@ -1,3 +1,5 @@
+# Spec: Setup Recommendations (delta)
+
 ## ADDED Requirements
 
 ### Requirement: Each recommendation entry shows inline detection context

@@ -84,7 +84,7 @@ func hostDetectionInfo(system *analyzer.SystemInfo) string {
 		for _, t := range system.ProjectTechs {
 			parts = append(parts, fmt.Sprintf("%s (%s)", t.Name, t.Path))
 		}
-		info += " · " + strings.Join(parts, ", ")
+		info += " · " + strings.Join(parts, " · ")
 	}
 	return info
 }
@@ -390,6 +390,13 @@ func FormatSetupMenu(recs []Recommendation, demoRunning bool, experimental bool)
 	for _, r := range recs {
 		if r.Done {
 			sb.WriteString(fmt.Sprintf("  %s  %s\n", recBadgeDone.Sprint(" ✓ "), recTitleDone.Sprint(r.Title)))
+			ctx := r.DetectionInfo
+			if ctx == "" {
+				ctx = r.Description
+			}
+			if ctx != "" {
+				sb.WriteString(fmt.Sprintf("         %s\n", recFaint.Sprint(ctx)))
+			}
 		}
 	}
 

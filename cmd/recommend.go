@@ -26,9 +26,15 @@ var recommendCmd = &cobra.Command{
 		recs := recommender.GenerateRecommendations(info)
 
 		if recommendJSON {
+			var available []recommender.Recommendation
+			for _, r := range recs {
+				if !r.Unavailable {
+					available = append(available, r)
+				}
+			}
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
-			return enc.Encode(recs)
+			return enc.Encode(available)
 		}
 
 		fmt.Println(recommender.FormatRecommendations(recs))

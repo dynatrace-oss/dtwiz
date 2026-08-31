@@ -397,3 +397,197 @@ func TestGenerateRecommendations_macOSGetsOtel(t *testing.T) {
 		t.Error("expected otel-collector recommendation on macOS")
 	}
 }
+
+func TestGenerateRecommendations_UnavailableEntriesPresent(t *testing.T) {
+	system := &analyzer.SystemInfo{
+		Platform:         analyzer.PlatformDarwin,
+		ContainerRuntime: analyzer.ContainerRuntimeNone,
+		Orchestrator:     analyzer.OrchestratorNone,
+	}
+	recs := recommender.GenerateRecommendations(system)
+
+	methods := map[recommender.IngestMethod]bool{}
+	for _, r := range recs {
+		if r.Unavailable {
+			methods[r.Method] = true
+		}
+	}
+	for _, want := range []recommender.IngestMethod{
+		recommender.MethodKubernetes,
+		recommender.MethodAWS,
+		recommender.MethodAzure,
+		recommender.MethodGCP,
+	} {
+		if !methods[want] {
+			t.Errorf("expected unavailable entry for %s", want)
+		}
+	}
+}
+
+func TestGenerateRecommendations_DetectedProviderNotUnavailable(t *testing.T) {
+	system := &analyzer.SystemInfo{
+		Platform:         analyzer.PlatformLinux,
+		ContainerRuntime: analyzer.ContainerRuntimeNone,
+		Orchestrator:     analyzer.OrchestratorKubernetes,
+		Kubernetes:       &analyzer.KubernetesInfo{Available: true, Distribution: "GKE"},
+	}
+	recs := recommender.GenerateRecommendations(system)
+	for _, r := range recs {
+		if r.Method == recommender.MethodKubernetes && r.Unavailable {
+			t.Error("detected Kubernetes should not produce an unavailable entry")
+		}
+	}
+}
+
+func TestGenerateRecommendations_HostDetectionInfoContainsDots(t *testing.T) {
+	system := &analyzer.SystemInfo{
+		Platform:     analyzer.PlatformDarwin,
+		Arch:         "arm64",
+		Hostname:     "myhost",
+		Orchestrator: analyzer.OrchestratorNone,
+		ProjectTechs: []analyzer.ProjectTech{
+			{Name: "Go", Path: "~/Code/dtwiz/go.mod"},
+			{Name: "Node.js", Path: "~/Code/dtwiz/package.json"},
+		},
+	}
+	recs := recommender.GenerateRecommendations(system)
+	for _, r := range recs {
+		if r.Method == recommender.MethodOtelCollector {
+			if !strings.Contains(r.DetectionInfo, " · ") {
+				t.Errorf("DetectionInfo should use · as separator between host and techs: %q", r.DetectionInfo)
+			}
+			if !strings.Contains(r.DetectionInfo, "Go") || !strings.Contains(r.DetectionInfo, "Node.js") {
+				t.Errorf("DetectionInfo should contain tech names: %q", r.DetectionInfo)
+			}
+			return
+		}
+	}
+	t.Error("no OtelCollector recommendation found")
+}
+
+func TestActionableItems_ExcludesDoneAndUnavailable(t *testing.T) {
+	recs := []recommender.Recommendation{
+		{Method: recommender.MethodAlreadyInstalled, Done: true},
+		{Method: recommender.MethodOtelCollector},
+		{Method: recommender.MethodKubernetes, Unavailable: true},
+	}
+	actionable := recommender.ActionableItems(recs, false)
+	if len(actionable) != 1 {
+		t.Errorf("expected 1 actionable item, got %d", len(actionable))
+	}
+	if actionable[0].Method != recommender.MethodOtelCollector {
+		t.Errorf("expected MethodOtelCollector, got %s", actionable[0].Method)
+	}
+}
+
+func TestActionableItems_ExcludesExperimentalWithoutFlag(t *testing.T) {
+	recs := []recommender.Recommendation{
+		{Method: recommender.MethodOtelCollector},
+		{Method: recommender.MethodDocker},
+	}
+	actionable := recommender.ActionableItems(recs, false)
+	for _, r := range actionable {
+		if r.Method == recommender.MethodDocker {
+			t.Error("Docker should be excluded when experimental=false")
+		}
+	}
+}
+
+func TestActionableItems_IncludesExperimentalWithFlag(t *testing.T) {
+	recs := []recommender.Recommendation{
+		{Method: recommender.MethodOtelCollector},
+		{Method: recommender.MethodDocker},
+	}
+	actionable := recommender.ActionableItems(recs, true)
+	found := false
+	for _, r := range actionable {
+		if r.Method == recommender.MethodDocker {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("Docker should be included when experimental=true")
+	}
+}
+
+func TestFormatSetupMenu_NumberedItemsAndUnavailableSection(t *testing.T) {
+	origNoColor := color.NoColor
+	color.NoColor = true
+	t.Cleanup(func() { color.NoColor = origNoColor })
+
+	recs := []recommender.Recommendation{
+		{Method: recommender.MethodOtelCollector, Title: "OTel Collector", DetectionInfo: "myhost (macOS arm64)"},
+		{Method: recommender.MethodKubernetes, Title: "Kubernetes cluster", Unavailable: true, ShortTitle: "Kubernetes", UnlockCommand: "kubectl config use-context <name>"},
+		{Method: recommender.MethodAWS, Title: "AWS cloud services", Unavailable: true, ShortTitle: "AWS", UnlockCommand: "aws configure"},
+	}
+	result := recommender.FormatSetupMenu(recs, false, false)
+
+	if !strings.Contains(result, "[1]") {
+		t.Error("expected numbered entry [1] in setup menu")
+	}
+	if !strings.Contains(result, "myhost (macOS arm64)") {
+		t.Error("expected detection info on numbered entry")
+	}
+	if !strings.Contains(result, "Sign in to unlock") {
+		t.Error("expected 'Sign in to unlock' section for unavailable entries")
+	}
+	if !strings.Contains(result, "kubectl config use-context <name>") {
+		t.Error("expected Kubernetes unlock command in unavailable section")
+	}
+	if !strings.Contains(result, "aws configure") {
+		t.Error("expected AWS unlock command in unavailable section")
+	}
+}
+
+func TestFormatSetupMenu_DoneEntryShowsContext(t *testing.T) {
+	origNoColor := color.NoColor
+	color.NoColor = true
+	t.Cleanup(func() { color.NoColor = origNoColor })
+
+	recs := []recommender.Recommendation{
+		{Method: recommender.MethodAlreadyInstalled, Title: "OneAgent running", Done: true, Description: "OneAgent is detected on this host."},
+		{Method: recommender.MethodOtelCollector, Title: "OTel Collector"},
+	}
+	result := recommender.FormatSetupMenu(recs, false, false)
+
+	if !strings.Contains(result, "✓") {
+		t.Error("expected ✓ badge for done entry")
+	}
+	if !strings.Contains(result, "OneAgent is detected on this host.") {
+		t.Error("expected description shown as context for done entry when DetectionInfo is empty")
+	}
+}
+
+func TestFormatSetupMenu_NoUnavailableSectionWhenAllDetected(t *testing.T) {
+	origNoColor := color.NoColor
+	color.NoColor = true
+	t.Cleanup(func() { color.NoColor = origNoColor })
+
+	recs := []recommender.Recommendation{
+		{Method: recommender.MethodOtelCollector, Title: "OTel Collector"},
+	}
+	result := recommender.FormatSetupMenu(recs, false, false)
+
+	if strings.Contains(result, "Sign in to unlock") {
+		t.Error("should not show 'Sign in to unlock' when there are no unavailable entries")
+	}
+}
+
+func TestFormatRecommendations_SkipsUnavailableInJSON(t *testing.T) {
+	system := &analyzer.SystemInfo{
+		Platform:         analyzer.PlatformDarwin,
+		ContainerRuntime: analyzer.ContainerRuntimeNone,
+		Orchestrator:     analyzer.OrchestratorNone,
+	}
+	recs := recommender.GenerateRecommendations(system)
+	for _, r := range recs {
+		if r.Unavailable {
+			// FormatRecommendations (text) must skip unavailable.
+			result := recommender.FormatRecommendations(recs)
+			if strings.Contains(result, r.ShortTitle+" ") && strings.Contains(result, r.UnlockCommand) {
+				t.Errorf("FormatRecommendations should not render unavailable entry for %s", r.ShortTitle)
+			}
+			return
+		}
+	}
+}

@@ -1,3 +1,5 @@
+# Proposal: Combine System Analysis and Recommendation Menu
+
 ## Why
 
 `dtwiz setup` shows a verbose "System Analysis" block followed immediately by a

@@ -63,13 +63,19 @@ func detectProject() (dir string, techs []ProjectTech) {
 }
 
 // shortenPath replaces the home directory prefix with ~.
+// Uses filepath.Rel to avoid false matches on sibling directories
+// (e.g. /home/alice vs /home/alice2) and to handle separator differences.
 func shortenPath(path string) string {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		return path
 	}
-	if strings.HasPrefix(path, home) {
-		return "~" + path[len(home):]
+	rel, err := filepath.Rel(home, path)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return path
 	}
-	return path
+	if rel == "." {
+		return "~"
+	}
+	return "~" + string(filepath.Separator) + rel
 }

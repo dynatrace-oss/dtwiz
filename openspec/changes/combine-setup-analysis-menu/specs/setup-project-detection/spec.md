@@ -1,3 +1,5 @@
+# Spec: Setup Project Detection
+
 ## ADDED Requirements
 
 ### Requirement: Project tech stack is detected from the current working directory

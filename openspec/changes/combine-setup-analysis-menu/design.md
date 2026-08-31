@@ -1,3 +1,5 @@
+# Design: Combine System Analysis and Recommendation Menu
+
 ## Context
 
 `dtwiz setup` runs in three phases: analyze → recommend → install. Currently it prints
@@ -41,6 +43,7 @@ than as a separate preceding block.
 the renderer reads typed fields.
 
 **Alternatives considered:**
+
 - Parse detection context from `SystemInfo` inside `cmd/setup.go` — rejected because it
   puts analyzer-layer knowledge into the cmd layer and creates an implicit contract
   between two packages.
@@ -56,6 +59,7 @@ whether and how to show them; `FormatRecommendations` (used by `dtwiz recommend`
 them.
 
 **Alternatives considered:**
+
 - Compute unavailable entries only inside `FormatSetupMenu` — rejected because it
   mixes recommendation logic with rendering logic.
 - Expose a separate `GenerateUnavailable(system)` function — rejected as unnecessary
@@ -68,6 +72,7 @@ them.
 is also added to the recommender so the cmd layer does not duplicate the filtering logic.
 
 **Alternatives considered:**
+
 - Keep rendering inline in `cmd/setup.go` — the rendering loop is short enough that
   inline is defensible, but moving it to the recommender keeps `setup.go` as thin
   orchestration and makes the rendering testable without invoking a Cobra command.

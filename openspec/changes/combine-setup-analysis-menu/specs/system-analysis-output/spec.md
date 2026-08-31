@@ -1,3 +1,5 @@
+# Spec: System Analysis Output (delta)
+
 ## MODIFIED Requirements
 
 ### Requirement: The System Analysis block is printed only by `dtwiz analyze` and `dtwiz status`

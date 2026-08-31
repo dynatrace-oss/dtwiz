@@ -1,3 +1,5 @@
+# Tasks: Combine System Analysis and Recommendation Menu
+
 ## 1. Analyzer — Project Tech Detection
 
 - [ ] 1.1 Add `ProjectTech` struct (`Name`, `Path` string fields with json tags) to `pkg/analyzer/analyzer.go`
