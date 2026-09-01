@@ -696,6 +696,41 @@ func stubExtensionPreview(t *testing.T) {
 	t.Cleanup(func() { buildExtensionActivationPreviewFn = orig })
 }
 
+func stubRoutePreview(t *testing.T) *fakeGrailClient {
+	t.Helper()
+	fake := happyFakeClient()
+	orig := buildGrailRoutePlansFn
+	buildGrailRoutePlansFn = func(_, _ string) (grailRouteClient, []grailSignalPlan, error) {
+		plans, err := buildGrailPlans(context.Background(), fake)
+		return fake, plans, err
+	}
+	t.Cleanup(func() { buildGrailRoutePlansFn = orig })
+	return fake
+}
+
+func routeWriteCount(fake *fakeGrailClient) int {
+	return len(fake.putCalls) + len(fake.createCalls)
+}
+
+func setupAutoConfirmedTempInstall(t *testing.T) string {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	t.Setenv("USERPROFILE", tmpDir)
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("os.Chdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	origAC := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = origAC })
+
+	return tmpDir
+}
+
 func TestPrintExtensionActivationPreview(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -714,6 +749,108 @@ func TestPrintExtensionActivationPreview(t *testing.T) {
 				t.Fatalf("printExtensionActivationPreview() output = %q, want %q", out, tt.want)
 			}
 		})
+	}
+}
+
+func TestInstallOtelCollector_RoutesBeforeCollectorVerification(t *testing.T) {
+	stubExtensionPreview(t)
+	stubActivation(t)
+	fakeRoutes := stubRoutePreview(t)
+	setupAutoConfirmedTempInstall(t)
+
+	origExecute := executeCollectorPlanFn
+	executeCollectorPlanFn = func(_ *collectorPlan, _, _ string, skipVerification bool) error {
+		if skipVerification {
+			t.Fatal("expected collector-only install to run verification")
+		}
+		if got, want := routeWriteCount(fakeRoutes), len(grailSignals); got != want {
+			t.Fatalf("route writes before collector verification = %d, want %d", got, want)
+		}
+		return nil
+	}
+	t.Cleanup(func() { executeCollectorPlanFn = origExecute })
+
+	if err := InstallOtelCollector("https://env.example.com", "tok", "dt0s16.test", false); err != nil {
+		t.Fatalf("InstallOtelCollector() error = %v", err)
+	}
+}
+
+type recordingInstrumentationPlan struct {
+	routeWrites func() int
+	executed    bool
+}
+
+func (p *recordingInstrumentationPlan) Runtime() string { return "Node.js" }
+
+func (p *recordingInstrumentationPlan) PrintPlanSteps() {}
+
+func (p *recordingInstrumentationPlan) Execute() error {
+	p.executed = true
+	if got, want := p.routeWrites(), len(grailSignals); got != want {
+		return fmt.Errorf("route writes before app instrumentation = %d, want %d", got, want)
+	}
+	return nil
+}
+
+func TestInstallOtelCollectorWithProject_RoutesBeforeCollectorAndApp(t *testing.T) {
+	stubExtensionPreview(t)
+	stubActivation(t)
+	fakeRoutes := stubRoutePreview(t)
+	tmpDir := setupAutoConfirmedTempInstall(t)
+
+	projectDir := filepath.Join(tmpDir, "app")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(projectDir, "package.json"), []byte(`{"scripts":{"start":"node server.js"}}`), 0o600); err != nil {
+		t.Fatalf("os.WriteFile package.json: %v", err)
+	}
+
+	plan := &recordingInstrumentationPlan{routeWrites: func() int { return routeWriteCount(fakeRoutes) }}
+	origCreatePlan := createRuntimePlanFn
+	createRuntimePlanFn = func(_ detectedProject, _ int, _, _, _ string) InstrumentationPlan { return plan }
+	t.Cleanup(func() { createRuntimePlanFn = origCreatePlan })
+
+	origExecute := executeCollectorPlanFn
+	executeCollectorPlanFn = func(_ *collectorPlan, _, _ string, skipVerification bool) error {
+		if !skipVerification {
+			t.Fatal("expected project install to skip collector verification")
+		}
+		if got, want := routeWriteCount(fakeRoutes), len(grailSignals); got != want {
+			t.Fatalf("route writes before collector execution = %d, want %d", got, want)
+		}
+		return nil
+	}
+	t.Cleanup(func() { executeCollectorPlanFn = origExecute })
+
+	if err := InstallOtelCollectorWithProject("https://env.example.com", "tok", "dt0s16.test", projectDir, false); err != nil {
+		t.Fatalf("InstallOtelCollectorWithProject() error = %v", err)
+	}
+	if !plan.executed {
+		t.Fatal("expected instrumentation plan to execute")
+	}
+}
+
+func TestInstallOtelCollectorOnly_RoutesBeforeVerification(t *testing.T) {
+	stubExtensionPreview(t)
+	stubActivation(t)
+	fakeRoutes := stubRoutePreview(t)
+	setupAutoConfirmedTempInstall(t)
+
+	origExecute := executeCollectorPlanFn
+	executeCollectorPlanFn = func(_ *collectorPlan, _, _ string, skipVerification bool) error {
+		if skipVerification {
+			t.Fatal("expected standalone collector install to run verification")
+		}
+		if got, want := routeWriteCount(fakeRoutes), len(grailSignals); got != want {
+			t.Fatalf("route writes before standalone verification = %d, want %d", got, want)
+		}
+		return nil
+	}
+	t.Cleanup(func() { executeCollectorPlanFn = origExecute })
+
+	if err := InstallOtelCollectorOnly("https://env.example.com", "tok", "dt0s16.test", false); err != nil {
+		t.Fatalf("InstallOtelCollectorOnly() error = %v", err)
 	}
 }
 

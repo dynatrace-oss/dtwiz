@@ -1009,6 +1009,10 @@ func (cp *collectorPlan) execute(envURL, platformToken string, skipVerification 
 	return nil
 }
 
+var executeCollectorPlanFn = func(cp *collectorPlan, envURL, platformToken string, skipVerification bool) error {
+	return cp.execute(envURL, platformToken, skipVerification)
+}
+
 // InstallOtelCollectorOnly installs the Dynatrace OTel Collector without
 // runtime instrumentation.
 func InstallOtelCollectorOnly(envURL, token, platformToken string, dryRun bool) error {
@@ -1058,12 +1062,11 @@ func InstallOtelCollectorOnly(envURL, token, platformToken string, dryRun bool) 
 	if platformToken != "" {
 		activateHostMonitoringExtensionFn(envURL, platformToken)
 	}
+	applyAndValidateGrailRoutes(grailC, grailPlans)
 
-	if err := cp.execute(envURL, platformToken, false); err != nil {
+	if err := executeCollectorPlanFn(cp, envURL, platformToken, false /* skipVerification */); err != nil {
 		return err
 	}
-
-	applyGrailRoutes(grailC, grailPlans)
 
 	return nil
 }

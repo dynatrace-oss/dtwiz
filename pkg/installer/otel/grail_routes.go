@@ -4,6 +4,7 @@ package otel
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -86,6 +87,42 @@ type grailSignalPlan struct {
 	schemaVersion string         // If-Match value
 	entries       []routingEntry // current routing entries (snapshot at plan time)
 	entryIdx      int            // index in entries of the matching entry (ReEnable only); -1 otherwise
+}
+
+type grailRouteValidation struct {
+	signal        grailSignal
+	pipelineObjID string
+}
+
+type grailRouteValidationError struct {
+	signalErrors map[string]error
+}
+
+func (e *grailRouteValidationError) Error() string {
+	if e == nil || len(e.signalErrors) == 0 {
+		return "routes not visible as enabled"
+	}
+	signals := make([]string, 0, len(e.signalErrors))
+	for _, sig := range grailSignals {
+		if _, ok := e.signalErrors[sig.name]; ok {
+			signals = append(signals, sig.name)
+		}
+	}
+	return fmt.Sprintf("routes not visible as enabled: %s", strings.Join(signals, ", "))
+}
+
+func (e *grailRouteValidationError) signalError(signal string) error {
+	if e == nil {
+		return nil
+	}
+	cause, ok := e.signalErrors[signal]
+	if !ok {
+		return nil
+	}
+	if cause != nil {
+		return fmt.Errorf("route validation inconclusive - route write succeeded, but visibility could not be read yet; it may become active shortly: %w", cause)
+	}
+	return fmt.Errorf("route validation inconclusive - route write succeeded, but the route was not visible as enabled before timeout; it may become active shortly")
 }
 
 // grailRouteClient abstracts the Dynatrace API calls needed for route
@@ -189,10 +226,19 @@ func (c *sdkGrailClient) createRoutingObject(ctx context.Context, schemaID strin
 }
 
 func findRoutingEntry(entries []routingEntry, pipelineID string) (found bool, idx int, enabled bool) {
+	firstDisabledIdx := -1
 	for i, e := range entries {
 		if e.PipelineID == pipelineID {
-			return true, i, e.Enabled
+			if e.Enabled {
+				return true, i, true
+			}
+			if firstDisabledIdx == -1 {
+				firstDisabledIdx = i
+			}
 		}
+	}
+	if firstDisabledIdx != -1 {
+		return true, firstDisabledIdx, false
 	}
 	return false, -1, false
 }
@@ -315,6 +361,100 @@ func printGrailApplyResults(plans []grailSignalPlan, errs []error) {
 		display.PrintStatusLine(p.signal.displayName, msg, colorFn)
 	}
 	fmt.Println()
+}
+
+func grailRouteValidations(plans []grailSignalPlan, errs []error) []grailRouteValidation {
+	validations := make([]grailRouteValidation, 0, len(plans))
+	skipped := make([]string, 0, len(plans))
+	for i, p := range plans {
+		if p.action == grailActionSkip || p.pipelineObjID == "" {
+			skipped = append(skipped, p.signal.name+":skip")
+			continue
+		}
+		if p.action == grailActionNoop {
+			skipped = append(skipped, p.signal.name+":already-visible")
+			continue
+		}
+		if i < len(errs) && errs[i] != nil {
+			skipped = append(skipped, p.signal.name+":setup-error")
+			continue
+		}
+		validations = append(validations, grailRouteValidation{signal: p.signal, pipelineObjID: p.pipelineObjID})
+	}
+	validated := make([]string, 0, len(validations))
+	for _, validation := range validations {
+		validated = append(validated, validation.signal.name)
+	}
+	logger.Debug("prepared Grail route validations", "validatedSignals", validated, "skippedSignals", skipped)
+	return validations
+}
+
+func grailApplyErrsWithValidation(plans []grailSignalPlan, applyErrs []error, validationErr error) []error {
+	finalErrs := make([]error, len(plans))
+	for i, err := range applyErrs {
+		if err != nil {
+			finalErrs[i] = fmt.Errorf("route setup failed: %w", err)
+		}
+	}
+	if validationErr == nil {
+		return finalErrs
+	}
+	var validation *grailRouteValidationError
+	ok := errors.As(validationErr, &validation)
+	for i, p := range plans {
+		if finalErrs[i] != nil || p.action == grailActionSkip {
+			continue
+		}
+		if ok {
+			finalErrs[i] = validation.signalError(p.signal.name)
+		} else {
+			finalErrs[i] = fmt.Errorf("route validation failed: %w", validationErr)
+		}
+	}
+	return finalErrs
+}
+
+var waitForGrailRoutesAppliedFn = waitForGrailRoutesApplied
+
+func waitForGrailRoutesApplied(ctx context.Context, c grailRouteClient, validations []grailRouteValidation, sleeper func(time.Duration)) error {
+	if len(validations) == 0 {
+		logger.Debug("no Grail route validations required")
+		return nil
+	}
+	attempt := 0
+	return installer.Retry(sleeper, installer.RetryConfig{
+		MaxAttempts: installer.ExtensionActiveMaxAttempts,
+		Delay:       func(int) time.Duration { return installer.ExtensionActiveRetryDelay },
+		OnRetry: func(attempt int, _ time.Duration, _ error) {
+			logger.Debug("OpenPipeline routes not yet visible after apply, polling", "attempt", attempt)
+		},
+	}, func() error {
+		attempt++
+		signalErrs := map[string]error{}
+		missingSignals := make([]string, 0, len(validations))
+		readFailedSignals := make([]string, 0, len(validations))
+		for _, validation := range validations {
+			_, _, entries, err := c.getRoutingEntries(ctx, validation.signal.routingSchema)
+			if err != nil {
+				signalErrs[validation.signal.name] = fmt.Errorf("read route: %w", err)
+				readFailedSignals = append(readFailedSignals, validation.signal.name)
+				continue
+			}
+			found, _, enabled := findRoutingEntry(entries, validation.pipelineObjID)
+			if !found || !enabled {
+				signalErrs[validation.signal.name] = nil
+				missingSignals = append(missingSignals, validation.signal.name)
+			}
+		}
+		if len(signalErrs) > 0 {
+			logger.Debug("Grail route validation attempt incomplete", "attempt", attempt, "missingSignals", missingSignals, "readFailedSignals", readFailedSignals)
+		}
+		if len(signalErrs) > 0 {
+			return &grailRouteValidationError{signalErrors: signalErrs}
+		}
+		logger.Debug("Grail route validation succeeded", "attempt", attempt, "validatedSignals", len(validations))
+		return nil
+	})
 }
 
 // grailPreviewMessage is shown before extension activation runs, so a skip here is never

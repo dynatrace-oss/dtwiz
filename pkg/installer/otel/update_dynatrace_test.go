@@ -156,6 +156,18 @@ func stubWaitForPipelines(t *testing.T) *bool {
 	return &called
 }
 
+func stubWaitForRouteValidation(t *testing.T) *bool {
+	t.Helper()
+	called := false
+	orig := waitForGrailRoutesAppliedFn
+	t.Cleanup(func() { waitForGrailRoutesAppliedFn = orig })
+	waitForGrailRoutesAppliedFn = func(_ context.Context, _ grailRouteClient, _ []grailRouteValidation, _ func(time.Duration)) error {
+		called = true
+		return nil
+	}
+	return &called
+}
+
 func runUpdateDynatrace(t *testing.T, configPath, platformTok string, dryRun bool) error {
 	t.Helper()
 	return updateDynatraceCollector(configPath, nil, "https://env.example.com", "tok", platformTok, dryRun)
@@ -305,6 +317,29 @@ func TestUpdateDynatraceCollector_ConfigUpToDate_StillRunsPrerequisites(t *testi
 	}
 	if len(fc.putCalls)+len(fc.createCalls) == 0 {
 		t.Error("expected applyGrailPlan to make route calls even when config is up to date")
+	}
+}
+
+func TestUpdateDynatraceCollector_DoesNotWaitForRouteValidation(t *testing.T) {
+	configPath := writeDynatraceConfig(t)
+	stubDynatraceExtensionPreview(t)
+	stubGrailRoutePlans(t)
+	stubActivation(t)
+	stubWaitForPipelines(t)
+	validationCalled := stubWaitForRouteValidation(t)
+
+	origAC := installer.AutoConfirm
+	installer.AutoConfirm = true
+	t.Cleanup(func() { installer.AutoConfirm = origAC })
+
+	captureUpdateOutput(t, func() {
+		if err := runUpdateDynatrace(t, configPath, "dt0s16.test", false /* not dryRun */); err != nil {
+			t.Fatalf("runUpdateDynatrace() error = %v", err)
+		}
+	})
+
+	if *validationCalled {
+		t.Fatal("expected updateDynatraceCollector not to wait for Grail route validation")
 	}
 }
 

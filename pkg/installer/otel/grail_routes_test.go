@@ -72,11 +72,30 @@ func (f *fakeGrailClient) getRoutingEntries(_ context.Context, schemaID string) 
 
 func (f *fakeGrailClient) putRoutingEntries(_ context.Context, objectID, schemaVersion string, entries []routingEntry) error {
 	f.putCalls = append(f.putCalls, putCall{objectID: objectID, schemaVersion: schemaVersion, entries: entries})
-	return f.putErr
+	if f.putErr != nil {
+		return f.putErr
+	}
+	if f.routing != nil {
+		for schemaID, obj := range f.routing {
+			if obj.objectID == objectID {
+				obj.schemaVersion = schemaVersion
+				obj.entries = entries
+				f.routing[schemaID] = obj
+				break
+			}
+		}
+	}
+	return nil
 }
 
 func (f *fakeGrailClient) createRoutingObject(_ context.Context, schemaID string, entries []routingEntry) error {
 	f.createCalls = append(f.createCalls, createCall{schemaID: schemaID, entries: entries})
+	if f.routing != nil {
+		f.routing[schemaID] = fakeRoutingObj{objectID: "created-" + schemaID, schemaVersion: "1", entries: entries}
+	}
+	if f.absentRouting != nil {
+		delete(f.absentRouting, schemaID)
+	}
 	return nil
 }
 
@@ -255,6 +274,24 @@ func TestBuildGrailPlans_DisabledEntry(t *testing.T) {
 	}
 	if plans[0].entryIdx != 0 {
 		t.Errorf("metrics: entryIdx = %d, want 0", plans[0].entryIdx)
+	}
+}
+
+func TestFindRoutingEntry_PrefersEnabledDuplicate(t *testing.T) {
+	entries := []routingEntry{
+		{Enabled: false, PipelineID: "pipe-1", Matcher: "old"},
+		{Enabled: true, PipelineID: "pipe-1", Matcher: "new"},
+	}
+
+	found, idx, enabled := findRoutingEntry(entries, "pipe-1")
+	if !found {
+		t.Fatal("expected to find matching entry")
+	}
+	if idx != 1 {
+		t.Fatalf("idx = %d, want 1", idx)
+	}
+	if !enabled {
+		t.Fatal("expected enabled duplicate to be preferred")
 	}
 }
 
@@ -532,6 +569,112 @@ func TestApplyGrailPlan_CreatesRoutingObjectWhenAbsent(t *testing.T) {
 	}
 	if !e.Enabled || e.PipelineType != "custom" || e.Matcher != grailMatcherMetrics || e.Description != grailPipelineName {
 		t.Errorf("created entry has unexpected fields: %+v", e)
+	}
+}
+
+func TestApplyGrailPlan_PutFailureDoesNotUpdateRoutingState(t *testing.T) {
+	c := happyFakeClient()
+	c.putErr = fmt.Errorf("simulated put failure")
+	metricsSig := grailSignals[0]
+	plan := grailSignalPlan{
+		signal:        metricsSig,
+		action:        grailActionCreate,
+		pipelineObjID: pipelineObjID(metricsSig.pipelineSchema),
+		routingObjID:  "route-obj-" + metricsSig.name,
+		schemaVersion: "1",
+		entries:       nil,
+		entryIdx:      -1,
+	}
+
+	if err := applyGrailPlan(context.Background(), c, plan); err == nil {
+		t.Fatal("expected applyGrailPlan to return put error")
+	}
+
+	_, _, entries, err := c.getRoutingEntries(context.Background(), metricsSig.routingSchema)
+	if err != nil {
+		t.Fatalf("getRoutingEntries() error = %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("routing entries after failed PUT = %d, want 0", len(entries))
+	}
+}
+
+func TestWaitForGrailRoutesApplied_ReadsBackEnabledRoutes(t *testing.T) {
+	c := happyFakeClient()
+	plans, err := buildGrailPlans(context.Background(), c)
+	if err != nil {
+		t.Fatalf("buildGrailPlans() error = %v", err)
+	}
+	applyErrs := make([]error, len(plans))
+	for i, p := range plans {
+		applyErrs[i] = applyGrailPlan(context.Background(), c, p)
+	}
+	validations := grailRouteValidations(plans, applyErrs)
+	if len(validations) != len(grailSignals) {
+		t.Fatalf("validations = %d, want %d", len(validations), len(grailSignals))
+	}
+	if err := waitForGrailRoutesApplied(context.Background(), c, validations, func(time.Duration) {}); err != nil {
+		t.Fatalf("waitForGrailRoutesApplied() error = %v", err)
+	}
+}
+
+func TestGrailRouteValidations_SkipsNoopPlans(t *testing.T) {
+	plans := []grailSignalPlan{
+		{signal: grailSignals[0], action: grailActionNoop, pipelineObjID: "pipe-metrics"},
+		{signal: grailSignals[1], action: grailActionCreate, pipelineObjID: "pipe-logs"},
+	}
+
+	validations := grailRouteValidations(plans, make([]error, len(plans)))
+	if len(validations) != 1 {
+		t.Fatalf("validations = %d, want 1", len(validations))
+	}
+	if validations[0].signal.name != grailSignals[1].name {
+		t.Fatalf("validated signal = %s, want %s", validations[0].signal.name, grailSignals[1].name)
+	}
+}
+
+func TestWaitForGrailRoutesApplied_TimesOutWhenRouteNotVisible(t *testing.T) {
+	c := happyFakeClient()
+	validations := []grailRouteValidation{{signal: grailSignals[0], pipelineObjID: pipelineObjID(grailSignals[0].pipelineSchema)}}
+	err := waitForGrailRoutesApplied(context.Background(), c, validations, func(time.Duration) {})
+	if err == nil {
+		t.Fatal("expected an error when the route never becomes visible")
+	}
+	if !strings.Contains(err.Error(), "routes not visible as enabled") {
+		t.Fatalf("error = %v, want missing route message", err)
+	}
+}
+
+func TestGrailApplyErrsWithValidation_MarksOnlyFailedSignals(t *testing.T) {
+	plans := []grailSignalPlan{
+		{signal: grailSignals[0], action: grailActionCreate},
+		{signal: grailSignals[1], action: grailActionCreate},
+		{signal: grailSignals[2], action: grailActionCreate},
+	}
+	applyErrs := make([]error, len(plans))
+	validationErr := &grailRouteValidationError{signalErrors: map[string]error{grailSignals[1].name: nil}}
+
+	finalErrs := grailApplyErrsWithValidation(plans, applyErrs, validationErr)
+
+	if finalErrs[0] != nil {
+		t.Fatalf("metrics error = %v, want nil", finalErrs[0])
+	}
+	if finalErrs[1] == nil || !strings.Contains(finalErrs[1].Error(), "route validation inconclusive") || !strings.Contains(finalErrs[1].Error(), "may become active shortly") {
+		t.Fatalf("logs error = %v, want validation failure", finalErrs[1])
+	}
+	if finalErrs[2] != nil {
+		t.Fatalf("spans error = %v, want nil", finalErrs[2])
+	}
+}
+
+func TestGrailApplyErrsWithValidation_DifferentiatesSetupFailure(t *testing.T) {
+	plans := []grailSignalPlan{{signal: grailSignals[0], action: grailActionCreate}}
+	applyErrs := []error{errors.New("settings api rejected request")}
+
+	finalErrs := grailApplyErrsWithValidation(plans, applyErrs, nil)
+
+	if finalErrs[0] == nil || !strings.Contains(finalErrs[0].Error(), "route setup failed") {
+		t.Fatalf("error = %v, want setup failure", finalErrs[0])
 	}
 }
 
