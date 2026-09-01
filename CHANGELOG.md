@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-09-01
+
+### Added
+
+- `install otel`: an info box is now shown before project selection when detected runtimes are not supported for auto-instrumentation, pointing users to the OpenTelemetry walkthroughs docs
+
+### Changed
+
+- `setup`: the separate System Analysis block is removed; detection context (hostname, OS, project tech stack from the working directory) is now shown inline on each recommendation
+- `setup`: cloud and infrastructure options not yet connected appear in a "Sign in to unlock" section with the exact command to run
+- `recommend --json`: unavailable entries are now filtered from the output
+
+### Fixed
+
+- `install otel` / `update otel`: fixed a race condition in Grail OpenPipeline dynamic route configuration that could produce incorrect route state
+- `display.PrintInfoBox`: border alignment is now correct when a box line contains an OSC 8 hyperlink; padding is measured by visible width instead of raw rune count
+
 ## [1.6.0] - 2026-08-27
 
 ### Changed
