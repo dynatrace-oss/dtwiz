@@ -2,14 +2,41 @@
 
 ## Purpose
 
-`dtwiz analyze` and `dtwiz setup` print a System Analysis block summarising what was
-detected on the host. This spec covers the labels, ordering, and stability rules for
-that block so that terminology is consistent across a single screen and the machine-readable
-JSON output remains stable regardless of label changes.
+`dtwiz analyze` and `dtwiz status` print a System Analysis block summarising what was
+detected on the host. This spec covers which commands print the block, the labels,
+ordering, and stability rules for that block so that terminology is consistent across
+a single screen and the machine-readable JSON output remains stable regardless of
+label changes.
 
 ---
 
 ## Requirements
+
+### Requirement: The System Analysis block is printed only by `dtwiz analyze` and `dtwiz status`
+
+The System Analysis block (`info.Summary()`) SHALL be printed by `dtwiz analyze` and
+`dtwiz status` only. `dtwiz setup` SHALL NOT print the System Analysis block; detection
+context is instead surfaced inline on each recommendation menu entry.
+
+#### Scenario: `dtwiz analyze` prints the System Analysis block
+
+- **GIVEN** the user runs `dtwiz analyze`
+- **WHEN** analysis completes
+- **THEN** the full System Analysis block is printed to stdout
+
+#### Scenario: `dtwiz status` prints the System Analysis block
+
+- **GIVEN** the user runs `dtwiz status`
+- **WHEN** analysis completes
+- **THEN** the full System Analysis block is printed to stdout
+
+#### Scenario: `dtwiz setup` does NOT print the System Analysis block
+
+- **GIVEN** the user runs `dtwiz setup`
+- **WHEN** analysis completes and the recommendation menu is shown
+- **THEN** no System Analysis block is printed; detection context appears inline on each menu entry instead
+
+---
 
 ### Requirement: The host line is labelled `This host`
 

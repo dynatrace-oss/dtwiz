@@ -43,11 +43,56 @@ type Recommendation struct {
 	// ConfigPath carries the detected config file path for methods that need
 	// it (e.g. MethodOtelUpdate).  Empty when not relevant.
 	ConfigPath string `json:"config_path,omitempty"`
+	// DetectionInfo is a short inline summary of what was found (or not found)
+	// for this recommendation — shown next to the title in the setup menu.
+	DetectionInfo string `json:"detection_info,omitempty"`
+	// Unavailable marks recommendations whose prerequisite was not detected.
+	// They are rendered greyed and not numbered in the setup menu.
+	Unavailable bool `json:"unavailable,omitempty"`
+	// ShortTitle is a compact label used in the "Sign in to unlock" section
+	// (e.g. "AWS" instead of "AWS cloud services").
+	ShortTitle string `json:"short_title,omitempty"`
+	// UnlockCommand is the CLI command the user should run to unlock this
+	// unavailable recommendation (e.g. "aws configure").
+	UnlockCommand string `json:"unlock_command,omitempty"`
+}
+
+// platformName returns a human-readable OS name for DetectionInfo labels.
+func platformName(p analyzer.Platform) string {
+	switch p {
+	case analyzer.PlatformDarwin:
+		return "macOS"
+	case analyzer.PlatformLinux:
+		return "Linux"
+	case analyzer.PlatformWindows:
+		return "Windows"
+	default:
+		return string(p)
+	}
+}
+
+// hostDetectionInfo builds the inline detection summary for the OtelCollector
+// (new install) option: hostname + OS/arch + current directory + project techs.
+func hostDetectionInfo(system *analyzer.SystemInfo) string {
+	hostname := system.Hostname
+	if hostname == "" {
+		hostname = "this host"
+	}
+	info := fmt.Sprintf("%s (%s %s)", hostname, platformName(system.Platform), system.Arch)
+	if len(system.ProjectTechs) > 0 {
+		var parts []string
+		for _, t := range system.ProjectTechs {
+			parts = append(parts, fmt.Sprintf("%s (%s)", t.Name, t.Path))
+		}
+		info += " · " + strings.Join(parts, " · ")
+	}
+	return info
 }
 
 // GenerateRecommendations returns a ranked list of recommendations based on
 // the given system analysis.  The list is ordered from highest to lowest
-// priority.
+// priority.  Recommendations for undetected infrastructure are appended at the
+// end with Unavailable=true so the setup menu can render them greyed.
 func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 	var recs []Recommendation
 
@@ -65,6 +110,10 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 	// 2. OTel Collector found → configure existing exporter (highest priority).
 	if system.OtelCollector {
 		configHint := ""
+		detInfo := "running"
+		if system.OtelBinaryPath != "" {
+			detInfo = "running: " + system.OtelBinaryPath
+		}
 		if system.OtelConfigPath != "" {
 			configHint = fmt.Sprintf(" (config: %s)", system.OtelConfigPath)
 		}
@@ -80,7 +129,8 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 			Steps: []string{
 				"dtwiz update otel",
 			},
-			ConfigPath: system.OtelConfigPath,
+			ConfigPath:    system.OtelConfigPath,
+			DetectionInfo: detInfo,
 		})
 	}
 
@@ -95,10 +145,16 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 		Steps: []string{
 			"dtwiz install otel",
 		},
+		DetectionInfo: hostDetectionInfo(system),
 	})
 
 	// 4. Kubernetes → Dynatrace Operator.
-	if system.Orchestrator == analyzer.OrchestratorKubernetes && system.Kubernetes != nil && system.Kubernetes.Available {
+	k8sDetected := system.Orchestrator == analyzer.OrchestratorKubernetes && system.Kubernetes != nil && system.Kubernetes.Available
+	if k8sDetected {
+		detInfo := system.Kubernetes.Distribution
+		if system.Kubernetes.Cluster != "" {
+			detInfo = fmt.Sprintf("%s: %s (%d nodes)", system.Kubernetes.Distribution, system.Kubernetes.Cluster, system.Kubernetes.NodeCount)
+		}
 		recs = append(recs, Recommendation{
 			Method:   MethodKubernetes,
 			Priority: 10,
@@ -111,6 +167,7 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 			Steps: []string{
 				"dtwiz install kubernetes",
 			},
+			DetectionInfo: detInfo,
 		})
 	}
 
@@ -144,11 +201,17 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 			Steps: []string{
 				"dtwiz install oneagent",
 			},
+			DetectionInfo: hostDetectionInfo(system),
 		})
 	}
 
 	// 7. AWS detected → CloudFormation integration.
-	if system.AWS != nil && system.AWS.Available {
+	awsDetected := system.AWS != nil && system.AWS.Available
+	if awsDetected {
+		detInfo := "account: " + system.AWS.AccountID
+		if system.AWS.Region != "" {
+			detInfo += ", " + system.AWS.Region
+		}
 		recs = append(recs, Recommendation{
 			Method:        MethodAWS,
 			Priority:      50,
@@ -158,6 +221,7 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 			Steps: []string{
 				"dtwiz install aws",
 			},
+			DetectionInfo: detInfo,
 		})
 	}
 
@@ -170,10 +234,11 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 			title = "Azure cloud services (update)"
 		}
 		recs = append(recs, Recommendation{
-			Method:      method,
-			Priority:    50,
-			Title:       title,
-			Description: fmt.Sprintf("Azure subscription detected (%s).", system.Azure.SubscriptionID),
+			Method:        method,
+			Priority:      50,
+			Title:         title,
+			Description:   fmt.Sprintf("Azure subscription detected (%s).", system.Azure.SubscriptionID),
+			DetectionInfo: "subscription: " + system.Azure.SubscriptionID,
 		})
 	}
 
@@ -186,10 +251,64 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 			title = "GCP cloud services (update)"
 		}
 		recs = append(recs, Recommendation{
-			Method:      method,
-			Priority:    50,
-			Title:       title,
-			Description: fmt.Sprintf("GCP project detected (%s).", system.GCP.ProjectID),
+			Method:        method,
+			Priority:      50,
+			Title:         title,
+			Description:   fmt.Sprintf("GCP project detected (%s).", system.GCP.ProjectID),
+			DetectionInfo: "project: " + system.GCP.ProjectID,
+		})
+	}
+
+	// Unavailable entries — shown greyed in the setup menu so users know what
+	// monitoring they can unlock by signing in or connecting infrastructure.
+	if !k8sDetected {
+		recs = append(recs, Recommendation{
+			Method:        MethodKubernetes,
+			Priority:      100,
+			Title:         "Kubernetes cluster",
+			ShortTitle:    "Kubernetes",
+			DetectionInfo: "not detected",
+			UnlockCommand: "kubectl config use-context <name>",
+			Unavailable:   true,
+		})
+	}
+	if !awsDetected {
+		recs = append(recs, Recommendation{
+			Method:        MethodAWS,
+			Priority:      100,
+			Title:         "AWS cloud services",
+			ShortTitle:    "AWS",
+			DetectionInfo: "not signed in",
+			UnlockCommand: "aws configure",
+			Unavailable:   true,
+		})
+	}
+	if !system.AzureDetected() {
+		recs = append(recs, Recommendation{
+			Method:        MethodAzure,
+			Priority:      100,
+			Title:         "Azure cloud services",
+			ShortTitle:    "Azure",
+			DetectionInfo: "not signed in",
+			UnlockCommand: "az login",
+			Unavailable:   true,
+		})
+	}
+	if !system.GCPDetected() {
+		gcpDetectionInfo := "not signed in"
+		gcpUnlockCommand := "gcloud auth login"
+		if system.GCP != nil && system.GCP.Authenticated {
+			gcpDetectionInfo = "no project selected"
+			gcpUnlockCommand = "gcloud config set project <PROJECT_ID>"
+		}
+		recs = append(recs, Recommendation{
+			Method:        MethodGCP,
+			Priority:      100,
+			Title:         "GCP cloud services",
+			ShortTitle:    "GCP",
+			DetectionInfo: gcpDetectionInfo,
+			UnlockCommand: gcpUnlockCommand,
+			Unavailable:   true,
 		})
 	}
 
@@ -205,6 +324,7 @@ var (
 	recBadgeDone   = color.New(color.FgGreen, color.Bold)
 	recBadgeNum    = color.New(color.FgMagenta, color.Bold)
 	recBadgeWarn   = color.New(color.FgYellow, color.Bold)
+	recFaint       = color.New(color.Faint)
 )
 
 // FormatRecommendations returns a human-readable string of recommendations.
@@ -220,6 +340,9 @@ func FormatRecommendations(recs []Recommendation) string {
 
 	n := 0
 	for _, r := range recs {
+		if r.Unavailable {
+			continue
+		}
 		switch {
 		case r.Done:
 			badge := recBadgeDone.Sprint(" ✓ ")
@@ -244,4 +367,89 @@ func FormatRecommendations(recs []Recommendation) string {
 	sb.WriteString("\n")
 	sb.WriteString(fmt.Sprintf("  %s  %s\n", recMuted.Sprint("[d]"), recMuted.Sprint("Install demo app (schnitzel)")))
 	return strings.TrimRight(sb.String(), "\n")
+}
+
+// ActionableItems returns the subset of recommendations that are numbered and
+// selectable in the setup menu — excluding done, not-supported, coming-soon,
+// unavailable, and experimental-gated entries.
+func ActionableItems(recs []Recommendation, experimental bool) []Recommendation {
+	var out []Recommendation
+	for _, r := range recs {
+		if r.Unavailable || r.Done || r.Method == MethodNotSupported || r.ComingSoon {
+			continue
+		}
+		if !experimental && (r.Method == MethodDocker || r.Method == MethodOtelUpdate) {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+// FormatSetupMenu returns the formatted recommendation menu for the interactive
+// setup command: done items, numbered actionable items with detection info,
+// coming-soon items, the "Sign in to unlock" section, and the demo option.
+func FormatSetupMenu(recs []Recommendation, demoRunning bool, experimental bool) string {
+	var sb strings.Builder
+
+	// Done items (e.g. OneAgent already running).
+	for _, r := range recs {
+		if r.Done {
+			sb.WriteString(fmt.Sprintf("  %s  %s\n", recBadgeDone.Sprint(" ✓ "), recTitleDone.Sprint(r.Title)))
+			ctx := r.DetectionInfo
+			if ctx == "" {
+				ctx = r.Description
+			}
+			if ctx != "" {
+				sb.WriteString(fmt.Sprintf("         %s\n", recFaint.Sprint(ctx)))
+			}
+		}
+	}
+
+	// Numbered selectable items with detection info on a second line.
+	for i, r := range ActionableItems(recs, experimental) {
+		sb.WriteString(fmt.Sprintf("  %s  %s\n", recBadgeNum.Sprintf("[%d]", i+1), recTitleActive.Sprint(r.Title)))
+		if r.DetectionInfo != "" {
+			sb.WriteString(fmt.Sprintf("         %s\n", recFaint.Sprint(r.DetectionInfo)))
+		}
+	}
+
+	// Coming-soon items (informational only, not selectable).
+	for _, r := range recs {
+		if r.ComingSoon {
+			sb.WriteString(fmt.Sprintf("  %s  %s\n", recFaint.Sprint(" · "), recFaint.Sprint(r.Title)))
+		}
+	}
+
+	// Unavailable items: compact "Sign in to unlock" section.
+	var unavailable []Recommendation
+	for _, r := range recs {
+		if r.Unavailable {
+			unavailable = append(unavailable, r)
+		}
+	}
+	if len(unavailable) > 0 {
+		sb.WriteString("\n")
+		sb.WriteString(fmt.Sprintf("  %s\n", recFaint.Sprint("Connect to unlock (then re-run dtwiz setup):")))
+		maxLen := 0
+		for _, r := range unavailable {
+			if l := len(r.ShortTitle); l > maxLen {
+				maxLen = l
+			}
+		}
+		for _, r := range unavailable {
+			sb.WriteString(fmt.Sprintf("   %s  %s\n",
+				recFaint.Sprint("·"),
+				recFaint.Sprintf("%-*s  — run: %s", maxLen, r.ShortTitle, r.UnlockCommand),
+			))
+		}
+	}
+
+	// Demo option.
+	if !demoRunning {
+		sb.WriteString("\n")
+		sb.WriteString(fmt.Sprintf("  %s  %s\n", recMuted.Sprint("[d]"), recMuted.Sprint("Install demo app (schnitzel)")))
+	}
+
+	return sb.String()
 }

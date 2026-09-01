@@ -55,45 +55,20 @@ var setupCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("analysis failed: %w", err)
 		}
-		fmt.Println(info.Summary())
 
 		demoRunning := <-demoRunningCh
 
-		fmt.Println()
 		display.Header("Recommendations — What do you want to monitor?")
 		fmt.Println("  Monitor Logs, Metrics, Traces of:")
 		fmt.Println()
 		recs := recommender.GenerateRecommendations(info)
-
-		// Collect actionable (non-done, non-not-supported, non-coming-soon) recommendations.
-		var actionable []recommender.Recommendation
-		for _, r := range recs {
-			if !r.Done && r.Method != recommender.MethodNotSupported && !r.ComingSoon {
-				if !featureflags.IsEnabled(featureflags.Experimental) &&
-					(r.Method == recommender.MethodDocker || r.Method == recommender.MethodOtelUpdate) {
-					continue
-				}
-				actionable = append(actionable, r)
-			}
-		}
+		actionable := recommender.ActionableItems(recs, featureflags.IsEnabled(featureflags.Experimental))
 
 		if len(actionable) == 0 {
 			return nil
 		}
 
-		for i, r := range actionable {
-			fmt.Printf("  %s  %s\n", display.ColorHeader.Sprintf("[%d]", i+1), r.Title)
-		}
-		// Show coming-soon items (informational only, not selectable).
-		for _, r := range recs {
-			if r.ComingSoon {
-				fmt.Printf("  %s  %s\n", display.ColorDefault.Sprint(" · "), display.ColorDefault.Sprint(r.Title))
-			}
-		}
-		if !demoRunning {
-			fmt.Println()
-			fmt.Printf("  %s  %s\n", display.ColorDefault.Sprint("[d]"), display.ColorDefault.Sprint("Install demo app (schnitzel)"))
-		}
+		fmt.Print(recommender.FormatSetupMenu(recs, demoRunning, featureflags.IsEnabled(featureflags.Experimental)))
 		fmt.Println()
 		fmt.Printf("  %s  %s\n", display.ColorDefault.Sprint("[u]"), display.ColorDefault.Sprint("Show uninstall commands"))
 		fmt.Printf("  %s  %s\n", display.ColorDefault.Sprint("[0]"), display.ColorDefault.Sprint("Cancel"))
