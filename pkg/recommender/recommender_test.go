@@ -528,8 +528,8 @@ func TestFormatSetupMenu_NumberedItemsAndUnavailableSection(t *testing.T) {
 	if !strings.Contains(result, "myhost (macOS arm64)") {
 		t.Error("expected detection info on numbered entry")
 	}
-	if !strings.Contains(result, "Sign in to unlock") {
-		t.Error("expected 'Sign in to unlock' section for unavailable entries")
+	if !strings.Contains(result, "Connect to unlock") {
+		t.Error("expected 'Connect to unlock' section for unavailable entries")
 	}
 	if !strings.Contains(result, "kubectl config use-context <name>") {
 		t.Error("expected Kubernetes unlock command in unavailable section")

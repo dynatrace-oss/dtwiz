@@ -295,13 +295,19 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 		})
 	}
 	if !system.GCPDetected() {
+		gcpDetectionInfo := "not signed in"
+		gcpUnlockCommand := "gcloud auth login"
+		if system.GCP != nil && system.GCP.Authenticated {
+			gcpDetectionInfo = "no project selected"
+			gcpUnlockCommand = "gcloud config set project <PROJECT_ID>"
+		}
 		recs = append(recs, Recommendation{
 			Method:        MethodGCP,
 			Priority:      100,
 			Title:         "GCP cloud services",
 			ShortTitle:    "GCP",
-			DetectionInfo: "not signed in",
-			UnlockCommand: "gcloud auth login",
+			DetectionInfo: gcpDetectionInfo,
+			UnlockCommand: gcpUnlockCommand,
 			Unavailable:   true,
 		})
 	}
@@ -424,7 +430,7 @@ func FormatSetupMenu(recs []Recommendation, demoRunning bool, experimental bool)
 	}
 	if len(unavailable) > 0 {
 		sb.WriteString("\n")
-		sb.WriteString(fmt.Sprintf("  %s\n", recFaint.Sprint("Sign in to unlock:")))
+		sb.WriteString(fmt.Sprintf("  %s\n", recFaint.Sprint("Connect to unlock (then re-run dtwiz setup):")))
 		maxLen := 0
 		for _, r := range unavailable {
 			if l := len(r.ShortTitle); l > maxLen {
