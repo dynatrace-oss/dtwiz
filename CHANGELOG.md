@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `install otel`: an info box is now shown before project selection when detected runtimes are not supported for auto-instrumentation, pointing users to the OpenTelemetry walkthroughs docs
+- `ingest watch`: a section showing detected Hosts is added to the ingest watch output
 
 ### Changed
 
