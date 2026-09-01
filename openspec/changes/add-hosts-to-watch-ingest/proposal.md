@@ -1,3 +1,5 @@
+# Proposal
+
 ## Why
 
 After a fresh OneAgent install, `dtwiz watch` can show no Smartscape host entities even when host monitoring was installed successfully. This makes the install look ineffective at exactly the moment the user expects confirmation that data is arriving.

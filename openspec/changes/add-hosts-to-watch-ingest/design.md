@@ -1,3 +1,5 @@
+# Design
+
 ## Context
 
 `dtwiz watch` polls Dynatrace DQL and renders a fixed set of watch sections from `pkg/installer/ingest_watch.go`. The current Smartscape node aggregation excludes host identity data, so a fresh OneAgent install can leave the watch display looking empty even though the host entity exists in Dynatrace.
