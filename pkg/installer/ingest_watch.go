@@ -2,11 +2,10 @@ package installer
 
 import (
 	"bufio"
-	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -15,6 +14,9 @@ import (
 
 	"github.com/fatih/color"
 	"golang.org/x/term"
+
+	"github.com/dynatrace-oss/dtctl/sdk/api/query"
+	"github.com/dynatrace-oss/dtctl/sdk/httpclient"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
@@ -52,6 +54,7 @@ type watchSection struct {
 	Name    string
 	Count   int
 	Details string // formatted detail line (e.g. service names, type breakdown)
+	Items   []watchDetail
 	// Status is shown when Count == 0 but data was first seen (phase transition).
 	// Used while the metrics pipeline catches up after the first data arrives.
 	Status string
@@ -62,14 +65,23 @@ type watchSection struct {
 	Link      string // deep link path appended to AppsURL
 }
 
+type watchDetail struct {
+	Label string
+	Link  string
+}
+
 type typeCount struct {
 	typeName string
 	count    int
 }
 
+// dqlRecords represents a DQL query response as a list of record objects.
+type dqlRecords []map[string]interface{}
+
 // watchState holds the aggregated state across all poll cycles.
 type watchState struct {
 	Services      watchSection
+	Hosts         watchSection
 	Cloud         watchSection
 	Kubernetes    watchSection
 	Relationships watchSection
@@ -124,7 +136,6 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsA
 	}
 
 	appsURL := AppsURL(envURL)
-	queryURL := appsURL + "/platform/storage/query/v1/query:execute"
 	watchStart := time.Now()
 	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
 	// Colors
@@ -223,12 +234,12 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsA
 			}
 		}
 
-		state := pollAll(queryURL, pToken, fromClause, awsAccountID, &qs)
+		state := pollAll(appsURL, pToken, fromClause, awsAccountID, &qs)
 
 		var buf strings.Builder
 
 		// Header
-		highlight.Fprintf(&buf, " Watching for new data in Dynatrace... (elapsed: %s)\n", formatElapsed(elapsed))
+		highlight.Fprintf(&buf, " Watching for new data in Dynatrace... (elapsed: %s)\n", display.FormatElapsed(elapsed))
 		dim.Fprintf(&buf, " Generate some load on your system to see data appear.\n")
 		if statusMsg != "" {
 			dim.Fprintf(&buf, " %s\n", statusMsg)
@@ -236,13 +247,7 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsA
 		buf.WriteString("\n")
 
 		// Sections
-		renderSection(&buf, "Services", state.Services, appsURL, highlight, dim, bold, linkFn)
-		renderSection(&buf, "Cloud", state.Cloud, appsURL, highlight, dim, bold, linkFn)
-		renderSection(&buf, "Kubernetes", state.Kubernetes, appsURL, highlight, dim, bold, linkFn)
-		renderRelationships(&buf, state.Relationships, appsURL, highlight, dim, bold, linkFn)
-		renderSection(&buf, "Logs", state.Logs, appsURL, highlight, dim, bold, linkFn)
-		renderSection(&buf, "Requests", state.Requests, appsURL, highlight, dim, bold, linkFn)
-		renderSection(&buf, "Exceptions", state.Exceptions, appsURL, highlight, dim, bold, linkFn)
+		renderWatchSections(&buf, state, appsURL, highlight, dim, bold, linkFn)
 
 		// Footer
 		separator := " ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -277,6 +282,17 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsA
 	}
 }
 
+func renderWatchSections(buf *strings.Builder, state watchState, appsURL string, highlight, dim, bold *color.Color, linkFn func(string, string) string) {
+	renderSection(buf, "Services", state.Services, appsURL, highlight, dim, bold, linkFn)
+	renderSection(buf, "Hosts", state.Hosts, appsURL, highlight, dim, bold, linkFn)
+	renderSection(buf, "Kubernetes", state.Kubernetes, appsURL, highlight, dim, bold, linkFn)
+	renderSection(buf, "Cloud", state.Cloud, appsURL, highlight, dim, bold, linkFn)
+	renderRelationships(buf, state.Relationships, appsURL, highlight, dim, bold, linkFn)
+	renderSection(buf, "Logs", state.Logs, appsURL, highlight, dim, bold, linkFn)
+	renderSection(buf, "Requests", state.Requests, appsURL, highlight, dim, bold, linkFn)
+	renderSection(buf, "Exceptions", state.Exceptions, appsURL, highlight, dim, bold, linkFn)
+}
+
 func renderSection(buf *strings.Builder, name string, sec watchSection, appsURL string, highlight, dim, bold *color.Color, linkFn func(string, string) string) {
 	if sec.Count > 0 {
 		title := name
@@ -284,9 +300,9 @@ func renderSection(buf *strings.Builder, name string, sec watchSection, appsURL 
 			title = linkFn(appsURL+sec.Link, name)
 		}
 		highlight.Fprintf(buf, " %s", title)
-		fmt.Fprintf(buf, " (%s)\n", formatCount(sec.Count))
-		if sec.Details != "" {
-			fmt.Fprintf(buf, "   %s\n", sec.Details)
+		fmt.Fprintf(buf, " (%s)\n", display.FormatCount(sec.Count))
+		if details := renderSectionDetails(sec, appsURL, linkFn); details != "" {
+			fmt.Fprintf(buf, "   %s\n", details)
 		}
 	} else if sec.Status != "" {
 		title := name
@@ -305,6 +321,24 @@ func renderSection(buf *strings.Builder, name string, sec watchSection, appsURL 
 	buf.WriteString("\n")
 }
 
+func renderSectionDetails(sec watchSection, appsURL string, linkFn func(string, string) string) string {
+	parts := make([]string, 0, len(sec.Items)+1)
+	for _, item := range sec.Items {
+		if item.Label == "" {
+			continue
+		}
+		if item.Link != "" {
+			parts = append(parts, linkFn(appsURL+item.Link, item.Label))
+			continue
+		}
+		parts = append(parts, item.Label)
+	}
+	if sec.Details != "" {
+		parts = append(parts, sec.Details)
+	}
+	return strings.Join(parts, ", ")
+}
+
 func renderRelationships(buf *strings.Builder, sec watchSection, appsURL string, highlight, dim, bold *color.Color, linkFn func(string, string) string) {
 	if sec.Count > 0 {
 		title := "Relationships"
@@ -312,7 +346,7 @@ func renderRelationships(buf *strings.Builder, sec watchSection, appsURL string,
 			title = linkFn(appsURL+sec.Link, "Relationships")
 		}
 		highlight.Fprintf(buf, " %s", title)
-		fmt.Fprintf(buf, " (%s)\n", formatCount(sec.Count))
+		fmt.Fprintf(buf, " (%s)\n", display.FormatCount(sec.Count))
 		if sec.Details != "" {
 			fmt.Fprintf(buf, "   %s\n", sec.Details)
 		}
@@ -344,18 +378,19 @@ func dqlEscapeString(s string) string { return dqlStringEscaper.Replace(s) }
 
 // pollAll executes all DQL queries in parallel and returns the aggregated state.
 // qs tracks per-signal query phases and is updated in-place as phases advance.
-func pollAll(queryURL, token, fromClause, awsAccountID string, qs *watchQueryState) watchState {
+func pollAll(appsURL, token, fromClause, awsAccountID string, qs *watchQueryState) watchState {
 	var state watchState
 
 	type result struct {
 		name string
-		data *dqlResponse
+		data dqlRecords
 	}
 
 	from := dqlFromLiteral(fromClause)
 
 	queries := map[string]string{
 		"services":      fmt.Sprintf(`smartscapeNodes SERVICE, from:%s | fields name | limit 100`, from),
+		"hosts":         fmt.Sprintf(`smartscapeNodes "*", from:%s | filter type == "HOST" or type == "OTEL_HOST" | fields id, name, type | sort name asc | limit 100`, from),
 		"nodes":         fmt.Sprintf(`smartscapeNodes "*", from:%s | summarize count=count(), by:{type} | limit 200`, from),
 		"relationships": fmt.Sprintf(`smartscapeEdges "*", from:%s | summarize count=count(), by:{type}`, from),
 		"exceptions":    fmt.Sprintf(`fetch spans, from:%s | expand events = span.events | filter events[type] == "exception" | summarize count=count()`, from),
@@ -396,11 +431,11 @@ func pollAll(queryURL, token, fromClause, awsAccountID string, qs *watchQuerySta
 	ch := make(chan result, len(queries))
 	for name, dql := range queries {
 		go func(n, q string) {
-			ch <- result{name: n, data: executeDQL(queryURL, token, q)}
+			ch <- result{name: n, data: executeDQL(appsURL, token, q)}
 		}(name, dql)
 	}
 
-	results := make(map[string]*dqlResponse, len(queries))
+	results := make(map[string]dqlRecords, len(queries))
 	for range queries {
 		r := <-ch
 		results[r.name] = r.data
@@ -408,6 +443,8 @@ func pollAll(queryURL, token, fromClause, awsAccountID string, qs *watchQuerySta
 
 	// Services
 	state.Services = parseServices(results["services"])
+	// Hosts
+	state.Hosts = parseHosts(results["hosts"])
 	// Cloud + Kubernetes from nodes
 	state.Cloud, state.Kubernetes = parseNodes(results["nodes"])
 	// Cloud platform signals (metrics + logs from da-* integrations)
@@ -419,7 +456,7 @@ func pollAll(queryURL, token, fromClause, awsAccountID string, qs *watchQuerySta
 	// metrics phase shows the level breakdown once the pipeline catches up.
 	switch qs.logs {
 	case watchPhaseProbe:
-		if results["logs"] != nil && len(results["logs"].Result.Records) > 0 {
+		if len(results["logs"]) > 0 {
 			qs.logs = watchPhaseMetrics
 			state.Logs = watchSection{Link: "/ui/apps/dynatrace.logs/", Status: "Logs ingested"}
 		}
@@ -435,7 +472,7 @@ func pollAll(queryURL, token, fromClause, awsAccountID string, qs *watchQuerySta
 	// metrics phase shows success/failed counts once the pipeline catches up.
 	switch qs.requests {
 	case watchPhaseProbe:
-		if results["requests"] != nil && len(results["requests"].Result.Records) > 0 {
+		if len(results["requests"]) > 0 {
 			qs.requests = watchPhaseMetrics
 			state.Requests = watchSection{Link: "/ui/apps/dynatrace.distributedtracing/explorer", Status: "Requests ingested"}
 		}
@@ -453,60 +490,33 @@ func pollAll(queryURL, token, fromClause, awsAccountID string, qs *watchQuerySta
 	return state
 }
 
-type dqlResponse struct {
-	State  string `json:"state"`
-	Result struct {
-		Records []map[string]interface{} `json:"records"`
-	} `json:"result"`
-}
-
-func executeDQL(queryURL, token, dql string) *dqlResponse {
-	payload := map[string]interface{}{
-		"query":                      dql,
-		"requestTimeoutMilliseconds": 10000,
-		"maxResultRecords":           200,
-	}
-	bodyBytes, err := json.Marshal(payload)
+func executeDQL(appsURL, token, dql string) dqlRecords {
+	c, err := httpclient.New(appsURL, httpclient.WithToken(token))
 	if err != nil {
+		logger.Debug("watch DQL client error", "err", err)
 		return nil
 	}
-
-	req, err := http.NewRequest(http.MethodPost, queryURL, bytes.NewReader(bodyBytes))
-	if err != nil {
-		return nil
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	resp, err := http.DefaultClient.Do(req)
+	h := query.NewHandler(c)
+	resp, err := h.ExecuteAndPoll(context.Background(), query.ExecuteRequest{
+		Query:                      dql,
+		RequestTimeoutMilliseconds: 10000,
+		MaxResultRecords:           200,
+	}, nil)
 	if err != nil {
 		logger.Debug("watch DQL request failed", "err", err)
 		return nil
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		logger.Debug("watch DQL non-200", "status", resp.StatusCode, "query", dql)
-		_, _ = io.Copy(io.Discard, resp.Body)
-		return nil
-	}
-
-	var result dqlResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil
-	}
-
-	return &result
+	return resp.GetRecords()
 }
 
-func parseServices(resp *dqlResponse) watchSection {
+func parseServices(records dqlRecords) watchSection {
 	sec := watchSection{Link: "/ui/apps/dynatrace.services/explorer-new/services-new"}
-	if resp == nil || len(resp.Result.Records) == 0 {
+	if len(records) == 0 {
 		return sec
 	}
 
 	var names []string
-	for _, rec := range resp.Result.Records {
+	for _, rec := range records {
 		if name, ok := rec["name"].(string); ok {
 			names = append(names, name)
 		}
@@ -520,17 +530,52 @@ func parseServices(resp *dqlResponse) watchSection {
 	return sec
 }
 
-func parseNodes(resp *dqlResponse) (cloud, k8s watchSection) {
+func parseHosts(records dqlRecords) watchSection {
+	sec := watchSection{Link: "/ui/apps/dynatrace.infraops/smartscape/Compute/Hosts?perspective=Health&sort=healthIndicators%3Adescending"}
+	if len(records) == 0 {
+		return sec
+	}
+
+	for _, rec := range records {
+		id, _ := rec["id"].(string)
+		name, _ := rec["name"].(string)
+		typeName, _ := rec["type"].(string)
+		link := hostDetailLink(typeName, id)
+		if id == "" || name == "" || link == "" {
+			continue
+		}
+
+		sec.Count++
+		if len(sec.Items) < 5 {
+			sec.Items = append(sec.Items, watchDetail{Label: name, Link: link})
+		}
+	}
+
+	if sec.Count > len(sec.Items) {
+		sec.Details = fmt.Sprintf("+%d more", sec.Count-len(sec.Items))
+	}
+	return sec
+}
+
+func hostDetailLink(typeName, id string) string {
+	entityID := url.QueryEscape(id)
+	switch typeName {
+	case "HOST":
+		return "/ui/apps/dynatrace.infraops/smartscape/Compute/Hosts?perspective=Health&sort=healthIndicators%3Adescending&fullPageId=" + entityID
+	case "OTEL_HOST":
+		return "/ui/apps/dynatrace.infraops/smartscape/Compute/com.dynatrace.extension.opentelemetry/OTEL_HOST-inventory?perspective=health&sort=healthIndicators%3Adescending&detailsId=" + entityID + "&sidebarOpen=false"
+	default:
+		return ""
+	}
+}
+
+func parseNodes(records dqlRecords) (cloud, k8s watchSection) {
 	cloud = watchSection{Link: "/ui/apps/dynatrace.clouds/smartscape/services"}
 	k8s = watchSection{Link: "/ui/apps/dynatrace.kubernetes/smartscape/K8S_CLUSTER"}
 
-	if resp == nil {
-		return
-	}
-
 	var awsTypes, azureTypes, gcpTypes, k8sTypes []typeCount
 
-	for _, rec := range resp.Result.Records {
+	for _, rec := range records {
 		typeName, _ := rec["type"].(string)
 		count := toInt(rec["count"])
 		if count == 0 {
@@ -569,14 +614,14 @@ func parseNodes(resp *dqlResponse) (cloud, k8s watchSection) {
 	return
 }
 
-func parseRelationships(resp *dqlResponse) watchSection {
+func parseRelationships(records dqlRecords) watchSection {
 	sec := watchSection{Link: "/ui/apps/dynatrace.smartscape/view/dynatrace.smartscape.smartscape-on-grail"}
-	if resp == nil || len(resp.Result.Records) == 0 {
+	if len(records) == 0 {
 		return sec
 	}
 
 	var types []typeCount
-	for _, rec := range resp.Result.Records {
+	for _, rec := range records {
 		typeName, _ := rec["type"].(string)
 		count := toInt(rec["count"])
 		if count == 0 {
@@ -596,7 +641,7 @@ func parseRelationships(resp *dqlResponse) watchSection {
 		for _, tc := range types[:limit] {
 			name := strings.ToLower(tc.typeName)
 			name = strings.ReplaceAll(name, "_", " ")
-			parts = append(parts, fmt.Sprintf("%s %s", formatCount(tc.count), name))
+			parts = append(parts, fmt.Sprintf("%s %s", display.FormatCount(tc.count), name))
 		}
 		sec.Details = strings.Join(parts, " · ")
 	}
@@ -604,15 +649,15 @@ func parseRelationships(resp *dqlResponse) watchSection {
 	return sec
 }
 
-func parseLogs(resp *dqlResponse) watchSection {
+func parseLogs(records dqlRecords) watchSection {
 	sec := watchSection{Link: "/ui/apps/dynatrace.logs/"}
-	if resp == nil || len(resp.Result.Records) == 0 {
+	if len(records) == 0 {
 		return sec
 	}
 
 	levelCounts := make(map[string]int)
 	total := 0
-	for _, rec := range resp.Result.Records {
+	for _, rec := range records {
 		level, _ := rec["loglevel"].(string)
 		count := toInt(rec["count"])
 		if level == "" {
@@ -626,7 +671,7 @@ func parseLogs(resp *dqlResponse) watchSection {
 	var parts []string
 	for _, lvl := range []string{"info", "warn", "error"} {
 		if c, ok := levelCounts[lvl]; ok && c > 0 {
-			parts = append(parts, fmt.Sprintf("%s %s", formatCount(c), lvl))
+			parts = append(parts, fmt.Sprintf("%s %s", display.FormatCount(c), lvl))
 		}
 	}
 	if len(parts) > 0 {
@@ -635,27 +680,27 @@ func parseLogs(resp *dqlResponse) watchSection {
 	return sec
 }
 
-func parseRequests(resp *dqlResponse) watchSection {
+func parseRequests(records dqlRecords) watchSection {
 	sec := watchSection{Link: "/ui/apps/dynatrace.distributedtracing/explorer"}
-	if resp == nil || len(resp.Result.Records) == 0 {
+	if len(records) == 0 {
 		return sec
 	}
-	rec := resp.Result.Records[0]
+	rec := records[0]
 	success := toInt(rec["success"])
 	failed := toInt(rec["failed"])
 	sec.Count = success + failed
 	if sec.Count > 0 {
-		sec.Details = fmt.Sprintf("%s successful · %s failed", formatCount(success), formatCount(failed))
+		sec.Details = fmt.Sprintf("%s successful · %s failed", display.FormatCount(success), display.FormatCount(failed))
 	}
 	return sec
 }
 
-func parseExceptions(resp *dqlResponse) watchSection {
+func parseExceptions(records dqlRecords) watchSection {
 	sec := watchSection{Link: "/ui/apps/dynatrace.distributedtracing/exceptions"}
-	if resp == nil || len(resp.Result.Records) == 0 {
+	if len(records) == 0 {
 		return sec
 	}
-	sec.Count = toInt(resp.Result.Records[0]["count"])
+	sec.Count = toInt(records[0]["count"])
 	return sec
 }
 
@@ -667,7 +712,7 @@ func parseExceptions(resp *dqlResponse) watchSection {
 //
 // Records with null/empty `aws.resource.type` are ignored — they are noise
 // (uncategorised metrics).
-func parseCloudPlatformSignals(metrics, logs *dqlResponse) string {
+func parseCloudPlatformSignals(metrics, logs dqlRecords) string {
 	combined := make(map[string]int)
 	collectResourceTypes(metrics, combined)
 	collectResourceTypes(logs, combined)
@@ -706,11 +751,8 @@ func parseCloudPlatformSignals(metrics, logs *dqlResponse) string {
 }
 
 // collectResourceTypes accumulates non-null `aws.resource.type` counts into dst.
-func collectResourceTypes(resp *dqlResponse, dst map[string]int) {
-	if resp == nil {
-		return
-	}
-	for _, rec := range resp.Result.Records {
+func collectResourceTypes(records dqlRecords, dst map[string]int) {
+	for _, rec := range records {
 		rt, _ := rec["aws.resource.type"].(string)
 		if rt == "" {
 			continue
@@ -753,7 +795,7 @@ func formatTypeBreakdown(types []typeCount, prefix string) string {
 
 	var parts []string
 	for _, tc := range types[:limit] {
-		parts = append(parts, fmt.Sprintf("%s %s", formatCount(tc.count), humanizeTypeName(tc.typeName, prefix)))
+		parts = append(parts, fmt.Sprintf("%s %s", display.FormatCount(tc.count), humanizeTypeName(tc.typeName, prefix)))
 	}
 	return strings.Join(parts, ", ")
 }
@@ -768,32 +810,6 @@ func humanizeTypeName(typeName, prefix string) string {
 		name += "s"
 	}
 	return name
-}
-
-// formatElapsed formats a duration as "Xm Ys".
-func formatElapsed(d time.Duration) string {
-	m := int(d.Minutes())
-	s := int(d.Seconds()) % 60
-	if m > 0 {
-		return fmt.Sprintf("%dm %ds", m, s)
-	}
-	return fmt.Sprintf("%ds", s)
-}
-
-// formatCount formats an integer with comma separators.
-func formatCount(n int) string {
-	if n < 1000 {
-		return fmt.Sprintf("%d", n)
-	}
-	s := fmt.Sprintf("%d", n)
-	var result []byte
-	for i, c := range s {
-		if i > 0 && (len(s)-i)%3 == 0 {
-			result = append(result, ',')
-		}
-		result = append(result, byte(c))
-	}
-	return string(result)
 }
 
 // toInt extracts an int from a DQL response value (which may be float64, json.Number, or string).

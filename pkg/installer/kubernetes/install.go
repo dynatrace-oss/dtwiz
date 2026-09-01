@@ -164,13 +164,6 @@ func waitForPods(timeout time.Duration) error {
 	start := time.Now()
 	deadline := start.Add(timeout)
 
-	formatElapsed := func(d time.Duration) string {
-		d = d.Round(time.Second)
-		m := int(d.Minutes())
-		s := int(d.Seconds()) % 60
-		return fmt.Sprintf("%d:%02d", m, s)
-	}
-
 	clearLine := "\r" + strings.Repeat(" ", 60) + "\r"
 
 	fmt.Print("  0/0 pods ready  activegate: …  [0:00]")
@@ -203,7 +196,7 @@ func waitForPods(timeout time.Duration) error {
 		now := time.Now()
 		elapsed := now.Sub(start)
 		fmt.Printf("\r  %d/%d pods ready  activegate: %s  [%s]",
-			readyCount, total, agGlyph, formatElapsed(elapsed),
+			readyCount, total, agGlyph, display.FormatElapsed(elapsed),
 		)
 
 		if total > 0 && readyCount == total && hasActiveGate {
