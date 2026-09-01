@@ -3,26 +3,31 @@ package installer
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/fatih/color"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 )
 
-// nodesResp builds a dqlResponse for the smartscapeNodes query (type + count fields).
+// nodesResp builds records for the smartscapeNodes query (type + count fields).
 func nodesResp(rows ...struct {
 	typeName string
 	count    int
-}) *dqlResponse {
-	resp := &dqlResponse{}
+}) []map[string]interface{} {
+	var records []map[string]interface{}
 	for _, row := range rows {
-		resp.Result.Records = append(resp.Result.Records, map[string]interface{}{
+		records = append(records, map[string]interface{}{
 			"type":  row.typeName,
 			"count": float64(row.count),
 		})
 	}
-	return resp
+	return records
 }
 
 // ── parseNodes ──────────────────────────────────────────────────────────────
@@ -184,12 +189,12 @@ func TestParseNodes_CloudDetailsEmptyWhenNoCloudEntities(t *testing.T) {
 }
 
 func TestParseServices(t *testing.T) {
-	resp := &dqlResponse{}
+	var records []map[string]interface{}
 	for _, name := range []string{"checkout", "catalog", "payment", "shipping", "frontend", "worker"} {
-		resp.Result.Records = append(resp.Result.Records, map[string]interface{}{"name": name})
+		records = append(records, map[string]interface{}{"name": name})
 	}
 
-	sec := parseServices(resp)
+	sec := parseServices(records)
 	if sec.Count != 6 {
 		t.Fatalf("service count = %d, want 6", sec.Count)
 	}
@@ -207,8 +212,80 @@ func TestParseServices_Empty(t *testing.T) {
 	}
 }
 
+type hostRow struct {
+	id       string
+	name     string
+	typeName string
+}
+
+func hostsResp(rows ...hostRow) []map[string]interface{} {
+	var records []map[string]interface{}
+	for _, row := range rows {
+		records = append(records, map[string]interface{}{
+			"id":   row.id,
+			"name": row.name,
+			"type": row.typeName,
+		})
+	}
+	return records
+}
+
+func TestParseHosts_RegularAndOtelHosts(t *testing.T) {
+	sec := parseHosts(hostsResp(
+		hostRow{id: "HOST-51166F7740C48393", name: "dt-host", typeName: "HOST"},
+		hostRow{id: "OTEL_HOST-D4D6C7D01659A0E6", name: "otel-host", typeName: "OTEL_HOST"},
+	))
+
+	if sec.Count != 2 {
+		t.Fatalf("host count = %d, want 2", sec.Count)
+	}
+	if len(sec.Items) != 2 {
+		t.Fatalf("host items = %d, want 2", len(sec.Items))
+	}
+	if sec.Items[0].Label != "dt-host" || !strings.Contains(sec.Items[0].Link, "fullPageId=HOST-51166F7740C48393") {
+		t.Fatalf("regular host item = %#v", sec.Items[0])
+	}
+	if sec.Items[1].Label != "otel-host" || !strings.Contains(sec.Items[1].Link, "detailsId=OTEL_HOST-D4D6C7D01659A0E6") || !strings.Contains(sec.Items[1].Link, "sidebarOpen=false") {
+		t.Fatalf("otel host item = %#v", sec.Items[1])
+	}
+}
+
+func TestParseHosts_IgnoresIncompleteAndUnknownRows(t *testing.T) {
+	sec := parseHosts(hostsResp(
+		hostRow{id: "HOST-valid", name: "valid", typeName: "HOST"},
+		hostRow{id: "", name: "missing-id", typeName: "HOST"},
+		hostRow{id: "HOST-missing-name", name: "", typeName: "HOST"},
+		hostRow{id: "SERVICE-1", name: "service", typeName: "SERVICE"},
+	))
+
+	if sec.Count != 1 {
+		t.Fatalf("host count = %d, want 1", sec.Count)
+	}
+	if len(sec.Items) != 1 || sec.Items[0].Label != "valid" {
+		t.Fatalf("host items = %#v, want only valid host", sec.Items)
+	}
+}
+
+func TestParseHosts_TruncatesDetails(t *testing.T) {
+	rows := make([]hostRow, 0, 6)
+	for index := 1; index <= 6; index++ {
+		rows = append(rows, hostRow{id: fmt.Sprintf("HOST-%d", index), name: fmt.Sprintf("host-%d", index), typeName: "HOST"})
+	}
+
+	sec := parseHosts(hostsResp(rows...))
+	if sec.Count != 6 {
+		t.Fatalf("host count = %d, want 6", sec.Count)
+	}
+	if len(sec.Items) != 5 {
+		t.Fatalf("host items = %d, want 5", len(sec.Items))
+	}
+	if sec.Details != "+1 more" {
+		t.Fatalf("host detail suffix = %q, want +1 more", sec.Details)
+	}
+}
+
 func TestParseRelationships(t *testing.T) {
-	resp := &dqlResponse{}
+	var records []map[string]interface{}
 	for _, row := range []struct {
 		typeName string
 		count    interface{}
@@ -217,10 +294,10 @@ func TestParseRelationships(t *testing.T) {
 		{typeName: "RUNS_ON", count: json.Number("25")},
 		{typeName: "IGNORED", count: 0},
 	} {
-		resp.Result.Records = append(resp.Result.Records, map[string]interface{}{"type": row.typeName, "count": row.count})
+		records = append(records, map[string]interface{}{"type": row.typeName, "count": row.count})
 	}
 
-	sec := parseRelationships(resp)
+	sec := parseRelationships(records)
 	if sec.Count != 1225 {
 		t.Fatalf("relationship count = %d, want 1225", sec.Count)
 	}
@@ -230,9 +307,7 @@ func TestParseRelationships(t *testing.T) {
 }
 
 func TestParseExceptions(t *testing.T) {
-	sec := parseExceptions(&dqlResponse{Result: struct {
-		Records []map[string]interface{} `json:"records"`
-	}{Records: []map[string]interface{}{{"count": "42"}}}})
+	sec := parseExceptions([]map[string]interface{}{{"count": "42"}})
 	if sec.Count != 42 {
 		t.Fatalf("exception count = %d, want 42", sec.Count)
 	}
@@ -250,15 +325,15 @@ func TestFormatElapsed(t *testing.T) {
 		{duration: 65 * time.Second, want: "1m 5s"},
 	}
 	for _, tt := range tests {
-		if got := formatElapsed(tt.duration); got != tt.want {
-			t.Fatalf("formatElapsed(%s) = %q, want %q", tt.duration, got, tt.want)
+		if got := display.FormatElapsed(tt.duration); got != tt.want {
+			t.Fatalf("display.FormatElapsed(%s) = %q, want %q", tt.duration, got, tt.want)
 		}
 	}
 }
 
 func TestFormatCountAndToInt(t *testing.T) {
-	if got := formatCount(1234567); got != "1,234,567" {
-		t.Fatalf("formatCount() = %q, want 1,234,567", got)
+	if got := display.FormatCount(1234567); got != "1,234,567" {
+		t.Fatalf("display.FormatCount() = %q, want 1,234,567", got)
 	}
 	for _, tt := range []struct {
 		input interface{}
@@ -286,21 +361,21 @@ func TestTermHyperlink(t *testing.T) {
 	}
 }
 
-// helper: build a dqlResponse with the given (resource type, count) rows.
+// helper: build records with the given (resource type, count) rows.
 func cloudResp(rows ...struct {
 	rt    string
 	count int
-}) *dqlResponse {
-	resp := &dqlResponse{}
+}) []map[string]interface{} {
+	var records []map[string]interface{}
 	for _, row := range rows {
 		rec := map[string]interface{}{}
 		if row.rt != "" {
 			rec["aws.resource.type"] = row.rt
 		}
 		rec["count"] = float64(row.count) // JSON numbers decode as float64
-		resp.Result.Records = append(resp.Result.Records, rec)
+		records = append(records, rec)
 	}
-	return resp
+	return records
 }
 
 func TestParseCloudPlatformSignals_EmptyInputs(t *testing.T) {
@@ -520,6 +595,56 @@ func TestPollAllCloudFilter_EscapesAccountID(t *testing.T) {
 	}
 }
 
+func TestPollAllQueriesHosts(t *testing.T) {
+	var mu sync.Mutex
+	var queries []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			Query string `json:"query"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode query payload: %v", err)
+		}
+
+		mu.Lock()
+		queries = append(queries, payload.Query)
+		mu.Unlock()
+
+		records := []map[string]interface{}{}
+		if strings.Contains(payload.Query, `fields id, name, type`) {
+			records = append(records, map[string]interface{}{
+				"id":   "HOST-51166F7740C48393",
+				"name": "dt-host",
+				"type": "HOST",
+			})
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
+			"result": map[string]interface{}{"records": records},
+		}); err != nil {
+			t.Fatalf("encode query response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	state := pollAll(server.URL, "dt0s16.token", "now()-1h", "", &watchQueryState{})
+	if state.Hosts.Count != 1 {
+		t.Fatalf("host count = %d, want 1", state.Hosts.Count)
+	}
+
+	foundHostQuery := false
+	for _, query := range queries {
+		if strings.Contains(query, `type == "HOST"`) && strings.Contains(query, `type == "OTEL_HOST"`) {
+			foundHostQuery = true
+			break
+		}
+	}
+	if !foundHostQuery {
+		t.Fatalf("host query not found in queries: %#v", queries)
+	}
+}
+
 // ── dqlFromLiteral ─────────────────────────────────────────────────────────
 
 func TestDqlFromLiteral_RelativeExpression(t *testing.T) {
@@ -548,19 +673,19 @@ func TestDqlFromLiteral_AbsoluteTimestamp(t *testing.T) {
 
 // ── parseLogs ──────────────────────────────────────────────────────────────
 
-// logsResp builds a dqlResponse for the logs query (loglevel + count fields).
+// logsResp builds records for the logs query (loglevel + count fields).
 func logsResp(rows ...struct {
 	level string
 	count int
-}) *dqlResponse {
-	resp := &dqlResponse{}
+}) []map[string]interface{} {
+	var records []map[string]interface{}
 	for _, row := range rows {
-		resp.Result.Records = append(resp.Result.Records, map[string]interface{}{
+		records = append(records, map[string]interface{}{
 			"loglevel": row.level,
 			"count":    float64(row.count),
 		})
 	}
-	return resp
+	return records
 }
 
 func TestParseLogs_NilResponse(t *testing.T) {
@@ -571,7 +696,7 @@ func TestParseLogs_NilResponse(t *testing.T) {
 }
 
 func TestParseLogs_EmptyRecords(t *testing.T) {
-	sec := parseLogs(&dqlResponse{})
+	sec := parseLogs(nil)
 	if sec.Count != 0 {
 		t.Errorf("empty records must yield Count=0, got %d", sec.Count)
 	}
@@ -700,18 +825,16 @@ func TestParseRequests_NilResponse(t *testing.T) {
 }
 
 func TestParseRequests_EmptyRecords(t *testing.T) {
-	sec := parseRequests(&dqlResponse{})
+	sec := parseRequests(nil)
 	if sec.Count != 0 {
 		t.Errorf("empty records must yield Count=0, got %d", sec.Count)
 	}
 }
 
 func TestParseRequests_SuccessAndFailed(t *testing.T) {
-	resp := &dqlResponse{}
-	resp.Result.Records = []map[string]interface{}{
+	sec := parseRequests([]map[string]interface{}{
 		{"success": float64(95), "failed": float64(5)},
-	}
-	sec := parseRequests(resp)
+	})
 	if sec.Count != 100 {
 		t.Errorf("Count = %d, want 100", sec.Count)
 	}
@@ -724,11 +847,9 @@ func TestParseRequests_SuccessAndFailed(t *testing.T) {
 }
 
 func TestParseRequests_AllSuccessful(t *testing.T) {
-	resp := &dqlResponse{}
-	resp.Result.Records = []map[string]interface{}{
+	sec := parseRequests([]map[string]interface{}{
 		{"success": float64(50), "failed": float64(0)},
-	}
-	sec := parseRequests(resp)
+	})
 	if sec.Count != 50 {
 		t.Errorf("Count = %d, want 50", sec.Count)
 	}
@@ -738,11 +859,9 @@ func TestParseRequests_AllSuccessful(t *testing.T) {
 }
 
 func TestParseRequests_ZeroTotalNoDetails(t *testing.T) {
-	resp := &dqlResponse{}
-	resp.Result.Records = []map[string]interface{}{
+	sec := parseRequests([]map[string]interface{}{
 		{"success": float64(0), "failed": float64(0)},
-	}
-	sec := parseRequests(resp)
+	})
 	if sec.Count != 0 {
 		t.Errorf("Count = %d, want 0", sec.Count)
 	}
@@ -799,6 +918,63 @@ func TestRenderSection_StatusBranchUsesLink(t *testing.T) {
 	renderSection(&buf, "Logs", sec, "https://example.com", noop, noop, noop, linkFn)
 	if capturedURL != "https://example.com/ui/apps/dynatrace.logs/" {
 		t.Errorf("linkFn called with %q, want full deep-link URL", capturedURL)
+	}
+}
+
+func TestRenderSection_LinksDetailItems(t *testing.T) {
+	var buf strings.Builder
+	noop := color.New()
+	var capturedURLs []string
+	linkFn := func(url, label string) string {
+		capturedURLs = append(capturedURLs, url)
+		return label
+	}
+	sec := watchSection{
+		Count: 2,
+		Items: []watchDetail{
+			{Label: "host-a", Link: "/host-a"},
+			{Label: "host-b", Link: "/host-b"},
+		},
+		Details: "+1 more",
+	}
+
+	renderSection(&buf, "Hosts", sec, "https://example.com", noop, noop, noop, linkFn)
+	out := buf.String()
+	if !strings.Contains(out, "host-a, host-b, +1 more") {
+		t.Fatalf("rendered details = %q", out)
+	}
+	if len(capturedURLs) != 2 || capturedURLs[0] != "https://example.com/host-a" || capturedURLs[1] != "https://example.com/host-b" {
+		t.Fatalf("captured URLs = %#v", capturedURLs)
+	}
+}
+
+func TestRenderWatchSections_Order(t *testing.T) {
+	var buf strings.Builder
+	noop := color.New()
+	linkFn := func(_, label string) string { return label }
+	state := watchState{
+		Services:      watchSection{Count: 1},
+		Hosts:         watchSection{Count: 1},
+		Kubernetes:    watchSection{Count: 1},
+		Cloud:         watchSection{Count: 1},
+		Relationships: watchSection{Count: 1},
+		Logs:          watchSection{Count: 1},
+		Requests:      watchSection{Count: 1},
+		Exceptions:    watchSection{Count: 1},
+	}
+
+	renderWatchSections(&buf, state, "https://example.com", noop, noop, noop, linkFn)
+	out := buf.String()
+	previousIndex := -1
+	for _, section := range []string{" Services", " Hosts", " Kubernetes", " Cloud", " Relationships", " Logs", " Requests", " Exceptions"} {
+		currentIndex := strings.Index(out, section)
+		if currentIndex == -1 {
+			t.Fatalf("section %q missing from output: %q", section, out)
+		}
+		if currentIndex <= previousIndex {
+			t.Fatalf("section %q rendered out of order in output: %q", section, out)
+		}
+		previousIndex = currentIndex
 	}
 }
 
