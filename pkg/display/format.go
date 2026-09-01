@@ -9,6 +9,9 @@ import (
 
 // FormatElapsed formats a duration as "Xm Ys" (or "Ys" when under a minute).
 func FormatElapsed(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
 	m := int(d.Minutes())
 	s := int(d.Seconds()) % 60
 	if m > 0 {
