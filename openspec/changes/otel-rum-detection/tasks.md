@@ -31,8 +31,10 @@
 
 - [ ] 5.1 Implement `Detect(dir string) (DetectionResult, error)` as the package's public entry point.
 - [ ] 5.2 Run framework detection first; if a framework is found, return `ModeManual` immediately with the framework name in `ManualReason`.
-- [ ] 5.3 Run the HTML walk; if no writable files are found, return `ModeManual` with reason `"no writable HTML files found"`.
-- [ ] 5.4 Return `ModeAuto` with `InjectableFiles` sorted (`sort.Strings`) and an empty `ManualReason`.
+- [ ] 5.3 Run the HTML walk and write-permission probe to collect writable `.html` files.
+- [ ] 5.4 If any collected file is named `index.html`, filter to only those files (drop all other `.html` files from the candidate list).
+- [ ] 5.5 If no files remain, return `ModeManual` with reason `"no writable HTML files found"`.
+- [ ] 5.6 Return `ModeAuto` with `InjectableFiles` sorted (`sort.Strings`) and an empty `ManualReason`.
 
 ## 6. Tests
 
@@ -49,7 +51,9 @@
   - HTML under `node_modules/`: excluded.
   - HTML under `build/`: excluded.
   - No HTML files at all → `ModeManual`, reason "no writable HTML files found".
-  - Multiple HTML files → `ModeAuto`, `InjectableFiles` sorted.
+  - `index.html` present alongside other `.html` files → `ModeAuto`, only `index.html` in `InjectableFiles`.
+  - Angular-style: `index.html` + many `*.component.html` files → `ModeAuto`, only `index.html` returned.
+  - No `index.html`, multiple `.html` files → `ModeAuto`, all files sorted in `InjectableFiles`.
   - Mixed: framework detected alongside `.html` files → `ModeManual` (framework takes precedence).
 - [ ] 6.3 Run `go test ./pkg/installer/otel/rum/...` and confirm all cases pass.
 - [ ] 6.4 Run `make lint` to confirm no golangci-lint issues in the new package.

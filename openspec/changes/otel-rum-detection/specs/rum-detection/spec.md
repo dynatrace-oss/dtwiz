@@ -29,13 +29,21 @@ The system SHALL scan the current project directory when `dtwiz install otel` ru
 - **THEN** the system treats `package.json` as not indicating any framework
 - **AND** continues to the HTML file scan
 
-#### Scenario: Static HTML files found, no framework
+#### Scenario: index.html found, no framework
 
-- **GIVEN** the project directory contains one or more writable `.html` files
+- **GIVEN** the project directory contains a writable `index.html` file alongside other `.html` files
 - **AND** no framework config file or Create React App dependency is present
 - **WHEN** the RUM detection scan runs
-- **THEN** the system returns auto injection mode (because static HTML files can be safely modified to inject the RUM tag)
-- **AND** the result includes the full paths of the writable HTML files, sorted
+- **THEN** the system returns auto injection mode (because `index.html` is the app entry point and can be safely modified)
+- **AND** the result includes only the `index.html` path(s), not other `.html` files
+
+#### Scenario: Static HTML files found without index.html, no framework
+
+- **GIVEN** the project directory contains one or more writable `.html` files, none named `index.html`
+- **AND** no framework config file or Create React App dependency is present
+- **WHEN** the RUM detection scan runs
+- **THEN** the system returns auto injection mode (because all found files are likely page-level HTML)
+- **AND** the result includes the full paths of all writable HTML files, sorted
 
 #### Scenario: HTML files exist only inside build output directories
 
@@ -75,10 +83,10 @@ The system SHALL scan the current project directory when `dtwiz install otel` ru
 - **THEN** the system returns manual injection mode (because framework detection takes precedence — the framework will manage HTML, so static files are not injectable)
 - **AND** the injectable file list is empty
 
-#### Scenario: Multiple writable HTML files
+#### Scenario: Angular-style project with index.html and component templates
 
-- **GIVEN** the project directory contains multiple writable `.html` files at various subdirectory depths (outside excluded directories)
+- **GIVEN** the project directory contains `index.html` alongside many `.html` component templates (e.g. `app.component.html`, `header.component.html`)
 - **AND** no framework config file is present
 - **WHEN** the RUM detection scan runs
-- **THEN** the system returns auto injection mode (because all files can be safely modified)
-- **AND** all writable HTML paths are included, sorted alphabetically
+- **THEN** the system returns auto injection mode
+- **AND** only `index.html` is included in the result (component templates are excluded because `index.html` is present)

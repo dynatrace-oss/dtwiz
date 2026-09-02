@@ -81,12 +81,16 @@ Walk the project directory with `fs.WalkDir`. For each entry:
 
 ### Step 3 — Write permission probe
 
-For each collected `.html` file, probe writability by attempting `os.OpenFile(path, os.O_WRONLY, 0)`. If the call fails, exclude the file and record it as a permission error. Do not use Unix mode bits — they are unreliable on Windows.
+For each collected `.html` file, probe writability by attempting `os.OpenFile(path, os.O_WRONLY, 0)`. If the call fails, exclude the file and record it as a permission error. Don't use `os.Stat` because it works on all supported operating systems.
 
 ### Step 4 — Mode assignment
 
-- If no writable `.html` files remain after step 3: `Mode = ModeManual`, `ManualReason = "no writable HTML files found"`.
-- Otherwise: `Mode = ModeAuto`, `InjectableFiles` = sorted list of writable `.html` absolute paths.
+From the writable `.html` files collected in step 3:
+
+- If any file is named `index.html`, keep only those files (prefer the app entry point over partial templates).
+- Otherwise, keep all collected files.
+- If no files remain: `Mode = ModeManual`, `ManualReason = "no writable HTML files found"`.
+- Otherwise: `Mode = ModeAuto`, `InjectableFiles` = sorted list of the selected paths.
 
 ## Decisions
 
@@ -95,6 +99,7 @@ For each collected `.html` file, probe writability by attempting `os.OpenFile(pa
 - **`fs.WalkDir` over `filepath.Walk`.** `fs.WalkDir` passes `fs.DirEntry` which avoids an extra `os.Stat` syscall per entry. Both are cross-platform.
 - **No `os.Stat` mode-bit checks for writability.** `os.Stat` returns Unix-style mode bits that are not meaningful on Windows (all files appear writable). `os.OpenFile` with `O_WRONLY` is portable.
 - **Case-insensitive `.html` only on Windows.** Unix filesystems are case-sensitive; treating `.HTML` as `.html` on Unix would be incorrect for most projects.
+- **Prefer `index.html` over other `.html` files.** Frameworks like Angular have many `.html` component templates alongside `src/index.html`. Targeting only `index.html` when present avoids injecting into partial templates, which would corrupt them. For projects with no `index.html` (multi-page static sites), all writable `.html` files are candidates.
 - **Sorted `InjectableFiles`.** Deterministic ordering simplifies tests and makes the preview stable across runs.
 
 ## Risks / Trade-offs
