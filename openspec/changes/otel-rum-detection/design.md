@@ -59,13 +59,12 @@ Check for the following frameworks in order (first match wins):
 |---|---|
 | Next.js | Config files: `next.config.js`, `next.config.mjs`, `next.config.ts`; or dependency: `"next"` in `package.json` |
 | Nuxt | Config files: `nuxt.config.js`, `nuxt.config.mjs`, `nuxt.config.ts`; or dependency: `"nuxt"` in `package.json` |
-| Create React App | Dependency: `"react-scripts"` in `package.json` |
 
 For each framework, check config files first. If no config file is found, read and JSON-parse `package.json` and check `dependencies` and `devDependencies`. If `package.json` cannot be read or parsed, treat it as "framework not found" and continue to step 2.
 
 When a framework is detected, set `Mode = ModeManual` and populate `ManualReason` with the framework name.
 
-**Rationale:** Only detect frameworks that OTel already instruments, ensuring consistency. This avoids false positives where RUM instructs manual setup for a framework that OTel doesn't support, creating confusion. Reuse the existing detection logic from `nodejs_project.go` where applicable.
+**Rationale:** Only detect frameworks that have no injectable HTML source file. Next.js and Nuxt render pages from JSX/Vue components. There is no `index.html` to inject into. Projects like Create React App or Angular that do have a source `index.html` are handled correctly by the `index.html` preference rule in step 4. Reuse the existing detection logic from `nodejs_project.go`.
 
 ### Step 2 — HTML file scan
 

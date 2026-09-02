@@ -13,14 +13,6 @@ The system SHALL scan the current project directory when `dtwiz install otel` ru
 - **THEN** the system returns manual injection mode (because frameworks manage their build output and prevent direct HTML file modification)
 - **AND** the reason identifies the detected framework by name
 
-#### Scenario: Create React App detected via package.json
-
-- **GIVEN** the project directory contains a `package.json` with `react-scripts` listed in its dependencies or devDependencies
-- **AND** no other framework config file is present
-- **WHEN** the RUM detection scan runs
-- **THEN** the system returns manual injection mode (because Create React App builds and manages HTML output, preventing direct file modification)
-- **AND** the reason identifies Create React App
-
 #### Scenario: Malformed package.json
 
 - **GIVEN** the project directory contains a `package.json` that cannot be parsed as valid JSON

@@ -8,12 +8,11 @@
 
 ## 2. Framework Detection
 
-- [ ] 2.1 Import and alias `isNextJSProject`, `isNuxtProject`, and `hasDependency` from `pkg/installer/otel/nodejs_project.go` (reuse existing OTel detection logic).
+- [ ] 2.1 Import and alias `isNextJSProject` and `isNuxtProject` from `pkg/installer/otel/nodejs_project.go` (reuse existing OTel detection logic).
 - [ ] 2.2 Implement `detectFramework(dir string) (name string, found bool)` in `detect.go` that:
   - Returns `"Next.js"` if `isNextJSProject(dir)` is true
   - Returns `"Nuxt"` if `isNuxtProject(dir)` is true
-  - Returns `"Create React App"` if `hasDependency(dir, "react-scripts")` is true
-  - Returns `""` (empty string) and `false` if none are found
+  - Returns `""` and `false` if none are found
 - [ ] 2.3 Expose `detectFramework` for use by the main `Detect` entry point.
 
 ## 3. HTML File Walk
@@ -45,8 +44,8 @@
   - Next.js via dependency: `package.json` with `"next"` dep, no config file → `ModeManual`, reason "Next.js".
   - Nuxt via config: `nuxt.config.js` present → `ModeManual`, reason "Nuxt".
   - Nuxt via dependency: `package.json` with `"nuxt"` dep, no config file → `ModeManual`, reason "Nuxt".
-  - Create React App: `package.json` with `react-scripts` dep → `ModeManual`, reason "Create React App".
   - No framework: `package.json` with malformed JSON → framework not detected, continues to HTML scan.
+  - CRA-style: `public/index.html` + no framework config → `ModeAuto`, `public/index.html` in `InjectableFiles`.
   - HTML under `dist/`: excluded; root `.html` is injectable.
   - HTML under `node_modules/`: excluded.
   - HTML under `build/`: excluded.
