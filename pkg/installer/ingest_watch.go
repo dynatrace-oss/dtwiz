@@ -145,8 +145,18 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsA
 	bold := color.New(color.Bold)
 	_ = green
 
+	supportsHyperlinks := display.StdoutSupportsHyperlinks()
 	linkFn := func(url, label string) string {
-		return termHyperlink(url, label, display.StdoutSupportsHyperlinks())
+		return termHyperlink(url, label, supportsHyperlinks)
+	}
+	// Section headers and item links omit the URL when hyperlinks are not
+	// supported — the raw URL breaks the watch layout without adding value.
+	// The footer CTA always uses linkFn so the URL stays visible.
+	sectionLinkFn := func(url, label string) string {
+		if !supportsHyperlinks {
+			return label
+		}
+		return termHyperlink(url, label, true)
 	}
 
 	var prevLines int
@@ -247,7 +257,7 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsA
 		buf.WriteString("\n")
 
 		// Sections
-		renderWatchSections(&buf, state, appsURL, highlight, dim, bold, linkFn)
+		renderWatchSections(&buf, state, appsURL, highlight, dim, bold, sectionLinkFn)
 
 		// Footer
 		separator := " ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
