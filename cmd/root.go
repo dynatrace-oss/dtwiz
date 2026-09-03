@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/fatih/color"
@@ -12,6 +13,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
+	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 	"github.com/dynatrace-oss/dtwiz/pkg/version"
 )
 
@@ -44,7 +46,23 @@ Then use dtwiz commands to analyze and instrument your system.`,
 		logger.Debug("logging: debug")
 
 		featureflags.ApplyCLIOverrides(cmd.Flags())
+		fireSelfMonitoringStart()
 	},
+}
+
+func fireSelfMonitoringStart() {
+	env := os.Getenv("DTWIZ_SELF_MONITORING_POC")
+	if !strings.EqualFold(env, "true") && env != "1" {
+		return
+	}
+	envURL, _, platformTok, err := getDtEnvironment()
+	if err != nil {
+		logger.Debug(fmt.Sprintf("selfmonitoring: could not resolve credentials: %v", err))
+		return
+	}
+	if err := selfmonitoring.SendEvent(installer.APIURL(envURL), platformTok); err != nil {
+		logger.Debug(fmt.Sprintf("selfmonitoring: %v", err))
+	}
 }
 
 func printBanner() {
