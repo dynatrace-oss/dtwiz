@@ -282,13 +282,19 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsA
 		separator := " ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
 		highlight.Fprint(&buf, separator)
 		if manualLang != "" {
-			langName := otelLangNames[manualLang]
-			if langName == "" {
-				langName = manualLang
+			if manualLang == "other" {
+				otelURL := "https://dt-url.net/otel-walkthroughs"
+				highlight.Fprintf(&buf, " 👉 Browse OTel instrumentation walkthroughs\n")
+				fmt.Fprintf(&buf, "    %s\n", linkFn(otelURL, "→ "+otelURL))
+			} else {
+				langName := otelLangNames[manualLang]
+				if langName == "" {
+					langName = manualLang
+				}
+				otelURL := "https://dt-url.net/otel-" + manualLang
+				highlight.Fprintf(&buf, " 👉 Instrument your %s app\n", langName)
+				fmt.Fprintf(&buf, "    %s\n", linkFn(otelURL, "→ "+otelURL))
 			}
-			otelURL := "https://dt-url.net/otel-" + manualLang
-			highlight.Fprintf(&buf, " 👉 Instrument your %s app\n", langName)
-			fmt.Fprintf(&buf, "    %s\n", linkFn(otelURL, "→ "+otelURL))
 		}
 		if cloudInstall {
 			highlight.Fprintf(&buf, " 👉 See your cloud resources in the Clouds app\n")

@@ -395,6 +395,7 @@ var manualLanguages = []manualLanguageEntry{
 	{Key: "g", Name: "Go", URLSlug: "go"},
 	{Key: "r", Name: "Ruby", URLSlug: "ruby"},
 	{Key: "u", Name: "Rust", URLSlug: "rust"},
+	{Key: "o", Name: "Other language", URLSlug: "other"},
 }
 
 func printProjectList(projects []detectedProject) {
@@ -414,6 +415,8 @@ func printProjectList(projects []detectedProject) {
 		}
 		fmt.Println(line)
 	}
+	fmt.Println()
+	display.ColorMuted.Println("  No auto-instrumentation yet — select your language for a manual walkthrough:")
 	fmt.Println()
 	for _, lang := range manualLanguages {
 		fmt.Printf("  [%s]  %-10s — OTel instrumentation guide shown after install\n", lang.Key, lang.Name)

@@ -280,9 +280,12 @@ func TestPrintProjectList_Formatting(t *testing.T) {
 		"github.com/example/go-svc",
 		"[s]",
 		"Skip —",
-		// manual language entries
+		// manual language entries + separator + other option
 		"PHP",
 		"Ruby",
+		"[o]",
+		"Other language",
+		"No auto-instrumentation yet",
 	}
 	for _, c := range checks {
 		if !strings.Contains(output, c) {
@@ -375,6 +378,7 @@ func TestSelectProject(t *testing.T) {
 		{name: "language key selects go", input: "g\n", wantOK: true, wantIdx: -1, wantLang: "go"},
 		{name: "language key selects php", input: "p\n", wantOK: true, wantIdx: -1, wantLang: "php"},
 		{name: "language key selects rust", input: "u\n", wantOK: true, wantIdx: -1, wantLang: "rust"},
+		{name: "language key selects other", input: "o\n", wantOK: true, wantIdx: -1, wantLang: "other"},
 	}
 
 	for _, tt := range tests {
