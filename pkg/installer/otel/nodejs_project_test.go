@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/markers"
 	"github.com/dynatrace-oss/dtwiz/test/helpers"
 )
 
@@ -52,7 +53,7 @@ func TestDetectNodeProjects_ExcludesNodeModules(t *testing.T) {
 	}
 }
 
-// --- Task 1.1a: isNextJSProject tests ---
+// --- Task 1.1a: IsNextJSProject tests ---
 
 func TestIsNextJSProject_ConfigFile(t *testing.T) {
 	for _, configFile := range []string{"next.config.js", "next.config.ts", "next.config.mjs"} {
@@ -64,8 +65,8 @@ func TestIsNextJSProject_ConfigFile(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(dir, configFile), []byte(""), 0644); err != nil {
 				t.Fatal(err)
 			}
-			if !isNextJSProject(dir) {
-				t.Errorf("expected isNextJSProject=true for %s", configFile)
+			if !markers.IsNextJSProject(dir) {
+				t.Errorf("expected IsNextJSProject=true for %s", configFile)
 			}
 		})
 	}
@@ -76,8 +77,8 @@ func TestIsNextJSProject_PackageDep(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"dependencies":{"next":"14.0.0"}}`), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if !isNextJSProject(dir) {
-		t.Error("expected isNextJSProject=true for next in dependencies")
+	if !markers.IsNextJSProject(dir) {
+		t.Error("expected IsNextJSProject=true for next in dependencies")
 	}
 }
 
@@ -86,8 +87,8 @@ func TestIsNextJSProject_DevDep(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"devDependencies":{"next":"14.0.0"}}`), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if !isNextJSProject(dir) {
-		t.Error("expected isNextJSProject=true for next in devDependencies")
+	if !markers.IsNextJSProject(dir) {
+		t.Error("expected IsNextJSProject=true for next in devDependencies")
 	}
 }
 
@@ -96,8 +97,8 @@ func TestIsNextJSProject_NotNextJS(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"dependencies":{"express":"4.0.0"}}`), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if isNextJSProject(dir) {
-		t.Error("expected isNextJSProject=false for non-Next.js project")
+	if markers.IsNextJSProject(dir) {
+		t.Error("expected IsNextJSProject=false for non-Next.js project")
 	}
 }
 

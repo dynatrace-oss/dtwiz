@@ -12,6 +12,7 @@ This change adds the detection layer: a cross-platform scanner that classifies a
 - Scan the project directory for `.html` files, excluding build output directories.
 - Detect frameworks and build tools by inspecting config files and `package.json` dependencies.
 - Determine injection mode (`auto` or `manual`) and populate a result struct with injectable files, the chosen mode, and the reason for manual mode when applicable.
+- Wire detection into `dtwiz install otel` behind `--experimental` / `DTWIZ_EXPERIMENTAL`, showing a preview section with the detected mode and injectable files.
 
 ## Capabilities
 
@@ -21,11 +22,12 @@ This change adds the detection layer: a cross-platform scanner that classifies a
 
 ### Modified Capabilities
 
-- None. The OTel installer is not modified in this change; it will call the detector in a follow-on change.
+- `install otel`: When `--experimental` is active, runs RUM detection before the confirmation prompt and displays a "Real User Monitoring [experimental]" section in the install preview showing the detected mode and injectable files. No injection happens yet; the preview is informational only.
 
 ## Impact
 
 - New package `pkg/installer/otel/rum/` with no external dependencies beyond the Go standard library.
-- No changes to CLI commands, flags, or UX in this change.
+- `pkg/installer/otel/otel.go` imports `pkg/installer/otel/rum`; the `rum` package is self-contained and does not import back into `otel`.
+- The experimental preview section appears only when `--experimental` / `DTWIZ_EXPERIMENTAL=true`; default behaviour of `dtwiz install otel` is unchanged.
 - No new Dynatrace API calls.
 - Table-driven unit tests using in-memory temp directories; no filesystem side effects in CI.
