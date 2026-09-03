@@ -418,7 +418,7 @@ func printProjectList(projects []detectedProject) {
 	fmt.Println()
 	display.ColorMuted.Println("  Following languages don't support automatic project detection yet:")
 	for _, lang := range manualLanguages {
-		fmt.Printf("  [%s]  %-10s — OTel instrumentation guide shown after install\n", lang.Key, lang.Name)
+		fmt.Printf("  [%s]  %-14s — OTel instrumentation guide shown after install\n", lang.Key, lang.Name)
 	}
 	fmt.Println()
 	fmt.Println("  [s]  Skip — I already have my application instrumented with OpenTelemetry or just want host monitoring")
