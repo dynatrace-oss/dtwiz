@@ -285,7 +285,7 @@ func TestPrintProjectList_Formatting(t *testing.T) {
 		"Ruby",
 		"[o]",
 		"Other language",
-		"No auto-instrumentation yet",
+		"Following languages don't support automatic project detection yet",
 	}
 	for _, c := range checks {
 		if !strings.Contains(output, c) {

@@ -416,8 +416,7 @@ func printProjectList(projects []detectedProject) {
 		fmt.Println(line)
 	}
 	fmt.Println()
-	display.ColorMuted.Println("  No auto-instrumentation yet — select your language for a manual walkthrough:")
-	fmt.Println()
+	display.ColorMuted.Println("  Following languages don't support automatic project detection yet:")
 	for _, lang := range manualLanguages {
 		fmt.Printf("  [%s]  %-10s — OTel instrumentation guide shown after install\n", lang.Key, lang.Name)
 	}
