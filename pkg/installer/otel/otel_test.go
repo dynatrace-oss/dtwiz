@@ -69,7 +69,7 @@ func captureInstallOutput(t *testing.T, isElevated bool) string {
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 
 	// dryRun=true prevents any download or process execution.
-	_ = InstallOtelCollector("https://env.example.com", "mytoken", "", true)
+	_, _ = InstallOtelCollector("https://env.example.com", "mytoken", "", true)
 
 	w.Close()
 	out, _ := io.ReadAll(r)
@@ -278,7 +278,14 @@ func TestPrintProjectList_Formatting(t *testing.T) {
 		"/home/user/svc",
 		"pom.xml",
 		"github.com/example/go-svc",
-		"Skip — If skipped",
+		"[s]",
+		"Skip —",
+		// manual language entries + separator + other option
+		"PHP",
+		"Ruby",
+		"[o]",
+		"Other language",
+		"Following languages don't support automatic project detection yet",
 	}
 	for _, c := range checks {
 		if !strings.Contains(output, c) {
@@ -357,29 +364,37 @@ func TestSelectProject(t *testing.T) {
 	}
 
 	tests := []struct {
-		name    string
-		input   string
-		wantOK  bool
-		wantIdx int
+		name     string
+		input    string
+		wantOK   bool
+		wantIdx  int
+		wantLang string
 	}{
 		{name: "empty input skips", input: "\n", wantOK: false, wantIdx: -1},
-		{name: "non numeric skips", input: "abc\n", wantOK: false, wantIdx: -1},
+		{name: "s skips", input: "s\n", wantOK: false, wantIdx: -1},
+		{name: "invalid input skips", input: "xyz\n", wantOK: false, wantIdx: -1},
 		{name: "out of range skips", input: "9\n", wantOK: false, wantIdx: -1},
-		{name: "explicit skip option", input: "3\n", wantOK: false, wantIdx: -1},
-		{name: "valid selection", input: "2\n", wantOK: true, wantIdx: 1},
+		{name: "valid project selection", input: "2\n", wantOK: true, wantIdx: 1},
+		{name: "language key selects go", input: "g\n", wantOK: true, wantIdx: -1, wantLang: "go"},
+		{name: "language key selects php", input: "p\n", wantOK: true, wantIdx: -1, wantLang: "php"},
+		{name: "language key selects rust", input: "u\n", wantOK: true, wantIdx: -1, wantLang: "rust"},
+		{name: "language key selects other", input: "o\n", wantOK: true, wantIdx: -1, wantLang: "other"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			setTestStdin(t, tt.input)
 
-			project, ok := selectProject(projects)
+			project, lang, ok := selectProject(projects)
 
 			if ok != tt.wantOK {
 				t.Fatalf("expected ok=%v, got %v", tt.wantOK, ok)
 			}
 			if tt.wantIdx >= 0 && project.Path != projects[tt.wantIdx].Path {
 				t.Fatalf("expected selected path %s, got %s", projects[tt.wantIdx].Path, project.Path)
+			}
+			if tt.wantLang != "" && lang != tt.wantLang {
+				t.Fatalf("expected lang=%q, got %q", tt.wantLang, lang)
 			}
 		})
 	}
@@ -770,7 +785,7 @@ func TestInstallOtelCollector_RoutesBeforeCollectorVerification(t *testing.T) {
 	}
 	t.Cleanup(func() { executeCollectorPlanFn = origExecute })
 
-	if err := InstallOtelCollector("https://env.example.com", "tok", "dt0s16.test", false); err != nil {
+	if _, err := InstallOtelCollector("https://env.example.com", "tok", "dt0s16.test", false); err != nil {
 		t.Fatalf("InstallOtelCollector() error = %v", err)
 	}
 }
@@ -823,7 +838,7 @@ func TestInstallOtelCollectorWithProject_RoutesBeforeCollectorAndApp(t *testing.
 	}
 	t.Cleanup(func() { executeCollectorPlanFn = origExecute })
 
-	if err := InstallOtelCollectorWithProject("https://env.example.com", "tok", "dt0s16.test", projectDir, false); err != nil {
+	if _, err := InstallOtelCollectorWithProject("https://env.example.com", "tok", "dt0s16.test", projectDir, false); err != nil {
 		t.Fatalf("InstallOtelCollectorWithProject() error = %v", err)
 	}
 	if !plan.executed {
@@ -905,7 +920,8 @@ func runInstallWithAutoConfirm(t *testing.T, platformToken string) error {
 	}
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 
-	return InstallOtelCollectorWithProject("https://env.example.com", "tok", platformToken, "", false)
+	_, err = InstallOtelCollectorWithProject("https://env.example.com", "tok", platformToken, "", false)
+	return err
 }
 
 // TestInstallOtelCollector_CallsActivation verifies that the extension
@@ -955,7 +971,7 @@ func TestInstallOtelCollector_DryRun_SkipsActivation(t *testing.T) {
 	installer.AutoConfirm = true
 	t.Cleanup(func() { installer.AutoConfirm = origAC })
 
-	_ = InstallOtelCollector("https://env.example.com", "tok", "", true /* dryRun */)
+	_, _ = InstallOtelCollector("https://env.example.com", "tok", "", true /* dryRun */)
 
 	if *called {
 		t.Error("expected activateHostMonitoringExtensionFn NOT to be called on dry run")
@@ -1445,10 +1461,10 @@ func TestPrintGrailPlanAndApplyResults(t *testing.T) {
 	}
 }
 
-// TestInstallOtelCollector_Darwin_AlwaysShowsUnavailableNotice verifies that on
+// TestInstallOtelCollector_Darwin_NeverShowsUnavailableNotice verifies that on
 // macOS the advisory about system.processes.created / process.disk.io being
-// unavailable is printed regardless of privilege level.
-func TestInstallOtelCollector_Darwin_AlwaysShowsUnavailableNotice(t *testing.T) {
+// unavailable is NOT printed (it is debug-only).
+func TestInstallOtelCollector_Darwin_NeverShowsUnavailableNotice(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("Darwin-only test")
 	}
@@ -1462,8 +1478,8 @@ func TestInstallOtelCollector_Darwin_AlwaysShowsUnavailableNotice(t *testing.T) 
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			output := captureInstallOutput(t, tt.isElevated)
-			if !strings.Contains(output, "macOS") {
-				t.Errorf("expected macOS unavailability notice in output:\n%s", output)
+			if strings.Contains(output, "system.processes.created") {
+				t.Errorf("macOS unavailability notice must not appear in non-debug output:\n%s", output)
 			}
 		})
 	}

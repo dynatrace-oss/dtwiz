@@ -158,14 +158,15 @@ var installOtelCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := otel.InstallOtelCollectorWithProject(envURL, classicTok, platformTok, otelProject, installDryRun); err != nil {
+		manualLang, err := otel.InstallOtelCollectorWithProject(envURL, classicTok, platformTok, otelProject, installDryRun)
+		if err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
 				return nil
 			}
 			return err
 		}
 		if !installDryRun {
-			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat))
+			installer.WatchIngestOtel(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), manualLang)
 		}
 		return nil
 	},

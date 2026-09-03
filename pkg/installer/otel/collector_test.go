@@ -971,6 +971,8 @@ func TestCollectorPlanPrintDryRun(t *testing.T) {
 	}
 }
 
+// buildPreviewConfig builds a synthetic config for preview tests.
+// Structure: headLines head lines, middleLines middle lines, optional pipelines, then 5 exporter lines.
 func buildPreviewConfig(headLines, middleLines int, withPipelines bool) string {
 	var b strings.Builder
 	for i := range headLines {
@@ -984,6 +986,11 @@ func buildPreviewConfig(headLines, middleLines int, withPipelines bool) string {
 		b.WriteString("    traces:\n")
 		b.WriteString("      receivers: [otlp]\n")
 	}
+	b.WriteString("exporters:\n")
+	b.WriteString("  otlp_http:\n")
+	b.WriteString("    endpoint: https://example.com/api/v2/otlp\n")
+	b.WriteString("    headers:\n")
+	b.WriteString("      Authorization: \"Bearer ***\"\n")
 	return b.String()
 }
 
@@ -999,34 +1006,36 @@ func TestPrintConfigPreview_Truncation(t *testing.T) {
 		wantMsg       string // substring expected in ellipsis line (if wantEllipsis)
 	}{
 		{
-			name:          "short middle with pipelines — no truncation",
+			name:          "short tail with pipelines — truncated, pipelines hidden, exporters shown",
 			headLines:     20,
-			middleLines:   9, // 9 ≤ 30: show everything
+			middleLines:   9, // 9 middle + 3 pipeline lines = 12 hidden before exporters
 			withPipelines: true,
-			wantEllipsis:  false,
+			wantEllipsis:  true,
+			wantMsg:       "12 lines",
 		},
 		{
-			name:          "long middle with pipelines — truncate, show pipelines after",
+			name:          "long tail with pipelines — truncated, pipelines hidden, exporters shown",
 			headLines:     20,
-			middleLines:   31, // 31 > 30: hide middle
+			middleLines:   31, // 31 middle + 3 pipeline lines = 34 hidden before exporters
 			withPipelines: true,
+			wantEllipsis:  true,
+			wantMsg:       "34 lines",
+		},
+		{
+			name:          "short tail without pipelines — truncated, exporters shown",
+			headLines:     20,
+			middleLines:   9, // 9 middle lines hidden before exporters
+			withPipelines: false,
+			wantEllipsis:  true,
+			wantMsg:       "9 lines",
+		},
+		{
+			name:          "long tail without pipelines — truncated, exporters shown",
+			headLines:     20,
+			middleLines:   31, // 31 middle lines hidden before exporters
+			withPipelines: false,
 			wantEllipsis:  true,
 			wantMsg:       "31 lines",
-		},
-		{
-			name:          "short tail without pipelines — no truncation",
-			headLines:     20,
-			middleLines:   9, // 9 ≤ 30: show everything
-			withPipelines: false,
-			wantEllipsis:  false,
-		},
-		{
-			name:          "long tail without pipelines — truncate",
-			headLines:     20,
-			middleLines:   31, // 31 > 30: hide tail
-			withPipelines: false,
-			wantEllipsis:  true,
-			wantMsg:       "31 more lines",
 		},
 	}
 
@@ -1046,19 +1055,13 @@ func TestPrintConfigPreview_Truncation(t *testing.T) {
 			if tc.wantEllipsis && !strings.Contains(out, tc.wantMsg) {
 				t.Errorf("ellipsis line missing %q\noutput:\n%s", tc.wantMsg, out)
 			}
-			if !tc.wantEllipsis {
-				for i := range tc.middleLines {
-					marker := fmt.Sprintf("middle_%02d", i)
-					if !strings.Contains(out, marker) {
-						t.Errorf("expected %q in full output\noutput:\n%s", marker, out)
-					}
-				}
-				if tc.withPipelines && !strings.Contains(out, "pipelines:") {
-					t.Errorf("expected pipelines section in full output\noutput:\n%s", out)
-				}
+			// Pipelines section must never appear in default (non-debug) output.
+			if strings.Contains(out, "pipelines:") {
+				t.Errorf("pipelines section must not appear in default output\noutput:\n%s", out)
 			}
-			if tc.wantEllipsis && tc.withPipelines && !strings.Contains(out, "pipelines:") {
-				t.Errorf("pipelines section missing after ellipsis\noutput:\n%s", out)
+			// Exporters section must always appear in default (non-debug) output.
+			if !strings.Contains(out, "exporters:") {
+				t.Errorf("exporters section must appear in default output\noutput:\n%s", out)
 			}
 		})
 	}

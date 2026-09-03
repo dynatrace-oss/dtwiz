@@ -36,20 +36,26 @@ func TestConfirmProceedAutoConfirm(t *testing.T) {
 func TestInstallOtelCollectorWithProject_DryRun(t *testing.T) {
 	dir := t.TempDir()
 	helpers.SetTestWorkingDir(t, dir)
-	setTestStdin(t, "y\n")
+	// Isolate scan roots: HOME/USERPROFILE point at the temp dir so no real
+	// projects are detected and the scan completes quickly.
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+	// "s" selects Skip in the project-selection UI.
+	// platformToken is empty so buildTenantPrerequisitePreview skips API calls.
+	setTestStdin(t, "s\n")
 
 	output := helpers.CaptureStdout(t, func() {
-		err := InstallOtelCollectorWithProject(
-			"https://fake.live.dynatrace.com", "tok", "tok", "", true,
+		_, err := InstallOtelCollectorWithProject(
+			"https://fake.live.dynatrace.com", "tok", "", "", true,
 		)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
-	// The collector config preview (printed via fmt.Printf) must be present.
-	if !strings.Contains(output, "fake.live.dynatrace.com") {
-		t.Fatalf("expected collector config in dry-run output, got:\n%s", output)
+	// The collector config header must appear in the dry-run output.
+	if !strings.Contains(output, "health_check:") {
+		t.Fatalf("expected collector config preview in dry-run output, got:\n%s", output)
 	}
 	// No files must be written.
 	if _, err := os.Stat(filepath.Join(dir, "opentelemetry")); !os.IsNotExist(err) {
@@ -58,7 +64,7 @@ func TestInstallOtelCollectorWithProject_DryRun(t *testing.T) {
 }
 
 func TestInstallOtelCollectorWithProjectPathNotFound(t *testing.T) {
-	err := InstallOtelCollectorWithProject("https://fake.live.dynatrace.com", "tok", "tok", "/nonexistent/path", false)
+	_, err := InstallOtelCollectorWithProject("https://fake.live.dynatrace.com", "tok", "tok", "/nonexistent/path", false)
 	if err == nil {
 		t.Fatal("expected error for non-existent project path")
 	}

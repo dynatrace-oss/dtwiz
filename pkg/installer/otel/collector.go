@@ -767,7 +767,8 @@ func extractOtlpHTTPPort(configYAML []byte) (httpPort int, portFound bool) {
 }
 
 // printConfigPreview prints the OTel Collector config preview.
-// Default: head (up to OTLP receiver endpoints) + "..." + pipelines section.
+// Default: head (up to OTLP receiver endpoints) + "..." + exporters section.
+// Pipelines are always hidden in non-debug output.
 // With --debug: full config.
 func (cp *collectorPlan) printConfigPreview(sep string) {
 	const headLines = 20
@@ -787,27 +788,17 @@ func (cp *collectorPlan) printConfigPreview(sep string) {
 		}
 	} else {
 		headEnd := configHeadEnd(lines, headLines)
-		pipeStart := pipelinesSectionStart(lines)
+		exportersStart := exportersSectionStart(lines)
 		for _, line := range lines[:headEnd] {
 			fmt.Printf("    %s\n", line)
 		}
-		const truncateThreshold = 30
-		switch {
-		case pipeStart > headEnd && pipeStart-headEnd > truncateThreshold:
-			fmt.Printf("    # ... (%d lines) — run with --debug to see full %s\n", pipeStart-headEnd, label)
-			for _, line := range lines[pipeStart:] {
+		if exportersStart > headEnd {
+			fmt.Printf("    # ... (%d lines) — run with --debug to see full %s\n", exportersStart-headEnd, label)
+			for _, line := range lines[exportersStart:] {
 				fmt.Printf("    %s\n", line)
 			}
-		case pipeStart > headEnd:
-			for _, line := range lines[headEnd:] {
-				fmt.Printf("    %s\n", line)
-			}
-		case len(lines)-headEnd > truncateThreshold:
-			fmt.Printf("    # ... (%d more lines) — run with --debug to see full %s\n", len(lines)-headEnd, label)
-		case len(lines) > headEnd:
-			for _, line := range lines[headEnd:] {
-				fmt.Printf("    %s\n", line)
-			}
+		} else if len(lines) > headEnd {
+			fmt.Printf("    # ... (%d lines) — run with --debug to see full %s\n", len(lines)-headEnd, label)
 		}
 	}
 
@@ -832,6 +823,16 @@ func configHeadEnd(lines []string, headLines int) int {
 func pipelinesSectionStart(lines []string) int {
 	for i, line := range lines {
 		if strings.TrimRight(line, " ") == "  pipelines:" {
+			return i
+		}
+	}
+	return -1
+}
+
+// exportersSectionStart returns the index of the top-level "exporters:" line, or -1 if not found.
+func exportersSectionStart(lines []string) int {
+	for i, line := range lines {
+		if strings.TrimRight(line, " ") == "exporters:" {
 			return i
 		}
 	}
