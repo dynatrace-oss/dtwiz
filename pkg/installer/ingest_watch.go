@@ -95,7 +95,14 @@ type watchState struct {
 // fromClause is injected directly into DQL queries — accepts RFC3339 timestamps
 // or DQL relative expressions (e.g. "now()-1h").
 func WatchIngest(envURL, pToken, fromClause string) {
-	watchIngest(envURL, pToken, fromClause, nil, "", false)
+	watchIngest(envURL, pToken, fromClause, nil, "", false, "")
+}
+
+// WatchIngestOtel is like WatchIngest but also shows a call to action to
+// instrument the application when manualLang is the URL slug of a language
+// the user selected for manual instrumentation (e.g. "go", "php").
+func WatchIngestOtel(envURL, pToken, fromClause, manualLang string) {
+	watchIngest(envURL, pToken, fromClause, nil, "", false, manualLang)
 }
 
 // WatchIngestCloudFromTime is like WatchIngest but calls WatchIngestCloud.
@@ -112,24 +119,36 @@ func WatchIngestCloudFromTime(envURL, pToken string, startTime time.Time) {
 // The caller sends status messages to statusCh; the most recent message is
 // shown on every render. Passing a nil channel disables status updates.
 func WatchIngestWithStatus(envURL, pToken, fromClause string, statusCh <-chan string) {
-	watchIngest(envURL, pToken, fromClause, statusCh, "", false)
+	watchIngest(envURL, pToken, fromClause, statusCh, "", false, "")
 }
 
 // WatchIngestAWS is like WatchIngestWithStatus but additionally scopes the
 // cloud-platform signal queries (metrics + da-* logs) to a specific AWS
 // account ID so noise from other accounts in the same tenant is filtered out.
 func WatchIngestAWS(envURL, pToken, fromClause string, statusCh <-chan string, awsAccountID string) {
-	watchIngest(envURL, pToken, fromClause, statusCh, awsAccountID, true)
+	watchIngest(envURL, pToken, fromClause, statusCh, awsAccountID, true, "")
 }
 
 // WatchIngestCloud is like WatchIngest but shows a "See your cloud resources
 // in the Clouds app" footer instead of the QuickStart link. Use this for
 // AWS, GCP, and Azure installs.
 func WatchIngestCloud(envURL, pToken, fromClause string) {
-	watchIngest(envURL, pToken, fromClause, nil, "", true)
+	watchIngest(envURL, pToken, fromClause, nil, "", true, "")
 }
 
-func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsAccountID string, cloudInstall bool) {
+// otelLangNames maps a manual-language URL slug to its display name.
+var otelLangNames = map[string]string{
+	"php":    "PHP",
+	"cpp":    "C++",
+	"dotnet": ".NET",
+	"elixir": "Elixir",
+	"erlang": "Erlang",
+	"go":     "Go",
+	"ruby":   "Ruby",
+	"rust":   "Rust",
+}
+
+func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsAccountID string, cloudInstall bool, manualLang string) {
 	if pToken == "" {
 		fmt.Println("  Platform token required for watch. Set --platform-token or DT_PLATFORM_TOKEN.")
 		return
@@ -262,6 +281,15 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsA
 		// Footer
 		separator := " ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
 		highlight.Fprint(&buf, separator)
+		if manualLang != "" {
+			langName := otelLangNames[manualLang]
+			if langName == "" {
+				langName = manualLang
+			}
+			otelURL := "https://dt-url.net/otel-" + manualLang
+			highlight.Fprintf(&buf, " 👉 Instrument your %s app\n", langName)
+			fmt.Fprintf(&buf, "    %s\n", linkFn(otelURL, "→ "+otelURL))
+		}
 		if cloudInstall {
 			highlight.Fprintf(&buf, " 👉 See your cloud resources in the Clouds app\n")
 			fmt.Fprintf(&buf, "    %s\n", linkFn(appsURL+"/ui/apps/dynatrace.clouds/smartscape/services", "→ Open Clouds"))

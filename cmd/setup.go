@@ -145,6 +145,7 @@ var setupCmd = &cobra.Command{
 		}
 
 		var installErr error
+		var otelManualLang string
 		switch selected.Method {
 		case recommender.MethodOneAgent:
 			installErr = oneagent.InstallOneAgentV2(c, oneagent.InstallOptions{
@@ -162,7 +163,7 @@ var setupCmd = &cobra.Command{
 		case recommender.MethodDocker:
 			installErr = installer.InstallDocker(envURL, classicTok, setupDryRun)
 		case recommender.MethodOtelCollector:
-			installErr = otel.InstallOtelCollector(envURL, classicTok, platformTok, setupDryRun)
+			otelManualLang, installErr = otel.InstallOtelCollector(envURL, classicTok, platformTok, setupDryRun)
 		case recommender.MethodOtelUpdate:
 			installErr = otel.UpdateOtelConfigInteractive(envURL, classicTok, platformTok, setupDryRun)
 		case recommender.MethodAWS:
@@ -194,9 +195,10 @@ var setupCmd = &cobra.Command{
 		case recommender.MethodOneAgent,
 			recommender.MethodKubernetes,
 			recommender.MethodDocker,
-			recommender.MethodOtelCollector,
 			recommender.MethodOtelUpdate:
 			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat))
+		case recommender.MethodOtelCollector:
+			installer.WatchIngestOtel(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), otelManualLang)
 		}
 		return nil
 	},

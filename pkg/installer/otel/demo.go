@@ -339,5 +339,6 @@ func InstallDemo(envURL, token, platformTok string, dryRun bool) error {
 	}
 
 	installer.AutoConfirm = true
-	return InstallOtelCollectorWithProject(envURL, token, platformTok, demoPath, dryRun)
+	_, err = InstallOtelCollectorWithProject(envURL, token, platformTok, demoPath, dryRun)
+	return err
 }

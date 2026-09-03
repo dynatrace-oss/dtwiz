@@ -787,27 +787,11 @@ func (cp *collectorPlan) printConfigPreview(sep string) {
 		}
 	} else {
 		headEnd := configHeadEnd(lines, headLines)
-		pipeStart := pipelinesSectionStart(lines)
 		for _, line := range lines[:headEnd] {
 			fmt.Printf("    %s\n", line)
 		}
-		const truncateThreshold = 30
-		switch {
-		case pipeStart > headEnd && pipeStart-headEnd > truncateThreshold:
-			fmt.Printf("    # ... (%d lines) — run with --debug to see full %s\n", pipeStart-headEnd, label)
-			for _, line := range lines[pipeStart:] {
-				fmt.Printf("    %s\n", line)
-			}
-		case pipeStart > headEnd:
-			for _, line := range lines[headEnd:] {
-				fmt.Printf("    %s\n", line)
-			}
-		case len(lines)-headEnd > truncateThreshold:
-			fmt.Printf("    # ... (%d more lines) — run with --debug to see full %s\n", len(lines)-headEnd, label)
-		case len(lines) > headEnd:
-			for _, line := range lines[headEnd:] {
-				fmt.Printf("    %s\n", line)
-			}
+		if len(lines) > headEnd {
+			fmt.Printf("    # ... (%d lines) — run with --debug to see full %s\n", len(lines)-headEnd, label)
 		}
 	}
 

@@ -97,7 +97,8 @@ const (
 // The scan root itself is exempted from the skip-children rule: it's the
 // user's cwd, not necessarily a project boundary, so a marker match there
 // (e.g. a stray lockfile) must not hide every nested project underneath it.
-func walkCandidateDirs(root string, parentLevels int, visit func(dir string, entries []os.DirEntry) bool, shouldSkip func(name string) bool) {
+// shouldSkip receives the full absolute child path (not just the name).
+func walkCandidateDirs(root string, parentLevels int, visit func(dir string, entries []os.DirEntry) bool, shouldSkip func(path string) bool) {
 	concurrency := max(runtime.NumCPU()*scanConcurrencyPerCPU, minScanConcurrency)
 	// When full, child scans run synchronously instead of spawning more goroutines.
 	sem := make(chan struct{}, concurrency)
@@ -123,10 +124,13 @@ func walkCandidateDirs(root string, parentLevels int, visit func(dir string, ent
 		}
 
 		for _, entry := range entries {
-			if !entry.IsDir() || shouldSkip(entry.Name()) {
+			if !entry.IsDir() {
 				continue
 			}
 			childPath := filepath.Join(dir, entry.Name())
+			if shouldSkip(childPath) {
+				continue
+			}
 			if _, loaded := queued.LoadOrStore(childPath, struct{}{}); loaded {
 				continue
 			}
@@ -310,6 +314,19 @@ func isDescendant(child, parent string) bool {
 	return true
 }
 
+// effectiveGOPATH returns the Go workspace directory, defaulting to ~/go when
+// GOPATH is not set. Returns "" if the home directory cannot be determined.
+func effectiveGOPATH() string {
+	if gp := os.Getenv("GOPATH"); gp != "" {
+		return filepath.Clean(gp)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, "go")
+}
+
 func scanProjectDirs(markers []string, excludeNames []string, roots []string) []ScannedProject {
 	if len(roots) == 0 {
 		return nil
@@ -320,8 +337,14 @@ func scanProjectDirs(markers []string, excludeNames []string, roots []string) []
 		excludedDirNames[name] = true
 	}
 
-	shouldSkipDir := func(name string) bool {
-		return strings.HasPrefix(name, ".") || strings.HasPrefix(name, "$") || excludedDirNames[name] || ignoredProjectDirNames[name]
+	gopath := effectiveGOPATH()
+	shouldSkipDir := func(path string) bool {
+		name := filepath.Base(path)
+		if strings.HasPrefix(name, ".") || strings.HasPrefix(name, "$") || excludedDirNames[name] || ignoredProjectDirNames[name] {
+			return true
+		}
+		// Skip the Go workspace directory (module cache lives inside it).
+		return gopath != "" && (path == gopath || isDescendant(path, gopath))
 	}
 
 	// The first root is the working directory; progress and relative-path
@@ -341,7 +364,7 @@ func scanProjectDirs(markers []string, excludeNames []string, roots []string) []
 	var subtreeCounts sync.Map   // relative top-level child → *atomic.Int64
 
 	dirMatches := func(dir string, entries []os.DirEntry) bool {
-		if shouldSkipDir(filepath.Base(dir)) {
+		if shouldSkipDir(dir) {
 			return false
 		}
 

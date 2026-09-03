@@ -378,21 +378,23 @@ func detectAllProjects(runtimes []runtimeInfo, roots []string) []detectedProject
 	return all
 }
 
-const openTelemetryWalkthroughsURL = "https://docs.dynatrace.com/docs/ingest-from/opentelemetry/walkthroughs"
+// manualLanguageEntry describes a language that dtwiz does not auto-instrument.
+// The user can select it to receive an OTel instrumentation guide after install.
+type manualLanguageEntry struct {
+	Key     string // single-character selection key
+	Name    string // display name
+	URLSlug string // slug for https://dt-url.net/otel-<slug>
+}
 
-// printSupportedRuntimesInfoBox tells the user which runtimes dtwiz can
-// auto-instrument and where to find manual walkthroughs for the rest.
-func printSupportedRuntimesInfoBox() {
-	linkText := openTelemetryWalkthroughsURL
-	if display.StdoutSupportsHyperlinks() {
-		linkText = display.Hyperlink("OpenTelemetry walkthroughs", openTelemetryWalkthroughsURL)
-	}
-	display.PrintInfoBox(
-		"(i) dtwiz automatically instruments Python, Java, and Node.js projects.",
-		"",
-		"To instrument PHP, C++, .NET, Elixir, Erlang, Go, Ruby, or Rust, follow the walkthroughs:",
-		linkText,
-	)
+var manualLanguages = []manualLanguageEntry{
+	{Key: "p", Name: "PHP", URLSlug: "php"},
+	{Key: "c", Name: "C++", URLSlug: "cpp"},
+	{Key: "n", Name: ".NET", URLSlug: "dotnet"},
+	{Key: "e", Name: "Elixir", URLSlug: "elixir"},
+	{Key: "l", Name: "Erlang", URLSlug: "erlang"},
+	{Key: "g", Name: "Go", URLSlug: "go"},
+	{Key: "r", Name: "Ruby", URLSlug: "ruby"},
+	{Key: "u", Name: "Rust", URLSlug: "rust"},
 }
 
 func printProjectList(projects []detectedProject) {
@@ -412,28 +414,39 @@ func printProjectList(projects []detectedProject) {
 		}
 		fmt.Println(line)
 	}
-	fmt.Printf("  [%d]  ", len(projects)+1)
-	display.ColorMessage.Println("Skip — If skipped, you need to send application signals to the OpenTelemetry Collector yourself so they show up in Dynatrace.")
+	fmt.Println()
+	for _, lang := range manualLanguages {
+		fmt.Printf("  [%s]  %-10s — OTel instrumentation guide shown after install\n", lang.Key, lang.Name)
+	}
+	fmt.Println()
+	fmt.Println("  [s]  Skip — I already have my application instrumented with OpenTelemetry or just want host monitoring")
 }
 
-func selectProject(projects []detectedProject) (detectedProject, bool) {
+// selectProject prompts the user to select a detected project, a manual language, or skip.
+// Returns (project, languageSlug, ok):
+//   - ok=false means skip / cancel
+//   - languageSlug != "" means a manual language was selected (no project)
+//   - otherwise a detected project was selected
+func selectProject(projects []detectedProject) (detectedProject, string, bool) {
 	fmt.Println()
-	fmt.Printf("  Select a project to instrument [1-%d]: ", len(projects)+1)
+	fmt.Print("  Your selection: ")
 	reader := bufio.NewReader(os.Stdin)
 	answer, _ := reader.ReadString('\n')
-	answer = strings.TrimSpace(answer)
-	if answer == "" {
-		return detectedProject{}, false
+	answer = strings.TrimSpace(strings.ToLower(answer))
+	if answer == "" || answer == "s" {
+		return detectedProject{}, "", false
+	}
+	for _, lang := range manualLanguages {
+		if answer == lang.Key {
+			return detectedProject{}, lang.URLSlug, true
+		}
 	}
 	num, err := strconv.Atoi(answer)
-	if err != nil || num < 1 || num > len(projects)+1 {
+	if err != nil || num < 1 || num > len(projects) {
 		fmt.Println("  Invalid selection, skipping instrumentation.")
-		return detectedProject{}, false
+		return detectedProject{}, "", false
 	}
-	if num == len(projects)+1 {
-		return detectedProject{}, false
-	}
-	return projects[num-1], true
+	return projects[num-1], "", true
 }
 
 func createRuntimePlan(proj detectedProject, httpPort int, token, envURL, platformToken string) InstrumentationPlan {
@@ -495,14 +508,20 @@ func inferRuntimeFromPath(path string) string {
 	return ""
 }
 
-func InstallOtelCollector(envURL, token, platformToken string, dryRun bool) error {
+// InstallOtelCollector installs the OTel Collector with interactive project selection.
+// Returns the URL slug of the manually-selected language (e.g. "go", "php") when
+// the user chose a language that requires manual instrumentation; empty otherwise.
+func InstallOtelCollector(envURL, token, platformToken string, dryRun bool) (string, error) {
 	return InstallOtelCollectorWithProject(envURL, token, platformToken, "", dryRun)
 }
 
-func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath string, dryRun bool) error {
+// InstallOtelCollectorWithProject installs the OTel Collector, optionally with
+// auto-instrumentation for a pre-selected project path.
+// Returns the URL slug of the manually-selected language when the user chose one.
+func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath string, dryRun bool) (string, error) {
 	if projectPath != "" {
 		if _, err := os.Stat(projectPath); err != nil {
-			return fmt.Errorf("project path not found: %s", projectPath)
+			return "", fmt.Errorf("project path not found: %s", projectPath)
 		}
 	}
 
@@ -523,8 +542,7 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 			fmt.Println("        without it, metrics for services and other users' processes are skipped.")
 		}
 	case "darwin":
-		fmt.Println("  Note: system.processes.created and process.disk.io are unavailable on macOS")
-		fmt.Println("        regardless of privilege level and will not appear in Dynatrace.")
+		logger.Debug("system.processes.created and process.disk.io are unavailable on macOS regardless of privilege level")
 	}
 	fmt.Println()
 
@@ -532,17 +550,18 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 
 	cp, err := prepareCollectorPlan(envURL, token)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	var plan InstrumentationPlan
+	var manualLang string
 	if projectPath != "" {
-		runtime := inferRuntimeFromPath(projectPath)
-		if runtime == "" {
-			return fmt.Errorf("could not detect runtime from project path: %s", projectPath)
+		rt := inferRuntimeFromPath(projectPath)
+		if rt == "" {
+			return "", fmt.Errorf("could not detect runtime from project path: %s", projectPath)
 		}
 		projects := []ScannedProject{{Path: projectPath}}
-		switch runtime {
+		switch rt {
 		case "Java":
 			matchProcessesToProjects(projects, detectJavaProcesses())
 		case "Node.js":
@@ -550,51 +569,42 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		default:
 			matchProcessesToProjects(projects, detectPythonProcesses())
 		}
-		proj := detectedProject{ScannedProject: projects[0], Runtime: runtime}
+		proj := detectedProject{ScannedProject: projects[0], Runtime: rt}
 		plan = createRuntimePlanFn(proj, cp.httpPort, token, envURL, platformToken)
 	} else {
 		roots, err := selectScanRoots()
 		if err != nil {
-			return err
+			return "", err
 		}
 		logger.Debug("scanning for projects", "roots", roots)
 		projects := detectAllProjects(runtimes, roots)
-		if len(projects) == 0 {
-			fmt.Println("  No projects detected.")
-			cont, err := installer.ConfirmProceed("  Continue installation?")
-			if err != nil {
-				return fmt.Errorf("reading confirmation: %w", err)
-			}
-			if !cont {
-				return installer.ErrInstallCancelled
-			}
+		if len(projects) > 0 {
+			display.ColorMessage.Println("  Detected projects:")
 		} else {
-			infoBoxShown := false
-			for {
-				display.ColorMessage.Println("  Detected projects:")
-				display.PrintSectionDivider()
-				printProjectList(projects)
-
-				if !infoBoxShown {
-					fmt.Println()
-					printSupportedRuntimesInfoBox()
-					infoBoxShown = true
-				}
-
-				selected, ok := selectProject(projects)
-				if !ok {
-					break
-				}
-				plan = createRuntimePlanFn(selected, cp.httpPort, token, envURL, platformToken)
-				if plan != nil {
-					break
-				}
-				// Project can't be auto-instrumented; ask if the user wants to try another.
-				again, err := installer.ConfirmProceed("  Select another project?")
-				if err != nil || !again {
-					break
-				}
+			display.ColorMessage.Println("  Select how to instrument your application:")
+		}
+		display.PrintSectionDivider()
+		printProjectList(projects)
+		for {
+			selected, lang, ok := selectProject(projects)
+			if !ok {
+				break
 			}
+			if lang != "" {
+				manualLang = lang
+				break
+			}
+			plan = createRuntimePlanFn(selected, cp.httpPort, token, envURL, platformToken)
+			if plan != nil {
+				break
+			}
+			// Project can't be auto-instrumented; ask if the user wants to try another.
+			again, err := installer.ConfirmProceed("  Select another project?")
+			if err != nil || !again {
+				break
+			}
+			display.PrintSectionDivider()
+			printProjectList(projects)
 		}
 	}
 	fmt.Println()
@@ -632,16 +642,16 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 
 	if dryRun {
 		display.PrintStatusLine("dry-run", "no changes made", display.ColorMuted)
-		return nil
+		return "", nil
 	}
 
 	ok, err := installer.ConfirmProceed("  Proceed with installation?")
 	if err != nil {
-		return fmt.Errorf("reading confirmation: %w", err)
+		return "", fmt.Errorf("reading confirmation: %w", err)
 	}
 	if !ok {
 		fmt.Println("  Installation cancelled.")
-		return installer.ErrInstallCancelled
+		return "", installer.ErrInstallCancelled
 	}
 	fmt.Println()
 
@@ -651,15 +661,15 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 	applyAndValidateGrailRoutes(grailC, grailPlans)
 
 	if err := executeCollectorPlanFn(cp, envURL, platformToken, plan != nil); err != nil {
-		return err
+		return "", err
 	}
 
 	if plan != nil {
 		fmt.Printf("\n  ── %s auto-instrumentation ──\n\n", plan.Runtime())
 		if err := plan.Execute(); err != nil {
-			return err
+			return "", err
 		}
 	}
 
-	return nil
+	return manualLang, nil
 }
