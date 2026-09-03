@@ -17,6 +17,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/environment"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/rum"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -597,6 +598,24 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 			}
 		}
 	}
+
+	var rumResult *rum.DetectionResult
+	if featureflags.IsEnabled(featureflags.Experimental) {
+		rumDir := projectPath
+		if rumDir == "" {
+			rumDir, _ = os.Getwd()
+		}
+		if rumDir != "" {
+			r, err := rum.Detect(rumDir)
+			if err != nil {
+				logger.Debug("RUM detection failed", "dir", rumDir, "error", err)
+			} else {
+				rumResult = &r
+				logger.Debug("RUM detection result", "mode", r.Mode, "files", r.InjectableFiles, "reason", r.ManualReason)
+			}
+		}
+	}
+
 	fmt.Println()
 
 	if plan != nil {
@@ -624,6 +643,23 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		fmt.Println()
 		display.ColorMessage.Printf("  2) %s auto-instrumentation\n", plan.Runtime())
 		plan.PrintPlanSteps()
+	}
+
+	if rumResult != nil {
+		sectionNum := 2
+		if plan != nil {
+			sectionNum = 3
+		}
+		fmt.Println()
+		display.ColorMessage.Printf("  %d) Real User Monitoring [experimental]\n", sectionNum)
+		if rumResult.Mode == rum.ModeAuto {
+			fmt.Printf("     Mode:  auto-inject\n")
+			for _, f := range rumResult.InjectableFiles {
+				fmt.Printf("     File:  %s\n", f)
+			}
+		} else {
+			fmt.Printf("     Mode:  manual (%s)\n", rumResult.ManualReason)
+		}
 	}
 
 	grailC, grailPlans := buildTenantPrerequisitePreview(envURL, platformToken)
