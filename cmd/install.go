@@ -40,6 +40,7 @@ var installCmd = &cobra.Command{
 		logger.Debug("logging: debug")
 		featureflags.ApplyCLIOverrides(cmd.Flags())
 		installer.AutoConfirm = installAutoConfirm
+		fireSelfMonitoringStart()
 	},
 }
 
