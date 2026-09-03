@@ -387,14 +387,14 @@ type manualLanguageEntry struct {
 }
 
 var manualLanguages = []manualLanguageEntry{
+	{Key: "g", Name: "Go", URLSlug: "go"},
+	{Key: "n", Name: ".NET", URLSlug: "dotnet"},
 	{Key: "p", Name: "PHP", URLSlug: "php"},
 	{Key: "c", Name: "C++", URLSlug: "cpp"},
-	{Key: "n", Name: ".NET", URLSlug: "dotnet"},
-	{Key: "e", Name: "Elixir", URLSlug: "elixir"},
-	{Key: "l", Name: "Erlang", URLSlug: "erlang"},
-	{Key: "g", Name: "Go", URLSlug: "go"},
 	{Key: "r", Name: "Ruby", URLSlug: "ruby"},
 	{Key: "u", Name: "Rust", URLSlug: "rust"},
+	{Key: "e", Name: "Elixir", URLSlug: "elixir"},
+	{Key: "l", Name: "Erlang", URLSlug: "erlang"},
 	{Key: "o", Name: "Other language", URLSlug: "other"},
 }
 
