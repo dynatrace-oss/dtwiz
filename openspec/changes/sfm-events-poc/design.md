@@ -50,8 +50,8 @@ dtwiz currently produces no signal about its own usage. Pipeline propagation has
 - Fire the event in `PersistentPreRun` with `StepInvoked`.
   - Rationale: `PersistentPreRun` fires as soon as the command is dispatched, before any user prompt or network call, giving a signal for every invocation regardless of outcome. Future steps (confirmed, completed, failed, cancelled) will be fired at their respective points in the command lifecycle.
   - Alternative considered: fire only after a successful install. Rejected because it would miss crashes and early exits.
-- Use `http.DefaultClient` directly rather than the typed `client.Client`.
-  - Rationale: the selfmonitoring package is a PoC with no dependency on the installer client stack. Using the typed client would couple the package to credential resolution, which is handled one level up in `cmd/root.go`.
+- Use a package-level `http.Client` with a 3-second timeout rather than `http.DefaultClient` or the typed `client.Client`.
+  - Rationale: the selfmonitoring package is a PoC with no dependency on the installer client stack. Using the typed client would couple the package to credential resolution, which is handled one level up in `cmd/root.go`. A dedicated client with a short timeout prevents a slow or unreachable endpoint from blocking `PersistentPreRun` indefinitely.
   - Alternative considered: pass a `*client.Client`. Rejected because it would require the package to import `pkg/client`, creating an unnecessary coupling at this stage.
 - Duplicate the `authHeader` logic inside `pkg/selfmonitoring` rather than importing `pkg/installer`.
   - Rationale: importing `pkg/installer` for one two-line helper would pull in its full dependency surface and blur the package boundary.
@@ -60,4 +60,4 @@ dtwiz currently produces no signal about its own usage. Pipeline propagation has
 
 - Credentials must be resolvable at `PersistentPreRun` time; if the user has not configured them the call silently no-ops, which is the correct behavior.
 - The event will fire on every mutating command invocation while the feature flag is set, including `--dry-run` runs, since the check happens in `PersistentPreRun` before `--dry-run` is evaluated. Acceptable at this stage; a production design would filter dry-run invocations.
-- `http.DefaultClient` has no timeout set; a slow or unreachable endpoint could hang the pre-run hook. Must be addressed before any production use.
+- A slow or unreachable endpoint is bounded by the 3-second timeout on the package-level HTTP client; the pre-run hook will not block beyond that.

@@ -11,10 +11,13 @@ import (
 	"net/http"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/dynatrace-oss/dtwiz/pkg/version"
 )
+
+var smHTTPClient = &http.Client{Timeout: 3 * time.Second}
 
 var execID string
 
@@ -100,7 +103,7 @@ func SendEvent(classicURL, token string, params EventParams) error {
 	req.Header.Set("Tab-Id", buildTabID(params))
 	req.Header.Set(headerKey, headerValue)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := smHTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("send: %w", err)
 	}
