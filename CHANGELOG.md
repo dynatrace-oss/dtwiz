@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Self-monitoring PoC (opt-in via `DTWIZ_SELF_MONITORING_POC=true`): dtwiz now fires a `CUSTOM_INFO` event to the Dynatrace Events v2 API on every invocation. Per-invocation metadata (command, mode, OS) is encoded in event properties and dual HTTP headers (`User-Agent` and `Tab-Id`) for pipeline correlation. Strictly internal and gated; no event fires for regular users.
+
 ## [1.7.0] - 2026-09-01
 
 ### Added

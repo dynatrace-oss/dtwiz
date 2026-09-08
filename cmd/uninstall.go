@@ -15,6 +15,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
+	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 )
 
 var uninstallDryRun bool
@@ -32,6 +33,7 @@ var uninstallCmd = &cobra.Command{
 		logger.Debug("logging: debug")
 		featureflags.ApplyCLIOverrides(cmd.Flags())
 		installer.AutoConfirm = uninstallAutoConfirm
+		fireSelfMonitoringEvent(cmd, selfmonitoring.StepInvoked)
 	},
 }
 
