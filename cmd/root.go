@@ -54,14 +54,17 @@ func fireSelfMonitoringEvent(cmd *cobra.Command, stepID string) {
 	if !featureflags.IsEnabled(featureflags.SelfMonitoringPoC) {
 		return
 	}
-	envURL, _, platformTok, err := getDtEnvironment()
-	if err != nil {
-		logger.Debug(fmt.Sprintf("selfmonitoring: could not resolve credentials: %v", err))
-		return
-	}
-	if err := selfmonitoring.SendEvent(installer.APIURL(envURL), platformTok, buildEventParams(cmd, stepID)); err != nil {
-		logger.Debug(fmt.Sprintf("selfmonitoring: %v", err))
-	}
+	params := buildEventParams(cmd, stepID)
+	go func() {
+		envURL, _, platformTok, err := getDtEnvironment()
+		if err != nil {
+			logger.Debug(fmt.Sprintf("selfmonitoring: could not resolve credentials: %v", err))
+			return
+		}
+		if err := selfmonitoring.SendEvent(installer.APIURL(envURL), platformTok, params); err != nil {
+			logger.Debug(fmt.Sprintf("selfmonitoring: %v", err))
+		}
+	}()
 }
 
 func buildEventParams(cmd *cobra.Command, stepID string) selfmonitoring.EventParams {

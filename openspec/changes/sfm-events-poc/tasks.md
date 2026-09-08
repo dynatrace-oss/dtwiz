@@ -23,7 +23,7 @@
 
 ## 3. Command Wiring
 
-- [x] 3.1 Add `fireSelfMonitoringEvent(cmd *cobra.Command, stepID string)` in `cmd/root.go`: gate on `featureflags.IsEnabled`, resolve credentials, build `EventParams`, call `selfmonitoring.SendEvent`.
+- [x] 3.1 Add `fireSelfMonitoringEvent(cmd *cobra.Command, stepID string)` in `cmd/root.go`: gate on `featureflags.IsEnabled`, build `EventParams` synchronously, then launch a background goroutine to resolve credentials and call `selfmonitoring.SendEvent`.
 - [x] 3.2 Add `buildEventParams(cmd, stepID)`: derives `CmdID`/`SubID` from cobra command tree, sets `StepID` from caller, calls `resolveMode()`.
 - [x] 3.3 Add `deriveCommandIDs(cmd)` with `normCmd`/`normSub` lookup maps: abbreviate command names to max 3 chars and sub names to max 4 chars; unknown names pass through unchanged.
 - [x] 3.4 Add `resolveMode()`: returns `"deb"` if `debugFlag` is set, `"tty"` if `golang.org/x/term.IsTerminal(stdout)`, else `"ntt"` (all 3 chars).
