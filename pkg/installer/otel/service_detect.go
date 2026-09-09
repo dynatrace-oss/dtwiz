@@ -267,15 +267,18 @@ func reconcileExportEnv(env []string) (out []string) {
 func retargetEnvToCollector(env []string, endpoint string) (out []string, changed bool) {
 	current := envGet(env, "OTEL_EXPORTER_OTLP_ENDPOINT")
 	if current == endpoint {
+		logger.Debug("retargetEnvToCollector", "current", current, "target", endpoint, "reason", "exact_match", "changed", false)
 		return env, false
 	}
 	// Treat 127.0.0.1 and localhost as equivalent: if both are loopback on the
 	// same port the process is already pointing at the right collector.
 	if curHost, curPort := hostPort(current); isLoopback(curHost) {
 		if tgtHost, tgtPort := hostPort(endpoint); isLoopback(tgtHost) && curPort == tgtPort {
+			logger.Debug("retargetEnvToCollector", "current", current, "target", endpoint, "curPort", curPort, "tgtPort", tgtPort, "reason", "same_loopback_port", "changed", false)
 			return env, false
 		}
 	}
+	logger.Debug("retargetEnvToCollector", "current", current, "target", endpoint, "reason", "port_mismatch_or_non_loopback", "changed", true)
 	out = envSet(env, "OTEL_EXPORTER_OTLP_ENDPOINT", endpoint)
 	out = envRemove(out, otlpSignalEndpointKeys...)
 	return out, true
@@ -498,7 +501,10 @@ func restartConnectedServices(svcs []connectedService) {
 		// export tenant with DT_ENVIRONMENT so a stale endpoint is corrected.
 		envToUse := svc.env
 		if svc.collectorEndpoint != "" {
+			logger.Debug("restartConnectedServices retargeting", "pid", svc.pid, "name", svc.name, "collectorEndpoint", svc.collectorEndpoint)
 			envToUse, _ = retargetEnvToCollector(svc.env, svc.collectorEndpoint)
+		} else {
+			logger.Debug("restartConnectedServices no collector endpoint", "pid", svc.pid, "name", svc.name)
 		}
 		newEnv := reconcileExportEnv(envToUse)
 		svc.env = newEnv

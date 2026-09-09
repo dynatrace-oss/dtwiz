@@ -66,8 +66,10 @@ func findFreePort(startPort int) int {
 		if !canBindPort("localhost", port) {
 			continue
 		}
+		logger.Debug("findFreePort selected", "startPort", startPort, "selectedPort", port)
 		return port
 	}
+	logger.Debug("findFreePort fallback", "startPort", startPort)
 	return startPort
 }
 
@@ -985,8 +987,11 @@ func (cp *collectorPlan) execute(envURL, platformToken string, skipVerification 
 		// findFreePort picks the preferred ports (4317/4318) instead of the
 		// higher ones it selected at plan time while the old process still held them.
 		if fresh, err := generateOtelConfig(cp.apiURL, cp.collectorToken); err == nil {
+			logger.Debug("regenerated config after stopping old collector", "oldHttpPort", cp.httpPort, "newHttpPort", fresh.httpPort)
 			cp.configContent = fresh.content
 			cp.httpPort = fresh.httpPort
+		} else {
+			logger.Debug("failed to regenerate config after stopping old collector", "err", err)
 		}
 	}
 
