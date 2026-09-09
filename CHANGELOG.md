@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Banner: fixed off-by-one characters in the dtwiz ASCII art and removed blank lines between the Environment, docs, and permissions lines so the header renders as one compact block
 - `watch`: section header links are now hidden when the terminal does not support OSC 8 hyperlinks, preventing raw URLs from breaking the watch layout; the footer CTA retains the URL fallback
+- `install otel` (demo): `apt-get`/`dnf` Python install no longer fails in root containers or CI environments without `sudo`; `sudo` is now prefixed only when not already running as root, with a clear error when `sudo` is required but missing
 - `install otel` / `setup`: fixed instrumented services not being retargeted to the new collector when the previous collector occupied the default ports and a new one was assigned different ports. Services whose `OTEL_EXPORTER_OTLP_ENDPOINT` pointed at a now-stopped collector on a different loopback port were incorrectly left unchanged, causing connection-refused errors and no spans on the new tenant.
 
 ## [1.7.0] - 2026-09-01
