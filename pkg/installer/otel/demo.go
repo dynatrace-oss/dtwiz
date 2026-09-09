@@ -159,12 +159,19 @@ func pythonInstallPlan() ([]string, error) {
 		return []string{"brew", "install", "python3"}, nil
 
 	case "linux":
+		var prefix []string
+		if installer.NeedsSudo() {
+			if _, err := exec.LookPath("sudo"); err != nil {
+				return nil, fmt.Errorf("Python 3 is required but not found, and sudo is not available to install it.\nInstall python3, python3-pip, and python3-venv manually, then re-run this command") //nolint:staticcheck // ST1005: keep brand capitalization
+			}
+			prefix = []string{"sudo"}
+		}
 		switch detectLinuxDistro() {
 		case "debian", "ubuntu":
-			return []string{"sudo", "apt-get", "install", "-y", "python3", "python3-pip", "python3-venv"}, nil
+			return append(prefix, "apt-get", "install", "-y", "python3", "python3-pip", "python3-venv"), nil
 		default:
 			// RHEL/Fedora/CentOS/Rocky/Alma
-			return []string{"sudo", "dnf", "install", "-y", "python3", "python3-pip", "python3-venv"}, nil
+			return append(prefix, "dnf", "install", "-y", "python3", "python3-pip", "python3-venv"), nil
 		}
 
 	case "windows":
