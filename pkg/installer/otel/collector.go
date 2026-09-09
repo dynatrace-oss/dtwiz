@@ -981,6 +981,13 @@ func (cp *collectorPlan) execute(envURL, platformToken string, skipVerification 
 			}
 			fmt.Printf("  Stopped collector (PID %d).\n", rc.pid)
 		}
+		// The old collector's ports are now free. Regenerate the config so
+		// findFreePort picks the preferred ports (4317/4318) instead of the
+		// higher ones it selected at plan time while the old process still held them.
+		if fresh, err := generateOtelConfig(cp.apiURL, cp.collectorToken); err == nil {
+			cp.configContent = fresh.content
+			cp.httpPort = fresh.httpPort
+		}
 	}
 
 	binaryPath, err := downloadOtelCollector(cp.installDir)

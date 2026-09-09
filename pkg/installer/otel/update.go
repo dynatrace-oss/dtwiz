@@ -678,6 +678,10 @@ func updateOtelConfig(configPath string, runningProcs []otelProcessInfo, envURL,
 
 	if len(connectedSvcs) > 0 {
 		fmt.Println()
+		collectorEndpoint := fmt.Sprintf("http://localhost:%d", httpPort)
+		for i := range connectedSvcs {
+			connectedSvcs[i].collectorEndpoint = collectorEndpoint
+		}
 		restartConnectedServices(connectedSvcs)
 	}
 

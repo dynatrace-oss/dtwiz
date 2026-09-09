@@ -259,10 +259,20 @@ func reconcileExportEnv(env []string) (out []string) {
 
 // retargetEnvToCollector returns env with OTEL_EXPORTER_OTLP_ENDPOINT set to
 // the local collector HTTP endpoint and per-signal endpoint overrides removed.
-// No-op when the current endpoint is already loopback (already collector-routed).
+// No-op when the current endpoint already points at the same collector: either
+// an exact string match or both are loopback addresses on the same port
+// (127.0.0.1 and localhost are treated as equivalent for this comparison).
+// A loopback address pointing to a different port (e.g. a previous collector
+// install on a now-stopped port) is updated like any other endpoint.
 func retargetEnvToCollector(env []string, endpoint string) (out []string, changed bool) {
-	if current := envGet(env, "OTEL_EXPORTER_OTLP_ENDPOINT"); current != "" {
-		if host, _ := hostPort(current); isLoopback(host) {
+	current := envGet(env, "OTEL_EXPORTER_OTLP_ENDPOINT")
+	if current == endpoint {
+		return env, false
+	}
+	// Treat 127.0.0.1 and localhost as equivalent: if both are loopback on the
+	// same port the process is already pointing at the right collector.
+	if curHost, curPort := hostPort(current); isLoopback(curHost) {
+		if tgtHost, tgtPort := hostPort(endpoint); isLoopback(tgtHost) && curPort == tgtPort {
 			return env, false
 		}
 	}
