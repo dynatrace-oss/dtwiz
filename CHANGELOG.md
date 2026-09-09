@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Self-monitoring PoC (opt-in via `DTWIZ_SELF_MONITORING_POC=true`): dtwiz now fires a `CUSTOM_INFO` event to the Dynatrace Events v2 API on every invocation. Per-invocation metadata (command, mode, OS) is encoded in event properties and dual HTTP headers (`User-Agent` and `Tab-Id`) for pipeline correlation. Strictly internal and gated; no event fires for regular users.
 
+### Fixed
+
+- `install otel` / `setup`: fixed instrumented services not being retargeted to the new collector when the previous collector occupied the default ports and a new one was assigned different ports. Services whose `OTEL_EXPORTER_OTLP_ENDPOINT` pointed at a now-stopped collector on a different loopback port were incorrectly left unchanged, causing connection-refused errors and no spans on the new tenant.
+
 ## [1.7.0] - 2026-09-01
 
 ### Added
