@@ -280,6 +280,7 @@ func retargetEnvToCollector(env []string, endpoint string) (out []string, change
 	}
 	logger.Debug("retargetEnvToCollector", "current", current, "target", endpoint, "reason", "port_mismatch_or_non_loopback", "changed", true)
 	out = envSet(env, "OTEL_EXPORTER_OTLP_ENDPOINT", endpoint)
+	out = envSet(out, "OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
 	out = envRemove(out, otlpSignalEndpointKeys...)
 	return out, true
 }

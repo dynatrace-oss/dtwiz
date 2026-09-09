@@ -989,6 +989,7 @@ func (cp *collectorPlan) execute(envURL, platformToken string, skipVerification 
 		if fresh, err := generateOtelConfig(cp.apiURL, cp.collectorToken); err == nil {
 			logger.Debug("regenerated config after stopping old collector", "oldHttpPort", cp.httpPort, "newHttpPort", fresh.httpPort)
 			cp.configContent = fresh.content
+			cp.configPreview = installer.MaskSecret(fresh.content, cp.collectorToken)
 			cp.httpPort = fresh.httpPort
 		} else {
 			logger.Debug("failed to regenerate config after stopping old collector", "err", err)
