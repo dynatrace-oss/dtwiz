@@ -8,6 +8,28 @@
 
 > **Early Development**: This project is in active development. If you encounter any bugs or issues, please [file a GitHub issue](https://github.com/dynatrace-oss/dtwiz/issues/new). Contributions and feedback are welcome!
 
+## Table of Contents
+
+- [Quickstart](#quickstart)
+  - [Linux / macOS](#linux--macos)
+  - [Windows (PowerShell)](#windows-powershell)
+- [Prerequisites](#prerequisites)
+  - [Platform token scopes](#platform-token-scopes)
+- [Installation](#installation)
+  - [Install channels](#install-channels)
+- [Supported versions](#supported-versions)
+  - [OneAgent](#oneagent)
+  - [OpenTelemetry Collector](#opentelemetry-collector)
+- [Available commands](#available-commands)
+- [Flags](#flags)
+  - [`--yes` / `-y`](#--yes---y)
+  - [`--project <path>`](#--project-path)
+- [Demo](#demo)
+- [Example workflow](#example-workflow)
+- [JSON output](#json-output)
+- [Building](#building)
+- [Architecture](#architecture)
+
 ## Quickstart
 
 Run the following commands in your terminal/console to install and launch `dtwiz`:
