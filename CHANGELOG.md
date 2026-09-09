@@ -10,9 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Self-monitoring PoC (opt-in via `DTWIZ_SELF_MONITORING_POC=true`): dtwiz now fires a `CUSTOM_INFO` event to the Dynatrace Events v2 API on every invocation. Per-invocation metadata (command, mode, OS) is encoded in event properties and dual HTTP headers (`User-Agent` and `Tab-Id`) for pipeline correlation. Strictly internal and gated; no event fires for regular users.
+- `install otel`: unsupported languages (PHP, C++, .NET, Elixir, Erlang, Go, Ruby, Rust) are now individually selectable entries above `Skip`; selecting one shows a language-specific docs CTA (`dt-url.net/otel-<lang>`) in the post-install watch section
+
+### Changed
+
+- `install otel`: GOPATH (`~/go`) is now excluded from project scanning so the Go toolchain directory is never offered as a candidate project
+- `install otel`: the macOS system process advisory is now logged at debug level only, removing noise from standard output
+- `install otel`: the `Skip` entry is now shown as `[s] Skip` on its own line, separated by a blank line, without color highlighting
+- `install otel`: config preview always shows only the head lines in non-debug mode, with a single truncation comment reporting the total number of hidden lines
 
 ### Fixed
 
+- Banner: fixed off-by-one characters in the dtwiz ASCII art and removed blank lines between the Environment, docs, and permissions lines so the header renders as one compact block
+- `watch`: section header links are now hidden when the terminal does not support OSC 8 hyperlinks, preventing raw URLs from breaking the watch layout; the footer CTA retains the URL fallback
 - `install otel` / `setup`: fixed instrumented services not being retargeted to the new collector when the previous collector occupied the default ports and a new one was assigned different ports. Services whose `OTEL_EXPORTER_OTLP_ENDPOINT` pointed at a now-stopped collector on a different loopback port were incorrectly left unchanged, causing connection-refused errors and no spans on the new tenant.
 
 ## [1.7.0] - 2026-09-01
@@ -554,7 +564,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/dynatrace-oss/dtwiz/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.4.0...v1.5.0
