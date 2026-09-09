@@ -315,6 +315,42 @@ func TestInstallPythonWindows_WingetSucceedsButPythonUnavailable(t *testing.T) {
 	}
 }
 
+func TestLinuxPythonInstallCmd_RootSkipsSudo(t *testing.T) {
+	cmd, err := linuxPythonInstallCmd(func() bool { return false })
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cmd) == 0 || cmd[0] == "sudo" {
+		t.Fatalf("expected no sudo prefix when already root, got: %v", cmd)
+	}
+}
+
+func TestLinuxPythonInstallCmd_NonRootWithSudoAvailable(t *testing.T) {
+	dir := t.TempDir()
+	createPythonDemoTestCommand(t, dir, "sudo", "", 0)
+	t.Setenv("PATH", dir)
+
+	cmd, err := linuxPythonInstallCmd(func() bool { return true })
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cmd) == 0 || cmd[0] != "sudo" {
+		t.Fatalf("expected sudo prefix, got: %v", cmd)
+	}
+}
+
+func TestLinuxPythonInstallCmd_NonRootWithoutSudo(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+
+	_, err := linuxPythonInstallCmd(func() bool { return true })
+	if err == nil {
+		t.Fatal("expected error when sudo is required but missing")
+	}
+	if !strings.Contains(err.Error(), "sudo is not available") {
+		t.Fatalf("error should mention missing sudo, got: %v", err)
+	}
+}
+
 func TestDetectLinuxDistro(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("Linux-only test")

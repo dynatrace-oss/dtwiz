@@ -159,26 +159,33 @@ func pythonInstallPlan() ([]string, error) {
 		return []string{"brew", "install", "python3"}, nil
 
 	case "linux":
-		var prefix []string
-		if installer.NeedsSudo() {
-			if _, err := exec.LookPath("sudo"); err != nil {
-				return nil, fmt.Errorf("Python 3 is required but not found, and sudo is not available to install it.\nInstall python3, python3-pip, and python3-venv manually, then re-run this command") //nolint:staticcheck // ST1005: keep brand capitalization
-			}
-			prefix = []string{"sudo"}
-		}
-		switch detectLinuxDistro() {
-		case "debian", "ubuntu":
-			return append(prefix, "apt-get", "install", "-y", "python3", "python3-pip", "python3-venv"), nil
-		default:
-			// RHEL/Fedora/CentOS/Rocky/Alma
-			return append(prefix, "dnf", "install", "-y", "python3", "python3-pip", "python3-venv"), nil
-		}
+		return linuxPythonInstallCmd(installer.NeedsSudo)
 
 	case "windows":
 		return []string{"winget", "install", "--id", wingetPythonPackage}, nil
 
 	default:
 		return nil, fmt.Errorf("Python 3 is required but not found; please install it manually") //nolint:staticcheck // ST1005: keep brand capitalization
+	}
+}
+
+// linuxPythonInstallCmd builds the apt-get/dnf command that installs Python 3
+// prerequisites on Linux, prefixing sudo only when needsSudo reports that the
+// process isn't already running as root.
+func linuxPythonInstallCmd(needsSudo func() bool) ([]string, error) {
+	var prefix []string
+	if needsSudo() {
+		if _, err := exec.LookPath("sudo"); err != nil {
+			return nil, fmt.Errorf("Python 3 is required but not found, and sudo is not available to install it.\nInstall python3, python3-pip, and python3-venv manually, then re-run this command") //nolint:staticcheck // ST1005: keep brand capitalization
+		}
+		prefix = []string{"sudo"}
+	}
+	switch detectLinuxDistro() {
+	case "debian", "ubuntu":
+		return append(prefix, "apt-get", "install", "-y", "python3", "python3-pip", "python3-venv"), nil
+	default:
+		// RHEL/Fedora/CentOS/Rocky/Alma
+		return append(prefix, "dnf", "install", "-y", "python3", "python3-pip", "python3-venv"), nil
 	}
 }
 
