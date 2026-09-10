@@ -6,7 +6,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 var watchFromFlag string
@@ -16,6 +18,12 @@ var watchCmd = &cobra.Command{
 	Short: "Watch for new data arriving in Dynatrace",
 	Long:  `Polls Dynatrace every 5 seconds and displays a live summary of newly ingested data including services, cloud resources, Kubernetes entities, logs, requests, and exceptions.`,
 	Args:  cobra.NoArgs,
+	// Override PersistentPreRun so the root's StepInvoked event is not fired —
+	// watch emits a single post-session span instead (VI: one span per watch invocation).
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		logger.Init(debugFlag, verbosityFlag)
+		featureflags.ApplyCLIOverrides(cmd.Flags())
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 		envURL := environmentHint()
 		if envURL == "" {
@@ -34,7 +42,9 @@ var watchCmd = &cobra.Command{
 			fromClause = StartTime.UTC().Format(installer.IngestTimeFormat)
 		}
 
-		installer.WatchIngest(envURL, pTok, fromClause)
+		installer.WatchIngestWithEvent(envURL, pTok, fromClause, func(r installer.WatchSessionResult) {
+			fireSelfMonitoringWatchComplete(cmd, r)
+		})
 	},
 }
 

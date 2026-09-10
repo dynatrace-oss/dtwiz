@@ -989,3 +989,87 @@ func TestRenderSection_ShowsWaitingWhenNoCountOrStatus(t *testing.T) {
 		t.Errorf("expected 'waiting...' when no count and no status, got: %q", out)
 	}
 }
+
+// ── trackWatchSignals ────────────────────────────────────────────────────────
+
+func TestTrackWatchSignals_RecordsFirstAppearance(t *testing.T) {
+	result := WatchSessionResult{FirstDataMs: make(map[string]int64)}
+	watchStart := time.Now().Add(-5 * time.Second)
+
+	trackWatchSignals(&result, watchStart, watchState{
+		Services: watchSection{Count: 3},
+		Hosts:    watchSection{Count: 1},
+	})
+
+	for _, sig := range []string{"svc", "hst"} {
+		ms, ok := result.FirstDataMs[sig]
+		if !ok {
+			t.Errorf("signal %q not recorded", sig)
+		}
+		if ms <= 0 {
+			t.Errorf("signal %q has non-positive ms: %d", sig, ms)
+		}
+	}
+	if _, ok := result.FirstDataMs["k8s"]; ok {
+		t.Error("signal k8s should not be recorded when count is 0")
+	}
+}
+
+func TestTrackWatchSignals_DoesNotOverwriteExisting(t *testing.T) {
+	result := WatchSessionResult{FirstDataMs: make(map[string]int64)}
+	result.FirstDataMs["svc"] = 1234
+
+	trackWatchSignals(&result, time.Now(), watchState{
+		Services: watchSection{Count: 5},
+	})
+
+	if result.FirstDataMs["svc"] != 1234 {
+		t.Errorf("existing timestamp overwritten: got %d, want 1234", result.FirstDataMs["svc"])
+	}
+}
+
+func TestTrackWatchSignals_LogsDetectedViaStatus(t *testing.T) {
+	result := WatchSessionResult{FirstDataMs: make(map[string]int64)}
+
+	// Count is 0 but Status is set — probe phase transition before metrics pipeline catches up.
+	trackWatchSignals(&result, time.Now(), watchState{
+		Logs: watchSection{Count: 0, Status: "Logs ingested"},
+	})
+
+	if _, ok := result.FirstDataMs["log"]; !ok {
+		t.Error("log signal not recorded when Status != \"\" and Count == 0")
+	}
+}
+
+func TestTrackWatchSignals_RequestsDetectedViaStatus(t *testing.T) {
+	result := WatchSessionResult{FirstDataMs: make(map[string]int64)}
+
+	trackWatchSignals(&result, time.Now(), watchState{
+		Requests: watchSection{Count: 0, Status: "Requests ingested"},
+	})
+
+	if _, ok := result.FirstDataMs["req"]; !ok {
+		t.Error("req signal not recorded when Status != \"\" and Count == 0")
+	}
+}
+
+func TestTrackWatchSignals_AllSignals(t *testing.T) {
+	result := WatchSessionResult{FirstDataMs: make(map[string]int64)}
+
+	trackWatchSignals(&result, time.Now(), watchState{
+		Services:      watchSection{Count: 1},
+		Hosts:         watchSection{Count: 1},
+		Cloud:         watchSection{Count: 1},
+		Kubernetes:    watchSection{Count: 1},
+		Relationships: watchSection{Count: 1},
+		Logs:          watchSection{Count: 1},
+		Requests:      watchSection{Count: 1},
+		Exceptions:    watchSection{Count: 1},
+	})
+
+	for _, sig := range []string{"svc", "hst", "cld", "k8s", "rel", "log", "req", "exc"} {
+		if _, ok := result.FirstDataMs[sig]; !ok {
+			t.Errorf("signal %q not recorded", sig)
+		}
+	}
+}

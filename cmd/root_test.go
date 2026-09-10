@@ -2,8 +2,11 @@ package cmd
 
 import (
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 )
 
 func TestNormCmd(t *testing.T) {
@@ -170,5 +173,62 @@ func TestResolveMode(t *testing.T) {
 				t.Error("unexpected valid mode in test expecting invalid")
 			}
 		})
+	}
+}
+
+// ── watchResultToProps ───────────────────────────────────────────────────────
+
+func TestWatchResultToProps_Encoding(t *testing.T) {
+	result := installer.WatchSessionResult{
+		Duration:    10 * time.Second,
+		ExitReason:  "user_exit",
+		FirstDataMs: map[string]int64{"svc": 1234, "hst": 5678},
+	}
+	props := watchResultToProps(result)
+
+	if got := props["watch.dur"]; got != "10000" {
+		t.Errorf("watch.dur = %q, want %q", got, "10000")
+	}
+	if got := props["watch.exit"]; got != "user_exit" {
+		t.Errorf("watch.exit = %q, want %q", got, "user_exit")
+	}
+	// signals must be sorted alphabetically
+	if got := props["watch.sig"]; got != "hst,svc" {
+		t.Errorf("watch.sig = %q, want %q", got, "hst,svc")
+	}
+	if got := props["watch.t_svc"]; got != "1234" {
+		t.Errorf("watch.t_svc = %q, want %q", got, "1234")
+	}
+	if got := props["watch.t_hst"]; got != "5678" {
+		t.Errorf("watch.t_hst = %q, want %q", got, "5678")
+	}
+}
+
+func TestWatchResultToProps_AbsentSignalProducesNoKey(t *testing.T) {
+	result := installer.WatchSessionResult{
+		Duration:    2 * time.Second,
+		ExitReason:  "timeout",
+		FirstDataMs: map[string]int64{"svc": 500},
+	}
+	props := watchResultToProps(result)
+
+	if _, ok := props["watch.t_hst"]; ok {
+		t.Error("watch.t_hst must not be present when hst was not seen")
+	}
+	if got := props["watch.sig"]; got != "svc" {
+		t.Errorf("watch.sig = %q, want %q", got, "svc")
+	}
+}
+
+func TestWatchResultToProps_NilFirstDataMsDoesNotPanic(t *testing.T) {
+	// WatchSessionResult zero value — pToken == "" early-return path leaves FirstDataMs nil.
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("watchResultToProps panicked with nil FirstDataMs: %v", r)
+		}
+	}()
+	props := watchResultToProps(installer.WatchSessionResult{})
+	if got := props["watch.sig"]; got != "" {
+		t.Errorf("watch.sig = %q, want empty string for zero-value result", got)
 	}
 }

@@ -3,6 +3,9 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/fatih/color"
@@ -146,6 +149,52 @@ func printBanner() {
 	purple.Printf(" | |_| |   | |      \\ V  V /   | |  / /_ \n")
 	purple.Printf(" |____/    |_|       \\_/\\_/   |___|/____| %s\n", version.Version)
 	fmt.Printf("\n HASTA LA VISTA - BLIND SPOTS!\n\n")
+}
+
+// fireSelfMonitoringWatchComplete sends the watch completion event synchronously
+// with a 500ms cap so it does not delay the command exit noticeably.
+func fireSelfMonitoringWatchComplete(cmd *cobra.Command, result installer.WatchSessionResult) {
+	if !featureflags.IsEnabled(featureflags.SelfMonitoringPoC) {
+		logger.Debug("selfmonitoring: skipped (self-monitoring-poc not enabled)")
+		return
+	}
+	params := buildEventParams(cmd, selfmonitoring.StepCompleted)
+	params.ExtraProps = watchResultToProps(result)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		envURL, _, platformTok, err := getDtEnvironment()
+		if err != nil {
+			logger.Debug(fmt.Sprintf("selfmonitoring: could not resolve credentials: %v", err))
+			return
+		}
+		if err := selfmonitoring.SendEvent(installer.APIURL(envURL), platformTok, params); err != nil {
+			logger.Debug(fmt.Sprintf("selfmonitoring: watch event failed: %v", err))
+		} else {
+			logger.Debug("selfmonitoring: watch event sent")
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(500 * time.Millisecond):
+		logger.Debug("selfmonitoring: watch event flush timed out (500ms), event may be lost")
+	}
+}
+
+func watchResultToProps(result installer.WatchSessionResult) map[string]string {
+	props := map[string]string{
+		"watch.dur":  strconv.FormatInt(result.Duration.Milliseconds(), 10),
+		"watch.exit": result.ExitReason,
+	}
+	signals := make([]string, 0, len(result.FirstDataMs))
+	for sig, ms := range result.FirstDataMs {
+		signals = append(signals, sig)
+		props["watch.t_"+sig] = strconv.FormatInt(ms, 10)
+	}
+	sort.Strings(signals)
+	props["watch.sig"] = strings.Join(signals, ",")
+	return props
 }
 
 // setupClientFromCreds creates a Dynatrace API client from already-resolved credentials.

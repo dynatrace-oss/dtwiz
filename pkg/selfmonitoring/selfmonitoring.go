@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"runtime"
 	"strings"
@@ -32,19 +33,21 @@ func init() {
 
 // EventParams holds per-invocation metadata embedded in the request User-Agent and event body.
 type EventParams struct {
-	CmdID  string // top-level command: install, update, uninstall, etc.
-	SubID  string // subcommand: otel, gcp, kubernetes, etc.
-	StepID string // execution step; defaults to StepInvoked when empty
-	Mode   string // deb, tty, or ntt
-	Err    string // error category; omitted from event body when empty
-	Type   string // event type qualifier; omitted from event body when empty
+	CmdID      string            // top-level command: install, update, uninstall, etc.
+	SubID      string            // subcommand: otel, gcp, kubernetes, etc.
+	StepID     string            // execution step; defaults to StepInvoked when empty
+	Mode       string            // deb, tty, or ntt
+	Err        string            // error category; omitted from event body when empty
+	Type       string            // event type qualifier; omitted from event body when empty
+	ExtraProps map[string]string // merged into event body properties; not included in User-Agent
 }
 
 const (
 	headerKey   = "dtwiz-monitoring"
 	headerValue = "dtwiz-start"
 
-	StepInvoked = "inv"
+	StepInvoked   = "inv"
+	StepCompleted = "com"
 
 	propExecID = "e"
 	propCmd    = "c"
@@ -81,9 +84,14 @@ func SendEvent(classicURL, token string, params EventParams) error {
 			props[kv.k] = kv.v
 		}
 	}
+	maps.Copy(props, params.ExtraProps)
+	title := "dtwiz " + params.CmdID
+	if params.SubID != "" {
+		title += " " + params.SubID
+	}
 	eventBody, err := json.Marshal(eventPayload{
 		EventType:  "CUSTOM_INFO",
-		Title:      "dtwiz started",
+		Title:      title,
 		Properties: props,
 	})
 	if err != nil {
@@ -102,6 +110,9 @@ func SendEvent(classicURL, token string, params EventParams) error {
 	req.Header.Set("User-Agent", buildUserAgent(params))
 	req.Header.Set("Tab-Id", buildTabID(params))
 	req.Header.Set(headerKey, headerValue)
+
+	logger.Debug(fmt.Sprintf("selfmonitoring: POST %s  User-Agent: %s  Tab-Id: %s  body: %s",
+		url, req.Header.Get("User-Agent"), req.Header.Get("Tab-Id"), string(eventBody)))
 
 	resp, err := smHTTPClient.Do(req)
 	if err != nil {
