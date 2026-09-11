@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"runtime"
 	"strings"
@@ -32,19 +33,21 @@ func init() {
 
 // EventParams holds per-invocation metadata embedded in the request User-Agent and event body.
 type EventParams struct {
-	CmdID  string // top-level command: install, update, uninstall, etc.
-	SubID  string // subcommand: otel, gcp, kubernetes, etc.
-	StepID string // execution step; defaults to StepInvoked when empty
-	Mode   string // deb, tty, or ntt
-	Err    string // error category; omitted from event body when empty
-	Type   string // event type qualifier; omitted from event body when empty
+	CmdID      string            // top-level command: install, update, uninstall, etc.
+	SubID      string            // subcommand: otel, gcp, kubernetes, etc.
+	StepID     string            // execution step; defaults to StepInvoked when empty
+	Mode       string            // deb, tty, or ntt
+	Err        string            // error category; omitted from event body when empty
+	Type       string            // event type qualifier; omitted from event body when empty
+	ExtraProps map[string]string // merged into event body properties; not included in User-Agent
 }
 
 const (
 	headerKey   = "dtwiz-monitoring"
 	headerValue = "dtwiz-start"
 
-	StepInvoked = "inv"
+	StepInvoked   = "inv"
+	StepCompleted = "com"
 
 	propExecID = "e"
 	propCmd    = "c"
@@ -81,9 +84,14 @@ func SendEvent(classicURL, token string, params EventParams) error {
 			props[kv.k] = kv.v
 		}
 	}
+	maps.Copy(props, params.ExtraProps)
+	title := "dtwiz " + params.CmdID
+	if params.SubID != "" {
+		title += " " + params.SubID
+	}
 	eventBody, err := json.Marshal(eventPayload{
 		EventType:  "CUSTOM_INFO",
-		Title:      "dtwiz started",
+		Title:      title,
 		Properties: props,
 	})
 	if err != nil {
@@ -103,6 +111,9 @@ func SendEvent(classicURL, token string, params EventParams) error {
 	req.Header.Set("Tab-Id", buildTabID(params))
 	req.Header.Set(headerKey, headerValue)
 
+	logger.Debug(fmt.Sprintf("selfmonitoring: POST %s  User-Agent: %s  Tab-Id: %s  body: %s",
+		url, req.Header.Get("User-Agent"), req.Header.Get("Tab-Id"), string(eventBody)))
+
 	resp, err := smHTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("send: %w", err)
@@ -120,15 +131,14 @@ func SendEvent(classicURL, token string, params EventParams) error {
 }
 
 // buildUserAgent encodes operation identity into User-Agent (64-char HAProxy capture limit).
-// Format: dtwiz/<version>;c=<cmd>;st=<step>[;s=<sub>][;er=<err>][;t=<type>]
-// ExecID, mode, and OS are omitted here — they go into Tab-Id via buildTabID.
+// Format: dtwiz/<version>[;c=<cmd>];st=<step>[;s=<sub>][;er=<err>][;t=<type>]
+// c= is omitted when CmdID is empty. ExecID, mode, and OS go into Tab-Id via buildTabID.
 func buildUserAgent(p EventParams) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "dtwiz/%s;%s=%s;%s=%s",
-		version.Version,
-		propCmd, p.CmdID,
-		propStep, p.StepID)
+	fmt.Fprintf(&b, "dtwiz/%s", version.Version)
 	for _, kv := range []struct{ k, v string }{
+		{propCmd, p.CmdID},
+		{propStep, p.StepID},
 		{propSub, p.SubID},
 		{propErr, p.Err},
 		{propType, p.Type},
