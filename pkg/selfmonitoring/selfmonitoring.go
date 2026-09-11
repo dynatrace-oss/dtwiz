@@ -131,15 +131,14 @@ func SendEvent(classicURL, token string, params EventParams) error {
 }
 
 // buildUserAgent encodes operation identity into User-Agent (64-char HAProxy capture limit).
-// Format: dtwiz/<version>;c=<cmd>;st=<step>[;s=<sub>][;er=<err>][;t=<type>]
-// ExecID, mode, and OS are omitted here — they go into Tab-Id via buildTabID.
+// Format: dtwiz/<version>[;c=<cmd>];st=<step>[;s=<sub>][;er=<err>][;t=<type>]
+// c= is omitted when CmdID is empty. ExecID, mode, and OS go into Tab-Id via buildTabID.
 func buildUserAgent(p EventParams) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "dtwiz/%s;%s=%s;%s=%s",
-		version.Version,
-		propCmd, p.CmdID,
-		propStep, p.StepID)
+	fmt.Fprintf(&b, "dtwiz/%s", version.Version)
 	for _, kv := range []struct{ k, v string }{
+		{propCmd, p.CmdID},
+		{propStep, p.StepID},
 		{propSub, p.SubID},
 		{propErr, p.Err},
 		{propType, p.Type},

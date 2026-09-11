@@ -2,11 +2,8 @@ package cmd
 
 import (
 	"testing"
-	"time"
 
 	"github.com/spf13/cobra"
-
-	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 )
 
 func TestNormCmd(t *testing.T) {
@@ -176,59 +173,38 @@ func TestResolveMode(t *testing.T) {
 	}
 }
 
-// ── watchResultToProps ───────────────────────────────────────────────────────
+// ── watchSignalCSV ───────────────────────────────────────────────────────────
 
-func TestWatchResultToProps_Encoding(t *testing.T) {
-	result := installer.WatchSessionResult{
-		Duration:    10 * time.Second,
-		ExitReason:  "user_exit",
-		FirstDataMs: map[string]int64{"svc": 1234, "hst": 5678},
-	}
-	props := watchResultToProps(result)
-
-	if got := props["watch.dur"]; got != "10000" {
-		t.Errorf("watch.dur = %q, want %q", got, "10000")
-	}
-	if got := props["watch.exit"]; got != "user_exit" {
-		t.Errorf("watch.exit = %q, want %q", got, "user_exit")
-	}
-	// signals must be sorted alphabetically
-	if got := props["watch.sig"]; got != "hst,svc" {
-		t.Errorf("watch.sig = %q, want %q", got, "hst,svc")
-	}
-	if got := props["watch.t_svc"]; got != "1234" {
-		t.Errorf("watch.t_svc = %q, want %q", got, "1234")
-	}
-	if got := props["watch.t_hst"]; got != "5678" {
-		t.Errorf("watch.t_hst = %q, want %q", got, "5678")
+func TestWatchSignalCSV_PositionalEncoding(t *testing.T) {
+	// order: cld,exc,hst,k8s,log,rel,req,svc
+	// hst=5678ms→5s (pos 2), k8s=9ms→1 (sub-second, pos 3), svc=1234ms→1s (pos 7); rest absent → 0
+	got := watchSignalCSV(map[string]int64{"svc": 1234, "hst": 5678, "k8s": 9})
+	if got != "0,0,5,1,0,0,0,1" {
+		t.Errorf("watchSignalCSV = %q, want %q", got, "0,0,5,1,0,0,0,1")
 	}
 }
 
-func TestWatchResultToProps_AbsentSignalProducesNoKey(t *testing.T) {
-	result := installer.WatchSessionResult{
-		Duration:    2 * time.Second,
-		ExitReason:  "timeout",
-		FirstDataMs: map[string]int64{"svc": 500},
-	}
-	props := watchResultToProps(result)
-
-	if _, ok := props["watch.t_hst"]; ok {
-		t.Error("watch.t_hst must not be present when hst was not seen")
-	}
-	if got := props["watch.sig"]; got != "svc" {
-		t.Errorf("watch.sig = %q, want %q", got, "svc")
+func TestWatchSignalCSV_SubSecondEncodesAsOne(t *testing.T) {
+	// sub-second signals must encode as 1, not 0, so 0 exclusively means absent
+	got := watchSignalCSV(map[string]int64{"svc": 999, "hst": 1, "cld": 500})
+	if got != "1,0,1,0,0,0,0,1" {
+		t.Errorf("watchSignalCSV = %q, want %q", got, "1,0,1,0,0,0,0,1")
 	}
 }
 
-func TestWatchResultToProps_NilFirstDataMsDoesNotPanic(t *testing.T) {
-	// WatchSessionResult zero value — pToken == "" early-return path leaves FirstDataMs nil.
-	defer func() {
-		if r := recover(); r != nil {
-			t.Errorf("watchResultToProps panicked with nil FirstDataMs: %v", r)
-		}
-	}()
-	props := watchResultToProps(installer.WatchSessionResult{})
-	if got := props["watch.sig"]; got != "" {
-		t.Errorf("watch.sig = %q, want empty string for zero-value result", got)
+func TestWatchSignalCSV_AllSignals(t *testing.T) {
+	got := watchSignalCSV(map[string]int64{
+		"cld": 60000, "exc": 45000, "hst": 12000, "k8s": 5000,
+		"log": 30000, "rel": 9000, "req": 25000, "svc": 3000,
+	})
+	if got != "60,45,12,5,30,9,25,3" {
+		t.Errorf("watchSignalCSV = %q, want %q", got, "60,45,12,5,30,9,25,3")
+	}
+}
+
+func TestWatchSignalCSV_EmptyMapReturnsEmpty(t *testing.T) {
+	got := watchSignalCSV(nil)
+	if got != "" {
+		t.Errorf("watchSignalCSV(nil) = %q, want empty string", got)
 	}
 }
