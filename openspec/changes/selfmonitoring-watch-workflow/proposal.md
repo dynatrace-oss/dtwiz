@@ -27,7 +27,7 @@ Per VI PRODUCT-17847, every meaningful dtwiz action must be instrumented and vis
 
 ## Impact
 
-- Affects `pkg/selfmonitoring/selfmonitoring.go`, `pkg/installer/ingest_watch.go`, `cmd/watch.go`, `cmd/root.go`.
+- Affects `pkg/selfmonitoring/selfmonitoring.go`, `pkg/installer/ingest_watch.go`, `cmd/watch.go`, `cmd/root.go`, `cmd/selfmonitoring.go` (new file).
 - No new dependencies or breaking CLI changes.
 - Gated by the existing `DTWIZ_SELF_MONITORING_POC` feature flag — no user-visible change when the flag is off.
 - No deviation from the VI's flush behaviour: `st=com` is fire-and-forget (goroutine), same as all other commands. The timeout path calls `onEvent` synchronously, but `fireSelfMonitoringEvent` inside it spawns a goroutine and returns immediately.
