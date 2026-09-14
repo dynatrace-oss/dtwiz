@@ -928,6 +928,7 @@ func prepareCollectorPlan(envURL, token string) (*collectorPlan, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	generatedConfig, err := generateOtelConfig(apiURL, collectorToken)
 	if err != nil {
 		return nil, fmt.Errorf("generating OTel Collector config: %w", err)
@@ -983,17 +984,6 @@ func (cp *collectorPlan) execute(envURL, platformToken string, skipVerification 
 			}
 			fmt.Printf("  Stopped collector (PID %d).\n", rc.pid)
 		}
-		// The old collector's ports are now free. Regenerate the config so
-		// findFreePort picks the preferred ports (4317/4318) instead of the
-		// higher ones it selected at plan time while the old process still held them.
-		if fresh, err := generateOtelConfig(cp.apiURL, cp.collectorToken); err == nil {
-			logger.Debug("regenerated config after stopping old collector", "oldHttpPort", cp.httpPort, "newHttpPort", fresh.httpPort)
-			cp.configContent = fresh.content
-			cp.configPreview = installer.MaskSecret(fresh.content, cp.collectorToken)
-			cp.httpPort = fresh.httpPort
-		} else {
-			logger.Debug("failed to regenerate config after stopping old collector", "err", err)
-		}
 	}
 
 	binaryPath, err := downloadOtelCollector(cp.installDir)
@@ -1011,6 +1001,9 @@ func (cp *collectorPlan) execute(envURL, platformToken string, skipVerification 
 		return err
 	}
 
+	if err := waitForOtelCollectorReady(cp.httpPort, 30*time.Second, crashed); err != nil {
+		fmt.Printf("\n  Warning: collector port did not open: %v\n", err)
+	}
 	if skipVerification {
 		fmt.Println("  Collector started — skipping verification (app instrumentation will follow).")
 		return nil
