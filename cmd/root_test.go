@@ -173,6 +173,30 @@ func TestResolveMode(t *testing.T) {
 	}
 }
 
+// ── watchSignalProps ─────────────────────────────────────────────────────────
+
+func TestWatchSignalProps_NamedKeys(t *testing.T) {
+	props := watchSignalProps(map[string]int64{"hst": 12000, "k8s": 5000, "svc": 999})
+	if got := props["hosts"]; got != "12000" {
+		t.Errorf("hosts = %q, want %q", got, "12000")
+	}
+	if got := props["kubernetes"]; got != "5000" {
+		t.Errorf("kubernetes = %q, want %q", got, "5000")
+	}
+	if got := props["services"]; got != "999" {
+		t.Errorf("services = %q, want %q", got, "999")
+	}
+	if _, ok := props["cloud"]; ok {
+		t.Error("cloud must not be present when not seen")
+	}
+}
+
+func TestWatchSignalProps_NilReturnsNil(t *testing.T) {
+	if got := watchSignalProps(nil); got != nil {
+		t.Errorf("watchSignalProps(nil) = %v, want nil", got)
+	}
+}
+
 // ── watchSignalCSV ───────────────────────────────────────────────────────────
 
 func TestWatchSignalCSV_PositionalEncoding(t *testing.T) {

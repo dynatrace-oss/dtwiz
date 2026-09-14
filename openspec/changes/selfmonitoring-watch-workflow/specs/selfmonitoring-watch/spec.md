@@ -18,7 +18,7 @@ The `st=inv` event is sent by the standard root `PersistentPreRun` hook — `wat
 
 - **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and credentials are configured
 - **WHEN** the first poll cycle after `dtwiz watch` starts returns at least one signal with data
-- **THEN** the system sends one `st=com` event asynchronously (without waiting for the user to exit) with User-Agent `dtwiz/<ver>;st=com;t=<signals>` where `<signals>` is a positional comma-separated list of whole-second values (see "Signal timing encoding" below); the `c=` field is absent; the watch display continues uninterrupted
+- **THEN** the system sends one `st=com` event asynchronously (without waiting for the user to exit) with User-Agent `dtwiz/<ver>;st=com;t=<signals>` where `<signals>` is a positional comma-separated list of whole-second values (see "Signal timing encoding" below); the `c=` field is absent; each seen signal also appears as a named property in the event body (e.g. `hst: "12"`); the watch display continues uninterrupted
 
 #### Scenario: Watch session ends with no data — user exits
 

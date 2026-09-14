@@ -71,21 +71,23 @@ func SendEvent(classicURL, token string, params EventParams) error {
 	}
 
 	props := map[string]string{
-		propExecID: execID,
-		propCmd:    params.CmdID,
-		propStep:   params.StepID,
+		"event": execID,
+		"step":  params.StepID,
 	}
 	for _, kv := range []struct{ k, v string }{
-		{propSub, params.SubID},
-		{propErr, params.Err},
-		{propType, params.Type},
+		{"command", params.CmdID},
+		{"subcommand", params.SubID},
+		{"error", params.Err},
 	} {
 		if kv.v != "" {
 			props[kv.k] = kv.v
 		}
 	}
 	maps.Copy(props, params.ExtraProps)
-	title := "dtwiz " + params.CmdID
+	title := "dtwiz"
+	if params.CmdID != "" {
+		title += " " + params.CmdID
+	}
 	if params.SubID != "" {
 		title += " " + params.SubID
 	}

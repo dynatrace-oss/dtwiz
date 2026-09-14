@@ -41,9 +41,39 @@ var watchCmd = &cobra.Command{
 			params := buildEventParams(cmd, selfmonitoring.StepCompleted)
 			params.CmdID = ""
 			params.Type = watchSignalCSV(r.FirstDataMs)
+			params.ExtraProps = watchSignalProps(r.FirstDataMs)
 			fireSelfMonitoringEvent(params)
 		})
 	},
+}
+
+var watchSignalNames = map[string]string{
+	"cld": "cloud",
+	"exc": "exceptions",
+	"hst": "hosts",
+	"k8s": "kubernetes",
+	"log": "logs",
+	"rel": "relationships",
+	"req": "requests",
+	"svc": "services",
+}
+
+// watchSignalProps builds event body properties from signal first-data timing.
+// Each seen signal gets a full-name key (e.g. "hosts") and a value in milliseconds.
+// Absent signals produce no key. Returns nil when no signals were seen.
+func watchSignalProps(firstDataMs map[string]int64) map[string]string {
+	if len(firstDataMs) == 0 {
+		return nil
+	}
+	props := make(map[string]string, len(firstDataMs))
+	for sig, ms := range firstDataMs {
+		key := watchSignalNames[sig]
+		if key == "" {
+			key = sig
+		}
+		props[key] = strconv.FormatInt(ms, 10)
+	}
+	return props
 }
 
 // watchSignalOrder is the fixed positional order used by watchSignalCSV (alphabetical).
