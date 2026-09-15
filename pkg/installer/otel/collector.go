@@ -968,8 +968,14 @@ func (cp *collectorPlan) execute(envURL, platformToken string, skipVerification 
 		return fmt.Errorf("creating install directory: %w", err)
 	}
 
-	// Stop any running collectors first so file locks are released before
-	// the download overwrites the binary (critical on Windows).
+	// Download the new binary before stopping the old collector to minimise
+	// the downtime window. On Windows the running binary is file-locked, so
+	// we download to a temp path and rename after the old process is gone.
+	binaryPath, err := downloadOtelCollector(cp.installDir)
+	if err != nil {
+		return err
+	}
+
 	if procs := cp.runningPIDs; len(procs) > 0 {
 		fmt.Printf("  Stopping existing collector (PIDs: %s)...\n", formatPIDs(procs))
 		for _, rc := range procs {
@@ -984,11 +990,17 @@ func (cp *collectorPlan) execute(envURL, platformToken string, skipVerification 
 			}
 			fmt.Printf("  Stopped collector (PID %d).\n", rc.pid)
 		}
-	}
-
-	binaryPath, err := downloadOtelCollector(cp.installDir)
-	if err != nil {
-		return err
+		// The old collector's ports are now free. Regenerate the config so
+		// findFreePort picks the preferred ports (4317/4318) instead of the
+		// higher ones it selected at plan time while the old process still held them.
+		if fresh, err := generateOtelConfig(cp.apiURL, cp.collectorToken); err == nil {
+			logger.Debug("regenerated config after stopping old collector", "oldHttpPort", cp.httpPort, "newHttpPort", fresh.httpPort)
+			cp.configContent = fresh.content
+			cp.configPreview = installer.MaskSecret(fresh.content, cp.collectorToken)
+			cp.httpPort = fresh.httpPort
+		} else {
+			logger.Debug("failed to regenerate config after stopping old collector", "err", err)
+		}
 	}
 
 	if err := os.WriteFile(cp.configPath, []byte(cp.configContent), 0o600); err != nil {
