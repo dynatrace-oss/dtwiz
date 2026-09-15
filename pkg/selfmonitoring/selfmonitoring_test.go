@@ -134,12 +134,12 @@ func TestBuildTabID(t *testing.T) {
 				t.Errorf("Tab-Id too long: %d > %d: %s", len(tabID), tt.maxLen, tabID)
 			}
 
-			// Check format: <2hex>;m=<mode>;o=<os>
-			if len(tabID) < 5 {
+			// Check format: <3hex>;m=<mode>;o=<os>
+			if len(tabID) < 6 {
 				t.Errorf("Tab-Id malformed (too short): %s", tabID)
 			}
-			if tabID[2] != ';' {
-				t.Errorf("Tab-Id format error: expected ';' at position 2, got %q in %s", tabID[2], tabID)
+			if tabID[3] != ';' {
+				t.Errorf("Tab-Id format error: expected ';' at position 3, got %q in %s", tabID[3], tabID)
 			}
 
 			// Check mode is present

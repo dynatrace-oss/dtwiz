@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"sort"
@@ -90,19 +91,33 @@ type watchState struct {
 	Exceptions    watchSection
 }
 
+// WatchSessionResult holds telemetry data collected during a watch session.
+type WatchSessionResult struct {
+	Duration    time.Duration
+	ExitReason  string           // "first_data", "timeout", or "user_exit"
+	FirstDataMs map[string]int64 // signal name -> ms since watch start when first data arrived
+}
+
 // WatchIngest polls Dynatrace for newly ingested data and renders a live
 // terminal summary. It blocks until the user presses Enter or Ctrl+C.
 // fromClause is injected directly into DQL queries — accepts RFC3339 timestamps
 // or DQL relative expressions (e.g. "now()-1h").
-func WatchIngest(envURL, pToken, fromClause string) {
-	watchIngest(envURL, pToken, fromClause, nil, "", false, "")
+func WatchIngest(envURL, pToken, fromClause string) WatchSessionResult {
+	return watchIngest(envURL, pToken, fromClause, nil, "", false, "", nil)
+}
+
+// WatchIngestWithEvent is like WatchIngest but calls onEvent as soon as the
+// first signal data is received OR the session times out — without waiting for
+// the user to exit the watch display.
+func WatchIngestWithEvent(envURL, pToken, fromClause string, onEvent func(WatchSessionResult)) WatchSessionResult {
+	return watchIngest(envURL, pToken, fromClause, nil, "", false, "", onEvent)
 }
 
 // WatchIngestOtel is like WatchIngest but also shows a call to action to
 // instrument the application when manualLang is the URL slug of a language
 // the user selected for manual instrumentation (e.g. "go", "php").
 func WatchIngestOtel(envURL, pToken, fromClause, manualLang string) {
-	watchIngest(envURL, pToken, fromClause, nil, "", false, manualLang)
+	watchIngest(envURL, pToken, fromClause, nil, "", false, manualLang, nil)
 }
 
 // WatchIngestCloudFromTime is like WatchIngest but calls WatchIngestCloud.
@@ -119,21 +134,21 @@ func WatchIngestCloudFromTime(envURL, pToken string, startTime time.Time) {
 // The caller sends status messages to statusCh; the most recent message is
 // shown on every render. Passing a nil channel disables status updates.
 func WatchIngestWithStatus(envURL, pToken, fromClause string, statusCh <-chan string) {
-	watchIngest(envURL, pToken, fromClause, statusCh, "", false, "")
+	watchIngest(envURL, pToken, fromClause, statusCh, "", false, "", nil)
 }
 
 // WatchIngestAWS is like WatchIngestWithStatus but additionally scopes the
 // cloud-platform signal queries (metrics + da-* logs) to a specific AWS
 // account ID so noise from other accounts in the same tenant is filtered out.
 func WatchIngestAWS(envURL, pToken, fromClause string, statusCh <-chan string, awsAccountID string) {
-	watchIngest(envURL, pToken, fromClause, statusCh, awsAccountID, true, "")
+	watchIngest(envURL, pToken, fromClause, statusCh, awsAccountID, true, "", nil)
 }
 
 // WatchIngestCloud is like WatchIngest but shows a "See your cloud resources
 // in the Clouds app" footer instead of the QuickStart link. Use this for
 // AWS, GCP, and Azure installs.
 func WatchIngestCloud(envURL, pToken, fromClause string) {
-	watchIngest(envURL, pToken, fromClause, nil, "", true, "")
+	watchIngest(envURL, pToken, fromClause, nil, "", true, "", nil)
 }
 
 // otelLangNames maps a manual-language URL slug to its display name.
@@ -148,14 +163,25 @@ var otelLangNames = map[string]string{
 	"rust":   "Rust",
 }
 
-func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsAccountID string, cloudInstall bool, manualLang string) {
+func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsAccountID string, cloudInstall bool, manualLang string, onEvent func(WatchSessionResult)) (result WatchSessionResult) {
 	if pToken == "" {
 		fmt.Println("  Platform token required for watch. Set --platform-token or DT_PLATFORM_TOKEN.")
 		return
 	}
 
+	result.FirstDataMs = make(map[string]int64)
 	appsURL := AppsURL(envURL)
-	watchStart := time.Now()
+	sessionStart := time.Now() // never reset — used for event Duration
+	watchStart := sessionStart // reset on "Y" continuation; used for elapsed display
+	defer func() { result.Duration = time.Since(watchStart) }()
+	var eventFired bool
+	snapEvent := func(exitReason string) WatchSessionResult {
+		return WatchSessionResult{
+			Duration:    time.Since(sessionStart),
+			ExitReason:  exitReason,
+			FirstDataMs: maps.Clone(result.FirstDataMs),
+		}
+	}
 	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
 	// Colors
 	highlight := color.New(color.FgMagenta, color.Bold)
@@ -210,9 +236,11 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsA
 			case <-ticker.C:
 			case inp := <-inputCh:
 				if inp.err != nil {
+					result.ExitReason = "user_exit"
 					return
 				}
 				// Any Enter press during normal watching stops the loop.
+				result.ExitReason = "user_exit"
 				return
 			}
 		}
@@ -239,11 +267,19 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsA
 		// After 10 minutes, prompt the user to decide whether to continue.
 		if elapsed >= watchTimeout {
 			if !isTTY {
+				if onEvent != nil && !eventFired {
+					onEvent(snapEvent("timeout")) // synchronous — must complete before watchIngest returns
+				}
+				result.ExitReason = "timeout"
 				return
 			}
 			dim.Printf(" Continue watching? [Y/n] ")
 			resp := <-inputCh
 			if resp.err != nil || strings.HasPrefix(strings.ToLower(resp.line), "n") {
+				if onEvent != nil && !eventFired {
+					onEvent(snapEvent("timeout")) // synchronous — must complete before watchIngest returns
+				}
+				result.ExitReason = "timeout"
 				return
 			}
 			watchStart = time.Now()
@@ -264,6 +300,12 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsA
 		}
 
 		state := pollAll(appsURL, pToken, fromClause, awsAccountID, &qs)
+		trackWatchSignals(&result, watchStart, state)
+		if onEvent != nil && !eventFired && len(result.FirstDataMs) > 0 {
+			eventFired = true
+			snap := snapEvent("first_data")
+			go onEvent(snap) // asynchronous — must not block the watch display loop
+		}
 
 		var buf strings.Builder
 
@@ -872,6 +914,26 @@ func toInt(v interface{}) int {
 	default:
 		return 0
 	}
+}
+
+// trackWatchSignals records the first-data timestamp for each signal that
+// transitions from unseen to seen in this poll cycle.
+func trackWatchSignals(result *WatchSessionResult, watchStart time.Time, state watchState) {
+	check := func(sig string, hasData bool) {
+		if hasData {
+			if _, seen := result.FirstDataMs[sig]; !seen {
+				result.FirstDataMs[sig] = time.Since(watchStart).Milliseconds()
+			}
+		}
+	}
+	check("svc", state.Services.Count > 0)
+	check("hst", state.Hosts.Count > 0)
+	check("cld", state.Cloud.Count > 0 || state.Cloud.Secondary != "")
+	check("k8s", state.Kubernetes.Count > 0)
+	check("rel", state.Relationships.Count > 0)
+	check("log", state.Logs.Count > 0 || state.Logs.Status != "")
+	check("req", state.Requests.Count > 0 || state.Requests.Status != "")
+	check("exc", state.Exceptions.Count > 0)
 }
 
 // termHyperlink returns an OSC 8 clickable hyperlink for supported terminals.
