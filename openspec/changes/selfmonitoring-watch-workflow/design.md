@@ -2,7 +2,7 @@
 
 ## Context
 
-`dtwiz watch` polls Dynatrace DQL every 5 seconds and renders a live terminal summary. Prior to this change, the command emitted no self-monitoring events. The existing self-monitoring package (`pkg/selfmonitoring`) sends fire-and-forget invocation events for all commands via `rootCmd.PersistentPreRun`. The VI specifies that `dtwiz watch` must emit one span covering session telemetry (time to first data, signals seen). The implementation fires two events: the standard `st=inv` on start, and a `st=com` mid-session when first data arrives or the session times out.
+`dtwiz watch` polls Dynatrace DQL every 5 seconds and renders a live terminal summary. Prior to this change, the command emitted no self-monitoring events. The existing self-monitoring package (`pkg/selfmonitoring`) sends fire-and-forget invocation events for all commands via `rootCmd.PersistentPreRun`. The VI specifies that `dtwiz watch` must emit one event covering session telemetry (time to first data, signals seen). The implementation fires two events: the standard `st=inv` on start, and a `st=com` mid-session when first data arrives or the session times out.
 
 ## Goals / Non-Goals
 
@@ -17,16 +17,16 @@
 **Non-Goals:**
 
 - Handle Ctrl+C gracefully — the process is killed before the completion path runs; this is a known gap acceptable for the current iteration.
-- Instrument watch sessions triggered from within `dtwiz setup` or `dtwiz install` — those are covered by their own spans.
+- Instrument watch sessions triggered from within `dtwiz setup` or `dtwiz install` — those are covered by their own events.
 - Change the polling or rendering behaviour of `watchIngest`.
 
 ## Decisions
 
-### Two spans: st=inv at start + st=com mid-session
+### Two events: st=inv at start + st=com mid-session
 
 The VI requires session telemetry (duration, signals, timing). The only point where that data is available is when first data arrives or the session times out — both of which happen mid-session, before the user exits. `st=inv` is sent by the standard root `PersistentPreRun` hook (no override needed on `watchCmd`). `st=com` is sent via the `onEvent` callback in `WatchIngestWithEvent`, which fires asynchronously at first data and synchronously at timeout (to guarantee the callback runs before `watchIngest` returns, even though the subsequent `fireSelfMonitoringEvent` call is itself non-blocking).
 
-- Alternative considered: suppress `st=inv` via a `PersistentPreRun` override and emit a single post-session span when the user exits. This loses the invocation signal if the user Ctrl+C's, and requires mirroring root hook additions manually in `watchCmd`. Discarded.
+- Alternative considered: suppress `st=inv` via a `PersistentPreRun` override and emit a single post-session event when the user exits. This loses the invocation signal if the user Ctrl+C's, and requires mirroring root hook additions manually in `watchCmd`. Discarded.
 
 ### Signal timing encoded in User-Agent t= (positional CSV, not body)
 

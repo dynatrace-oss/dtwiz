@@ -23,12 +23,12 @@ var smHTTPClient = &http.Client{Timeout: 3 * time.Second}
 var execID string
 
 func init() {
-	b := make([]byte, 1)
+	b := make([]byte, 2)
 	if _, err := rand.Read(b); err != nil {
-		execID = "00"
+		execID = "000"
 		return
 	}
-	execID = fmt.Sprintf("%x", b)
+	execID = fmt.Sprintf("%02x%x", b[0], b[1]>>4)
 }
 
 // EventParams holds per-invocation metadata embedded in the request User-Agent and event body.
@@ -153,8 +153,8 @@ func buildUserAgent(p EventParams) string {
 }
 
 // buildTabID encodes execution context into Tab-Id (16-char HAProxy capture limit).
-// Format: <execid>;m=<mode>;o=<os> — execid is positional (always 2 hex chars), mode and os are 3 chars each.
-// Worst case: "3a;m=deb;o=win" = 14 chars.
+// Format: <execid>;m=<mode>;o=<os> — execid is positional (always 3 hex chars), mode and os are 3 chars each.
+// Worst case: "3ab;m=deb;o=win" = 15 chars.
 func buildTabID(p EventParams) string {
 	return execID + ";m=" + p.Mode + ";o=" + resolveOS()
 }

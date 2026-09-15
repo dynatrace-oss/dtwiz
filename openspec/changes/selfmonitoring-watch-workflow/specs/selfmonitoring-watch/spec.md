@@ -22,7 +22,7 @@ The system SHALL emit two self-monitoring events per `dtwiz watch` invocation: o
 
 - **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and credentials are configured
 - **WHEN** the user runs `dtwiz watch` and presses Enter before any signal receives data
-- **THEN** only the `st=inv` event is present — no `st=com` event is sent; absence of the completion span indicates the user exited before data arrived
+- **THEN** only the `st=inv` event is present — no `st=com` event is sent; absence of the completion event indicates the user exited before data arrived
 
 #### Scenario: Watch session times out with no data
 
@@ -34,7 +34,7 @@ The system SHALL emit two self-monitoring events per `dtwiz watch` invocation: o
 
 - **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and credentials are configured and first data was already received (`st=com` already fired)
 - **WHEN** the watch session subsequently reaches the 10-minute timeout
-- **THEN** no second completion event is sent — the `st=com` span was already emitted at first-data time
+- **THEN** no second completion event is sent — the `st=com` event was already emitted at first-data time
 
 #### Scenario: Feature flag disabled
 
@@ -50,7 +50,7 @@ The `t=` field in the User-Agent of the `st=com` event encodes time-to-first-dat
 
 **Encoding invariant:** `0` always means the signal was not seen. A signal that was seen encodes as the whole-second duration (minimum `1`, even if the actual time was under 1 second). This preserves the ability to distinguish "absent" from "present but very fast".
 
-**Worst-case header length:** `dtwiz/1.8.0;st=com;t=60,45,12,5,30,9,25,3` = 43 characters, well within the 64-character HAProxy capture limit.
+**Worst-case header length:** `dtwiz/1.8.0;st=com;t=600,600,600,600,600,600,600,600` = 53 characters, well within the 64-character HAProxy capture limit.
 
 #### Scenario: Partial signal data
 
