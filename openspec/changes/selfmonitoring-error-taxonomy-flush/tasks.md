@@ -3,27 +3,26 @@
 ## 1. Flush strategy — `pkg/selfmonitoring/selfmonitoring.go`
 
 - [ ] 1.1 Add `StepFailed = "fai"` and `StepCancelled = "can"` constants alongside `StepInvoked` and `StepCompleted`.
-- [ ] 1.2 Add a package-level `sync.WaitGroup` to track all in-flight event sends.
-- [ ] 1.3 Add `Flush(timeout time.Duration)`: waits on the WaitGroup for up to `timeout`, then returns — silent on timeout, accepts any remaining in-flight sends as lost.
+- [ ] 1.2 Add `pendingEvent` struct with `classicURL string`, `token string`, `params EventParams` fields.
+- [ ] 1.3 Add package-level `queue []pendingEvent` and `mu sync.Mutex`.
+- [ ] 1.4 Add `Enqueue(classicURL, token string, params EventParams)`: sets `params.StepID` default if empty, then appends to queue under mutex.
+- [ ] 1.5 Add `Flush(timeout time.Duration)`: drains queue under mutex, sends all pending events concurrently via goroutines + `sync.WaitGroup`, blocks until all complete or `context.WithTimeout` fires — silent on timeout.
 
 ## 2. Flush strategy — `cmd/selfmonitoring.go`
 
-- [ ] 2.1 In `fireSelfMonitoringEvent`: keep the goroutine-based send. Register `wg.Add(1)` before spawning the goroutine and call `wg.Done()` when the HTTP send completes. The goroutine continues to resolve credentials internally — no change to that behaviour.
-- [ ] 2.2 Add `fireSelfMonitoringEventWithError(params selfmonitoring.EventParams, err error)`: calls `selfmonitoring.ClassifyError(err)`, sets `params.Err = string(errType)`, merges attrs into `params.ExtraProps`, then calls `fireSelfMonitoringEvent(params)`.
+- [ ] 2.1 In `fireSelfMonitoringEvent`: move `getDtEnvironment()` call out of the goroutine to the top of the function (before feature flag check is fine; after is cleaner — keep guard at top). Remove the goroutine. Call `selfmonitoring.Enqueue(installer.APIURL(envURL), platformTok, params)` on success.
+- [ ] 2.2 Add `fireSelfMonitoringEventWithError(params selfmonitoring.EventParams, err error)`: calls `installer.ClassifyError(err)`, sets `params.Err = string(errType)`, merges attrs into `params.ExtraProps`, then calls `fireSelfMonitoringEvent(params)`.
 
 ## 3. Flush strategy — `cmd/root.go`
 
-- [ ] 3.1 In `Execute()`: call `rootCmd.Execute()`, then `selfmonitoring.Flush(200 * time.Millisecond)`, then `os.Exit(1)` if err non-nil. The flush waits for any in-flight goroutines to complete before the process exits.
+- [ ] 3.1 In `Execute()`: change from `if err := rootCmd.Execute(); err != nil { os.Exit(1) }` to: call `rootCmd.Execute()`, then `selfmonitoring.Flush(200 * time.Millisecond)`, then `os.Exit(1)` if err non-nil.
 
-## 4. Error taxonomy — typed error types in `pkg/installer/errors.go` (new file)
+## 4. Error taxonomy — `pkg/installer/errors.go` (new file)
 
 - [ ] 4.1 Define `ErrorType string` type and constants: `ErrTypeUserCancelled`, `ErrTypeAuthError`, `ErrTypeConfigError`, `ErrTypeDependencyMissing`, `ErrTypeNetworkError`, `ErrTypeInstallFailed`, `ErrTypePlatformUnsupported`.
 - [ ] 4.2 Add `ErrPlatformUnsupported = errors.New("platform not supported")` sentinel.
 - [ ] 4.3 Add typed error structs: `AuthError{Reason string}`, `ConfigError{MissingFields []string}`, `DependencyMissingError{Name string}`, `NetworkError{Reason, URL string}`, `InstallFailedError{Step string}`. Each implements `error` with a human-readable `Error() string`. Each implements `Unwrap() error` returning `nil` (they are leaf errors, not wrappers).
-
-## 4a. Error taxonomy — `ClassifyError` in `pkg/selfmonitoring/classify.go` (new file)
-
-- [ ] 4a.1 Add `ClassifyError(err error) (installer.ErrorType, map[string]string)`: walks error chain in priority order (see design), returns type + additional attributes map. Returns `(installer.ErrTypeInstallFailed, nil)` for unrecognised errors. `pkg/selfmonitoring` imports `pkg/installer` for the typed error types.
+- [ ] 4.4 Add `ClassifyError(err error) (ErrorType, map[string]string)`: walks error chain in priority order (see design), returns type + additional attributes map. Returns `(ErrTypeInstallFailed, nil)` for unrecognised errors.
 
 ## 5. Typed errors — `cmd/auth.go`
 
@@ -74,7 +73,7 @@ Replace each `exec.LookPath` / `ExecLookPath` "not found" failure with a `Depend
 ## 11. Tests
 
 - [ ] 11.1 Unit-test `ClassifyError`: table-driven test covering each of the 8 error types (including fallback), verifying the returned `ErrorType` constant and `map[string]string` attributes.
-- [ ] 11.2 Unit-test `Flush`: verify that it waits for in-flight goroutines to complete and that the timeout is respected.
+- [ ] 11.2 Unit-test `Flush`: verify that all enqueued events are sent, that timeout is respected (no block beyond timeout), and that the queue is cleared after flush.
 - [ ] 11.3 Unit-test `fireSelfMonitoringEventWithError`: verify `params.Err` is set to the classified type and `ExtraProps` contains the expected attributes.
 - [ ] 11.4 Run `go test ./pkg/installer/... ./pkg/selfmonitoring/... ./cmd/...` and confirm all pass.
 - [ ] 11.5 Run `make lint` and confirm no new issues.

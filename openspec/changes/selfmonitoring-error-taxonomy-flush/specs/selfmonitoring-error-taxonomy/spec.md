@@ -1,6 +1,6 @@
 # Spec: Self-Monitoring Error Taxonomy
 
-## ADDED Requirements
+## NEW Requirements
 
 ### Requirement: Every command failure emits a terminal self-monitoring event
 
@@ -35,7 +35,17 @@ The system SHALL emit exactly one terminal self-monitoring event per command inv
 
 ### Requirement: Errors are classified using the structured taxonomy
 
-The system SHALL classify every error into exactly one taxonomy category and include the classification and any additional attributes in the terminal event. The taxonomy categories and their additional attributes are defined in `design.md`.
+The system SHALL classify every error into exactly one of the following taxonomy categories and include the classification in the terminal event. Additional attributes are included where specified.
+
+| `error.type` | Additional attributes | When |
+|---|---|---|
+| `user_cancelled` | — | User declined Y/N prompt or typed `0` at recommendation menu |
+| `auth_error` | `auth.failure_reason`: `invalid_token`, `environment_not_reachable`, or `authentication_failed` | Authentication failed, invalid or missing token, environment unreachable |
+| `config_error` | `config.missing_fields`: array of missing field names (`DT_ENVIRONMENT`, `DT_PLATFORM_TOKEN`, `project_path`) | Missing environment URL, missing platform token, or project path not found before the install could start |
+| `dependency_missing` | `dependency.name`: name of the missing binary | A required external tool was not found |
+| `network_error` | `network.failure_reason`, `network.url` (if available) | Connection timeout, environment not reachable, or unexpected HTTP response |
+| `install_failed` | `install.step`: free-text name of the step that failed | Install execution failed; catch-all for failures not matching a more specific category |
+| `platform_unsupported` | — | Current OS or architecture is not supported by the selected install method |
 
 #### Scenario: Missing environment variable
 
@@ -50,10 +60,16 @@ The system SHALL classify every error into exactly one taxonomy category and inc
 - **WHEN** credential validation fails
 - **THEN** the terminal event carries `er=config_error` and `config.missing_fields` contains both field names in a single event
 
+#### Scenario: Invalid token
+
+- **GIVEN** `DT_ENVIRONMENT` is set and `DT_PLATFORM_TOKEN` is set to an invalid value
+- **WHEN** the token validation call returns HTTP 401
+- **THEN** the terminal event carries `er=auth_error` and `auth.failure_reason=authentication_failed`
+
 #### Scenario: Missing dependency
 
 - **GIVEN** a required external binary (e.g. `kubectl`, `helm`, `aws-cli`) is not installed
-- **WHEN** the required binary is not found on the system
+- **WHEN** the installer checks for the binary using `exec.LookPath`
 - **THEN** the terminal event carries `er=dependency_missing` and `dependency.name` set to the name of the missing binary
 
 #### Scenario: Platform not supported

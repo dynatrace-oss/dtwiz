@@ -1,6 +1,6 @@
 # Spec: Self-Monitoring Flush
 
-## ADDED Requirements
+## NEW Requirements
 
 ### Requirement: Self-monitoring events are flushed before process exit
 
