@@ -32,7 +32,7 @@ The VI requires session telemetry (duration, signals, timing). The only point wh
 
 Watch session data goes into the `t=` field of the User-Agent header rather than into event body properties. This avoids body schema churn and keeps both events structurally consistent with other commands. The format is a positional comma-separated list of whole-second values in fixed signal order (`cld,exc,hst,k8s,log,rel,req,svc`). `0` means the signal was not seen. A signal that was seen encodes as the number of whole seconds to first data, minimum `1` — sub-second arrivals encode as `1`, not `0`, so `0` exclusively means absent. The `t=` field is omitted when no signals were seen.
 
-Worst-case header: `dtwiz/1.8.0;st=com;t=60,45,12,5,30,9,25,3` = 43 chars, within the 64-char HAProxy limit.
+Worst-case header: `dtwiz/1.8.0;st=com;t=600,600,600,600,600,600,600,600` = 53 chars, within the 64-char HAProxy limit.
 
 - Alternative considered: `t=hst:12,k8s:5,rel:9,svc:3` (named key-value pairs, only present signals). This approach is variable-length and harder to parse at scale; worst case with all 8 signals and 2-digit seconds would approach 64 chars. Discarded in favour of positional encoding.
 

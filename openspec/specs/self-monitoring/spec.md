@@ -1,6 +1,6 @@
 # Spec: Self-Monitoring Events
 
-## NEW Requirements
+## ADDED Requirements
 
 ### Requirement: Self-monitoring events capture command invocations
 

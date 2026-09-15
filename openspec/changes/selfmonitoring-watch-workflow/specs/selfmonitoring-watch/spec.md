@@ -4,9 +4,7 @@
 
 ### Requirement: dtwiz watch emits two self-monitoring events per invocation
 
-The system SHALL emit two self-monitoring events per `dtwiz watch` invocation: one on invocation (`st=inv`) and one when first data is received or the session times out (`st=com`).
-
-The `st=inv` event is sent by the standard root `PersistentPreRun` hook — `watch` does not override it. The `st=com` event is sent by a callback registered with `WatchIngestWithEvent` and fires mid-session (before the user exits).
+The system SHALL emit two self-monitoring events per `dtwiz watch` invocation: one on invocation and one when first data is received or the session times out.
 
 #### Scenario: Command is invoked
 
@@ -52,15 +50,6 @@ The `t=` field in the User-Agent of the `st=com` event encodes time-to-first-dat
 
 **Encoding invariant:** `0` always means the signal was not seen. A signal that was seen encodes as the whole-second duration (minimum `1`, even if the actual time was under 1 second). This preserves the ability to distinguish "absent" from "present but very fast".
 
-**Examples:**
-
-| Signals seen | Encoded value |
-|---|---|
-| `hst` after 12s, `k8s` after 5s, `rel` after 9s, `svc` after 3s | `t=0,0,12,5,0,9,0,3` |
-| `hst` after 800ms (sub-second), `svc` after 400ms (sub-second) | `t=0,0,1,0,0,0,0,1` |
-| All 8 signals | `t=60,45,12,5,30,9,25,3` |
-| No signals | `t=` field absent |
-
 **Worst-case header length:** `dtwiz/1.8.0;st=com;t=60,45,12,5,30,9,25,3` = 43 characters, well within the 64-character HAProxy capture limit.
 
 #### Scenario: Partial signal data
@@ -95,7 +84,7 @@ The system SHALL set the event title to `"dtwiz <cmd>"` or `"dtwiz <cmd> <sub>"`
 
 ### Requirement: st=com for watch omits c= from the User-Agent
 
-For the `st=com` event sent by `dtwiz watch`, the `c=` field (command identifier) SHALL be absent from the User-Agent header. This distinguishes it from the `st=inv` event (which carries `c=wch`) and keeps the header short.
+For the completed event sent by `dtwiz watch`, the command field SHALL be absent from the User-Agent header.
 
 #### Scenario: Completion event header format
 
