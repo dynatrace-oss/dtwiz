@@ -253,10 +253,9 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 		fmt.Println()
 		fmt.Printf("  Waiting for collector to be ready...")
 		if err := waitForOtelCollectorReady(httpPort, 30*time.Second, crashed); err != nil {
-			fmt.Printf("\n  Warning: collector port did not open: %v\n", err)
-		} else {
-			fmt.Println(" ✓")
+			return fmt.Errorf("collector port did not open: %w", err)
 		}
+		fmt.Println(" ✓")
 		if err := verifyOtelInstall(envURL, platformTok, token, httpPort); err != nil {
 			fmt.Printf("\n  Warning: log verification failed: %v\n", err)
 			fmt.Println("  The collector may still be working — check the Dynatrace UI.")
@@ -270,10 +269,9 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 		fmt.Println()
 		fmt.Printf("  Waiting for collector to be ready...")
 		if err := waitForOtelCollectorReady(httpPort, 30*time.Second, noCrash); err != nil {
-			fmt.Printf("\n  Warning: collector port did not open: %v\n", err)
-		} else {
-			fmt.Println(" ✓")
+			return fmt.Errorf("collector port did not open: %w", err)
 		}
+		fmt.Println(" ✓")
 		if err := verifyOtelInstall(envURL, platformTok, token, httpPort); err != nil {
 			fmt.Printf("\n  Warning: log verification failed: %v\n", err)
 			fmt.Println("  The collector may still be working — check the Dynatrace UI.")

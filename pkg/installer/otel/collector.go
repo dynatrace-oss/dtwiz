@@ -1007,10 +1007,9 @@ func (cp *collectorPlan) execute(envURL, platformToken string, skipVerification 
 	fmt.Println()
 	fmt.Printf("  Waiting for collector to be ready...")
 	if err := waitForOtelCollectorReady(cp.httpPort, 30*time.Second, crashed); err != nil {
-		fmt.Printf("\n  Warning: collector port did not open: %v\n", err)
-	} else {
-		fmt.Println(" ✓")
+		return fmt.Errorf("collector port did not open: %w", err)
 	}
+	fmt.Println(" ✓")
 	if skipVerification {
 		fmt.Println("  Collector started — skipping verification (app instrumentation will follow).")
 		return nil
