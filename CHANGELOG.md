@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-09-16
+
+### Fixed
+
+- `install otel` / `update otel`: fixed collector installation when an existing collector is running. The binary is now downloaded after the old process is stopped to avoid Windows file-lock conflicts. Collector readiness is verified once (not twice), and port-ready failures now correctly halt installation instead of silently proceeding with a broken endpoint. Auto-instrumentation plans are now recreated after the collector starts to ensure they use the actual port the collector ended up on.
+
 ## [1.8.0] - 2026-09-10
 
 ### Added
@@ -567,7 +573,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.8.1...HEAD
+[1.8.1]: https://github.com/dynatrace-oss/dtwiz/compare/v1.8.0...v1.8.1
+[1.8.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/dynatrace-oss/dtwiz/compare/v1.5.0...v1.5.1
