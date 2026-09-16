@@ -33,6 +33,8 @@ var setupCmd = &cobra.Command{
   4. Runs the selected installer`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		fireInvokedEvent(cmd)
+
 		printBanner()
 
 		if env := environmentHint(); env != "" {
@@ -51,6 +53,7 @@ var setupCmd = &cobra.Command{
 		go func() { demoRunningCh <- otel.IsDemoRunning() }()
 
 		info, err := analyzeSystem()
+		fireSetupAnalyzeEvent(cmd, err)
 		if err != nil {
 			return fmt.Errorf("analysis failed: %w", err)
 		}
@@ -87,11 +90,14 @@ var setupCmd = &cobra.Command{
 		}
 
 		if input == "u" {
+			fireSetupRecommendEvent(cmd, "uni")
 			fmt.Println()
 			return uninstallCmd.Help()
 		}
 
 		if input == "d" {
+			fireSetupRecommendEvent(cmd, "demo")
+
 			fmt.Println()
 
 			envURL, accessTok, platformTok, err := getDtEnvironment()
@@ -104,14 +110,16 @@ var setupCmd = &cobra.Command{
 			}
 
 			display.Header("Installing: Demo app (schnitzel)")
-			if err := otel.InstallDemo(envURL, classicTok, platformTok, setupDryRun); err != nil {
-				if errors.Is(err, installer.ErrInstallCancelled) {
+			demoInstErr := otel.InstallDemo(envURL, classicTok, platformTok, setupDryRun)
+			fireSetupInstallEvent(cmd, "demo", demoInstErr)
+			if demoInstErr != nil {
+				if errors.Is(demoInstErr, installer.ErrInstallCancelled) {
 					return nil
 				}
-				return err
+				return demoInstErr
 			}
 			if !setupDryRun {
-				installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat))
+				installer.WatchIngestWithEvent(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), buildWatchEventCallback(cmd))
 			}
 			return nil
 		}
@@ -122,6 +130,8 @@ var setupCmd = &cobra.Command{
 		}
 
 		selected := actionable[choice-1]
+		fireSetupRecommendEvent(cmd, normSub(string(selected.Method)))
+
 		fmt.Println()
 
 		envURL, accessTok, platformTok, err := getDtEnvironment()
@@ -179,6 +189,7 @@ var setupCmd = &cobra.Command{
 		default:
 			return fmt.Errorf("unsupported method: %s", selected.Method)
 		}
+		fireSetupInstallEvent(cmd, normSub(string(selected.Method)), installErr)
 		if installErr != nil {
 			if errors.Is(installErr, installer.ErrInstallCancelled) || errors.Is(installErr, otel.ErrUpToDate) {
 				return nil
@@ -191,14 +202,15 @@ var setupCmd = &cobra.Command{
 		// AWS scopes its watch to the account (WatchIngestAWS); Azure and GCP run their
 		// own generic watch from inside the installer. Only the methods below use the
 		// generic post-install watch.
+		fromClause := StartTime.UTC().Format(installer.IngestTimeFormat)
 		switch selected.Method {
 		case recommender.MethodOneAgent,
 			recommender.MethodKubernetes,
 			recommender.MethodDocker,
 			recommender.MethodOtelUpdate:
-			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat))
+			installer.WatchIngestWithEvent(envURL, platformTok, fromClause, buildWatchEventCallback(cmd))
 		case recommender.MethodOtelCollector:
-			installer.WatchIngestOtel(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), otelManualLang)
+			installer.WatchIngestOtelWithEvent(envURL, platformTok, fromClause, otelManualLang, buildWatchEventCallback(cmd))
 		}
 		return nil
 	},

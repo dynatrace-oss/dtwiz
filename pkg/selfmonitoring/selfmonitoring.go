@@ -47,6 +47,9 @@ const (
 	headerValue = "dtwiz-start"
 
 	StepInvoked   = "inv"
+	StepAnalyze   = "ana"
+	StepRecommend = "rec"
+	StepInstall   = "ist"
 	StepCompleted = "com"
 
 	propExecID = "e"

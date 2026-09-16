@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Self-monitoring (`DTWIZ_SELF_MONITORING_POC`): `setup` wizard is now instrumented with four events covering the full wizard flow — invocation, analysis completion, method selection, and install outcome. All events share a per-run execution ID so sessions can be correlated and step durations measured. The watch completion event is also fired after post-install watch sessions triggered from `setup`.
+
 ## [1.8.1] - 2026-09-16
 
 ### Fixed

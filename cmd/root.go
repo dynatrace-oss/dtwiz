@@ -12,7 +12,6 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
-	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 	"github.com/dynatrace-oss/dtwiz/pkg/version"
 )
 
@@ -45,7 +44,7 @@ Then use dtwiz commands to analyze and instrument your system.`,
 		logger.Debug("logging: debug")
 
 		featureflags.ApplyCLIOverrides(cmd.Flags())
-		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepInvoked))
+		fireInvokedEvent(cmd)
 	},
 }
 
