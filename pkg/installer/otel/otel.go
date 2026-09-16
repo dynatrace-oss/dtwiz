@@ -556,6 +556,7 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 	}
 
 	var plan InstrumentationPlan
+	var planProj detectedProject
 	var manualLang string
 	if projectPath != "" {
 		rt := inferRuntimeFromPath(projectPath)
@@ -573,6 +574,7 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		}
 		proj := detectedProject{ScannedProject: projects[0], Runtime: rt}
 		plan = createRuntimePlanFn(proj, cp.httpPort, token, envURL, platformToken)
+		planProj = proj
 	} else {
 		roots, err := selectScanRoots()
 		if err != nil {
@@ -598,6 +600,7 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 			}
 			plan = createRuntimePlanFn(selected, cp.httpPort, token, envURL, platformToken)
 			if plan != nil {
+				planProj = selected
 				break
 			}
 			// Project can't be auto-instrumented; ask if the user wants to try another.
@@ -667,6 +670,11 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 	}
 
 	if plan != nil {
+		// Recreate the plan with the port the collector actually ended up on.
+		// execute() may have stopped an existing collector and regenerated the
+		// config, updating cp.httpPort. The original plan baked in the pre-stop
+		// port, so without this the app would be configured with the wrong endpoint.
+		plan = createRuntimePlanFn(planProj, cp.httpPort, token, envURL, platformToken)
 		fmt.Printf("\n  ── %s auto-instrumentation ──\n\n", plan.Runtime())
 		if err := plan.Execute(); err != nil {
 			return "", err
