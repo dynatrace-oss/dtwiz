@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `install otel`: cloud entity correlation for host monitoring. On AWS, Azure, and GCP, dtwiz now probes the instance metadata service (IMDS) at install time and injects the matching cloud detector (`ec2`, `azure`, or `gcp`) into the collector config. A `transform/dt-cloud-correlation` processor derives the Dynatrace cloud-correlation attribute (`aws.arn`, `azure.resource.id`, or `gcp.resource.name`) from enriched resource attributes and sets it on every host metric, enabling the `OTEL_HOST runs_on <cloud entity>` Smartscape edge.
+
 ## [1.8.1] - 2026-09-16
 
 ### Fixed

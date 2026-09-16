@@ -42,6 +42,7 @@ type otelConfigData struct {
 	HTTPPort        int
 	IncludeJournald bool
 	HealthCheckPort int
+	CloudProvider   string // "aws" | "azure" | "gcp" | ""
 }
 
 type generatedOtelConfig struct {
@@ -723,7 +724,9 @@ func generateOtelConfig(apiURL, token string) (generatedOtelConfig, error) {
 	}
 	data.IncludeJournald = runtime.GOOS == "linux"
 	data.HealthCheckPort = healthCheckPort
+	data.CloudProvider = detectIMDSCloudProvider()
 	logger.Debug("otel config ports", "grpc", grpcPort, "http", httpPort, "metrics", metricsPort, "health_check", healthCheckPort)
+	logger.Debug("otel config cloud provider", "provider", data.CloudProvider)
 
 	rendered, err := renderOtelTemplate(data)
 	if err != nil {
