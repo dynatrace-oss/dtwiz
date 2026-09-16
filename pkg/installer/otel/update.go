@@ -656,7 +656,13 @@ func updateOtelConfig(configPath string, runningProcs []otelProcessInfo, envURL,
 			return fmt.Errorf("restarting collector: %w", err)
 		}
 
-		if err := verifyOtelInstall(envURL, platformTok, token, httpPort, crashed); err != nil {
+		fmt.Println()
+		fmt.Printf("  Waiting for collector to be ready...")
+		if err := waitForOtelCollectorReady(httpPort, 30*time.Second, crashed); err != nil {
+			return fmt.Errorf("collector port did not open: %w", err)
+		}
+		fmt.Println(" ✓")
+		if err := verifyOtelInstall(envURL, platformTok, token, httpPort); err != nil {
 			fmt.Printf("\n  Warning: log verification failed: %v\n", err)
 			fmt.Println("  The collector may still be working — check the Dynatrace UI.")
 			return nil
@@ -666,8 +672,14 @@ func updateOtelConfig(configPath string, runningProcs []otelProcessInfo, envURL,
 	if len(containerProcs) > 0 {
 		// Best-effort verification for containers: httpPort may or may not be
 		// exposed to the host depending on how the container was started.
-		noCrash := make(chan error) // never sends — no process to monitor
-		if err := verifyOtelInstall(envURL, platformTok, token, httpPort, noCrash); err != nil {
+		noCrash := make(chan error, 1) // never sends — no process to monitor
+		fmt.Println()
+		fmt.Printf("  Waiting for collector to be ready...")
+		if err := waitForOtelCollectorReady(httpPort, 30*time.Second, noCrash); err != nil {
+			return fmt.Errorf("collector port did not open: %w", err)
+		}
+		fmt.Println(" ✓")
+		if err := verifyOtelInstall(envURL, platformTok, token, httpPort); err != nil {
 			fmt.Printf("\n  Warning: log verification failed: %v\n", err)
 			fmt.Println("  The collector may still be working — check the Dynatrace UI.")
 			return nil

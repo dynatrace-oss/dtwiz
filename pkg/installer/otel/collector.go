@@ -604,7 +604,7 @@ func waitForOtelCollectorReady(httpPort int, timeout time.Duration, crashed <-ch
 // as a fallback (matching the Python: platform_token or api_token). The Grail
 // DQL endpoint always requires Bearer auth. If neither token is set,
 // verification is skipped with a manual-check link.
-func verifyOtelInstall(envURL, platformToken, apiToken string, httpPort int, crashed <-chan error) error {
+func verifyOtelInstall(envURL, platformToken, apiToken string, httpPort int) error {
 	// Prefer platform token; fall back to API token.
 	dqlToken := platformToken
 	if dqlToken == "" {
@@ -620,13 +620,6 @@ func verifyOtelInstall(envURL, platformToken, apiToken string, httpPort int, cra
 		"OpenTelemetry Collector Successfully installed with dtwiz [host: %s, os: %s/%s, id: %s]",
 		hostname, runtime.GOOS, runtime.GOARCH, uniqueID,
 	)
-
-	fmt.Println()
-	fmt.Printf("  Waiting for collector to be ready...")
-	if err := waitForOtelCollectorReady(httpPort, 30*time.Second, crashed); err != nil {
-		return fmt.Errorf("collector not ready: %w", err)
-	}
-	fmt.Println(" ✓")
 
 	fmt.Printf("  Sending verification log to collector...\n")
 	if err := sendOtelVerificationLog(httpPort, body); err != nil {
@@ -928,6 +921,7 @@ func prepareCollectorPlan(envURL, token string) (*collectorPlan, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	generatedConfig, err := generateOtelConfig(apiURL, collectorToken)
 	if err != nil {
 		return nil, fmt.Errorf("generating OTel Collector config: %w", err)
@@ -967,8 +961,6 @@ func (cp *collectorPlan) execute(envURL, platformToken string, skipVerification 
 		return fmt.Errorf("creating install directory: %w", err)
 	}
 
-	// Stop any running collectors first so file locks are released before
-	// the download overwrites the binary (critical on Windows).
 	if procs := cp.runningPIDs; len(procs) > 0 {
 		fmt.Printf("  Stopping existing collector (PIDs: %s)...\n", formatPIDs(procs))
 		for _, rc := range procs {
@@ -996,6 +988,7 @@ func (cp *collectorPlan) execute(envURL, platformToken string, skipVerification 
 		}
 	}
 
+	// Download after the old process is stopped so the binary file is not locked on Windows.
 	binaryPath, err := downloadOtelCollector(cp.installDir)
 	if err != nil {
 		return err
@@ -1011,11 +1004,17 @@ func (cp *collectorPlan) execute(envURL, platformToken string, skipVerification 
 		return err
 	}
 
+	fmt.Println()
+	fmt.Printf("  Waiting for collector to be ready...")
+	if err := waitForOtelCollectorReady(cp.httpPort, 30*time.Second, crashed); err != nil {
+		return fmt.Errorf("collector port did not open: %w", err)
+	}
+	fmt.Println(" ✓")
 	if skipVerification {
 		fmt.Println("  Collector started — skipping verification (app instrumentation will follow).")
 		return nil
 	}
-	if err := verifyOtelInstall(envURL, platformToken, cp.collectorToken, cp.httpPort, crashed); err != nil {
+	if err := verifyOtelInstall(envURL, platformToken, cp.collectorToken, cp.httpPort); err != nil {
 		fmt.Printf("\n  Warning: log verification failed: %v\n", err)
 		fmt.Println("  The collector may still be working — check the Dynatrace UI.")
 	}

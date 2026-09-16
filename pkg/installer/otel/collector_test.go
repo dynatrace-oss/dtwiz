@@ -1282,7 +1282,7 @@ func TestVerifyOtelInstall_UsesGivenHTTPPort(t *testing.T) {
 
 	var err error
 	captureStdout(t, func() {
-		err = verifyOtelInstall("https://env.example.com", "platform-token", "", port, make(chan error))
+		err = verifyOtelInstall("https://env.example.com", "platform-token", "", port)
 	})
 	if err != nil {
 		t.Fatalf("verifyOtelInstall() error = %v", err)
