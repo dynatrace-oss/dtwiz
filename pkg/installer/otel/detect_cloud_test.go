@@ -9,15 +9,15 @@ import (
 func TestDetectIMDS(t *testing.T) {
 	tests := []struct {
 		name       string
+		provider   string // which IMDS endpoint the server simulates
 		wantMethod string
 		statusCode int
-		argIdx     int // 0=aws, 1=azure, 2=gcp
 		want       string
 	}{
-		{name: "aws", wantMethod: http.MethodPut, statusCode: 200, argIdx: 0, want: "aws"},
-		{name: "azure", wantMethod: http.MethodGet, statusCode: 200, argIdx: 1, want: "azure"},
-		{name: "gcp", wantMethod: http.MethodGet, statusCode: 200, argIdx: 2, want: "gcp"},
-		{name: "no imds", wantMethod: http.MethodPut, statusCode: 404, argIdx: 0, want: ""},
+		{name: "aws", provider: "aws", wantMethod: http.MethodPut, statusCode: 200, want: "aws"},
+		{name: "azure", provider: "azure", wantMethod: http.MethodGet, statusCode: 200, want: "azure"},
+		{name: "gcp", provider: "gcp", wantMethod: http.MethodGet, statusCode: 200, want: "gcp"},
+		{name: "no imds", provider: "aws", wantMethod: http.MethodPut, statusCode: 404, want: ""},
 	}
 
 	for _, tc := range tests {
@@ -31,10 +31,17 @@ func TestDetectIMDS(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			urls := [3]string{"http://localhost:0", "http://localhost:0", "http://localhost:0"}
-			urls[tc.argIdx] = srv.URL
+			awsURL, azureURL, gcpURL := "http://localhost:0", "http://localhost:0", "http://localhost:0"
+			switch tc.provider {
+			case "aws":
+				awsURL = srv.URL
+			case "azure":
+				azureURL = srv.URL
+			case "gcp":
+				gcpURL = srv.URL
+			}
 
-			got := detectIMDS(&http.Client{}, urls[0], urls[1], urls[2])
+			got := detectIMDS(&http.Client{}, awsURL, azureURL, gcpURL)
 			if got != tc.want {
 				t.Errorf("detectIMDS() = %q, want %q", got, tc.want)
 			}
