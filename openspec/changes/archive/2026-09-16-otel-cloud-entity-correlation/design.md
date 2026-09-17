@@ -20,7 +20,7 @@ The OTel `resourcedetectionprocessor` enriches resource attributes via cloud-spe
 
 ## IMDS Detection
 
-All three probes run in parallel with a 150 ms timeout. First 200 response wins via `sync.Once`.
+All three probes run in parallel with a 150 ms timeout. First 200 response wins — written to a buffered channel sized to `len(probes)`; `<-resultCh` returns the first write. Channel closes via `wg.Wait()` when all goroutines finish, unblocking the receive with `""` on non-cloud hosts.
 
 | Cloud | Method | Endpoint |
 |---|---|---|
@@ -40,9 +40,9 @@ AWS uses IMDSv2 PUT so that Azure's `169.254.169.254` (which returns 404 for `/l
 
 ## Testability
 
-`detectIMDS(client *http.Client, awsURL, azureURL, gcpURL string)` is the testable core. URLs are `const`; the public `detectIMDSCloudProvider()` wrapper passes them alongside a real client. Tests substitute `httptest.NewServer` URLs directly — no package-level mutation, no `TestMain`.
+`detectIMDSCloudProvider` is not unit-tested — the fan-out and channel logic relies on Go stdlib guarantees (`sync.WaitGroup`, buffered channel), not application behaviour worth mocking. URLs are `const`; no package-level mutation, no `TestMain`.
 
-`generateOtelConfig` accepts `opts ...otelConfigOpt`. The `withCloudProvider(p string)` option overrides `CloudProvider` on `otelConfigData`. Default (no opts) leaves `CloudProvider = ""` — existing snapshot tests require zero changes. Cloud-specific snapshot tests pass `withCloudProvider("aws"|"azure"|"gcp")` to exercise each template branch.
+`generateOtelConfig` accepts `opts ...otelConfigOpt`. The `withCloudProvider(p string)` option overrides `CloudProvider` on `otelConfigData`. Default (no opts) leaves `CloudProvider = ""` — existing snapshot tests require zero changes. Cloud-specific snapshot tests (`Combined_AWS`, `Combined_Azure`, `Combined_GCP`) pass `withCloudProvider` to exercise each template branch and assert detector name, OTTL statement, and processor order.
 
 Detection is called once in `prepareCollectorPlan` and stored on `collectorPlan.cloudProvider` for reuse when the config is regenerated after stopping an old collector on a port-conflict path.
 
@@ -51,5 +51,5 @@ Detection is called once in `prepareCollectorPlan` and stored on `collectorPlan.
 - **IMDSv2 PUT**: plain GET to `169.254.169.254/latest/meta-data/` returns 401 on IMDSv2-only EC2 and 404 on Azure — ambiguous. PUT to `/latest/api/token` returns 200 only on EC2.
 - **Install-time detection**: keeps the collector config self-contained; a machine does not change cloud providers post-deployment.
 - **`error_mode: ignore`**: partial ARN from missing IAM permissions should not block metric export.
-- **URLs as params not vars**: passing `awsURL, azureURL, gcpURL` to `detectIMDS` keeps URLs `const` and makes tests inject server addresses directly — eliminates URL discrimination logic in test transports and removes global state mutation.
-- **`otelConfigOpt` variadic**: `generateOtelConfig` stays pure (no detection side effect); cloud provider flows explicitly from `prepareCollectorPlan` through `withCloudProvider`. Existing call sites unchanged — default `CloudProvider = ""`.
+- **`otelConfigOpt` variadic**: `generateOtelConfig` stays pure (no detection side effect); cloud provider flows explicitly from `prepareCollectorPlan` through `withCloudProvider`. Existing call sites unchanged — default `CloudProvider = ""`. Cloud snapshot tests override via `withCloudProvider` without touching detection code.
+- **No unit tests for detection**: `detectIMDSCloudProvider` fan-out correctness is a stdlib guarantee; template coverage comes from `Combined_AWS/Azure/GCP` snapshot tests instead.

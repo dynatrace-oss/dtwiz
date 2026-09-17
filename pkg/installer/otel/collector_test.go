@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -673,28 +674,11 @@ func TestGenerateOtelConfig_Combined_GCP(t *testing.T) {
 	assertProcessorOrder(t, hostPipeline.Processors, "resource_detection/system", "transform/dt-cloud-correlation")
 }
 
-// assertProcessorOrder fails if before does not appear strictly before after in processors.
 func assertProcessorOrder(t *testing.T, processors []string, before, after string) {
 	t.Helper()
-	bi, ai := -1, -1
-	for i, p := range processors {
-		if p == before {
-			bi = i
-		}
-		if p == after {
-			ai = i
-		}
-	}
-	if bi == -1 {
-		t.Errorf("processor %q not found in %v", before, processors)
-		return
-	}
-	if ai == -1 {
-		t.Errorf("processor %q not found in %v", after, processors)
-		return
-	}
-	if bi >= ai {
-		t.Errorf("processor %q (idx %d) must come before %q (idx %d) in %v", before, bi, after, ai, processors)
+	bi, ai := slices.Index(processors, before), slices.Index(processors, after)
+	if bi == -1 || ai == -1 || bi >= ai {
+		t.Errorf("expected %q before %q in %v", before, after, processors)
 	}
 }
 

@@ -2,22 +2,13 @@
 
 ## Implementation
 
-- [x] `pkg/installer/otel/detect_cloud.go` — `detectIMDSCloudProvider()` with parallel IMDS probes and package-level URL vars
-- [x] `pkg/installer/otel/collector.go` — `CloudProvider string` field on `otelConfigData`; call `detectIMDSCloudProvider()` in `generateOtelConfig()`
+- [x] `pkg/installer/otel/detect_cloud.go` — `detectIMDSCloudProvider()` with parallel IMDS probes; const URLs; buffered channel first-wins; no `sync.Once`
+- [x] `pkg/installer/otel/collector.go` — `otelConfigOpt` / `withCloudProvider`; `generateOtelConfig` pure (no detection); detection in `prepareCollectorPlan`; `cloudProvider` stored on `collectorPlan`
 - [x] `pkg/installer/otel/otel.tmpl` — conditional `resource_detection/system` detectors, `transform/dt-cloud-correlation` processor, pipeline wiring
 
 ## Tests
 
-- [x] `pkg/installer/otel/detect_cloud_test.go`
-  - `TestMain` stubs all IMDS URLs to prevent live probes on cloud CI runners
-  - `TestDetectIMDSCloudProvider` — table-driven: aws (PUT 200), azure (GET 200), gcp (GET 200), no-imds (404 → "")
-
-## Refactor: testability improvements
-
-- [ ] `detect_cloud.go` — URLs to `const`; split into `detectIMDS(client, awsURL, azureURL, gcpURL string)` + `detectIMDSCloudProvider()` wrapper
-- [ ] `collector.go` — add `otelConfigOpt` / `withCloudProvider`; make `generateOtelConfig` accept `opts ...otelConfigOpt`; remove detection from body; move detection to `prepareCollectorPlan`; store `cloudProvider` on `collectorPlan`; reuse at port-conflict regeneration
-- [ ] `detect_cloud_test.go` — drop `TestMain` + URL var patching; rewrite using `httptest.NewServer` + explicit URL params; add AWS/Azure/GCP/none table cases
-- [ ] `collector_test.go` — add `TestGenerateOtelConfig_Combined_AWS`, `_Azure`, `_GCP` snapshot tests using `withCloudProvider`
+- [x] `pkg/installer/otel/collector_test.go` — `TestGenerateOtelConfig_Combined_AWS/Azure/GCP` snapshot tests via `withCloudProvider`; assert detector line, OTTL statement, processor order; `assertProcessorOrder` uses `slices.Index`
 
 ## Validation
 

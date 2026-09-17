@@ -16,15 +16,10 @@ const (
 	gcpIMDSURL   = "http://metadata.google.internal/computeMetadata/v1/"
 )
 
+// detectIMDSCloudProvider probes the three cloud IMDS endpoints in parallel
+// and returns "aws", "azure", or "gcp" if the machine is a cloud VM, or ""
+// if no endpoint responds within imdsTimeout.
 func detectIMDSCloudProvider() string {
-	return detectIMDS(&http.Client{Timeout: imdsTimeout}, awsIMDSURL, azureIMDSURL, gcpIMDSURL)
-}
-
-// detectIMDS probes the three cloud IMDS endpoints in parallel and returns
-// "aws", "azure", or "gcp" if the machine is a cloud VM, or "" if no endpoint
-// responds within imdsTimeout. URLs are parameters so tests can substitute
-// httptest server addresses without mutating package-level state.
-func detectIMDS(client *http.Client, awsURL, azureURL, gcpURL string) string {
 	type probe struct {
 		provider string
 		method   string
@@ -36,26 +31,26 @@ func detectIMDS(client *http.Client, awsURL, azureURL, gcpURL string) string {
 		{
 			provider: "aws",
 			method:   http.MethodPut,
-			url:      awsURL,
+			url:      awsIMDSURL,
 			header:   http.Header{"X-aws-ec2-metadata-token-ttl-seconds": {"21600"}},
 		},
 		{
 			provider: "azure",
 			method:   http.MethodGet,
-			url:      azureURL,
+			url:      azureIMDSURL,
 			header:   http.Header{"Metadata": {"true"}},
 		},
 		{
 			provider: "gcp",
 			method:   http.MethodGet,
-			url:      gcpURL,
+			url:      gcpIMDSURL,
 			header:   http.Header{"Metadata-Flavor": {"Google"}},
 		},
 	}
 
 	resultCh := make(chan string, len(probes))
-	var once sync.Once
 	var wg sync.WaitGroup
+	client := &http.Client{Timeout: imdsTimeout}
 
 	for _, p := range probes {
 		wg.Add(1)
@@ -72,11 +67,8 @@ func detectIMDS(client *http.Client, awsURL, azureURL, gcpURL string) string {
 			if resp != nil {
 				resp.Body.Close()
 			}
-			if err != nil {
-				return
-			}
-			if resp.StatusCode == http.StatusOK {
-				once.Do(func() { resultCh <- p.provider })
+			if err == nil && resp.StatusCode == http.StatusOK {
+				resultCh <- p.provider
 			}
 		}(p)
 	}
