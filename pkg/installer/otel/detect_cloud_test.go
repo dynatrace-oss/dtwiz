@@ -3,57 +3,21 @@ package otel
 import (
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 )
 
-// TestMain stubs all IMDS URLs before any test runs. Without this, tests that
-// call generateOtelConfig() trigger live IMDS probes — on Azure-hosted CI
-// runners the Azure endpoint responds, injecting an unexpected CloudProvider
-// into config snapshot tests.
-func TestMain(m *testing.M) {
-	awsIMDSURL = "http://localhost:0/"
-	azureIMDSURL = "http://localhost:0/"
-	gcpIMDSURL = "http://localhost:0/"
-	os.Exit(m.Run())
-}
-
-func TestDetectIMDSCloudProvider(t *testing.T) {
+func TestDetectIMDS(t *testing.T) {
 	tests := []struct {
 		name       string
-		urlVar     *string
 		wantMethod string
 		statusCode int
+		argIdx     int // 0=aws, 1=azure, 2=gcp
 		want       string
 	}{
-		{
-			name:       "aws",
-			urlVar:     &awsIMDSURL,
-			wantMethod: http.MethodPut,
-			statusCode: 200,
-			want:       "aws",
-		},
-		{
-			name:       "azure",
-			urlVar:     &azureIMDSURL,
-			wantMethod: http.MethodGet,
-			statusCode: 200,
-			want:       "azure",
-		},
-		{
-			name:       "gcp",
-			urlVar:     &gcpIMDSURL,
-			wantMethod: http.MethodGet,
-			statusCode: 200,
-			want:       "gcp",
-		},
-		{
-			name:       "no imds",
-			urlVar:     &awsIMDSURL,
-			wantMethod: http.MethodPut,
-			statusCode: 404,
-			want:       "",
-		},
+		{name: "aws", wantMethod: http.MethodPut, statusCode: 200, argIdx: 0, want: "aws"},
+		{name: "azure", wantMethod: http.MethodGet, statusCode: 200, argIdx: 1, want: "azure"},
+		{name: "gcp", wantMethod: http.MethodGet, statusCode: 200, argIdx: 2, want: "gcp"},
+		{name: "no imds", wantMethod: http.MethodPut, statusCode: 404, argIdx: 0, want: ""},
 	}
 
 	for _, tc := range tests {
@@ -67,13 +31,12 @@ func TestDetectIMDSCloudProvider(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			orig := *tc.urlVar
-			*tc.urlVar = srv.URL + "/"
-			defer func() { *tc.urlVar = orig }()
+			urls := [3]string{"http://localhost:0", "http://localhost:0", "http://localhost:0"}
+			urls[tc.argIdx] = srv.URL
 
-			got := detectIMDSCloudProvider()
+			got := detectIMDS(&http.Client{}, urls[0], urls[1], urls[2])
 			if got != tc.want {
-				t.Errorf("detectIMDSCloudProvider() = %q, want %q", got, tc.want)
+				t.Errorf("detectIMDS() = %q, want %q", got, tc.want)
 			}
 		})
 	}

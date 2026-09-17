@@ -8,7 +8,7 @@ import (
 
 const imdsTimeout = 150 * time.Millisecond
 
-var (
+const (
 	// AWS: PUT to the IMDSv2 token endpoint — returns 200 only on real EC2.
 	// Azure's 169.254.169.254 does not expose this path, so no false positives.
 	awsIMDSURL   = "http://169.254.169.254/latest/api/token"
@@ -16,10 +16,15 @@ var (
 	gcpIMDSURL   = "http://metadata.google.internal/computeMetadata/v1/"
 )
 
-// detectIMDSCloudProvider probes the three cloud IMDS endpoints in parallel
-// and returns "aws", "azure", or "gcp" if the machine is a cloud VM, or ""
-// if no endpoint responds within imdsTimeout.
 func detectIMDSCloudProvider() string {
+	return detectIMDS(&http.Client{Timeout: imdsTimeout}, awsIMDSURL, azureIMDSURL, gcpIMDSURL)
+}
+
+// detectIMDS probes the three cloud IMDS endpoints in parallel and returns
+// "aws", "azure", or "gcp" if the machine is a cloud VM, or "" if no endpoint
+// responds within imdsTimeout. URLs are parameters so tests can substitute
+// httptest server addresses without mutating package-level state.
+func detectIMDS(client *http.Client, awsURL, azureURL, gcpURL string) string {
 	type probe struct {
 		provider string
 		method   string
@@ -31,19 +36,19 @@ func detectIMDSCloudProvider() string {
 		{
 			provider: "aws",
 			method:   http.MethodPut,
-			url:      awsIMDSURL,
+			url:      awsURL,
 			header:   http.Header{"X-aws-ec2-metadata-token-ttl-seconds": {"21600"}},
 		},
 		{
 			provider: "azure",
 			method:   http.MethodGet,
-			url:      azureIMDSURL,
+			url:      azureURL,
 			header:   http.Header{"Metadata": {"true"}},
 		},
 		{
 			provider: "gcp",
 			method:   http.MethodGet,
-			url:      gcpIMDSURL,
+			url:      gcpURL,
 			header:   http.Header{"Metadata-Flavor": {"Google"}},
 		},
 	}
@@ -51,8 +56,6 @@ func detectIMDSCloudProvider() string {
 	resultCh := make(chan string, len(probes))
 	var once sync.Once
 	var wg sync.WaitGroup
-
-	client := &http.Client{Timeout: imdsTimeout}
 
 	for _, p := range probes {
 		wg.Add(1)

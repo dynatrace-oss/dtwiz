@@ -12,6 +12,13 @@
   - `TestMain` stubs all IMDS URLs to prevent live probes on cloud CI runners
   - `TestDetectIMDSCloudProvider` — table-driven: aws (PUT 200), azure (GET 200), gcp (GET 200), no-imds (404 → "")
 
+## Refactor: testability improvements
+
+- [ ] `detect_cloud.go` — URLs to `const`; split into `detectIMDS(client, awsURL, azureURL, gcpURL string)` + `detectIMDSCloudProvider()` wrapper
+- [ ] `collector.go` — add `otelConfigOpt` / `withCloudProvider`; make `generateOtelConfig` accept `opts ...otelConfigOpt`; remove detection from body; move detection to `prepareCollectorPlan`; store `cloudProvider` on `collectorPlan`; reuse at port-conflict regeneration
+- [ ] `detect_cloud_test.go` — drop `TestMain` + URL var patching; rewrite using `httptest.NewServer` + explicit URL params; add AWS/Azure/GCP/none table cases
+- [ ] `collector_test.go` — add `TestGenerateOtelConfig_Combined_AWS`, `_Azure`, `_GCP` snapshot tests using `withCloudProvider`
+
 ## Validation
 
 - [x] `make build`, `make lint`, `make test-coverage`, `make markdownlint` — all pass

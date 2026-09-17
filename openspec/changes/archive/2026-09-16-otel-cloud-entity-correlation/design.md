@@ -40,10 +40,16 @@ AWS uses IMDSv2 PUT so that Azure's `169.254.169.254` (which returns 404 for `/l
 
 ## Testability
 
-`awsIMDSURL`, `azureIMDSURL`, `gcpIMDSURL` are package-level vars. `TestMain` stubs all three to `http://localhost:0/` before any test runs — prevents live IMDS probes on Azure-hosted CI runners where the Azure endpoint responds.
+`detectIMDS(client *http.Client, awsURL, azureURL, gcpURL string)` is the testable core. URLs are `const`; the public `detectIMDSCloudProvider()` wrapper passes them alongside a real client. Tests substitute `httptest.NewServer` URLs directly — no package-level mutation, no `TestMain`.
+
+`generateOtelConfig` accepts `opts ...otelConfigOpt`. The `withCloudProvider(p string)` option overrides `CloudProvider` on `otelConfigData`. Default (no opts) leaves `CloudProvider = ""` — existing snapshot tests require zero changes. Cloud-specific snapshot tests pass `withCloudProvider("aws"|"azure"|"gcp")` to exercise each template branch.
+
+Detection is called once in `prepareCollectorPlan` and stored on `collectorPlan.cloudProvider` for reuse when the config is regenerated after stopping an old collector on a port-conflict path.
 
 ## Key Decisions
 
 - **IMDSv2 PUT**: plain GET to `169.254.169.254/latest/meta-data/` returns 401 on IMDSv2-only EC2 and 404 on Azure — ambiguous. PUT to `/latest/api/token` returns 200 only on EC2.
 - **Install-time detection**: keeps the collector config self-contained; a machine does not change cloud providers post-deployment.
 - **`error_mode: ignore`**: partial ARN from missing IAM permissions should not block metric export.
+- **URLs as params not vars**: passing `awsURL, azureURL, gcpURL` to `detectIMDS` keeps URLs `const` and makes tests inject server addresses directly — eliminates URL discrimination logic in test transports and removes global state mutation.
+- **`otelConfigOpt` variadic**: `generateOtelConfig` stays pure (no detection side effect); cloud provider flows explicitly from `prepareCollectorPlan` through `withCloudProvider`. Existing call sites unchanged — default `CloudProvider = ""`.
