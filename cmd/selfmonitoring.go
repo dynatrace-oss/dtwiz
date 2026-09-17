@@ -169,6 +169,18 @@ func fireInvokedEvent(cmd *cobra.Command) {
 	fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepInvoked))
 }
 
+func completedEventParams(cmd *cobra.Command, err error) selfmonitoring.EventParams {
+	p := buildEventParams(cmd, selfmonitoring.StepCompleted)
+	if err != nil {
+		p.Err = "err"
+	}
+	return p
+}
+
+func fireCompletedEvent(cmd *cobra.Command, err error) {
+	fireSelfMonitoringEvent(completedEventParams(cmd, err))
+}
+
 func fireSetupAnalyzeEvent(cmd *cobra.Command, err error) {
 	p := buildEventParams(cmd, selfmonitoring.StepAnalyze)
 	if err != nil {
