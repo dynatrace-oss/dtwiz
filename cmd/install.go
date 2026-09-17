@@ -16,7 +16,6 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
-	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 )
 
 var installDryRun bool
@@ -41,7 +40,7 @@ var installCmd = &cobra.Command{
 		logger.Debug("logging: debug")
 		featureflags.ApplyCLIOverrides(cmd.Flags())
 		installer.AutoConfirm = installAutoConfirm
-		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepInvoked))
+		fireInvokedEvent(cmd)
 	},
 }
 

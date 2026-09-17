@@ -12,7 +12,6 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/gcp"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
-	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 )
 
 var updateDryRun bool
@@ -30,7 +29,7 @@ var updateCmd = &cobra.Command{
 		logger.Debug("logging: debug")
 		featureflags.ApplyCLIOverrides(cmd.Flags())
 		installer.AutoConfirm = updateAutoConfirm
-		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepInvoked))
+		fireInvokedEvent(cmd)
 	},
 }
 

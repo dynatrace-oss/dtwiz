@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Self-monitoring (`DTWIZ_SELF_MONITORING_POC`): `setup` wizard is now instrumented with four events covering the full wizard flow — invocation, analysis completion, method selection, and install outcome. All events share a per-run execution ID so sessions can be correlated and step durations measured. The watch completion event is also fired after post-install watch sessions triggered from `setup`.
 - `install otel`: cloud entity correlation for host monitoring. On AWS, Azure, and GCP, dtwiz now probes the instance metadata service (IMDS) at install time and injects the matching cloud detector (`ec2`, `azure`, or `gcp`) into the collector config. A `transform/dt-cloud-correlation` processor derives the Dynatrace cloud-correlation attribute (`aws.arn`, `azure.resource.id`, or `gcp.resource.name`) from enriched resource attributes and sets it on every host metric, enabling the `OTEL_HOST runs_on <cloud entity>` Smartscape edge.
 
 ## [1.8.1] - 2026-09-16
