@@ -280,6 +280,9 @@ service:
         - resource_detection/system
       exporters:
         - otlp_http
+{{- if .Debug }}
+        - debug
+{{- end }}
     metrics/apps:
       receivers:
         - otlp
@@ -289,6 +292,9 @@ service:
         - cumulative_to_delta
       exporters:
         - otlp_http
+{{- if .Debug }}
+        - debug
+{{- end }}
     metrics/host:
       receivers:
         - host_metrics/10s
@@ -303,6 +309,10 @@ service:
         - cumulative_to_delta
       exporters:
         - otlp_http
+{{- if .Debug }}
+        - debug
+{{- end }}
+
     logs:
       receivers:
         - otlp
@@ -314,9 +324,16 @@ service:
         - resource_detection/system
       exporters:
         - otlp_http
+{{- if .Debug }}
+        - debug
+{{- end }}
 
 exporters:
   otlp_http:
     endpoint: {{ .Endpoint }}/api/v2/otlp
     headers:
       Authorization: "{{ .AuthHeader }}"
+{{- if .Debug }}
+  debug:
+    verbosity: normal
+{{- end }}
