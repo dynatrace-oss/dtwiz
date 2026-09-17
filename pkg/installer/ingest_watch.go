@@ -120,6 +120,12 @@ func WatchIngestOtel(envURL, pToken, fromClause, manualLang string) {
 	watchIngest(envURL, pToken, fromClause, nil, "", false, manualLang, nil)
 }
 
+// WatchIngestOtelWithEvent is like WatchIngestOtel but calls onEvent as soon
+// as the first signal data is received OR the session times out.
+func WatchIngestOtelWithEvent(envURL, pToken, fromClause, manualLang string, onEvent func(WatchSessionResult)) {
+	watchIngest(envURL, pToken, fromClause, nil, "", false, manualLang, onEvent)
+}
+
 // WatchIngestCloudFromTime is like WatchIngest but calls WatchIngestCloud.
 // Use this for Azure and GCP installs and updates.
 func WatchIngestCloudFromTime(envURL, pToken string, startTime time.Time) {

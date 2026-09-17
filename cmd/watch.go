@@ -3,13 +3,10 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"strconv"
-	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
-	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 )
 
 var watchFromFlag string
@@ -37,70 +34,8 @@ var watchCmd = &cobra.Command{
 			fromClause = StartTime.UTC().Format(installer.IngestTimeFormat)
 		}
 
-		installer.WatchIngestWithEvent(envURL, pTok, fromClause, func(r installer.WatchSessionResult) {
-			params := buildEventParams(cmd, selfmonitoring.StepCompleted)
-			params.CmdID = ""
-			params.Type = watchSignalCSV(r.FirstDataMs)
-			params.ExtraProps = watchSignalProps(r.FirstDataMs)
-			fireSelfMonitoringEvent(params)
-		})
+		installer.WatchIngestWithEvent(envURL, pTok, fromClause, buildWatchEventCallback(cmd))
 	},
-}
-
-var watchSignalNames = map[string]string{
-	"cld": "cloud",
-	"exc": "exceptions",
-	"hst": "hosts",
-	"k8s": "kubernetes",
-	"log": "logs",
-	"rel": "relationships",
-	"req": "requests",
-	"svc": "services",
-}
-
-// watchSignalProps builds event body properties from signal first-data timing.
-// Each seen signal gets a full-name key (e.g. "hosts") and a value in milliseconds.
-// Absent signals produce no key. Returns nil when no signals were seen.
-func watchSignalProps(firstDataMs map[string]int64) map[string]string {
-	if len(firstDataMs) == 0 {
-		return nil
-	}
-	props := make(map[string]string, len(firstDataMs))
-	for sig, ms := range firstDataMs {
-		key := watchSignalNames[sig]
-		if key == "" {
-			key = sig
-		}
-		props[key] = strconv.FormatInt(ms, 10)
-	}
-	return props
-}
-
-// watchSignalOrder is the fixed positional order used by watchSignalCSV (alphabetical).
-// Position in this slice determines position in the encoded t= value.
-var watchSignalOrder = []string{"cld", "exc", "hst", "k8s", "log", "rel", "req", "svc"}
-
-// watchSignalCSV encodes time-to-first-data in a positional format.
-// Format: "0,0,12,5,0,9,0,3" — one value per signal in watchSignalOrder.
-// 0 = signal not seen; ≥1 = whole seconds to first data (minimum 1, even if sub-second).
-// Returns "" when no signals were seen (t= field is then omitted from the header).
-func watchSignalCSV(firstDataMs map[string]int64) string {
-	if len(firstDataMs) == 0 {
-		return ""
-	}
-	parts := make([]string, len(watchSignalOrder))
-	for i, sig := range watchSignalOrder {
-		if ms, ok := firstDataMs[sig]; ok {
-			if secs := ms / 1000; secs > 0 {
-				parts[i] = strconv.FormatInt(secs, 10)
-			} else {
-				parts[i] = "1" // present but sub-second — distinguish from absent (0)
-			}
-		} else {
-			parts[i] = "0"
-		}
-	}
-	return strings.Join(parts, ",")
 }
 
 func init() {
