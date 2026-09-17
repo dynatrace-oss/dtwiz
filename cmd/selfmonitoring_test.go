@@ -32,40 +32,29 @@ func TestCompletedEventParams_ErrField(t *testing.T) {
 	})
 }
 
-func TestNormCmdInformationalCommands(t *testing.T) {
+func TestDeriveCommandNames_InformationalCommands(t *testing.T) {
 	tests := []struct {
-		input string
-		want  string
+		cmdName string
+		wantCmd string
+		wantSub string
 	}{
-		{"analyze", "ana"},
-		{"recommend", "rec"},
-		{"status", "sta"},
-		{"version", "ver"},
+		{"analyze", "analyze", ""},
+		{"recommend", "recommend", ""},
+		{"status", "status", ""},
+		{"version", "version", ""},
 	}
 	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			got := normCmd(tt.input)
-			if got != tt.want {
-				t.Errorf("normCmd(%q) = %q, want %q", tt.input, got, tt.want)
-			}
-		})
-	}
-}
+		t.Run(tt.cmdName, func(t *testing.T) {
+			cmd := &cobra.Command{Use: tt.cmdName, Args: cobra.NoArgs}
+			rootCmd.AddCommand(cmd)
+			defer rootCmd.RemoveCommand(cmd)
 
-func TestNormSubUpdateVariants(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"otel-update", "otlu"},
-		{"azure-update", "azu"},
-		{"gcp-update", "gcpu"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			got := normSub(tt.input)
-			if got != tt.want {
-				t.Errorf("normSub(%q) = %q, want %q", tt.input, got, tt.want)
+			gotCmd, gotSub := deriveCommandNames(cmd)
+			if gotCmd != tt.wantCmd {
+				t.Errorf("deriveCommandNames(%q) cmdName = %q, want %q", tt.cmdName, gotCmd, tt.wantCmd)
+			}
+			if gotSub != tt.wantSub {
+				t.Errorf("deriveCommandNames(%q) subName = %q, want %q", tt.cmdName, gotSub, tt.wantSub)
 			}
 		})
 	}

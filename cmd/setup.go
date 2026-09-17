@@ -90,7 +90,7 @@ var setupCmd = &cobra.Command{
 		}
 
 		if input == "u" {
-			fireSetupRecommendEvent(cmd, "uni")
+			fireSetupRecommendEvent(cmd, "uninstall")
 			fmt.Println()
 			return uninstallCmd.Help()
 		}
@@ -130,7 +130,7 @@ var setupCmd = &cobra.Command{
 		}
 
 		selected := actionable[choice-1]
-		fireSetupRecommendEvent(cmd, normSub(string(selected.Method)))
+		fireSetupRecommendEvent(cmd, string(selected.Method))
 
 		fmt.Println()
 
@@ -189,7 +189,7 @@ var setupCmd = &cobra.Command{
 		default:
 			return fmt.Errorf("unsupported method: %s", selected.Method)
 		}
-		fireSetupInstallEvent(cmd, normSub(string(selected.Method)), installErr)
+		fireSetupInstallEvent(cmd, string(selected.Method), installErr)
 		if installErr != nil {
 			if errors.Is(installErr, installer.ErrInstallCancelled) || errors.Is(installErr, otel.ErrUpToDate) {
 				return nil

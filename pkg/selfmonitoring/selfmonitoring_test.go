@@ -16,10 +16,9 @@ func TestBuildUserAgent(t *testing.T) {
 		{
 			name: "minimal_required_fields",
 			params: EventParams{
-				CmdID:  "ins",
-				SubID:  "",
+				Cmd:    "install",
 				StepID: "inv",
-				Mode:   "tty",
+				Mode:   ModeTTY,
 			},
 			wantKeys:    []string{"dtwiz/", "c=ins", "st=inv"},
 			notWantKeys: []string{";s=", ";er=", ";t="},
@@ -28,10 +27,10 @@ func TestBuildUserAgent(t *testing.T) {
 		{
 			name: "with_subcommand",
 			params: EventParams{
-				CmdID:  "ins",
-				SubID:  "otel",
+				Cmd:    "install",
+				Sub:    "otel",
 				StepID: "inv",
-				Mode:   "deb",
+				Mode:   ModeDebug,
 			},
 			wantKeys:    []string{"c=ins", "st=inv", "s=otel"},
 			notWantKeys: []string{";er=", ";t="},
@@ -40,10 +39,10 @@ func TestBuildUserAgent(t *testing.T) {
 		{
 			name: "with_error",
 			params: EventParams{
-				CmdID:  "uni",
-				SubID:  "k8s",
+				Cmd:    "uninstall",
+				Sub:    "kubernetes",
 				StepID: "inv",
-				Mode:   "ntt",
+				Mode:   ModeNonTTY,
 				Err:    "timeout",
 			},
 			wantKeys:    []string{"c=uni", "s=k8s", "er=timeout"},
@@ -53,10 +52,10 @@ func TestBuildUserAgent(t *testing.T) {
 		{
 			name: "with_all_fields",
 			params: EventParams{
-				CmdID:  "upd",
-				SubID:  "otel",
+				Cmd:    "update",
+				Sub:    "otel",
 				StepID: "inv",
-				Mode:   "deb",
+				Mode:   ModeDebug,
 				Err:    "net",
 				Type:   "retry",
 			},
@@ -102,7 +101,7 @@ func TestBuildTabID(t *testing.T) {
 		{
 			name: "debug_mode",
 			params: EventParams{
-				Mode: "deb",
+				Mode: ModeDebug,
 			},
 			modeWant: "m=deb",
 			maxLen:   16,
@@ -110,7 +109,7 @@ func TestBuildTabID(t *testing.T) {
 		{
 			name: "tty_mode",
 			params: EventParams{
-				Mode: "tty",
+				Mode: ModeTTY,
 			},
 			modeWant: "m=tty",
 			maxLen:   16,
@@ -118,7 +117,7 @@ func TestBuildTabID(t *testing.T) {
 		{
 			name: "ntt_mode",
 			params: EventParams{
-				Mode: "ntt",
+				Mode: ModeNonTTY,
 			},
 			modeWant: "m=ntt",
 			maxLen:   16,
@@ -267,9 +266,8 @@ func TestStepConstants(t *testing.T) {
 
 func TestEventParamsDefaults(t *testing.T) {
 	params := EventParams{
-		CmdID: "ana",
-		SubID: "",
-		Mode:  "tty",
+		Cmd:  "analyze",
+		Mode: ModeTTY,
 	}
 
 	// StepID should default to StepInvoked when empty
@@ -280,5 +278,55 @@ func TestEventParamsDefaults(t *testing.T) {
 	// Verify StepInvoked constant exists and is correct
 	if StepInvoked != "inv" {
 		t.Errorf("StepInvoked = %q, want %q", StepInvoked, "inv")
+	}
+}
+
+func TestShortCmd(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"install", "ins"},
+		{"uninstall", "uni"},
+		{"update", "upd"},
+		{"analyze", "ana"},
+		{"recommend", "rec"},
+		{"status", "sta"},
+		{"watch", "wch"},
+		{"setup", "set"},
+		{"version", "ver"},
+		{"unknown", "unknown"}, // pass-through for unmapped names
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := shortCmd(tt.input)
+			if got != tt.want {
+				t.Errorf("shortCmd(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestShortSub(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"kubernetes", "k8s"},
+		{"oneagent", "oa"},
+		{"aws-lambda", "awsl"},
+		{"otel-update", "otlu"},
+		{"azure-update", "azu"},
+		{"gcp-update", "gcpu"},
+		{"otel", "otel"},
+		{"unknown-sub", "unknown-sub"}, // pass-through for unmapped names
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := shortSub(tt.input)
+			if got != tt.want {
+				t.Errorf("shortSub(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
 	}
 }
