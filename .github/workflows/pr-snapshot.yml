@@ -42,14 +42,26 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_SNAPSHOT_TAG: snapshot-pr-${{ github.event.pull_request.number }}
 
-      - name: Upload artifacts
+      - name: Upload Linux artifacts
         if: steps.semver.outputs.found == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: dtwiz-pr-${{ github.event.pull_request.number }}
-          path: |
-            dist/dtwiz_*_linux_*.tar.gz
-            dist/dtwiz_*_darwin_*.tar.gz
-            dist/dtwiz_*_windows_*.zip
-            dist/checksums.txt
+          name: dtwiz-pr-${{ github.event.pull_request.number }}-linux
+          path: dist/dtwiz_*_linux_*.tar.gz
+          retention-days: 7
+
+      - name: Upload macOS artifacts
+        if: steps.semver.outputs.found == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dtwiz-pr-${{ github.event.pull_request.number }}-darwin
+          path: dist/dtwiz_*_darwin_*.tar.gz
+          retention-days: 7
+
+      - name: Upload Windows artifacts
+        if: steps.semver.outputs.found == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dtwiz-pr-${{ github.event.pull_request.number }}-windows
+          path: dist/dtwiz_*_windows_*.zip
           retention-days: 7
