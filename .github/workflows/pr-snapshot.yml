@@ -1,0 +1,55 @@
+name: PR Snapshot
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  snapshot:
+    # Only run for fork PRs — non-fork branches are covered by preview.yml
+    if: github.event.pull_request.head.repo.fork == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Check for semver tag
+        id: semver
+        run: |
+          if git describe --tags --match "v*" --abbrev=0 > /dev/null 2>&1; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "No semver tag reachable — skipping snapshot." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Remove non-semver tags locally
+        if: steps.semver.outputs.found == 'true'
+        run: git tag -l | (grep -v '^v' || true) | xargs -r git tag -d
+
+      - name: Run GoReleaser snapshot
+        if: steps.semver.outputs.found == 'true'
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          version: latest
+          args: release --snapshot --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_SNAPSHOT_TAG: snapshot-pr-${{ github.event.pull_request.number }}
+
+      - name: Upload artifacts
+        if: steps.semver.outputs.found == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dtwiz-pr-${{ github.event.pull_request.number }}
+          path: |
+            dist/dtwiz_*_linux_*.tar.gz
+            dist/dtwiz_*_darwin_*.tar.gz
+            dist/dtwiz_*_windows_*.zip
+            dist/checksums.txt
+          retention-days: 7
