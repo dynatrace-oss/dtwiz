@@ -190,6 +190,16 @@ PR templates live in [`.github/PULL_REQUEST_TEMPLATE/`](../../.github/PULL_REQUE
 3. Complete the checklist in the template
 4. For `feature/*` and `bugfix/*` PRs, make sure Copilot has reviewed your code before requesting a maintainer review
 
+#### Preview snapshot
+
+CI automatically builds a snapshot binary and posts install instructions as a PR comment. If the workflow did not run (for example, on a fork), build a binary locally and attach it to the PR:
+
+```bash
+GORELEASER_SNAPSHOT_TAG="snapshot-<your-branch>" goreleaser release --snapshot --clean
+```
+
+Artifacts are placed in `dist/`. Attach the relevant archive to the PR or share it with reviewers directly.
+
 ### Step 9: Squash Merging
 
 When a PR is approved and ready to merge, it should be **squash merged** into `main`. This means all commits in your branch should be combined into a single commit, preserving your PR description as the merge commit message.
