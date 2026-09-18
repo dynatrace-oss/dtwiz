@@ -174,12 +174,19 @@ func deactivateHostMonitoringExtension(envURL, platformToken string) {
 	display.ColorOK.Println("  ✓ OTel Host Monitoring extension removed")
 }
 
+type tenantPrereqs struct {
+	grailC               grailRouteClient
+	grailPlans           []grailSignalPlan
+	otlpDimensionsClient otlpMetricDimensionsClient
+	otlpDimensionsPlan   *otlpMetricDimensionsPlan
+}
+
 // buildTenantPrerequisitePreview shows extension and route previews.
-// Returns nil values when no platform token is available or preview setup fails.
-func buildTenantPrerequisitePreview(envURL, platformToken string) (grailRouteClient, []grailSignalPlan) {
+// Returns a zero-value tenantPrereqs when no platform token is available.
+func buildTenantPrerequisitePreview(envURL, platformToken string) tenantPrereqs {
 	if platformToken == "" {
 		logger.Debug("platform token not provided, skipping extension and route previews")
-		return nil, nil
+		return tenantPrereqs{}
 	}
 	if status, err := buildExtensionActivationPreviewFn(envURL, platformToken); err != nil {
 		fmt.Println()
@@ -192,11 +199,24 @@ func buildTenantPrerequisitePreview(envURL, platformToken string) (grailRouteCli
 	if err != nil {
 		fmt.Println()
 		display.PrintWarning("OpenPipeline routes", err)
-		return nil, nil
+	} else {
+		fmt.Println()
+		printGrailPlan(plans)
 	}
-	fmt.Println()
-	printGrailPlan(plans)
-	return c, plans
+	otlpC, otlpPlan, err := buildOTLPMetricDimensionsPlanFn(envURL, platformToken)
+	if err != nil {
+		logger.Debug("could not fetch Advanced OTLP metric dimensions setting", "err", err)
+	} else if otlpPlan != nil && otlpPlan.enabled {
+		otlpPlan = nil // already enabled — nothing to do
+	} else {
+		printOTLPMetricDimensionsPlan(otlpPlan)
+	}
+	return tenantPrereqs{
+		grailC:               c,
+		grailPlans:           plans,
+		otlpDimensionsClient: otlpC,
+		otlpDimensionsPlan:   otlpPlan,
+	}
 }
 
 // reconcileGrailRoutes waits for host-monitoring pipelines, rebuilds the route
@@ -641,7 +661,7 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		plan.PrintPlanSteps()
 	}
 
-	grailC, grailPlans := buildTenantPrerequisitePreview(envURL, platformToken)
+	prereqs := buildTenantPrerequisitePreview(envURL, platformToken)
 
 	fmt.Println()
 
@@ -663,7 +683,8 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 	if platformToken != "" {
 		activateHostMonitoringExtensionFn(envURL, platformToken)
 	}
-	applyAndValidateGrailRoutes(grailC, grailPlans)
+	applyAndValidateGrailRoutes(prereqs.grailC, prereqs.grailPlans)
+	applyOTLPMetricDimensions(context.Background(), prereqs.otlpDimensionsClient, prereqs.otlpDimensionsPlan)
 
 	if err := executeCollectorPlanFn(cp, envURL, platformToken, plan != nil); err != nil {
 		return "", err
