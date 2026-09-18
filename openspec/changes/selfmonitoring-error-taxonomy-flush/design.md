@@ -32,13 +32,14 @@ Cobra skips `PersistentPostRun` when `RunE` returns an error. The only hook that
 - Alternative considered: `PersistentPostRun` on root. Skipped on error paths — discarded.
 - Alternative considered: `defer` in each `RunE`. Requires touching every handler twice per change, and still misses CTRL+C on long-running commands. Discarded.
 
-### Enqueue model: credentials and timestamp resolved at enqueue time
+### WaitGroup approach: goroutines tracked, not queued
 
-`fireSelfMonitoringEvent` currently resolves credentials inside the goroutine. Moving credential resolution to the call site keeps each queued event ready to send with a resolved URL and token. `getDtEnvironment()` reads env vars and flags only; it is essentially free.
+`fireSelfMonitoringEvent` keeps the goroutine-based send — events are dispatched the moment they are fired, so the Dynatrace ingestion timestamp reflects when each event actually occurred. This matters because the self-monitoring dashboard queries on ingestion time; buffering all events to send at process exit would collapse `st=inv` and `st=fai` to the same timestamp, making duration calculation and event ordering impossible.
 
-If credential resolution fails at enqueue time, the event is silently dropped — same behaviour as today. Flush sends all queued events concurrently with a timeout and is silent: no output, no spinner.
+Instead of a queue, a package-level `sync.WaitGroup` tracks all in-flight sends. Each goroutine registers with the WaitGroup before spawning and signals done when the HTTP call completes. `Flush(timeout)` waits on the WaitGroup for up to `timeout`, then returns — if the timeout fires, remaining goroutines are accepted as lost.
 
-Because all queued events are sent together at flush time, the Events v2 API would assign them the same ingestion timestamp if no explicit time is provided — making it impossible to calculate command duration or distinguish event ordering in the dashboard. To preserve actual wall-clock times, `pendingEvent` carries a `timestamp time.Time` captured at enqueue time. This timestamp is included as `startTime` (Unix milliseconds) in the Events v2 payload. For `st=inv`, `cmd.StartTime` (set at process start in `cmd/root.go`) is passed as the timestamp rather than calling `time.Now()` inside `fireSelfMonitoringEvent`, since the command may have already been running for some time before the event is enqueued.
+- Alternative considered: enqueue all events and send at flush time. Solves the lost-event problem but assigns all events the same ingestion timestamp, breaking dashboard timing. Discarded.
+- Alternative considered: add explicit `startTime` to the payload to work around the ingestion timestamp issue. Requires the dashboard to query `startTime` rather than ingestion time, which is not the current behaviour. Discarded.
 
 ### Typed error types in `pkg/installer`, `ClassifyError` in `pkg/selfmonitoring`
 
