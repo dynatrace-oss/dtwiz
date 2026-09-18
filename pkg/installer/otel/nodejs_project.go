@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/markers"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -56,52 +57,13 @@ func detectNodeProcesses() []DetectedProcess {
 	return detectProcesses("node", []string{"npm "})
 }
 
-// isNextJSProject checks for Next.js config files or next in package.json dependencies.
-func isNextJSProject(projectPath string) bool {
-	for _, name := range []string{"next.config.js", "next.config.ts", "next.config.mjs"} {
-		if _, err := os.Stat(filepath.Join(projectPath, name)); err == nil {
-			return true
-		}
-	}
-	return hasDependency(projectPath, "next")
-}
-
-// isNuxtProject checks for Nuxt config files or nuxt in package.json dependencies.
-func isNuxtProject(projectPath string) bool {
-	for _, name := range []string{"nuxt.config.js", "nuxt.config.ts", "nuxt.config.mjs", "nuxt.config.mts"} {
-		if _, err := os.Stat(filepath.Join(projectPath, name)); err == nil {
-			return true
-		}
-	}
-	return hasDependency(projectPath, "nuxt")
-}
-
-// hasDependency checks if a package name appears in dependencies or devDependencies.
-func hasDependency(projectPath, pkgName string) bool {
-	data, err := os.ReadFile(filepath.Join(projectPath, "package.json"))
-	if err != nil {
-		return false
-	}
-	var pkg packageJSON
-	if err := json.Unmarshal(data, &pkg); err != nil {
-		return false
-	}
-	if _, ok := pkg.Dependencies[pkgName]; ok {
-		return true
-	}
-	if _, ok := pkg.DevDependencies[pkgName]; ok {
-		return true
-	}
-	return false
-}
-
 // detectNodeFramework returns "next", "nuxt", or "" for a project directory.
 // Next.js takes precedence when both are detected.
 func detectNodeFramework(projectPath string) string {
-	if isNextJSProject(projectPath) {
+	if markers.IsNextJSProject(projectPath) {
 		return "next"
 	}
-	if isNuxtProject(projectPath) {
+	if markers.IsNuxtProject(projectPath) {
 		return "nuxt"
 	}
 	return ""
