@@ -1075,7 +1075,7 @@ func InstallOtelCollectorOnly(envURL, token, platformToken string, dryRun bool) 
 
 	cp.printConfigPreview(sep)
 
-	grailC, grailPlans := buildTenantPrerequisitePreview(envURL, platformToken)
+	prereqs := buildTenantPrerequisitePreview(envURL, platformToken)
 
 	fmt.Println()
 	ok, err := installer.ConfirmProceed("  Proceed with installation?")
@@ -1091,7 +1091,12 @@ func InstallOtelCollectorOnly(envURL, token, platformToken string, dryRun bool) 
 	if platformToken != "" {
 		activateHostMonitoringExtensionFn(envURL, platformToken)
 	}
-	applyAndValidateGrailRoutes(grailC, grailPlans)
+	applyAndValidateGrailRoutes(prereqs.grailC, prereqs.grailPlans)
+	if prereqs.mintV2Plan != nil {
+		if err := applyMintV2IngestPlan(context.Background(), prereqs.mintV2Client, prereqs.mintV2Plan); err != nil {
+			display.PrintWarning("OTLP metric dimensions (Grail)", err)
+		}
+	}
 
 	if err := executeCollectorPlanFn(cp, envURL, platformToken, false /* skipVerification */); err != nil {
 		return err
