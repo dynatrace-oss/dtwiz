@@ -193,7 +193,7 @@ PR templates live in [`.github/PULL_REQUEST_TEMPLATE/`](../../.github/PULL_REQUE
 CI builds a snapshot binary on every PR push and makes it available to reviewers:
 
 - **Non-fork branches:** a pre-release is published to GitHub Releases and install instructions are posted as a PR comment.
-- **Fork PRs:** artifacts are uploaded to the workflow run. Open the **Actions** tab, click the `PR Snapshot` run, and download the archive from the **Artifacts** section.
+- **Fork PRs:** artifacts are uploaded to the workflow run. Open the **Actions** tab, click the `Fork Snapshot` run, and download the archive from the **Artifacts** section.
 
 If the workflow did not run or failed, build a binary locally with `make snapshot`.
 

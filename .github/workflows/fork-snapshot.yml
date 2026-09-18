@@ -1,4 +1,4 @@
-name: PR Snapshot
+name: Fork Snapshot
 
 on:
   pull_request:
@@ -7,7 +7,7 @@ on:
 jobs:
   snapshot:
     # Only run for fork PRs — non-fork branches are covered by preview.yml
-    if: github.event.pull_request.head.repo.fork == false
+    if: github.event.pull_request.head.repo.fork == true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -48,6 +48,7 @@ jobs:
         with:
           name: dtwiz-pr-${{ github.event.pull_request.number }}-linux
           path: dist/dtwiz_*_linux_*.tar.gz
+          overwrite: true
           retention-days: 7
 
       - name: Upload macOS artifacts
@@ -56,6 +57,7 @@ jobs:
         with:
           name: dtwiz-pr-${{ github.event.pull_request.number }}-darwin
           path: dist/dtwiz_*_darwin_*.tar.gz
+          overwrite: true
           retention-days: 7
 
       - name: Upload Windows artifacts
@@ -64,4 +66,5 @@ jobs:
         with:
           name: dtwiz-pr-${{ github.event.pull_request.number }}-windows
           path: dist/dtwiz_*_windows_*.zip
+          overwrite: true
           retention-days: 7
