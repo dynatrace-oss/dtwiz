@@ -7,7 +7,7 @@ on:
 jobs:
   snapshot:
     # Only run for fork PRs — non-fork branches are covered by preview.yml
-    if: github.event.pull_request.head.repo.fork == true
+    if: github.event.pull_request.head.repo.fork == false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -39,7 +39,6 @@ jobs:
           version: latest
           args: release --snapshot --clean
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_SNAPSHOT_TAG: snapshot-pr-${{ github.event.pull_request.number }}
 
       - name: Upload Linux artifacts
