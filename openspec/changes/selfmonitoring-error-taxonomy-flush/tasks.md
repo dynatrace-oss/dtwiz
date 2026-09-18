@@ -3,26 +3,31 @@
 ## 1. Flush strategy — `pkg/selfmonitoring/selfmonitoring.go`
 
 - [ ] 1.1 Add `StepFailed = "fai"` and `StepCancelled = "can"` constants alongside `StepInvoked` and `StepCompleted`.
-- [ ] 1.2 Add `pendingEvent` struct with `classicURL string`, `token string`, `params EventParams` fields.
+- [ ] 1.2 Add `pendingEvent` struct with `classicURL string`, `token string`, `timestamp time.Time`, `params EventParams` fields.
 - [ ] 1.3 Add package-level `queue []pendingEvent` and `mu sync.Mutex`.
-- [ ] 1.4 Add `Enqueue(classicURL, token string, params EventParams)`: sets `params.StepID` default if empty, then appends to queue under mutex.
+- [ ] 1.4 Add `Enqueue(classicURL, token string, timestamp time.Time, params EventParams)`: sets `params.StepID` default if empty, captures `timestamp`, then appends to queue under mutex.
+- [ ] 1.6 In `SendEvent` (or the payload builder): include `startTime` as Unix milliseconds in the Events v2 JSON payload using the timestamp from `pendingEvent`.
 - [ ] 1.5 Add `Flush(timeout time.Duration)`: drains queue under mutex, sends all pending events concurrently via goroutines + `sync.WaitGroup`, blocks until all complete or `context.WithTimeout` fires — silent on timeout.
 
 ## 2. Flush strategy — `cmd/selfmonitoring.go`
 
-- [ ] 2.1 In `fireSelfMonitoringEvent`: move `getDtEnvironment()` call out of the goroutine to the top of the function (before feature flag check is fine; after is cleaner — keep guard at top). Remove the goroutine. Call `selfmonitoring.Enqueue(installer.APIURL(envURL), platformTok, params)` on success.
-- [ ] 2.2 Add `fireSelfMonitoringEventWithError(params selfmonitoring.EventParams, err error)`: calls `installer.ClassifyError(err)`, sets `params.Err = string(errType)`, merges attrs into `params.ExtraProps`, then calls `fireSelfMonitoringEvent(params)`.
+- [ ] 2.1 In `fireSelfMonitoringEvent`: move `getDtEnvironment()` call out of the goroutine to the top of the function. Remove the goroutine. Accept an optional `timestamp time.Time` parameter (or use `time.Now()` as default) and call `selfmonitoring.Enqueue(installer.APIURL(envURL), platformTok, timestamp, params)` on success.
+- [ ] 2.3 For the `st=inv` event fired in `PersistentPreRun`, pass `cmd.StartTime` as the timestamp so the invocation time reflects process start, not the moment `PersistentPreRun` executes.
+- [ ] 2.2 Add `fireSelfMonitoringEventWithError(params selfmonitoring.EventParams, err error)`: calls `selfmonitoring.ClassifyError(err)`, sets `params.Err = string(errType)`, merges attrs into `params.ExtraProps`, then calls `fireSelfMonitoringEvent(params)`.
 
 ## 3. Flush strategy — `cmd/root.go`
 
 - [ ] 3.1 In `Execute()`: change from `if err := rootCmd.Execute(); err != nil { os.Exit(1) }` to: call `rootCmd.Execute()`, then `selfmonitoring.Flush(200 * time.Millisecond)`, then `os.Exit(1)` if err non-nil.
 
-## 4. Error taxonomy — `pkg/installer/errors.go` (new file)
+## 4. Error taxonomy — typed error types in `pkg/installer/errors.go` (new file)
 
 - [ ] 4.1 Define `ErrorType string` type and constants: `ErrTypeUserCancelled`, `ErrTypeAuthError`, `ErrTypeConfigError`, `ErrTypeDependencyMissing`, `ErrTypeNetworkError`, `ErrTypeInstallFailed`, `ErrTypePlatformUnsupported`.
 - [ ] 4.2 Add `ErrPlatformUnsupported = errors.New("platform not supported")` sentinel.
 - [ ] 4.3 Add typed error structs: `AuthError{Reason string}`, `ConfigError{MissingFields []string}`, `DependencyMissingError{Name string}`, `NetworkError{Reason, URL string}`, `InstallFailedError{Step string}`. Each implements `error` with a human-readable `Error() string`. Each implements `Unwrap() error` returning `nil` (they are leaf errors, not wrappers).
-- [ ] 4.4 Add `ClassifyError(err error) (ErrorType, map[string]string)`: walks error chain in priority order (see design), returns type + additional attributes map. Returns `(ErrTypeInstallFailed, nil)` for unrecognised errors.
+
+## 4a. Error taxonomy — `ClassifyError` in `pkg/selfmonitoring/classify.go` (new file)
+
+- [ ] 4a.1 Add `ClassifyError(err error) (installer.ErrorType, map[string]string)`: walks error chain in priority order (see design), returns type + additional attributes map. Returns `(installer.ErrTypeInstallFailed, nil)` for unrecognised errors. `pkg/selfmonitoring` imports `pkg/installer` for the typed error types.
 
 ## 5. Typed errors — `cmd/auth.go`
 
