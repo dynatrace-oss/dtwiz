@@ -20,4 +20,4 @@
 - [ ] I have run `make test-integration` locally.
 - [ ] I have updated the changelog if necessary.
 - [ ] I followed the existing code style and conventions.
-- [ ] Preview snapshot is available, or a testable binary is attached.
+- [ ] Preview snapshot is available, or a testable binary is provided.
