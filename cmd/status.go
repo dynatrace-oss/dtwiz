@@ -75,12 +75,14 @@ var statusCmd = &cobra.Command{
 		info, err := analyzer.AnalyzeSystem()
 		if err != nil {
 			fmt.Printf("  %s\n", display.ColorError.Sprintf("✗ system analysis failed: %v", err))
+			fireCompletedEvent(cmd, err)
 			return err
 		}
 		fmt.Println(info.Summary())
 
 		printFeatureFlags()
 
+		fireCompletedEvent(cmd, nil)
 		return nil
 	},
 }

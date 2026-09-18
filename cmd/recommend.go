@@ -20,7 +20,9 @@ var recommendCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		info, err := analyzeSystem()
 		if err != nil {
-			return fmt.Errorf("analysis failed: %w", err)
+			err = fmt.Errorf("analysis failed: %w", err)
+			fireCompletedEvent(cmd, err)
+			return err
 		}
 
 		recs := recommender.GenerateRecommendations(info)
@@ -34,10 +36,13 @@ var recommendCmd = &cobra.Command{
 			}
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
-			return enc.Encode(available)
+			err = enc.Encode(available)
+			fireCompletedEvent(cmd, err)
+			return err
 		}
 
 		fmt.Println(recommender.FormatRecommendations(recs))
+		fireCompletedEvent(cmd, nil)
 		return nil
 	},
 }

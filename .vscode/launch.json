@@ -7,7 +7,7 @@
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}",
-      "args": ["analyze"],
+      "args": ["analyze", "--debug"],
       "envFile": "${workspaceFolder}/.env",
       "env": {},
       "console": "integratedTerminal"
@@ -18,7 +18,7 @@
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}",
-      "args": ["recommend"],
+      "args": ["recommend", "--debug"],
       "envFile": "${workspaceFolder}/.env",
       "env": {},
       "console": "integratedTerminal"
@@ -40,7 +40,7 @@
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}",
-      "args": ["status"],
+      "args": ["status", "--debug"],
       "envFile": "${workspaceFolder}/.env",
       "env": {},
       "console": "integratedTerminal"
@@ -118,6 +118,17 @@
       "mode": "auto",
       "program": "${workspaceFolder}",
       "args": ["watch"],
+      "envFile": "${workspaceFolder}/.env",
+      "env": {},
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "dtwiz version",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "args": ["version"],
       "envFile": "${workspaceFolder}/.env",
       "env": {},
       "console": "integratedTerminal"

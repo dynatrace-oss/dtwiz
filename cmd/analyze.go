@@ -18,16 +18,21 @@ var analyzeCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		info, err := analyzeSystem()
 		if err != nil {
-			return fmt.Errorf("analysis failed: %w", err)
+			err = fmt.Errorf("analysis failed: %w", err)
+			fireCompletedEvent(cmd, err)
+			return err
 		}
 
 		if analyzeJSON {
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
-			return enc.Encode(info)
+			err = enc.Encode(info)
+			fireCompletedEvent(cmd, err)
+			return err
 		}
 
 		fmt.Println(info.Summary())
+		fireCompletedEvent(cmd, nil)
 		return nil
 	},
 }
