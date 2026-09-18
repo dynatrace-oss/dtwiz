@@ -2,6 +2,7 @@ package otel
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -161,7 +162,7 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 		display.PrintSectionDivider()
 	}
 
-	grailC, grailPlans := buildTenantPrerequisitePreview(envURL, platformTok)
+	prereqs := buildTenantPrerequisitePreview(envURL, platformTok)
 
 	if dryRun {
 		display.ColorDefault.Println("  [dry-run] No changes made.")
@@ -187,7 +188,12 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 		activateHostMonitoringExtensionFn(envURL, platformTok)
 	}
 
-	applyGrailRoutes(grailC, grailPlans)
+	applyGrailRoutes(prereqs.grailC, prereqs.grailPlans)
+	if prereqs.mintV2Plan != nil {
+		if err := applyMintV2IngestPlan(context.Background(), prereqs.mintV2Client, prereqs.mintV2Plan); err != nil {
+			display.PrintWarning("OTLP metric dimensions (Grail)", err)
+		}
+	}
 
 	if !configChanged {
 		display.ColorOK.Println("  Collector configuration is up to date.")
