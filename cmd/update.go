@@ -12,6 +12,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/gcp"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
+	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 )
 
 var updateDryRun bool
@@ -45,10 +46,12 @@ var updateOtelCmd = &cobra.Command{
 		}
 		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		var updateErr error
@@ -58,11 +61,14 @@ var updateOtelCmd = &cobra.Command{
 			updateErr = otel.UpdateOtelConfigInteractive(envURL, classicTok, platformTok, updateDryRun)
 		}
 		if errors.Is(updateErr, installer.ErrInstallCancelled) || errors.Is(updateErr, otel.ErrUpToDate) {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), updateErr)
 			return nil
 		}
 		if updateErr != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), updateErr)
 			return updateErr
 		}
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
 		return nil
 	},
 }
@@ -74,17 +80,22 @@ var updateAzureCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		envURL, _, platformTok, err := getDtEnvironment()
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		if err := checkPlatformToken(envURL, platformTok); err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		if err := azure.UpdateAzure(envURL, platformTok, updateDryRun, StartTime); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
+				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), err)
 				return nil
 			}
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
 		return nil
 	},
 }
@@ -96,17 +107,22 @@ var updateGcpCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		envURL, _, platformTok, err := getDtEnvironment()
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		if err := checkPlatformToken(envURL, platformTok); err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		if err := gcp.UpdateGCP(envURL, platformTok, updateDryRun, StartTime); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
+				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), err)
 				return nil
 			}
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
 		return nil
 	},
 }

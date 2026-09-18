@@ -39,7 +39,7 @@ func BuildInstallCommand(env Environment, cfg AgentConfig, opts InstallOptions, 
 		if needsSudoFn() {
 			sudoPath, err := sudoPathFn()
 			if err != nil {
-				return nil, fmt.Errorf("sudo not found: %w", err)
+				return nil, fmt.Errorf("sudo not found: %w", &installer.DependencyMissingError{Name: "sudo"})
 			}
 			logger.Debug("using sudo", "path", sudoPath)
 			argv = append([]string{sudoPath}, argv...)

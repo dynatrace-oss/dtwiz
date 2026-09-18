@@ -12,6 +12,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
+	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 	"github.com/dynatrace-oss/dtwiz/pkg/version"
 )
 
@@ -83,7 +84,9 @@ func setupClient() (*client.Client, error) {
 // Execute runs the root command.
 func Execute(t time.Time) {
 	StartTime = t
-	if err := rootCmd.Execute(); err != nil {
+	err := rootCmd.Execute()
+	selfmonitoring.Flush(200 * time.Millisecond)
+	if err != nil {
 		os.Exit(1)
 	}
 }

@@ -4,68 +4,64 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/spf13/cobra"
-
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 )
 
-func TestCompletedEventParams_ErrField(t *testing.T) {
-	cmd := &cobra.Command{Use: "analyze", Args: cobra.NoArgs}
-	rootCmd.AddCommand(cmd)
-	defer rootCmd.RemoveCommand(cmd)
-
-	t.Run("nil error produces empty Err", func(t *testing.T) {
-		p := completedEventParams(cmd, nil)
-		if p.StepID != selfmonitoring.StepCompleted {
-			t.Errorf("StepID = %q, want %q", p.StepID, selfmonitoring.StepCompleted)
-		}
-		if p.Err != "" {
-			t.Errorf("Err = %q, want empty", p.Err)
-		}
-	})
-
-	t.Run("non-nil error produces Err=err", func(t *testing.T) {
-		p := completedEventParams(cmd, errors.New("something failed"))
-		if p.Err != "err" {
-			t.Errorf("Err = %q, want %q", p.Err, "err")
-		}
-	})
-}
-
-func TestNormCmdInformationalCommands(t *testing.T) {
+func TestFireSelfMonitoringEventWithError_setsErrAndAttrs(t *testing.T) {
 	tests := []struct {
-		input string
-		want  string
+		name      string
+		err       error
+		wantErr   string
+		wantAttrs map[string]string
 	}{
-		{"analyze", "ana"},
-		{"recommend", "rec"},
-		{"status", "sta"},
-		{"version", "ver"},
+		{
+			name:      "AuthError sets err and reason attr",
+			err:       &installer.AuthError{Reason: "authentication_failed"},
+			wantErr:   string(installer.ErrTypeAuthError),
+			wantAttrs: map[string]string{"reason": "authentication_failed"},
+		},
+		{
+			name:      "DependencyMissingError sets dependency attr",
+			err:       &installer.DependencyMissingError{Name: "az"},
+			wantErr:   string(installer.ErrTypeDependencyMissing),
+			wantAttrs: map[string]string{"dependency": "az"},
+		},
+		{
+			name:    "ErrInstallCancelled maps to user_cancelled with no attrs",
+			err:     installer.ErrInstallCancelled,
+			wantErr: string(installer.ErrTypeUserCancelled),
+		},
+		{
+			name:      "ConfigError sets missing attr",
+			err:       &installer.ConfigError{MissingFields: []string{"DT_ENVIRONMENT"}},
+			wantErr:   string(installer.ErrTypeConfigError),
+			wantAttrs: map[string]string{"missing": "DT_ENVIRONMENT"},
+		},
+		{
+			name:    "unknown error falls back to install_failed",
+			err:     errors.New("something went wrong"),
+			wantErr: string(installer.ErrTypeInstallFailed),
+		},
 	}
+
 	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			got := normCmd(tt.input)
-			if got != tt.want {
-				t.Errorf("normCmd(%q) = %q, want %q", tt.input, got, tt.want)
+		t.Run(tt.name, func(t *testing.T) {
+			var captured selfmonitoring.EventParams
+			original := eventSink
+			eventSink = func(p selfmonitoring.EventParams) { captured = p }
+			defer func() { eventSink = original }()
+
+			params := selfmonitoring.EventParams{CmdID: "ins", StepID: selfmonitoring.StepFailed}
+			fireSelfMonitoringEventWithError(params, tt.err)
+
+			if captured.Err != tt.wantErr {
+				t.Errorf("params.Err = %q, want %q", captured.Err, tt.wantErr)
 			}
-		})
-	}
-}
-
-func TestNormSubUpdateVariants(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"otel-update", "otlu"},
-		{"azure-update", "azu"},
-		{"gcp-update", "gcpu"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			got := normSub(tt.input)
-			if got != tt.want {
-				t.Errorf("normSub(%q) = %q, want %q", tt.input, got, tt.want)
+			for k, wantV := range tt.wantAttrs {
+				if gotV := captured.ExtraProps[k]; gotV != wantV {
+					t.Errorf("ExtraProps[%q] = %q, want %q", k, gotV, wantV)
+				}
 			}
 		})
 	}

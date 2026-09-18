@@ -154,7 +154,7 @@ func pythonInstallPlan() ([]string, error) {
 	switch runtime.GOOS {
 	case "darwin":
 		if _, err := exec.LookPath("brew"); err != nil {
-			return nil, fmt.Errorf("Python 3 is required but not found.\nInstall Homebrew first: https://brew.sh, then re-run this command") //nolint:staticcheck // ST1005: keep brand capitalization
+			return nil, fmt.Errorf("Python 3 is required but not found.\nInstall Homebrew first: https://brew.sh, then re-run this command: %w", &installer.DependencyMissingError{Name: "brew"}) //nolint:staticcheck // ST1005: keep brand capitalization
 		}
 		return []string{"brew", "install", "python3"}, nil
 
@@ -176,7 +176,7 @@ func linuxPythonInstallCmd(needsSudo func() bool) ([]string, error) {
 	var prefix []string
 	if needsSudo() {
 		if _, err := exec.LookPath("sudo"); err != nil {
-			return nil, fmt.Errorf("Python 3 is required but not found, and sudo is not available to install it.\nInstall python3, python3-pip, and python3-venv manually, then re-run this command") //nolint:staticcheck // ST1005: keep brand capitalization
+			return nil, fmt.Errorf("Python 3 is required but not found, and sudo is not available to install it.\nInstall python3, python3-pip, and python3-venv manually, then re-run this command: %w", &installer.DependencyMissingError{Name: "sudo"}) //nolint:staticcheck // ST1005: keep brand capitalization
 		}
 		prefix = []string{"sudo"}
 	}
@@ -233,7 +233,7 @@ func installPythonWindows() error {
 	const manualPythonInstructions = "install Python manually from https://www.python.org/downloads/"
 
 	if _, err := exec.LookPath("winget"); err != nil {
-		return fmt.Errorf("winget was not found on PATH; install winget or %s", manualPythonInstructions)
+		return fmt.Errorf("winget was not found on PATH; install winget or %s: %w", manualPythonInstructions, &installer.DependencyMissingError{Name: "winget"})
 	}
 
 	logger.Debug("installPythonWindows: installing", "id", wingetPythonPackage)
