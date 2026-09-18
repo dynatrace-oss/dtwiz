@@ -11,7 +11,7 @@ Both problems must be solved together. Error taxonomy without flush classifies e
 ## What Changes
 
 - **Flush strategy:** Replace the fire-and-forget goroutine in `fireSelfMonitoringEvent` with an enqueue model. A `Flush(200ms)` call in `Execute()` drains all pending events concurrently before process exit — on every path (success, error, cancel, CTRL+C).
-- **Error taxonomy:** Introduce typed error types and a `ClassifyError` function that maps any Go error to a structured taxonomy category and its additional attributes, following the VI-specified taxonomy.
+- **Error taxonomy:** Introduce typed error types and a `ClassifyError` function that maps any Go error to a structured taxonomy category and its additional attributes, following the structured error taxonomy.
 - **Terminal events:** Fire a `StepFailed` or `StepCancelled` event at every `RunE` return point across all command handlers, carrying the classified error type.
 - **Typed errors at source:** Replace opaque `fmt.Errorf` strings in auth validation, dependency checks, and platform-unsupported guards with typed errors that carry machine-readable fields.
 
@@ -32,4 +32,4 @@ Both problems must be solved together. Error taxonomy without flush classifies e
 - Affects `pkg/selfmonitoring/selfmonitoring.go`, `pkg/installer/errors.go` (new), `cmd/selfmonitoring.go`, `cmd/root.go`, `cmd/auth.go`, `cmd/install.go`, `cmd/setup.go`, `cmd/update.go`, `cmd/uninstall.go`, `pkg/installer/oneagent/oneagent.go`, `pkg/installer/otel/collector.go`, and ~16 `exec.LookPath` failure sites across installer packages.
 - No new external dependencies. No new CLI flags or breaking changes.
 - Gated by the existing `DTWIZ_SELF_MONITORING_POC` feature flag — no user-visible change when the flag is off.
-- Known limitation: `config_error` with missing `DT_ENVIRONMENT` is always lost regardless of flush — the tenant URL is unknown, so there is no destination to send to. The VI acknowledges this explicitly.
+- Known limitation: `config_error` with missing `DT_ENVIRONMENT` is always lost regardless of flush — the tenant URL is unknown, so there is no destination to send to. This is an accepted constraint with no workaround.

@@ -13,14 +13,14 @@ Errors throughout the codebase are opaque `fmt.Errorf` strings. There are no typ
 **Goals:**
 
 - Enqueue self-monitoring events synchronously and flush them (≤200ms) before process exit on every code path.
-- Classify every command failure into a structured `ErrorType` and extract additional attributes where specified by the VI taxonomy.
+- Classify every command failure into a structured `ErrorType` and extract additional attributes where specified by the taxonomy.
 - Fire a terminal event (`StepFailed` or `StepCancelled`) at every `RunE` return point across all command handlers.
 - Replace opaque error strings in auth validation, dependency checks, and platform-unsupported guards with typed errors that carry machine-readable fields.
 
 **Non-Goals:**
 
 - Implement the `confirmed` stage (fired when the user passes Y/N). That is part of the onboarding funnel, not the error taxonomy.
-- Classify HTTP failures inside installer packages (aws, azure, gcp, kubernetes, otel, oneagent) with `NetworkError`. Those failures fall through to the `install_failed` catch-all, which is the designed behaviour per the VI.
+- Classify HTTP failures inside installer packages (aws, azure, gcp, kubernetes, otel, oneagent) with `NetworkError`. Those failures fall through to the `install_failed` catch-all.
 - Flush events fired outside of a command `RunE` (e.g. from `WatchIngestWithEvent` mid-session callbacks). Those remain fire-and-forget goroutines; flush covers the events fired at command boundaries.
 
 ## Decisions
@@ -32,15 +32,32 @@ Cobra skips `PersistentPostRun` when `RunE` returns an error. The only hook that
 - Alternative considered: `PersistentPostRun` on root. Skipped on error paths — discarded.
 - Alternative considered: `defer` in each `RunE`. Requires touching every handler twice per change, and still misses CTRL+C on long-running commands. Discarded.
 
-### Enqueue model: credentials resolved at enqueue time
+### Enqueue model: credentials and timestamp resolved at enqueue time
 
 `fireSelfMonitoringEvent` currently resolves credentials inside the goroutine. Moving credential resolution to the call site keeps each queued event ready to send with a resolved URL and token. `getDtEnvironment()` reads env vars and flags only; it is essentially free.
 
 If credential resolution fails at enqueue time, the event is silently dropped — same behaviour as today. Flush sends all queued events concurrently with a timeout and is silent: no output, no spinner.
 
-### `ClassifyError` lives in `pkg/installer`
+Because all queued events are sent together at flush time, the Events v2 API would assign them the same ingestion timestamp if no explicit time is provided — making it impossible to calculate command duration or distinguish event ordering in the dashboard. To preserve actual wall-clock times, `pendingEvent` carries a `timestamp time.Time` captured at enqueue time. This timestamp is included as `startTime` (Unix milliseconds) in the Events v2 payload. For `st=inv`, `cmd.StartTime` (set at process start in `cmd/root.go`) is passed as the timestamp rather than calling `time.Now()` inside `fireSelfMonitoringEvent`, since the command may have already been running for some time before the event is enqueued.
 
-The typed error types are defined in `pkg/installer` (where installers live). The classifier must be in the same package to avoid a circular import — `pkg/selfmonitoring` already imports `pkg/installer` for URL helpers. The `cmd` layer is the only place that bridges both packages: it calls `ClassifyError` and passes the result into `EventParams`.
+### Typed error types in `pkg/installer`, `ClassifyError` in `pkg/selfmonitoring`
+
+The typed error types (`AuthError`, `ConfigError`, `DependencyMissingError`, etc.) are defined in `pkg/installer` — that is where they originate and where they are returned. `ClassifyError` lives in `pkg/selfmonitoring`, because classification is a selfmonitoring concern: it translates Go errors into telemetry values. `pkg/selfmonitoring` imports `pkg/installer` for the typed error types; the dependency is one-directional and introduces no cycle.
+
+- Alternative considered: `ClassifyError` in `pkg/installer`. Works, but forces a selfmonitoring concern into the installer package. Discarded.
+- Alternative considered: a new `pkg/errors` package for the typed error types. Maximally clean, but adds a package for a small amount of code. Deferred — can be extracted later if the typed errors are reused beyond selfmonitoring.
+
+The taxonomy categories, their additional attributes, and the conditions under which each applies:
+
+| `error.type` | Additional attributes | When |
+|---|---|---|
+| `user_cancelled` | — | User declined Y/N prompt or typed `0` at recommendation menu |
+| `auth_error` | `auth.failure_reason`: `invalid_token`, `environment_not_reachable`, or `authentication_failed` | Authentication failed, invalid or missing token, environment unreachable |
+| `config_error` | `config.missing_fields`: array of missing field names (`DT_ENVIRONMENT`, `DT_PLATFORM_TOKEN`, `project_path`) | Missing environment URL, missing platform token, or project path not found before install could start |
+| `dependency_missing` | `dependency.name`: name of the missing binary | A required external tool was not found |
+| `network_error` | `network.failure_reason`, `network.url` (if available) | Connection timeout, environment not reachable, or unexpected HTTP response |
+| `install_failed` | `install.step`: free-text name of the step that failed | Install execution failed; catch-all for failures not matching a more specific category |
+| `platform_unsupported` | — | Current OS or architecture is not supported by the selected install method |
 
 Classification priority (first match wins): `user_cancelled` → `auth_error` → `config_error` → `dependency_missing` → `network_error` → `platform_unsupported` → `install_failed` → fallback `install_failed`. The fallback ensures every error produces a taxonomy value, even unrecognised ones.
 
@@ -60,7 +77,8 @@ Auth, config, platform-unsupported, and dependency-missing errors replace opaque
 
 ## Risks / Trade-offs
 
-- `config_error` with missing `DT_ENVIRONMENT` is always lost — no destination URL. This is a known limitation acknowledged by the VI and requires no mitigation.
+- `config_error` with missing `DT_ENVIRONMENT` is always lost — no destination URL. This is a known limitation with no workaround.
+- `auth_error` events are classified correctly but cannot be successfully ingested — the same invalid or rejected token is used to deliver the self-monitoring event to the same tenant, so the Events v2 call will also fail. The classification is verifiable as a unit test but not observable end-to-end.
 - Credential resolution moves to the call path of `fireSelfMonitoringEvent`. `getDtEnvironment()` reads env vars and flags only — no I/O — so the performance cost is negligible.
 - The 200ms flush cap is imperceptible at the end of commands that take seconds. For fast commands (version, help), the extra wait is at most the HTTP RTT to the tenant, which typically completes well within the cap.
 - Wrapping dependency-missing errors preserves existing human-readable messages in `Error()`, so display output and test assertions against those messages are unaffected.
