@@ -2,7 +2,7 @@
 
 ## Why
 
-Per VI PRODUCT-17847, every meaningful dtwiz action must be instrumented and visible in the self-monitoring tenant. The `dtwiz watch` command had no instrumentation, making it impossible to measure time to first data, confirm that WatchIngest signal detection is working, or understand how many watch sessions end with data vs. without.
+Every meaningful dtwiz action must be instrumented and visible in the self-monitoring tenant. The `dtwiz watch` command had no instrumentation, making it impossible to measure time to first data, confirm that WatchIngest signal detection is working, or understand how many watch sessions end with data vs. without.
 
 ## What Changes
 
