@@ -1,4 +1,4 @@
-.PHONY: build install test test-coverage test-integration lint fmt clean markdownlint markdownlint-fix setup
+.PHONY: build install test test-coverage test-integration lint fmt clean markdownlint markdownlint-fix setup snapshot
 
 ifneq (,$(wildcard .e2e.env))
 include .e2e.env
@@ -82,6 +82,10 @@ endif
 	echo ""; \
 	echo "$$(grep -c '^--- PASS:' "$$LOG") passed, $$(grep -c '^--- FAIL:' "$$LOG") failed, $$(grep -c '^--- SKIP:' "$$LOG") skipped"; \
 	exit $$status
+
+snapshot:
+	GORELEASER_SNAPSHOT_TAG="snapshot-$$(git rev-parse --abbrev-ref HEAD | tr '/' '-')" \
+		goreleaser release --snapshot --clean
 
 clean:
 	rm -f $(BINARY)
