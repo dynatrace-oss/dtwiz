@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -598,6 +599,86 @@ func TestGenerateOtelConfig_Combined_Default(t *testing.T) {
 	}
 	if _, ok := parsed.Service.Pipelines["logs"]; !ok {
 		t.Error("combined config missing logs pipeline")
+	}
+}
+
+func TestGenerateOtelConfig_Combined_AWS(t *testing.T) {
+	generatedConfig, err := generateOtelConfig("https://env.example.com", "mytoken", withCloudProvider("aws"))
+	if err != nil {
+		t.Fatalf("generateOtelConfig: %v", err)
+	}
+	cfg := generatedConfig.content
+	parsed := parseOtelConfig(t, cfg)
+
+	if _, ok := parsed.Processors["transform/dt-cloud-correlation"]; !ok {
+		t.Error("AWS config missing transform/dt-cloud-correlation processor")
+	}
+	if !strings.Contains(cfg, `detectors: ["ec2", "system"]`) {
+		t.Error("AWS config missing ec2 detector in resource_detection/system")
+	}
+	if !strings.Contains(cfg, `resource.attributes["aws.arn"]`) {
+		t.Error("AWS config missing aws.arn OTTL statement")
+	}
+	hostPipeline, ok := parsed.Service.Pipelines["metrics/host"]
+	if !ok {
+		t.Fatal("AWS config missing metrics/host pipeline")
+	}
+	assertProcessorOrder(t, hostPipeline.Processors, "resource_detection/system", "transform/dt-cloud-correlation")
+}
+
+func TestGenerateOtelConfig_Combined_Azure(t *testing.T) {
+	generatedConfig, err := generateOtelConfig("https://env.example.com", "mytoken", withCloudProvider("azure"))
+	if err != nil {
+		t.Fatalf("generateOtelConfig: %v", err)
+	}
+	cfg := generatedConfig.content
+	parsed := parseOtelConfig(t, cfg)
+
+	if _, ok := parsed.Processors["transform/dt-cloud-correlation"]; !ok {
+		t.Error("Azure config missing transform/dt-cloud-correlation processor")
+	}
+	if !strings.Contains(cfg, `detectors: ["azure", "system"]`) {
+		t.Error("Azure config missing azure detector in resource_detection/system")
+	}
+	if !strings.Contains(cfg, `resource.attributes["azure.resource.id"]`) {
+		t.Error("Azure config missing azure.resource.id OTTL statement")
+	}
+	hostPipeline, ok := parsed.Service.Pipelines["metrics/host"]
+	if !ok {
+		t.Fatal("Azure config missing metrics/host pipeline")
+	}
+	assertProcessorOrder(t, hostPipeline.Processors, "resource_detection/system", "transform/dt-cloud-correlation")
+}
+
+func TestGenerateOtelConfig_Combined_GCP(t *testing.T) {
+	generatedConfig, err := generateOtelConfig("https://env.example.com", "mytoken", withCloudProvider("gcp"))
+	if err != nil {
+		t.Fatalf("generateOtelConfig: %v", err)
+	}
+	cfg := generatedConfig.content
+	parsed := parseOtelConfig(t, cfg)
+
+	if _, ok := parsed.Processors["transform/dt-cloud-correlation"]; !ok {
+		t.Error("GCP config missing transform/dt-cloud-correlation processor")
+	}
+	if !strings.Contains(cfg, `detectors: ["gcp", "system"]`) {
+		t.Error("GCP config missing gcp detector in resource_detection/system")
+	}
+	if !strings.Contains(cfg, `resource.attributes["gcp.resource.name"]`) {
+		t.Error("GCP config missing gcp.resource.name OTTL statement")
+	}
+	hostPipeline, ok := parsed.Service.Pipelines["metrics/host"]
+	if !ok {
+		t.Fatal("GCP config missing metrics/host pipeline")
+	}
+	assertProcessorOrder(t, hostPipeline.Processors, "resource_detection/system", "transform/dt-cloud-correlation")
+}
+
+func assertProcessorOrder(t *testing.T, processors []string, before, after string) {
+	t.Helper()
+	bi, ai := slices.Index(processors, before), slices.Index(processors, after)
+	if bi == -1 || ai == -1 || bi >= ai {
+		t.Errorf("expected %q before %q in %v", before, after, processors)
 	}
 }
 

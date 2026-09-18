@@ -42,6 +42,7 @@ type otelConfigData struct {
 	HTTPPort        int
 	IncludeJournald bool
 	HealthCheckPort int
+	CloudProvider   string // "aws" | "azure" | "gcp" | ""
 }
 
 type generatedOtelConfig struct {
@@ -694,9 +695,16 @@ func renderOtelTemplate(data otelConfigData) (string, error) {
 	return rendered, nil
 }
 
+type otelConfigOpt func(*otelConfigData)
+
+func withCloudProvider(p string) otelConfigOpt {
+	return func(d *otelConfigData) { d.CloudProvider = p }
+}
+
 // generateOtelConfig renders otel.tmpl and returns the config plus its OTLP HTTP port.
-// Ports are selected from the canonical defaults.
-func generateOtelConfig(apiURL, token string) (generatedOtelConfig, error) {
+// Ports are selected from the canonical defaults. CloudProvider defaults to ""
+// (no cloud correlation); pass withCloudProvider to override.
+func generateOtelConfig(apiURL, token string, opts ...otelConfigOpt) (generatedOtelConfig, error) {
 	grpcPort := findFreePort(4317)
 	httpPort := findFreePort(4318)
 	if httpPort == grpcPort {
@@ -723,7 +731,11 @@ func generateOtelConfig(apiURL, token string) (generatedOtelConfig, error) {
 	}
 	data.IncludeJournald = runtime.GOOS == "linux"
 	data.HealthCheckPort = healthCheckPort
+	for _, o := range opts {
+		o(&data)
+	}
 	logger.Debug("otel config ports", "grpc", grpcPort, "http", httpPort, "metrics", metricsPort, "health_check", healthCheckPort)
+	logger.Debug("otel config cloud provider", "provider", data.CloudProvider)
 
 	rendered, err := renderOtelTemplate(data)
 	if err != nil {
@@ -905,6 +917,7 @@ func startOtelCollector(binaryPath, configPath string) (<-chan error, error) {
 type collectorPlan struct {
 	apiURL         string
 	collectorToken string
+	cloudProvider  string
 	installDir     string
 	configPath     string
 	binaryPath     string
@@ -922,13 +935,16 @@ func prepareCollectorPlan(envURL, token string) (*collectorPlan, error) {
 		return nil, err
 	}
 
-	generatedConfig, err := generateOtelConfig(apiURL, collectorToken)
+	cloudProvider := detectIMDSCloudProvider()
+	logger.Debug("otel config cloud provider", "provider", cloudProvider)
+	generatedConfig, err := generateOtelConfig(apiURL, collectorToken, withCloudProvider(cloudProvider))
 	if err != nil {
 		return nil, fmt.Errorf("generating OTel Collector config: %w", err)
 	}
 	return &collectorPlan{
 		apiURL:         apiURL,
 		collectorToken: collectorToken,
+		cloudProvider:  cloudProvider,
 		installDir:     installDir,
 		configPath:     filepath.Join(installDir, "config.yaml"),
 		binaryPath:     filepath.Join(installDir, otelCollectorBinaryName()),
@@ -978,7 +994,7 @@ func (cp *collectorPlan) execute(envURL, platformToken string, skipVerification 
 		// The old collector's ports are now free. Regenerate the config so
 		// findFreePort picks the preferred ports (4317/4318) instead of the
 		// higher ones it selected at plan time while the old process still held them.
-		if fresh, err := generateOtelConfig(cp.apiURL, cp.collectorToken); err == nil {
+		if fresh, err := generateOtelConfig(cp.apiURL, cp.collectorToken, withCloudProvider(cp.cloudProvider)); err == nil {
 			logger.Debug("regenerated config after stopping old collector", "oldHttpPort", cp.httpPort, "newHttpPort", fresh.httpPort)
 			cp.configContent = fresh.content
 			cp.configPreview = installer.MaskSecret(fresh.content, cp.collectorToken)

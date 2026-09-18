@@ -171,7 +171,19 @@ processors:
       datapoint:
         - metric.name == "system.cpu.utilization" and attributes["state"] == "idle"
   resource_detection/system:
+{{- if eq .CloudProvider "aws" }}
+    detectors: ["ec2", "system"]
+{{- else if eq .CloudProvider "azure" }}
+    detectors: ["azure", "system"]
+{{- else if eq .CloudProvider "gcp" }}
+    detectors: ["gcp", "system"]
+    gcp:
+      resource_attributes:
+        gcp.gce.instance.name:
+          enabled: true
+{{- else }}
     detectors: ["system"]
+{{- end }}
     system:
       resource_attributes:
         host.arch:
@@ -259,6 +271,28 @@ processors:
   filter/delete-metrics:
     metric_conditions:
       - resource.attributes["low-memory-process"] != nil
+{{- if eq .CloudProvider "aws" }}
+  transform/dt-cloud-correlation:
+    error_mode: ignore
+    metric_statements:
+      - context: resource
+        statements:
+          - set(resource.attributes["aws.arn"], Concat(["arn:aws:ec2:", resource.attributes["cloud.region"], ":", resource.attributes["cloud.account.id"], ":instance/", resource.attributes["host.id"]], "")) where resource.attributes["cloud.provider"] == "aws"
+{{- else if eq .CloudProvider "azure" }}
+  transform/dt-cloud-correlation:
+    error_mode: ignore
+    metric_statements:
+      - context: resource
+        statements:
+          - set(resource.attributes["azure.resource.id"], ConvertCase(Concat(["/subscriptions/", resource.attributes["cloud.account.id"], "/resourcegroups/", resource.attributes["azure.resourcegroup.name"], "/providers/microsoft.compute/virtualmachines/", resource.attributes["azure.vm.name"]], ""), "lower")) where resource.attributes["cloud.provider"] == "azure" and resource.attributes["azure.vm.scaleset.name"] == nil
+{{- else if eq .CloudProvider "gcp" }}
+  transform/dt-cloud-correlation:
+    error_mode: ignore
+    metric_statements:
+      - context: resource
+        statements:
+          - set(resource.attributes["gcp.resource.name"], Concat(["//compute.googleapis.com/projects/", resource.attributes["cloud.account.id"], "/zones/", resource.attributes["cloud.availability_zone"], "/instances/", resource.attributes["gcp.gce.instance.name"]], "")) where resource.attributes["cloud.provider"] == "gcp"
+{{- end }}
 
 service:
   extensions:
@@ -298,6 +332,9 @@ service:
         - filter/idle-cpu-usage
         - resource/add-host-group-id
         - resource_detection/system
+{{- if .CloudProvider }}
+        - transform/dt-cloud-correlation
+{{- end }}
         - transform
         - filter/delete-metrics
         - cumulative_to_delta
