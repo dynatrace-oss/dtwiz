@@ -3,21 +3,17 @@
 ## 1. Flush strategy — `pkg/selfmonitoring/selfmonitoring.go`
 
 - [ ] 1.1 Add `StepFailed = "fai"` and `StepCancelled = "can"` constants alongside `StepInvoked` and `StepCompleted`.
-- [ ] 1.2 Add `pendingEvent` struct with `classicURL string`, `token string`, `timestamp time.Time`, `params EventParams` fields.
-- [ ] 1.3 Add package-level `queue []pendingEvent` and `mu sync.Mutex`.
-- [ ] 1.4 Add `Enqueue(classicURL, token string, timestamp time.Time, params EventParams)`: sets `params.StepID` default if empty, captures `timestamp`, then appends to queue under mutex.
-- [ ] 1.6 In `SendEvent` (or the payload builder): include `startTime` as Unix milliseconds in the Events v2 JSON payload using the timestamp from `pendingEvent`.
-- [ ] 1.5 Add `Flush(timeout time.Duration)`: drains queue under mutex, sends all pending events concurrently via goroutines + `sync.WaitGroup`, blocks until all complete or `context.WithTimeout` fires — silent on timeout.
+- [ ] 1.2 Add a package-level `sync.WaitGroup` to track all in-flight event sends.
+- [ ] 1.3 Add `Flush(timeout time.Duration)`: waits on the WaitGroup for up to `timeout`, then returns — silent on timeout, accepts any remaining in-flight sends as lost.
 
 ## 2. Flush strategy — `cmd/selfmonitoring.go`
 
-- [ ] 2.1 In `fireSelfMonitoringEvent`: move `getDtEnvironment()` call out of the goroutine to the top of the function. Remove the goroutine. Accept an optional `timestamp time.Time` parameter (or use `time.Now()` as default) and call `selfmonitoring.Enqueue(installer.APIURL(envURL), platformTok, timestamp, params)` on success.
-- [ ] 2.3 For the `st=inv` event fired in `PersistentPreRun`, pass `cmd.StartTime` as the timestamp so the invocation time reflects process start, not the moment `PersistentPreRun` executes.
+- [ ] 2.1 In `fireSelfMonitoringEvent`: keep the goroutine-based send. Register `wg.Add(1)` before spawning the goroutine and call `wg.Done()` when the HTTP send completes. The goroutine continues to resolve credentials internally — no change to that behaviour.
 - [ ] 2.2 Add `fireSelfMonitoringEventWithError(params selfmonitoring.EventParams, err error)`: calls `selfmonitoring.ClassifyError(err)`, sets `params.Err = string(errType)`, merges attrs into `params.ExtraProps`, then calls `fireSelfMonitoringEvent(params)`.
 
 ## 3. Flush strategy — `cmd/root.go`
 
-- [ ] 3.1 In `Execute()`: change from `if err := rootCmd.Execute(); err != nil { os.Exit(1) }` to: call `rootCmd.Execute()`, then `selfmonitoring.Flush(200 * time.Millisecond)`, then `os.Exit(1)` if err non-nil.
+- [ ] 3.1 In `Execute()`: call `rootCmd.Execute()`, then `selfmonitoring.Flush(200 * time.Millisecond)`, then `os.Exit(1)` if err non-nil. The flush waits for any in-flight goroutines to complete before the process exits.
 
 ## 4. Error taxonomy — typed error types in `pkg/installer/errors.go` (new file)
 
@@ -78,7 +74,7 @@ Replace each `exec.LookPath` / `ExecLookPath` "not found" failure with a `Depend
 ## 11. Tests
 
 - [ ] 11.1 Unit-test `ClassifyError`: table-driven test covering each of the 8 error types (including fallback), verifying the returned `ErrorType` constant and `map[string]string` attributes.
-- [ ] 11.2 Unit-test `Flush`: verify that all enqueued events are sent, that timeout is respected (no block beyond timeout), and that the queue is cleared after flush.
+- [ ] 11.2 Unit-test `Flush`: verify that it waits for in-flight goroutines to complete and that the timeout is respected.
 - [ ] 11.3 Unit-test `fireSelfMonitoringEventWithError`: verify `params.Err` is set to the classified type and `ExtraProps` contains the expected attributes.
 - [ ] 11.4 Run `go test ./pkg/installer/... ./pkg/selfmonitoring/... ./cmd/...` and confirm all pass.
 - [ ] 11.5 Run `make lint` and confirm no new issues.
