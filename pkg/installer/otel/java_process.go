@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -57,7 +58,7 @@ func validateJavaPrerequisites() (string, error) {
 	javaPath, err := exec.LookPath("java")
 	if err != nil {
 		display.PrintStatusLine("error", "Java not found — install a JDK/JRE and ensure it is in PATH", display.ColorError)
-		return "", fmt.Errorf("Java not found on PATH") //nolint:staticcheck // ST1005: keep brand capitalization
+		return "", fmt.Errorf("Java not found on PATH: %w", &installer.DependencyMissingError{Name: "java"}) //nolint:staticcheck // ST1005: keep brand capitalization
 	}
 	logger.Debug("java binary found", "path", javaPath)
 

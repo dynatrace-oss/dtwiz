@@ -16,6 +16,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
+	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 )
 
 var installDryRun bool
@@ -51,14 +52,17 @@ var installOneAgentCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		c, err := setupClientFromCreds(envURL, classicTok, platformTok)
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		quiet, _ := cmd.Flags().GetBool("quiet")
@@ -76,10 +80,13 @@ var installOneAgentCmd = &cobra.Command{
 
 		if err := oneagent.InstallOneAgentV2(c, opts); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
+				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), err)
 				return nil
 			}
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
 		if !installDryRun {
 			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat))
 		}
@@ -94,10 +101,12 @@ var installKubernetesCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		k8sInfo := analyzer.DetectKubernetes()
@@ -108,10 +117,13 @@ var installKubernetesCmd = &cobra.Command{
 		}
 		if err := k8s.InstallKubernetes(envURL, classicTok, clusterName, distro, installDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
+				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), err)
 				return nil
 			}
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
 		if !installDryRun {
 			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat))
 		}
@@ -130,15 +142,19 @@ var installDockerCmd = &cobra.Command{
 		}
 		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		if err := installer.InstallDocker(envURL, classicTok, installDryRun); err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
 		if !installDryRun {
 			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat))
 		}
@@ -153,19 +169,24 @@ var installOtelCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		manualLang, err := otel.InstallOtelCollectorWithProject(envURL, classicTok, platformTok, otelProject, installDryRun)
 		if err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
+				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), err)
 				return nil
 			}
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
 		if !installDryRun {
 			installer.WatchIngestOtel(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), manualLang)
 		}
@@ -180,18 +201,23 @@ var installOtelCollectorCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		if err := otel.InstallOtelCollectorOnly(envURL, classicTok, platformTok, installDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
+				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), err)
 				return nil
 			}
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
 		if !installDryRun {
 			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat))
 		}
@@ -208,18 +234,23 @@ var installOtelPythonCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		if err := otel.InstallOtelPython(envURL, classicTok, platformTok, otelPythonServiceName, otelProject, installDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
+				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), err)
 				return nil
 			}
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
 		if !installDryRun {
 			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat))
 		}
@@ -235,18 +266,23 @@ var installOtelNodeCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		if err := otel.InstallOtelNode(envURL, classicTok, platformTok, otelNodeServiceName, otelProject, installDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
+				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), err)
 				return nil
 			}
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
 		return nil
 	},
 }
@@ -259,18 +295,23 @@ var installOtelJavaCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		if err := otel.InstallOtelJava(envURL, classicTok, otelJavaServiceName, otelProject, installDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
+				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), err)
 				return nil
 			}
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
 		if !installDryRun {
 			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat))
 		}
@@ -285,17 +326,22 @@ var installAWSCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		envURL, _, platformTok, err := getDtEnvironment()
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		if _, err := validateCredentials(envURL, "", platformTok); err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		if err := awspkg.InstallAWS(envURL, platformTok, installDryRun, StartTime.UTC().Format(installer.IngestTimeFormat)); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
+				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), err)
 				return nil
 			}
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
 		return nil
 	},
 }
@@ -307,18 +353,23 @@ var installAWSLambdaCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		if err := installer.InstallAWSLambda(envURL, classicTok, installDryRun, true); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
+				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), err)
 				return nil
 			}
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
 		if !installDryRun {
 			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat))
 		}
@@ -333,17 +384,22 @@ var installAzureCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		envURL, _, platformTok, err := getDtEnvironment()
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		if _, err := validateCredentials(envURL, "", platformTok); err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		if err := azure.InstallAzure(envURL, platformTok, installDryRun, StartTime); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
+				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), err)
 				return nil
 			}
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
 		return nil
 	},
 }
@@ -355,14 +411,18 @@ var installGCPCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		envURL, _, platformTok, err := getDtEnvironment()
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		if err := gcp.InstallGCP(envURL, platformTok, installDryRun, StartTime); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
+				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), err)
 				return nil
 			}
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
 		return nil
 	},
 }
@@ -374,18 +434,23 @@ var installDemoCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		if err := otel.InstallDemo(envURL, classicTok, platformTok, installDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
+				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), err)
 				return nil
 			}
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
 		if !installDryRun {
 			installer.WatchIngest(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat))
 		}
