@@ -31,15 +31,69 @@ func init() {
 	execID = fmt.Sprintf("%02x%x", b[0], b[1]>>4)
 }
 
+// Mode identifies how dtwiz was invoked.
+type Mode string
+
+const (
+	ModeDebug  Mode = "debug"
+	ModeTTY    Mode = "tty"
+	ModeNonTTY Mode = "non-tty"
+)
+
 // EventParams holds per-invocation metadata embedded in the request User-Agent and event body.
+// Cmd and Sub carry the full, natural command names (e.g. "install", "kubernetes").
+// Abbreviation for the 64-char User-Agent header is handled internally by this package.
 type EventParams struct {
-	CmdID      string            // top-level command: install, update, uninstall, etc.
-	SubID      string            // subcommand: otel, gcp, kubernetes, etc.
-	StepID     string            // execution step; defaults to StepInvoked when empty
-	Mode       string            // deb, tty, or ntt
-	Err        string            // error category; omitted from event body when empty
-	Type       string            // event type qualifier; omitted from event body when empty
+	Cmd        string            // top-level command: install, update, uninstall, analyze, etc.
+	Sub        string            // subcommand: otel, kubernetes, oneagent, etc.
+	StepID     string            // execution step shortcode; defaults to StepInvoked when empty
+	Mode       Mode              // ModeDebug, ModeTTY, or ModeNonTTY
+	Err        string            // error category; omitted when empty
+	Type       string            // event type qualifier; omitted when empty
 	ExtraProps map[string]string // merged into event body properties; not included in User-Agent
+}
+
+// stepFullNames maps step shortcodes to human-readable names used in the event body.
+var stepFullNames = map[string]string{
+	StepInvoked:   "invoked",
+	StepAnalyze:   "analyze",
+	StepRecommend: "recommend",
+	StepInstall:   "install",
+	StepCompleted: "completed",
+}
+
+// cmdShortMap and subShortMap abbreviate natural command names for the User-Agent header.
+var cmdShortMap = map[string]string{
+	"install":   "ins",
+	"uninstall": "uni",
+	"update":    "upd",
+	"analyze":   "ana",
+	"recommend": "rec",
+	"status":    "sta",
+	"watch":     "wch",
+	"setup":     "set",
+	"version":   "ver",
+}
+
+var subShortMap = map[string]string{
+	"otel":           "otel",
+	"otel-collector": "otlc",
+	"otel-python":    "otlp",
+	"otel-node":      "otln",
+	"otel-java":      "otlj",
+	"kubernetes":     "k8s",
+	"oneagent":       "oa",
+	"gcp":            "gcp",
+	"azure":          "az",
+	"aws":            "aws",
+	"aws-lambda":     "awsl",
+	"docker":         "dock",
+	"demo":           "demo",
+	"self":           "self",
+	"uninstall":      "uni",
+	"otel-update":    "otlu",
+	"azure-update":   "azu",
+	"gcp-update":     "gcpu",
 }
 
 const (
@@ -73,13 +127,21 @@ func SendEvent(classicURL, token string, params EventParams) error {
 		params.StepID = StepInvoked
 	}
 
+	stepFull := stepFullNames[params.StepID]
+	if stepFull == "" {
+		stepFull = params.StepID
+	}
+
 	props := map[string]string{
-		"event": execID,
-		"step":  params.StepID,
+		"executionId": execID,
+		"step":        stepFull,
+		"version":     version.Version,
+		"mode":        string(params.Mode),
+		"os":          runtime.GOOS,
 	}
 	for _, kv := range []struct{ k, v string }{
-		{"command", params.CmdID},
-		{"subcommand", params.SubID},
+		{"command", params.Cmd},
+		{"subcommand", params.Sub},
 		{"error", params.Err},
 	} {
 		if kv.v != "" {
@@ -88,11 +150,11 @@ func SendEvent(classicURL, token string, params EventParams) error {
 	}
 	maps.Copy(props, params.ExtraProps)
 	title := "dtwiz"
-	if params.CmdID != "" {
-		title += " " + params.CmdID
+	if params.Cmd != "" {
+		title += " " + params.Cmd
 	}
-	if params.SubID != "" {
-		title += " " + params.SubID
+	if params.Sub != "" {
+		title += " " + params.Sub
 	}
 	eventBody, err := json.Marshal(eventPayload{
 		EventType:  "CUSTOM_INFO",
@@ -137,14 +199,14 @@ func SendEvent(classicURL, token string, params EventParams) error {
 
 // buildUserAgent encodes operation identity into User-Agent (64-char HAProxy capture limit).
 // Format: dtwiz/<version>[;c=<cmd>];st=<step>[;s=<sub>][;er=<err>][;t=<type>]
-// c= is omitted when CmdID is empty. ExecID, mode, and OS go into Tab-Id via buildTabID.
+// c= is omitted when Cmd is empty. ExecID, mode, and OS go into Tab-Id via buildTabID.
 func buildUserAgent(p EventParams) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "dtwiz/%s", version.Version)
 	for _, kv := range []struct{ k, v string }{
-		{propCmd, p.CmdID},
+		{propCmd, shortCmd(p.Cmd)},
 		{propStep, p.StepID},
-		{propSub, p.SubID},
+		{propSub, shortSub(p.Sub)},
 		{propErr, p.Err},
 		{propType, p.Type},
 	} {
@@ -155,11 +217,36 @@ func buildUserAgent(p EventParams) string {
 	return b.String()
 }
 
+func shortCmd(name string) string {
+	if s, ok := cmdShortMap[name]; ok {
+		return s
+	}
+	return name
+}
+
+func shortSub(name string) string {
+	if s, ok := subShortMap[name]; ok {
+		return s
+	}
+	return name
+}
+
 // buildTabID encodes execution context into Tab-Id (16-char HAProxy capture limit).
 // Format: <execid>;m=<mode>;o=<os> — execid is positional (always 3 hex chars), mode and os are 3 chars each.
 // Worst case: "3ab;m=deb;o=win" = 15 chars.
 func buildTabID(p EventParams) string {
-	return execID + ";m=" + p.Mode + ";o=" + resolveOS()
+	return execID + ";m=" + shortMode(p.Mode) + ";o=" + resolveOS()
+}
+
+func shortMode(m Mode) string {
+	switch m {
+	case ModeDebug:
+		return "deb"
+	case ModeNonTTY:
+		return "ntt"
+	default:
+		return string(m)
+	}
 }
 
 func resolveOS() string {

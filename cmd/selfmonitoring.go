@@ -34,67 +34,21 @@ func fireSelfMonitoringEvent(params selfmonitoring.EventParams) {
 }
 
 func buildEventParams(cmd *cobra.Command, stepID string) selfmonitoring.EventParams {
-	cmdID, subID := deriveCommandIDs(cmd)
+	cmdName, subName := deriveCommandNames(cmd)
 	return selfmonitoring.EventParams{
-		CmdID:  cmdID,
-		SubID:  subID,
+		Cmd:    cmdName,
+		Sub:    subName,
 		StepID: stepID,
 		Mode:   resolveMode(),
 	}
 }
 
-var normCmdMap = map[string]string{
-	"install":   "ins",
-	"uninstall": "uni",
-	"update":    "upd",
-	"analyze":   "ana",
-	"recommend": "rec",
-	"status":    "sta",
-	"watch":     "wch",
-	"setup":     "set",
-	"version":   "ver",
-}
-
-var normSubMap = map[string]string{
-	"otel":           "otel",
-	"otel-collector": "otlc",
-	"otel-python":    "otlp",
-	"otel-node":      "otln",
-	"otel-java":      "otlj",
-	"kubernetes":     "k8s",
-	"oneagent":       "oa",
-	"gcp":            "gcp",
-	"azure":          "az",
-	"aws":            "aws",
-	"aws-lambda":     "awsl",
-	"docker":         "dock",
-	"demo":           "demo",
-	"self":           "self",
-	"otel-update":    "otlu",
-	"azure-update":   "azu",
-	"gcp-update":     "gcpu",
-}
-
-func deriveCommandIDs(cmd *cobra.Command) (cmdID, subID string) {
+func deriveCommandNames(cmd *cobra.Command) (cmdName, subName string) {
 	parent := cmd.Parent()
 	if parent == nil || parent.Name() == "dtwiz" {
-		return normCmd(cmd.Name()), ""
+		return cmd.Name(), ""
 	}
-	return normCmd(parent.Name()), normSub(cmd.Name())
-}
-
-func normCmd(name string) string {
-	if short, ok := normCmdMap[name]; ok {
-		return short
-	}
-	return name
-}
-
-func normSub(name string) string {
-	if short, ok := normSubMap[name]; ok {
-		return short
-	}
-	return name
+	return parent.Name(), cmd.Name()
 }
 
 var watchSignalNames = map[string]string{
@@ -158,7 +112,7 @@ func watchSignalCSV(firstDataMs map[string]int64) string {
 func buildWatchEventCallback(cmd *cobra.Command) func(installer.WatchSessionResult) {
 	return func(r installer.WatchSessionResult) {
 		params := buildEventParams(cmd, selfmonitoring.StepCompleted)
-		params.CmdID = ""
+		params.Cmd = ""
 		params.Type = watchSignalCSV(r.FirstDataMs)
 		params.ExtraProps = watchSignalProps(r.FirstDataMs)
 		fireSelfMonitoringEvent(params)
@@ -189,30 +143,30 @@ func fireSetupAnalyzeEvent(cmd *cobra.Command, err error) {
 	fireSelfMonitoringEvent(p)
 }
 
-func fireSetupRecommendEvent(cmd *cobra.Command, subID string) {
+func fireSetupRecommendEvent(cmd *cobra.Command, sub string) {
 	p := buildEventParams(cmd, selfmonitoring.StepRecommend)
-	p.SubID = subID
+	p.Sub = sub
 	fireSelfMonitoringEvent(p)
 }
 
-func fireSetupInstallEvent(cmd *cobra.Command, subID string, err error) {
+func fireSetupInstallEvent(cmd *cobra.Command, sub string, err error) {
 	if errors.Is(err, installer.ErrInstallCancelled) || errors.Is(err, otel.ErrUpToDate) {
 		return
 	}
 	p := buildEventParams(cmd, selfmonitoring.StepInstall)
-	p.SubID = subID
+	p.Sub = sub
 	if err != nil {
 		p.Err = "err"
 	}
 	fireSelfMonitoringEvent(p)
 }
 
-func resolveMode() string {
+func resolveMode() selfmonitoring.Mode {
 	if debugFlag {
-		return "deb"
+		return selfmonitoring.ModeDebug
 	}
 	if term.IsTerminal(int(os.Stdout.Fd())) {
-		return "tty"
+		return selfmonitoring.ModeTTY
 	}
-	return "ntt"
+	return selfmonitoring.ModeNonTTY
 }
