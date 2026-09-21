@@ -23,13 +23,13 @@ func TestFireSelfMonitoringEventWithError_setsErrAndAttrs(t *testing.T) {
 			name:      "AuthError sets err and reason attr",
 			err:       &installer.AuthError{Reason: "authentication_failed"},
 			wantErr:   string(installer.ErrTypeAuthError),
-			wantAttrs: map[string]string{"reason": "authentication_failed"},
+			wantAttrs: map[string]string{"auth.failure_reason": "authentication_failed"},
 		},
 		{
 			name:      "DependencyMissingError sets dependency attr",
 			err:       &installer.DependencyMissingError{Name: "az"},
 			wantErr:   string(installer.ErrTypeDependencyMissing),
-			wantAttrs: map[string]string{"dependency": "az"},
+			wantAttrs: map[string]string{"dependency.name": "az"},
 		},
 		{
 			name:    "ErrInstallCancelled maps to user_cancelled with no attrs",
@@ -40,7 +40,7 @@ func TestFireSelfMonitoringEventWithError_setsErrAndAttrs(t *testing.T) {
 			name:      "ConfigError sets missing attr",
 			err:       &installer.ConfigError{MissingFields: []string{"DT_ENVIRONMENT"}},
 			wantErr:   string(installer.ErrTypeConfigError),
-			wantAttrs: map[string]string{"missing": "DT_ENVIRONMENT"},
+			wantAttrs: map[string]string{"config.missing_fields": "DT_ENVIRONMENT"},
 		},
 		{
 			name:    "unknown error falls back to install_failed",

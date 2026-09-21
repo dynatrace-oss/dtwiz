@@ -2,6 +2,7 @@ package selfmonitoring
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 )
@@ -20,32 +21,26 @@ func ClassifyError(err error) (installer.ErrorType, map[string]string) {
 
 	var authErr *installer.AuthError
 	if errors.As(err, &authErr) {
-		return installer.ErrTypeAuthError, map[string]string{"reason": authErr.Reason}
+		return installer.ErrTypeAuthError, map[string]string{"auth.failure_reason": authErr.Reason}
 	}
 
 	var cfgErr *installer.ConfigError
 	if errors.As(err, &cfgErr) {
-		attrs := make(map[string]string, len(cfgErr.MissingFields))
-		for i, f := range cfgErr.MissingFields {
-			if i == 0 {
-				attrs["missing"] = f
-			} else {
-				attrs["missing"] += "," + f
-			}
+		return installer.ErrTypeConfigError, map[string]string{
+			"config.missing_fields": strings.Join(cfgErr.MissingFields, ","),
 		}
-		return installer.ErrTypeConfigError, attrs
 	}
 
 	var depErr *installer.DependencyMissingError
 	if errors.As(err, &depErr) {
-		return installer.ErrTypeDependencyMissing, map[string]string{"dependency": depErr.Name}
+		return installer.ErrTypeDependencyMissing, map[string]string{"dependency.name": depErr.Name}
 	}
 
 	var netErr *installer.NetworkError
 	if errors.As(err, &netErr) {
-		attrs := map[string]string{"reason": netErr.Reason}
+		attrs := map[string]string{"network.failure_reason": netErr.Reason}
 		if netErr.URL != "" {
-			attrs["url"] = netErr.URL
+			attrs["network.url"] = netErr.URL
 		}
 		return installer.ErrTypeNetworkError, attrs
 	}
@@ -56,7 +51,7 @@ func ClassifyError(err error) (installer.ErrorType, map[string]string) {
 
 	var installErr *installer.InstallFailedError
 	if errors.As(err, &installErr) {
-		return installer.ErrTypeInstallFailed, map[string]string{"step": installErr.Step}
+		return installer.ErrTypeInstallFailed, map[string]string{"install.step": installErr.Step}
 	}
 
 	return installer.ErrTypeInstallFailed, nil

@@ -8,6 +8,31 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 )
 
+// Classifier attributes are merged into the event body after the top-level properties, so an
+// unnamespaced key silently overwrites one. Namespacing every attribute keeps them distinct.
+func TestClassifyAttrsDoNotShadowBodyProperties(t *testing.T) {
+	reserved := buildEventProps(EventParams{
+		Cmd: "install", Sub: "oneagent", StepID: StepFailed, Mode: ModeTTY, Type: "x",
+	})
+
+	errs := []error{
+		&installer.AuthError{Reason: "invalid_token"},
+		&installer.ConfigError{MissingFields: []string{"DT_ENVIRONMENT"}},
+		&installer.DependencyMissingError{Name: "helm"},
+		&installer.NetworkError{Reason: "timeout", URL: "https://example.com"},
+		&installer.InstallFailedError{Step: "download"},
+	}
+
+	for _, err := range errs {
+		_, attrs := ClassifyError(err)
+		for k := range attrs {
+			if _, clash := reserved[k]; clash {
+				t.Errorf("%T attribute %q shadows a top-level body property", err, k)
+			}
+		}
+	}
+}
+
 func TestClassifyError(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -29,37 +54,37 @@ func TestClassifyError(t *testing.T) {
 			name:      "AuthError → auth_error with reason",
 			err:       &installer.AuthError{Reason: "authentication_failed"},
 			wantType:  installer.ErrTypeAuthError,
-			wantAttrs: map[string]string{"reason": "authentication_failed"},
+			wantAttrs: map[string]string{"auth.failure_reason": "authentication_failed"},
 		},
 		{
 			name:      "ConfigError single field → config_error",
 			err:       &installer.ConfigError{MissingFields: []string{"DT_ENVIRONMENT"}},
 			wantType:  installer.ErrTypeConfigError,
-			wantAttrs: map[string]string{"missing": "DT_ENVIRONMENT"},
+			wantAttrs: map[string]string{"config.missing_fields": "DT_ENVIRONMENT"},
 		},
 		{
 			name:      "ConfigError multiple fields → config_error comma-joined",
 			err:       &installer.ConfigError{MissingFields: []string{"DT_ENVIRONMENT", "DT_PLATFORM_TOKEN"}},
 			wantType:  installer.ErrTypeConfigError,
-			wantAttrs: map[string]string{"missing": "DT_ENVIRONMENT,DT_PLATFORM_TOKEN"},
+			wantAttrs: map[string]string{"config.missing_fields": "DT_ENVIRONMENT,DT_PLATFORM_TOKEN"},
 		},
 		{
 			name:      "DependencyMissingError → dependency_missing",
 			err:       &installer.DependencyMissingError{Name: "az"},
 			wantType:  installer.ErrTypeDependencyMissing,
-			wantAttrs: map[string]string{"dependency": "az"},
+			wantAttrs: map[string]string{"dependency.name": "az"},
 		},
 		{
 			name:      "NetworkError with URL → network_error with url attr",
 			err:       &installer.NetworkError{Reason: "environment_not_reachable", URL: "https://example.dynatracelabs.com"},
 			wantType:  installer.ErrTypeNetworkError,
-			wantAttrs: map[string]string{"reason": "environment_not_reachable", "url": "https://example.dynatracelabs.com"},
+			wantAttrs: map[string]string{"network.failure_reason": "environment_not_reachable", "network.url": "https://example.dynatracelabs.com"},
 		},
 		{
 			name:      "NetworkError without URL → network_error without url attr",
 			err:       &installer.NetworkError{Reason: "timeout"},
 			wantType:  installer.ErrTypeNetworkError,
-			wantAttrs: map[string]string{"reason": "timeout"},
+			wantAttrs: map[string]string{"network.failure_reason": "timeout"},
 		},
 		{
 			name:     "ErrPlatformUnsupported → platform_unsupported",
@@ -70,7 +95,7 @@ func TestClassifyError(t *testing.T) {
 			name:      "InstallFailedError → install_failed with step",
 			err:       &installer.InstallFailedError{Step: "download"},
 			wantType:  installer.ErrTypeInstallFailed,
-			wantAttrs: map[string]string{"step": "download"},
+			wantAttrs: map[string]string{"install.step": "download"},
 		},
 		{
 			name:     "unknown error → install_failed fallback",
@@ -81,7 +106,7 @@ func TestClassifyError(t *testing.T) {
 			name:      "wrapped AuthError is detected via errors.As",
 			err:       fmt.Errorf("context: %w", &installer.AuthError{Reason: "invalid_token"}),
 			wantType:  installer.ErrTypeAuthError,
-			wantAttrs: map[string]string{"reason": "invalid_token"},
+			wantAttrs: map[string]string{"auth.failure_reason": "invalid_token"},
 		},
 		{
 			name:     "ErrInstallCancelled wrapped → user_cancelled",
