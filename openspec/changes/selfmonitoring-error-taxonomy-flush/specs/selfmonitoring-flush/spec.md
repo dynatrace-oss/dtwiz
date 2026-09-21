@@ -2,75 +2,86 @@
 
 ## ADDED Requirements
 
-### Requirement: Self-monitoring events are flushed before process exit
+### Requirement: Self-monitoring events are delivered before process exit
 
-The system SHALL enqueue self-monitoring events and synchronously flush them before process exit, blocking for at most 200ms. This applies on every exit path: successful completion, error, user cancellation, and CTRL+C.
+The system SHALL wait for pending self-monitoring event deliveries to complete before the process
+exits, on every exit path: successful completion, error, user cancellation, and interruption. The
+wait SHALL be bounded so that it does not perceptibly delay the command, and SHALL be invisible to
+the user.
 
-#### Scenario: Events flushed after successful command
+#### Scenario: Events delivered after a successful command
 
 - **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and credentials are configured
 - **WHEN** a command completes successfully
-- **THEN** all pending self-monitoring events are sent before the process exits
-- **AND** the flush blocks for at most 200ms
+- **THEN** all pending events are delivered before the process exits
 - **AND** no flush status is shown to the user
 
-#### Scenario: Events flushed after command failure
+#### Scenario: Events delivered after a command failure
 
 - **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and credentials are configured
-- **WHEN** a command fails and returns a non-nil error
-- **THEN** all pending self-monitoring events (including the failure event) are sent before the process exits
-- **AND** the flush blocks for at most 200ms
+- **WHEN** a command fails
+- **THEN** all pending events, including the failure event, are delivered before the process exits
 
-#### Scenario: Events flushed after user cancellation
+#### Scenario: Events delivered after user cancellation
 
 - **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and credentials are configured
-- **WHEN** a command exits due to user cancellation (e.g. declining the Y/N confirmation)
-- **THEN** all pending self-monitoring events are sent before the process exits
+- **WHEN** a command exits because the user declined a confirmation prompt
+- **THEN** all pending events are delivered before the process exits
 
-#### Scenario: Flush timeout accepted silently
+#### Scenario: A fast-failing command still delivers its event
+
+- **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and the tenant URL is known
+- **WHEN** a command fails quickly enough that it would otherwise exit before delivery completes
+- **THEN** the event is still delivered
+
+#### Scenario: Exceeding the wait is accepted silently
 
 - **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled
-- **WHEN** the pending events cannot be sent within 200ms (e.g. slow network)
-- **THEN** the process exits immediately after 200ms
+- **WHEN** pending events cannot be delivered within the bounded wait
+- **THEN** the process exits without further delay
 - **AND** no error or warning is shown to the user
-- **AND** any unsent events are accepted as lost
+- **AND** the undelivered events are accepted as lost
 
-#### Scenario: Flush with no pending events is a no-op
+#### Scenario: Nothing pending causes no delay
 
-- **GIVEN** `DTWIZ_SELF_MONITORING_POC` is disabled or no events were enqueued
-- **WHEN** the flush runs at process exit
-- **THEN** the process exits immediately with no delay
+- **GIVEN** no events are pending
+- **WHEN** the process exits
+- **THEN** it exits with no added delay
 
-#### Scenario: Feature flag disabled — no events enqueued
+#### Scenario: Feature flag disabled
 
 - **GIVEN** `DTWIZ_SELF_MONITORING_POC` is not enabled
 - **WHEN** any dtwiz command runs
-- **THEN** no events are enqueued and no flush HTTP call is made
+- **THEN** no events are produced and no network call is made
 
-### Requirement: Credentials are resolved at enqueue time
+### Requirement: Events are delivered when they occur
 
-The system SHALL resolve Dynatrace credentials when an event is enqueued, not at flush time. If credentials cannot be resolved at enqueue time, the event is silently discarded.
+The system SHALL deliver each event at the point it is produced rather than batching events for
+delivery at exit, so that each event's ingestion time reflects when its step actually happened.
 
-#### Scenario: Credentials resolved successfully at enqueue time
+#### Scenario: Two events from one invocation have distinct ingestion times
 
-- **GIVEN** `DT_ENVIRONMENT` and `DT_PLATFORM_TOKEN` are set
-- **WHEN** `fireSelfMonitoringEvent` is called
-- **THEN** credentials are resolved immediately and the event is added to the pending queue
+- **GIVEN** a command produces an invocation event and later a terminal event
+- **WHEN** both are delivered
+- **THEN** their ingestion times differ and preserve the order in which the steps occurred
+- **AND** the elapsed time between the steps can be derived from them
 
-#### Scenario: Missing credentials at enqueue time
+### Requirement: An event is discarded only when the tenant is unknown
 
-- **GIVEN** `DT_ENVIRONMENT` is not set
-- **WHEN** `fireSelfMonitoringEvent` is called
-- **THEN** the event is silently discarded and does not enter the queue
+The system SHALL attempt delivery whenever the tenant URL is known, including when the token is
+missing or invalid, because a rejected request is still recorded by the tenant. An event SHALL be
+discarded only when no tenant URL is configured, as there is no destination.
+
+#### Scenario: Token is missing or rejected
+
+- **GIVEN** a tenant URL is configured but the token is missing or invalid
+- **WHEN** an event is produced
+- **THEN** delivery is still attempted
+- **AND** the resulting rejection is not shown to the user
+
+#### Scenario: Tenant URL is unknown
+
+- **GIVEN** no tenant URL is configured
+- **WHEN** an event is produced
+- **THEN** the event is discarded and no delivery is attempted
 - **AND** no error is shown to the user
-
-### Requirement: Flush sends all pending events concurrently
-
-When flushing, the system SHALL send all pending events concurrently rather than sequentially, so that multiple events from a single invocation do not compound the flush latency.
-
-#### Scenario: Multiple events flushed concurrently
-
-- **GIVEN** two or more events are pending (e.g. `st=inv` and `st=fai`)
-- **WHEN** flush runs
-- **THEN** all events are dispatched concurrently
-- **AND** the total flush time is bounded by the slowest single event, not the sum of all events

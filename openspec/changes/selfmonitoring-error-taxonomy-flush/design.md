@@ -12,7 +12,7 @@ Errors throughout the codebase are opaque `fmt.Errorf` strings. There are no typ
 
 **Goals:**
 
-- Enqueue self-monitoring events synchronously and flush them (≤200ms) before process exit on every code path.
+- Wait for in-flight self-monitoring sends (≤500ms) before process exit on every code path.
 - Classify every command failure into a structured `ErrorType` and extract additional attributes where specified by the taxonomy.
 - Fire a terminal event (`StepFailed` or `StepCancelled`) at every `RunE` return point across all command handlers.
 - Replace opaque error strings in auth validation, dependency checks, and platform-unsupported guards with typed errors that carry machine-readable fields.
@@ -100,5 +100,5 @@ Auth, config, platform-unsupported, and dependency-missing errors replace opaque
 - `config_error` with missing `DT_ENVIRONMENT` is always lost — no destination URL. This is a known limitation with no workaround.
 - `auth_error` events are still sent, but the Events v2 call itself fails: the same invalid or rejected token is used to deliver the self-monitoring event to the same tenant. The event is nonetheless observable, because the request reaches the tenant's HAProxy and its `User-Agent` capture records the attempt. Only the tenant URL is required to send; a missing or rejected token never suppresses the attempt.
 - Credential resolution moves to the call path of `fireSelfMonitoringEvent`. `getDtEnvironment()` reads env vars and flags only — no I/O — so the performance cost is negligible.
-- The 200ms flush cap is imperceptible at the end of commands that take seconds. For fast commands (version, help), the extra wait is at most the HTTP RTT to the tenant, which typically completes well within the cap.
+- The 500ms flush cap is imperceptible at the end of commands that take seconds. For fast commands (version, help), the extra wait is at most the HTTP RTT to the tenant, which typically completes well within the cap.
 - Wrapping dependency-missing errors preserves existing human-readable messages in `Error()`, so display output and test assertions against those messages are unaffected.
