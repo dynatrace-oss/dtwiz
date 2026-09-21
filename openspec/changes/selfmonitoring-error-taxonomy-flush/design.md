@@ -98,7 +98,7 @@ Auth, config, platform-unsupported, and dependency-missing errors replace opaque
 ## Risks / Trade-offs
 
 - `config_error` with missing `DT_ENVIRONMENT` is always lost — no destination URL. This is a known limitation with no workaround.
-- `auth_error` events are classified correctly but cannot be successfully ingested — the same invalid or rejected token is used to deliver the self-monitoring event to the same tenant, so the Events v2 call will also fail. The classification is verifiable as a unit test but not observable end-to-end.
+- `auth_error` events are still sent, but the Events v2 call itself fails: the same invalid or rejected token is used to deliver the self-monitoring event to the same tenant. The event is nonetheless observable, because the request reaches the tenant's HAProxy and its `User-Agent` capture records the attempt. Only the tenant URL is required to send; a missing or rejected token never suppresses the attempt.
 - Credential resolution moves to the call path of `fireSelfMonitoringEvent`. `getDtEnvironment()` reads env vars and flags only — no I/O — so the performance cost is negligible.
 - The 200ms flush cap is imperceptible at the end of commands that take seconds. For fast commands (version, help), the extra wait is at most the HTTP RTT to the tenant, which typically completes well within the cap.
 - Wrapping dependency-missing errors preserves existing human-readable messages in `Error()`, so display output and test assertions against those messages are unaffected.

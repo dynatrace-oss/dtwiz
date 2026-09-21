@@ -26,12 +26,16 @@ var eventSink = func(params selfmonitoring.EventParams) {
 	selfmonitoring.TrackSend()
 	go func() {
 		defer selfmonitoring.SendDone()
-		envURL, _, platformTok, err := getDtEnvironment()
-		if err != nil {
-			logger.Debug(fmt.Sprintf("selfmonitoring: could not resolve credentials: %v", err))
+		// Only a missing tenant URL is fatal: there is nowhere to send. A missing or
+		// rejected token is still worth attempting, because the request reaches the
+		// tenant's HAProxy and its User-Agent capture records the attempt even when
+		// the API rejects it — which is exactly how auth failures become visible.
+		envURL := environmentHint()
+		if envURL == "" {
+			logger.Debug("selfmonitoring: no environment URL configured, dropping event")
 			return
 		}
-		if err := selfmonitoring.SendEvent(installer.APIURL(envURL), platformTok, params); err != nil {
+		if err := selfmonitoring.SendEvent(installer.APIURL(envURL), platformToken(), params); err != nil {
 			logger.Debug(fmt.Sprintf("selfmonitoring: %v", err))
 		}
 	}()

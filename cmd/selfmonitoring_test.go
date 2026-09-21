@@ -2,7 +2,11 @@ package cmd
 
 import (
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
@@ -65,4 +69,61 @@ func TestFireSelfMonitoringEventWithError_setsErrAndAttrs(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A missing or rejected token must not stop the event: the request still reaches the
+// tenant's HAProxy, whose User-Agent capture is what makes auth failures observable.
+// Only an unknown tenant URL is fatal, because there is no destination.
+func TestEventSink_sendsEvenWithoutToken(t *testing.T) {
+	type capture struct {
+		auth string
+		ua   string
+	}
+	got := make(chan capture, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got <- capture{auth: r.Header.Get("Authorization"), ua: r.Header.Get("User-Agent")}
+		w.WriteHeader(http.StatusUnauthorized) // tenant rejects the missing token
+	}))
+	defer srv.Close()
+
+	withCleanCredentialFlags(t)
+	t.Setenv("DTWIZ_SELF_MONITORING_POC", "true")
+	t.Setenv("DT_ENVIRONMENT", srv.URL)
+	t.Setenv("DT_PLATFORM_TOKEN", "")
+
+	eventSink(selfmonitoring.EventParams{
+		Cmd:    "install",
+		StepID: selfmonitoring.StepFailed,
+		Err:    string(installer.ErrTypeAuthError),
+	})
+	selfmonitoring.Flush(5 * time.Second)
+
+	select {
+	case c := <-got:
+		if !strings.Contains(c.ua, "er=aut") {
+			t.Errorf("User-Agent = %q, want it to carry er=aut", c.ua)
+		}
+	default:
+		t.Fatal("event was dropped, but the tenant URL was known — the attempt should have been sent")
+	}
+}
+
+func TestEventSink_dropsEventWhenTenantUnknown(t *testing.T) {
+	withCleanCredentialFlags(t)
+	t.Setenv("DTWIZ_SELF_MONITORING_POC", "true")
+	t.Setenv("DT_ENVIRONMENT", "")
+	t.Setenv("DT_PLATFORM_TOKEN", "dt0s16.doesnotmatter")
+
+	// Nothing to assert beyond "does not panic and does not hang": with no URL there is
+	// no destination, so the event is intentionally discarded.
+	eventSink(selfmonitoring.EventParams{Cmd: "install", StepID: selfmonitoring.StepFailed})
+	selfmonitoring.Flush(5 * time.Second)
+}
+
+// withCleanCredentialFlags clears the CLI flag vars so env vars are the only source.
+func withCleanCredentialFlags(t *testing.T) {
+	t.Helper()
+	origEnv, origTok := environmentFlag, platformTokenFlag
+	environmentFlag, platformTokenFlag = "", ""
+	t.Cleanup(func() { environmentFlag, platformTokenFlag = origEnv, origTok })
 }
