@@ -12,7 +12,7 @@ Errors throughout the codebase are opaque `fmt.Errorf` strings. There are no typ
 
 **Goals:**
 
-- Enqueue self-monitoring events synchronously and flush them (≤200ms) before process exit on every code path.
+- Wait for in-flight self-monitoring sends (≤500ms) before process exit on every code path.
 - Classify every command failure into a structured `ErrorType` and extract additional attributes where specified by the taxonomy.
 - Fire a terminal event (`StepFailed` or `StepCancelled`) at every `RunE` return point across all command handlers.
 - Replace opaque error strings in auth validation, dependency checks, and platform-unsupported guards with typed errors that carry machine-readable fields.
@@ -62,6 +62,25 @@ The taxonomy categories, their additional attributes, and the conditions under w
 
 Classification priority (first match wins): `user_cancelled` → `auth_error` → `config_error` → `dependency_missing` → `network_error` → `platform_unsupported` → `install_failed` → fallback `install_failed`. The fallback ensures every error produces a taxonomy value, even unrecognised ones.
 
+### Error values are abbreviated in the User-Agent, full in the event body
+
+The `User-Agent` is capped at 64 characters by the HAProxy capture limit, and that budget has to absorb fields added later. The longest taxonomy value, `platform_unsupported`, spends 20 of those characters on its own. Each value therefore gets a 3-character code in the header:
+
+| Body `error` | `er=` |
+|---|---|
+| `user_cancelled` | `ucl` |
+| `auth_error` | `aut` |
+| `config_error` | `cfg` |
+| `dependency_missing` | `dep` |
+| `network_error` | `net` |
+| `install_failed` | `ifl` |
+| `platform_unsupported` | `plt` |
+
+The body keeps the full value, which makes it the stable query surface: the header encoding can be shortened or re-keyed later to free budget without any dashboard query changing. This only holds while every header field is also present in the body, so `type` was added to the body alongside the fields already mirrored there.
+
+- Alternative considered: abbreviate in both places. Discarded — it saves nothing (the body has no size limit) and forces queries to decode codes.
+- Alternative considered: leave the header unabbreviated. Discarded — worst case reaches 74 characters with a snapshot version string, over the capture limit.
+
 ### Two new terminal step values: `StepFailed` and `StepCancelled`
 
 `StepFailed` is the terminal stage for all errors. `StepCancelled` is used exclusively when the user declines a confirmation prompt or selects `0` at the recommendation menu. With these two additions, the dashboard can determine outcome from the step value alone, without inspecting the error field.
@@ -79,7 +98,7 @@ Auth, config, platform-unsupported, and dependency-missing errors replace opaque
 ## Risks / Trade-offs
 
 - `config_error` with missing `DT_ENVIRONMENT` is always lost — no destination URL. This is a known limitation with no workaround.
-- `auth_error` events are classified correctly but cannot be successfully ingested — the same invalid or rejected token is used to deliver the self-monitoring event to the same tenant, so the Events v2 call will also fail. The classification is verifiable as a unit test but not observable end-to-end.
+- `auth_error` events are still sent, but the Events v2 call itself fails: the same invalid or rejected token is used to deliver the self-monitoring event to the same tenant. The event is nonetheless observable, because the request reaches the tenant's HAProxy and its `User-Agent` capture records the attempt. Only the tenant URL is required to send; a missing or rejected token never suppresses the attempt.
 - Credential resolution moves to the call path of `fireSelfMonitoringEvent`. `getDtEnvironment()` reads env vars and flags only — no I/O — so the performance cost is negligible.
-- The 200ms flush cap is imperceptible at the end of commands that take seconds. For fast commands (version, help), the extra wait is at most the HTTP RTT to the tenant, which typically completes well within the cap.
+- The 500ms flush cap is imperceptible at the end of commands that take seconds. For fast commands (version, help), the extra wait is at most the HTTP RTT to the tenant, which typically completes well within the cap.
 - Wrapping dependency-missing errors preserves existing human-readable messages in `Error()`, so display output and test assertions against those messages are unaffected.

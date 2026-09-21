@@ -17,20 +17,46 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 )
 
-func fireSelfMonitoringEvent(params selfmonitoring.EventParams) {
+// eventSink is the function that handles a fully-built EventParams.
+// Replaced in tests to capture params without firing a real HTTP request.
+var eventSink = func(params selfmonitoring.EventParams) {
 	if !featureflags.IsEnabled(featureflags.SelfMonitoringPoC) {
 		return
 	}
+	selfmonitoring.TrackSend()
 	go func() {
-		envURL, _, platformTok, err := getDtEnvironment()
-		if err != nil {
-			logger.Debug(fmt.Sprintf("selfmonitoring: could not resolve credentials: %v", err))
+		defer selfmonitoring.SendDone()
+		// Only a missing tenant URL is fatal: there is nowhere to send. A missing or
+		// rejected token is still worth attempting, because the request reaches the
+		// tenant's HAProxy and its User-Agent capture records the attempt even when
+		// the API rejects it — which is exactly how auth failures become visible.
+		envURL := environmentHint()
+		if envURL == "" {
+			logger.Debug("selfmonitoring: no environment URL configured, dropping event")
 			return
 		}
-		if err := selfmonitoring.SendEvent(installer.APIURL(envURL), platformTok, params); err != nil {
+		if err := selfmonitoring.SendEvent(installer.APIURL(envURL), platformToken(), params); err != nil {
 			logger.Debug(fmt.Sprintf("selfmonitoring: %v", err))
 		}
 	}()
+}
+
+func fireSelfMonitoringEvent(params selfmonitoring.EventParams) {
+	eventSink(params)
+}
+
+func fireSelfMonitoringEventWithError(params selfmonitoring.EventParams, err error) {
+	errType, attrs := selfmonitoring.ClassifyError(err)
+	params.Err = string(errType)
+	if len(attrs) > 0 {
+		if params.ExtraProps == nil {
+			params.ExtraProps = make(map[string]string, len(attrs))
+		}
+		for k, v := range attrs {
+			params.ExtraProps[k] = v
+		}
+	}
+	fireSelfMonitoringEvent(params)
 }
 
 func buildEventParams(cmd *cobra.Command, stepID string) selfmonitoring.EventParams {
@@ -156,7 +182,14 @@ func fireSetupInstallEvent(cmd *cobra.Command, sub string, err error) {
 	p := buildEventParams(cmd, selfmonitoring.StepInstall)
 	p.Sub = sub
 	if err != nil {
-		p.Err = "err"
+		errType, attrs := selfmonitoring.ClassifyError(err)
+		p.Err = string(errType)
+		if len(attrs) > 0 {
+			p.ExtraProps = make(map[string]string, len(attrs))
+			for k, v := range attrs {
+				p.ExtraProps[k] = v
+			}
+		}
 	}
 	fireSelfMonitoringEvent(p)
 }

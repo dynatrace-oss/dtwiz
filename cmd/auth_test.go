@@ -44,12 +44,8 @@ func TestCheckPlatformToken(t *testing.T) {
 				t.Errorf("checkPlatformToken() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if tt.wantContain != "" && err != nil {
-				if tt.statusCode == http.StatusInternalServerError {
-					if !strings.Contains(err.Error(), tt.wantContain) {
-						t.Errorf("checkPlatformToken() error = %q, want it to contain %q", err.Error(), tt.wantContain)
-					}
-				} else if err.Error() != tt.wantContain {
-					t.Errorf("checkPlatformToken() error = %q, want %q", err.Error(), tt.wantContain)
+				if !strings.Contains(err.Error(), tt.wantContain) {
+					t.Errorf("checkPlatformToken() error = %q, want it to contain %q", err.Error(), tt.wantContain)
 				}
 			}
 		})
@@ -93,12 +89,8 @@ func TestCheckAccessToken(t *testing.T) {
 				t.Errorf("checkAccessToken() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if tt.wantContain != "" && err != nil {
-				if tt.statusCode == http.StatusInternalServerError {
-					if !strings.Contains(err.Error(), tt.wantContain) {
-						t.Errorf("checkAccessToken() error = %q, want it to contain %q", err.Error(), tt.wantContain)
-					}
-				} else if err.Error() != tt.wantContain {
-					t.Errorf("checkAccessToken() error = %q, want %q", err.Error(), tt.wantContain)
+				if !strings.Contains(err.Error(), tt.wantContain) {
+					t.Errorf("checkAccessToken() error = %q, want it to contain %q", err.Error(), tt.wantContain)
 				}
 			}
 		})

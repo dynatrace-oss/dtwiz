@@ -546,10 +546,10 @@ func launchEntrypoint(svcName, projectPath, entrypoint string, cmd *exec.Cmd) *M
 
 func InstallOtelNode(envURL, token, platformToken, serviceName, projectPath string, dryRun bool) error {
 	if _, err := exec.LookPath("node"); err != nil {
-		return fmt.Errorf("node not found — install Node.js and ensure it is in PATH")
+		return fmt.Errorf("node not found — install Node.js and ensure it is in PATH: %w", &installer.DependencyMissingError{Name: "node"})
 	}
 	if _, err := exec.LookPath("npm"); err != nil {
-		return fmt.Errorf("npm not found — install npm and ensure it is in PATH")
+		return fmt.Errorf("npm not found — install npm and ensure it is in PATH: %w", &installer.DependencyMissingError{Name: "npm"})
 	}
 
 	collectorEndpoint := fmt.Sprintf("http://127.0.0.1:%d", otlpHTTPPortFromConfig(findExistingCollectorConfig()))

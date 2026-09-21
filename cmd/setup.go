@@ -19,6 +19,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
 	"github.com/dynatrace-oss/dtwiz/pkg/recommender"
+	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 )
 
 var setupDryRun bool
@@ -55,6 +56,7 @@ var setupCmd = &cobra.Command{
 		info, err := analyzeSystem()
 		fireSetupAnalyzeEvent(cmd, err)
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return fmt.Errorf("analysis failed: %w", err)
 		}
 
@@ -80,12 +82,14 @@ var setupCmd = &cobra.Command{
 		reader := bufio.NewReader(cmd.InOrStdin())
 		input, err := reader.ReadString('\n')
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return fmt.Errorf("failed to read input: %w", err)
 		}
 		input = strings.TrimSpace(input)
 
 		if input == "" || input == "0" {
 			display.ColorDefault.Println("  Setup cancelled.")
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), installer.ErrInstallCancelled)
 			return nil
 		}
 
@@ -102,10 +106,12 @@ var setupCmd = &cobra.Command{
 
 			envURL, accessTok, platformTok, err := getDtEnvironment()
 			if err != nil {
+				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 				return err
 			}
 			classicTok, err := validateCredentials(envURL, accessTok, platformTok)
 			if err != nil {
+				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 				return err
 			}
 
@@ -114,10 +120,13 @@ var setupCmd = &cobra.Command{
 			fireSetupInstallEvent(cmd, "demo", demoInstErr)
 			if demoInstErr != nil {
 				if errors.Is(demoInstErr, installer.ErrInstallCancelled) {
+					fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), demoInstErr)
 					return nil
 				}
+				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), demoInstErr)
 				return demoInstErr
 			}
+			fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
 			if !setupDryRun {
 				installer.WatchIngestWithEvent(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), buildWatchEventCallback(cmd))
 			}
@@ -126,6 +135,7 @@ var setupCmd = &cobra.Command{
 
 		choice, err := strconv.Atoi(input)
 		if err != nil || choice < 1 || choice > len(actionable) {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), fmt.Errorf("invalid selection: %q", input))
 			return fmt.Errorf("invalid selection: %q", input)
 		}
 
@@ -136,10 +146,12 @@ var setupCmd = &cobra.Command{
 
 		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		classicTok, err := validateCredentials(envURL, accessTok, platformTok)
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 
@@ -151,6 +163,7 @@ var setupCmd = &cobra.Command{
 
 		c, err := setupClientFromCreds(envURL, classicTok, platformTok)
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 
@@ -192,10 +205,13 @@ var setupCmd = &cobra.Command{
 		fireSetupInstallEvent(cmd, string(selected.Method), installErr)
 		if installErr != nil {
 			if errors.Is(installErr, installer.ErrInstallCancelled) || errors.Is(installErr, otel.ErrUpToDate) {
+				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), installErr)
 				return nil
 			}
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), installErr)
 			return installErr
 		}
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
 		if setupDryRun {
 			return nil
 		}

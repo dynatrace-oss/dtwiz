@@ -15,6 +15,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/oneagent"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
+	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 )
 
 var uninstallDryRun bool
@@ -42,7 +43,16 @@ var uninstallKubernetesCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		k8sInfo := analyzer.DetectKubernetesIdentity()
-		return k8s.UninstallKubernetes(k8sInfo.Context, k8sInfo.Distribution, uninstallDryRun)
+		if err := k8s.UninstallKubernetes(k8sInfo.Context, k8sInfo.Distribution, uninstallDryRun); err != nil {
+			if errors.Is(err, installer.ErrInstallCancelled) {
+				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), err)
+				return nil
+			}
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
+			return err
+		}
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
+		return nil
 	},
 }
 
@@ -53,9 +63,15 @@ var uninstallOneAgentCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		err := oneagent.UninstallOneAgentV2(oneagent.UninstallOptions{DryRun: uninstallDryRun})
 		if errors.Is(err, installer.ErrInstallCancelled) {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), err)
 			return nil
 		}
-		return err
+		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
+			return err
+		}
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
+		return nil
 	},
 }
 
@@ -66,17 +82,22 @@ var uninstallAWSCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		envURL, _, platformTok, err := getDtEnvironment()
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		if _, err := validateCredentials(envURL, "", platformTok); err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		if err := awspkg.UninstallAWS(envURL, platformTok, uninstallDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
+				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), err)
 				return nil
 			}
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
 		return nil
 	},
 }
@@ -88,11 +109,14 @@ var uninstallAWSLambdaCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := installer.UninstallAWSLambda(uninstallDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
+				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), err)
 				return nil
 			}
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
-		return nil // success path
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
+		return nil
 	},
 }
 
@@ -103,14 +127,18 @@ var uninstallOtelCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		envURL, _, platformTok, err := getDtEnvironment()
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		if err := otel.UninstallOtelCollector(envURL, platformTok, uninstallDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
+				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), err)
 				return nil
 			}
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
 		return nil
 	},
 }
@@ -122,14 +150,18 @@ var uninstallAzureCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		envURL, _, platformTok, err := getDtEnvironment()
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		if err := azure.UninstallAzure(envURL, platformTok, uninstallDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
+				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), err)
 				return nil
 			}
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
 		return nil
 	},
 }
@@ -141,14 +173,18 @@ var uninstallGCPCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		envURL, _, platformTok, err := getDtEnvironment()
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
 		if err := gcp.UninstallGCP(envURL, platformTok, uninstallDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
+				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), err)
 				return nil
 			}
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
 		return nil
 	},
 }

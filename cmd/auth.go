@@ -47,20 +47,31 @@ func platformToken() string {
 // platformTok is required. accessTok may be empty when not configured.
 func getDtEnvironment() (envURL, accessTok, platformTok string, err error) {
 	envURL = environmentHint()
+	platformTok = platformToken()
+
+	var missing []string
+	if envURL == "" {
+		missing = append(missing, "DT_ENVIRONMENT")
+	}
+	if platformTok == "" {
+		missing = append(missing, "DT_PLATFORM_TOKEN")
+	}
+
 	if envURL == "" {
 		return "", "", "", fmt.Errorf(
-			"no Dynatrace environment URL configured\n\n" +
-				"Set one with --environment or the DT_ENVIRONMENT env var:\n" +
-				"  export DT_ENVIRONMENT=https://<your-env>.dynatracelabs.com/",
+			"no Dynatrace environment URL configured\n\n"+
+				"Set one with --environment or the DT_ENVIRONMENT env var:\n"+
+				"  export DT_ENVIRONMENT=https://<your-env>.dynatracelabs.com/: %w",
+			&installer.ConfigError{MissingFields: missing},
 		)
 	}
 
-	platformTok = platformToken()
 	if platformTok == "" {
 		return "", "", "", fmt.Errorf(
-			"no Dynatrace platform token configured\n\n" +
-				"Set one with --platform-token or the DT_PLATFORM_TOKEN env var:\n" +
-				"  export DT_PLATFORM_TOKEN=dt0s16.****",
+			"no Dynatrace platform token configured\n\n"+
+				"Set one with --platform-token or the DT_PLATFORM_TOKEN env var:\n"+
+				"  export DT_PLATFORM_TOKEN=dt0s16.****: %w",
+			&installer.ConfigError{MissingFields: missing},
 		)
 	}
 
@@ -130,13 +141,15 @@ func checkAccessToken(envURL, token string) error {
 
 	resp, err := credentialHTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("✗ Access token: environment not reachable (%s)", classicURL)
+		return fmt.Errorf("✗ Access token: environment not reachable (%s): %w",
+			classicURL, &installer.NetworkError{Reason: "environment_not_reachable", URL: classicURL})
 	}
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, resp.Body)
 
 	if resp.StatusCode == 401 {
-		return fmt.Errorf("✗ Access token: authentication failed")
+		return fmt.Errorf("✗ Access token: authentication failed: %w",
+			&installer.AuthError{Reason: "authentication_failed"})
 	}
 	if resp.StatusCode == 403 {
 		return fmt.Errorf("✗ Access token: insufficient permissions")
@@ -198,19 +211,23 @@ func checkPlatformToken(envURL, token string) error {
 
 	resp, err := credentialHTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("✗ Platform token: environment not reachable (%s)", appsURL)
+		return fmt.Errorf("✗ Platform token: environment not reachable (%s): %w",
+			appsURL, &installer.NetworkError{Reason: "environment_not_reachable", URL: appsURL})
 	}
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, resp.Body)
 
 	if resp.StatusCode == 401 {
-		return fmt.Errorf("✗ Platform token: authentication failed")
+		return fmt.Errorf("✗ Platform token: authentication failed: %w",
+			&installer.AuthError{Reason: "authentication_failed"})
 	}
 	if resp.StatusCode == 403 {
-		return fmt.Errorf("✗ Platform token: insufficient permissions")
+		return fmt.Errorf("✗ Platform token: insufficient permissions: %w",
+			&installer.AuthError{Reason: "invalid_token"})
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("✗ Platform token: unexpected response %d from %s", resp.StatusCode, queryURL)
+		return fmt.Errorf("✗ Platform token: unexpected response %d from %s: %w",
+			resp.StatusCode, queryURL, &installer.NetworkError{Reason: "environment_not_reachable", URL: appsURL})
 	}
 	return nil
 }

@@ -59,7 +59,7 @@ func installHelmWindows() error {
 		"  or download from https://helm.sh/docs/intro/install/"
 
 	if _, err := exec.LookPath("winget"); err != nil {
-		return fmt.Errorf("helm is not installed and winget was not found on PATH%s", manualInstructions)
+		return fmt.Errorf("helm is not installed and winget was not found on PATH%s: %w", manualInstructions, &installer.DependencyMissingError{Name: "winget"})
 	}
 
 	fmt.Println("  Helm not found — installing via winget...")

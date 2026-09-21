@@ -14,6 +14,7 @@ import (
 	"github.com/go-resty/resty/v2"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -42,7 +43,7 @@ func VerifyInstallerSignature(env Environment, installerPath string, skip bool) 
 	opensslPath, err := exec.LookPath("openssl")
 	logger.Debug("openssl lookup", "path", opensslPath, "found", err == nil)
 	if err != nil {
-		return errors.New(openSSLMissingError) //nolint:staticcheck // ST1005: exact wording is required by spec (user-facing remediation hint)
+		return fmt.Errorf("%s: %w", openSSLMissingError, &installer.DependencyMissingError{Name: "openssl"}) //nolint:staticcheck // ST1005: exact wording is required by spec (user-facing remediation hint)
 	}
 
 	display.PrintPending("signature", "fetching root CA...")
