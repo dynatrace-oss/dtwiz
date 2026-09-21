@@ -3,6 +3,9 @@ package selfmonitoring
 import (
 	"strings"
 	"testing"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/version"
 )
 
 func TestBuildUserAgent(t *testing.T) {
@@ -261,6 +264,134 @@ func TestStepConstants(t *testing.T) {
 	}
 	if StepInstall != "ist" {
 		t.Errorf("StepInstall = %q, want %q", StepInstall, "ist")
+	}
+}
+
+// Every step constant must map to a full name, otherwise SendEvent falls back to the
+// shortcode and the event body carries e.g. "can" instead of "cancelled".
+func TestStepFullNames(t *testing.T) {
+	want := map[string]string{
+		StepInvoked:   "invoked",
+		StepAnalyze:   "analyze",
+		StepRecommend: "recommend",
+		StepInstall:   "install",
+		StepCompleted: "completed",
+		StepFailed:    "failed",
+		StepCancelled: "cancelled",
+	}
+
+	for code, name := range want {
+		if got := stepFullNames[code]; got != name {
+			t.Errorf("stepFullNames[%q] = %q, want %q", code, got, name)
+		}
+	}
+	if len(stepFullNames) != len(want) {
+		t.Errorf("stepFullNames has %d entries, want %d — a step constant is missing a full name", len(stepFullNames), len(want))
+	}
+}
+
+// Every taxonomy value must have a short code, otherwise it lands in the User-Agent at
+// full length and risks blowing the 64-char capture limit.
+func TestShortErr(t *testing.T) {
+	want := map[installer.ErrorType]string{
+		installer.ErrTypeUserCancelled:       "ucl",
+		installer.ErrTypeAuthError:           "aut",
+		installer.ErrTypeConfigError:         "cfg",
+		installer.ErrTypeDependencyMissing:   "dep",
+		installer.ErrTypeNetworkError:        "net",
+		installer.ErrTypeInstallFailed:       "ifl",
+		installer.ErrTypePlatformUnsupported: "plt",
+	}
+
+	for errType, code := range want {
+		if got := shortErr(string(errType)); got != code {
+			t.Errorf("shortErr(%q) = %q, want %q", errType, got, code)
+		}
+	}
+	if len(errShortMap) != len(want) {
+		t.Errorf("errShortMap has %d entries, want %d — an ErrorType is missing a short code", len(errShortMap), len(want))
+	}
+	// Unknown values pass through unchanged.
+	if got := shortErr("something_else"); got != "something_else" {
+		t.Errorf("shortErr passthrough = %q, want %q", got, "something_else")
+	}
+}
+
+// The User-Agent is truncated by HAProxy at 64 chars, so the worst-case combination of
+// version, command, subcommand, and error must still fit. Release versions are short
+// ("1.8.1"), but goreleaser snapshots and preview builds append suffixes, so the budget
+// below is deliberately generous — without abbreviating the error this test fails.
+func TestBuildUserAgentWithinCaptureLimit(t *testing.T) {
+	const (
+		limit            = 64
+		maxVersionLength = 24
+	)
+
+	origVersion := version.Version
+	defer func() { version.Version = origVersion }()
+	version.Version = strings.Repeat("v", maxVersionLength)
+
+	longestCmd := longestKey(cmdShortMap)
+	longestSub := longestKey(subShortMap)
+
+	for errType := range errShortMap {
+		ua := buildUserAgent(EventParams{
+			Cmd:    longestCmd,
+			Sub:    longestSub,
+			StepID: StepFailed,
+			Err:    errType,
+		})
+		if len(ua) > limit {
+			t.Errorf("User-Agent %q is %d chars, exceeds %d-char limit", ua, len(ua), limit)
+		}
+	}
+}
+
+// longestKey returns the key whose abbreviated value is longest, breaking ties by key length.
+func longestKey(m map[string]string) string {
+	var best string
+	for k, v := range m {
+		switch {
+		case len(v) > len(m[best]):
+			best = k
+		case len(v) == len(m[best]) && len(k) > len(best):
+			best = k
+		}
+	}
+	return best
+}
+
+// Queries read the event body, so every field encoded in the abbreviated User-Agent must
+// also appear in the body at full length. That invariant is what lets the header encoding
+// change freely without any query being updated.
+func TestEventBodyCarriesFullNamesForAllHeaderFields(t *testing.T) {
+	params := EventParams{
+		Cmd:    "uninstall",
+		Sub:    "otel-collector",
+		StepID: StepCancelled,
+		Mode:   ModeTTY,
+		Err:    string(installer.ErrTypePlatformUnsupported),
+		Type:   "retry",
+	}
+
+	props := buildEventProps(params)
+	ua := buildUserAgent(params)
+
+	want := map[string]string{
+		"command":    "uninstall",
+		"subcommand": "otel-collector",
+		"step":       "cancelled",
+		"error":      "platform_unsupported",
+		"type":       "retry",
+	}
+	for k, v := range want {
+		if props[k] != v {
+			t.Errorf("body[%q] = %q, want full name %q", k, props[k], v)
+		}
+		// The whole point: the header is abbreviated, the body is not.
+		if k != "type" && strings.Contains(ua, v) {
+			t.Errorf("User-Agent %q carries full-length %q; it should be abbreviated", ua, v)
+		}
 	}
 }
 

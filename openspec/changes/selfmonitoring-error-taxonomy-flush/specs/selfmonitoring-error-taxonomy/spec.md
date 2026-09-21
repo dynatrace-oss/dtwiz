@@ -11,14 +11,15 @@ The system SHALL emit exactly one terminal self-monitoring event per command inv
 - **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and credentials are configured
 - **WHEN** a command's `RunE` returns a non-nil error (other than `ErrInstallCancelled`)
 - **THEN** one `st=fai` event is enqueued before the error is returned
-- **AND** the event carries the classified `error.type` in the `er=` User-Agent field and `error` body property
+- **AND** the event body carries the full classified `error.type` in the `error` property
+- **AND** the `er=` User-Agent field carries the abbreviated code for that type
 
 #### Scenario: Command is cancelled by the user
 
 - **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and credentials are configured
 - **WHEN** the user declines a Y/N confirmation prompt or selects `0` at the recommendation menu
 - **THEN** one `st=can` event is enqueued before the command returns nil
-- **AND** the event carries `er=user_cancelled`
+- **AND** the event body carries `error: "user_cancelled"`
 
 #### Scenario: Command completes successfully
 
@@ -81,6 +82,19 @@ The system SHALL classify errors in a fixed priority order so that a single erro
 - **THEN** the most specific matching type in the priority order is used
 - **AND** only one `error.type` is present in the event
 
+### Requirement: The event body is the query surface
+
+The event body SHALL carry the full, unabbreviated value of every field it reports, and every
+field encoded in the `User-Agent` SHALL also be present in the body. The `User-Agent` MAY
+abbreviate values to stay within its capture limit.
+
+#### Scenario: Header abbreviation does not affect the body
+
+- **GIVEN** a command fails with a `platform_unsupported` error
+- **WHEN** the event is sent
+- **THEN** the event body contains `error: "platform_unsupported"`
+- **AND** the `User-Agent` carries an abbreviated form of that value
+
 ## MODIFIED Requirements
 
 ### Requirement: Self-monitoring events include `er=` only when an error occurred
@@ -98,4 +112,4 @@ The `er=` field in the User-Agent and the `error` body property SHALL be present
 
 - **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and a command fails
 - **WHEN** the `st=fai` event is sent
-- **THEN** the User-Agent contains `er=<type>` and the event body contains `error: "<type>"`
+- **THEN** the event body contains `error: "<full type>"` and the User-Agent contains `er=<abbreviated code>`

@@ -62,6 +62,25 @@ The taxonomy categories, their additional attributes, and the conditions under w
 
 Classification priority (first match wins): `user_cancelled` → `auth_error` → `config_error` → `dependency_missing` → `network_error` → `platform_unsupported` → `install_failed` → fallback `install_failed`. The fallback ensures every error produces a taxonomy value, even unrecognised ones.
 
+### Error values are abbreviated in the User-Agent, full in the event body
+
+The `User-Agent` is capped at 64 characters by the HAProxy capture limit, and that budget has to absorb fields added later. The longest taxonomy value, `platform_unsupported`, spends 20 of those characters on its own. Each value therefore gets a 3-character code in the header:
+
+| Body `error` | `er=` |
+|---|---|
+| `user_cancelled` | `ucl` |
+| `auth_error` | `aut` |
+| `config_error` | `cfg` |
+| `dependency_missing` | `dep` |
+| `network_error` | `net` |
+| `install_failed` | `ifl` |
+| `platform_unsupported` | `plt` |
+
+The body keeps the full value, which makes it the stable query surface: the header encoding can be shortened or re-keyed later to free budget without any dashboard query changing. This only holds while every header field is also present in the body, so `type` was added to the body alongside the fields already mirrored there.
+
+- Alternative considered: abbreviate in both places. Discarded — it saves nothing (the body has no size limit) and forces queries to decode codes.
+- Alternative considered: leave the header unabbreviated. Discarded — worst case reaches 74 characters with a snapshot version string, over the capture limit.
+
 ### Two new terminal step values: `StepFailed` and `StepCancelled`
 
 `StepFailed` is the terminal stage for all errors. `StepCancelled` is used exclusively when the user declines a confirmation prompt or selects `0` at the recommendation menu. With these two additions, the dashboard can determine outcome from the step value alone, without inspecting the error field.

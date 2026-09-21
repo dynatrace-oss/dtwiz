@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/dynatrace-oss/dtwiz/pkg/version"
 )
@@ -88,6 +89,8 @@ var stepFullNames = map[string]string{
 	StepRecommend: "recommend",
 	StepInstall:   "install",
 	StepCompleted: "completed",
+	StepFailed:    "failed",
+	StepCancelled: "cancelled",
 }
 
 // cmdShortMap and subShortMap abbreviate natural command names for the User-Agent header.
@@ -101,6 +104,18 @@ var cmdShortMap = map[string]string{
 	"watch":     "wch",
 	"setup":     "set",
 	"version":   "ver",
+}
+
+// errShortMap abbreviates error taxonomy values for the User-Agent header.
+// The event body always carries the full name.
+var errShortMap = map[string]string{
+	string(installer.ErrTypeUserCancelled):       "ucl",
+	string(installer.ErrTypeAuthError):           "aut",
+	string(installer.ErrTypeConfigError):         "cfg",
+	string(installer.ErrTypeDependencyMissing):   "dep",
+	string(installer.ErrTypeNetworkError):        "net",
+	string(installer.ErrTypeInstallFailed):       "ifl",
+	string(installer.ErrTypePlatformUnsupported): "plt",
 }
 
 var subShortMap = map[string]string{
@@ -157,28 +172,7 @@ func SendEvent(classicURL, token string, params EventParams) error {
 		params.StepID = StepInvoked
 	}
 
-	stepFull := stepFullNames[params.StepID]
-	if stepFull == "" {
-		stepFull = params.StepID
-	}
-
-	props := map[string]string{
-		"executionId": execID,
-		"step":        stepFull,
-		"version":     version.Version,
-		"mode":        string(params.Mode),
-		"os":          runtime.GOOS,
-	}
-	for _, kv := range []struct{ k, v string }{
-		{"command", params.Cmd},
-		{"subcommand", params.Sub},
-		{"error", params.Err},
-	} {
-		if kv.v != "" {
-			props[kv.k] = kv.v
-		}
-	}
-	maps.Copy(props, params.ExtraProps)
+	props := buildEventProps(params)
 	title := "dtwiz"
 	if params.Cmd != "" {
 		title += " " + params.Cmd
@@ -227,9 +221,42 @@ func SendEvent(classicURL, token string, params EventParams) error {
 	return nil
 }
 
+// buildEventProps assembles the event body properties. Unlike the User-Agent, these carry
+// full, unabbreviated values: the body is the query surface, so its encoding stays stable
+// while the header is free to be shortened to fit the capture limit.
+// Callers must resolve an empty StepID to its default first.
+func buildEventProps(p EventParams) map[string]string {
+	stepFull := stepFullNames[p.StepID]
+	if stepFull == "" {
+		stepFull = p.StepID
+	}
+
+	props := map[string]string{
+		"executionId": execID,
+		"step":        stepFull,
+		"version":     version.Version,
+		"mode":        string(p.Mode),
+		"os":          runtime.GOOS,
+	}
+	for _, kv := range []struct{ k, v string }{
+		{"command", p.Cmd},
+		{"subcommand", p.Sub},
+		{"error", p.Err},
+		{"type", p.Type},
+	} {
+		if kv.v != "" {
+			props[kv.k] = kv.v
+		}
+	}
+	maps.Copy(props, p.ExtraProps)
+	return props
+}
+
 // buildUserAgent encodes operation identity into User-Agent (64-char HAProxy capture limit).
 // Format: dtwiz/<version>[;c=<cmd>];st=<step>[;s=<sub>][;er=<err>][;t=<type>]
 // c= is omitted when Cmd is empty. ExecID, mode, and OS go into Tab-Id via buildTabID.
+// Command, subcommand, and error are abbreviated to fit the limit; the event body carries
+// the full names.
 func buildUserAgent(p EventParams) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "dtwiz/%s", version.Version)
@@ -237,7 +264,7 @@ func buildUserAgent(p EventParams) string {
 		{propCmd, shortCmd(p.Cmd)},
 		{propStep, p.StepID},
 		{propSub, shortSub(p.Sub)},
-		{propErr, p.Err},
+		{propErr, shortErr(p.Err)},
 		{propType, p.Type},
 	} {
 		if kv.v != "" {
@@ -256,6 +283,13 @@ func shortCmd(name string) string {
 
 func shortSub(name string) string {
 	if s, ok := subShortMap[name]; ok {
+		return s
+	}
+	return name
+}
+
+func shortErr(name string) string {
+	if s, ok := errShortMap[name]; ok {
 		return s
 	}
 	return name
