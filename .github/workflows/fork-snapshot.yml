@@ -43,7 +43,7 @@ jobs:
 
       - name: Upload Linux artifacts
         if: steps.semver.outputs.found == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dtwiz-pr-${{ github.event.pull_request.number }}-linux
           path: dist/dtwiz_*_linux_*.tar.gz
@@ -52,7 +52,7 @@ jobs:
 
       - name: Upload macOS artifacts
         if: steps.semver.outputs.found == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dtwiz-pr-${{ github.event.pull_request.number }}-darwin
           path: dist/dtwiz_*_darwin_*.tar.gz
@@ -61,7 +61,7 @@ jobs:
 
       - name: Upload Windows artifacts
         if: steps.semver.outputs.found == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dtwiz-pr-${{ github.event.pull_request.number }}-windows
           path: dist/dtwiz_*_windows_*.zip
