@@ -85,7 +85,7 @@ func setupClient() (*client.Client, error) {
 func Execute(t time.Time) {
 	StartTime = t
 	err := rootCmd.Execute()
-	selfmonitoring.Flush(200 * time.Millisecond)
+	selfmonitoring.Flush(500 * time.Millisecond)
 	if err != nil {
 		os.Exit(1)
 	}
