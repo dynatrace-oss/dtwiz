@@ -7,14 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-09-22
+
 ### Added
 
+- `install otel`: cloud entity correlation for host monitoring. On AWS, Azure, and GCP, dtwiz now probes the instance metadata service (IMDS) at install time and injects the matching cloud detector (`ec2`, `azure`, or `gcp`) into the collector config. A `transform/dt-cloud-correlation` processor derives the Dynatrace cloud-correlation attribute (`aws.arn`, `azure.resource.id`, or `gcp.resource.name`) from enriched resource attributes and sets it on every host metric, enabling the `OTEL_HOST runs_on <cloud entity>` Smartscape edge.
 - Self-monitoring (`DTWIZ_SELF_MONITORING_POC`): `setup` wizard is now instrumented with four events covering the full wizard flow — invocation, analysis completion, method selection, and install outcome. All events share a per-run execution ID so sessions can be correlated and step durations measured. The watch completion event is also fired after post-install watch sessions triggered from `setup`.
 - Self-monitoring (`DTWIZ_SELF_MONITORING_POC`): `analyze`, `recommend`, `status`, and `version` now each emit a completed event in addition to the existing invocation event, with a failure indicator when the command exits with an error.
 - Self-monitoring (`DTWIZ_SELF_MONITORING_POC`): event body now includes richer fields — full OS name (`darwin`, `linux`, `windows`), full invocation mode (`debug`, `tty`, `non-tty`), and `executionId` for session correlation. Command and subcommand names are included as plain strings rather than abbreviated codes.
 - Self-monitoring (`DTWIZ_SELF_MONITORING_POC`): command failures are now classified into a structured error taxonomy — `user_cancelled`, `auth_error`, `config_error`, `dependency_missing`, `network_error`, `install_failed`, or `platform_unsupported` — and carried on the event along with category-specific attributes (the missing binary name, the missing config fields, the auth failure reason). `install`, `update`, `uninstall`, and `setup` now fire a terminal `failed` or `cancelled` event at every exit path, so the dashboard can tell a successful run from a failed one and see where the drop-off happened. Auth validation, dependency checks, and platform-unsupported guards return typed errors to drive the classification; their user-facing messages are unchanged.
 - Self-monitoring (`DTWIZ_SELF_MONITORING_POC`): pending events are now flushed (up to 500ms) before the process exits on every path, including errors and cancellations. Events were previously sent from detached goroutines that were killed on exit, so fast-failing commands — auth errors, missing dependencies, declined prompts — systematically lost exactly the failure signals the funnel depends on.
-- `install otel`: cloud entity correlation for host monitoring. On AWS, Azure, and GCP, dtwiz now probes the instance metadata service (IMDS) at install time and injects the matching cloud detector (`ec2`, `azure`, or `gcp`) into the collector config. A `transform/dt-cloud-correlation` processor derives the Dynatrace cloud-correlation attribute (`aws.arn`, `azure.resource.id`, or `gcp.resource.name`) from enriched resource attributes and sets it on every host metric, enabling the `OTEL_HOST runs_on <cloud entity>` Smartscape edge.
 
 ## [1.8.1] - 2026-09-16
 
