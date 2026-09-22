@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 	"github.com/dynatrace-oss/dtwiz/test/integration"
 	"github.com/dynatrace-oss/dtwiz/test/integration/grail"
 )
@@ -29,8 +28,7 @@ func TestSelfMonitoringInstrumentation(t *testing.T) {
 
 	// Compile once so each subtest runs the binary directly.
 	// go run spawns a child process; killing go run leaves the grandchild running
-	// with the pipe open, causing CombinedOutput to block forever for long-running
-	// commands like watch.
+	// causing CombinedOutput to block forever for long-running commands like watch.
 	binary := filepath.Join(t.TempDir(), "dtwiz-test")
 	buildOut, err := exec.Command("go", "build", "-o", binary, repoRoot).CombinedOutput()
 	if err != nil {
@@ -90,7 +88,7 @@ func TestSelfMonitoringInstrumentation(t *testing.T) {
 
 			q := grail.SelfMonitoringQuery{
 				EventName: "dtwiz " + tc.cmd,
-				Step:      selfmonitoring.StepInvoked,
+				Step:      "invoked",
 				From:      startTime,
 			}
 			t.Logf("waiting for dtwiz %s StepInvoked in Grail", tc.cmd)
