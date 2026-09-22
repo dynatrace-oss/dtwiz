@@ -9,30 +9,47 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/client"
 )
 
-// selfMonitoringEventQuery returns a DQL query for dtwiz CUSTOM_INFO events.
-// from is the test's own start time; using an absolute bound ensures events
-// from a prior run (even with the same test_run marker) are never matched.
-// The Events v2 title maps to event.name in Grail (not "title").
-// Custom properties (step, test_run, command, etc.) are top-level fields.
+// stepFullNames maps the selfmonitoring shortcode constants to the full name
+// stored in the event body by selfmonitoring.SendEvent. The DQL step filter
+// must use the full name, not the shortcode.
+var stepFullNames = map[string]string{
+	"inv": "invoked",
+	"ana": "analyze",
+	"rec": "recommend",
+	"ist": "install",
+	"com": "completed",
+}
+
 // SelfMonitoringQuery holds the filter parameters for a self-monitoring event DQL query.
+// EventName and TestRun are optional; when empty their filters are omitted.
+// Step accepts either the selfmonitoring shortcode (e.g. "inv") or the full name
+// (e.g. "invoked") — shortcodes are resolved internally.
+// From is the absolute lower bound — events before this timestamp are excluded.
 type SelfMonitoringQuery struct {
-	EventName string
-	Step      string
-	TestRun   string
-	From      time.Time // absolute lower bound — events before this are excluded
+	EventName string    // optional: filter on event.name (exact match)
+	Step      string    // required: selfmonitoring shortcode or full step name
+	TestRun   string    // optional: filter on test_run property
+	From      time.Time // required: absolute lower bound
 }
 
 func selfMonitoringEventQuery(q SelfMonitoringQuery) string {
+	stepName := q.Step
+	if full, ok := stepFullNames[q.Step]; ok {
+		stepName = full
+	}
 	fromLiteral := `"` + q.From.UTC().Format(time.RFC3339) + `"`
-	return fmt.Sprintf(
-		`fetch events, from: %s`+
-			` | filter event.type == "CUSTOM_INFO"`+
-			` | filter event.name == %q`+
-			` | filter step == %q`+
-			` | filter test_run == %q`+
-			` | limit 10`,
-		fromLiteral, q.EventName, q.Step, q.TestRun,
+	dql := fmt.Sprintf(
+		`fetch events, from: %s | filter event.type == "CUSTOM_INFO" | filter step == %q`,
+		fromLiteral, stepName,
 	)
+	if q.EventName != "" {
+		dql += fmt.Sprintf(` | filter event.name == %q`, q.EventName)
+	}
+	if q.TestRun != "" {
+		dql += fmt.Sprintf(` | filter test_run == %q`, q.TestRun)
+	}
+	dql += ` | limit 10`
+	return dql
 }
 
 // WaitForSelfMonitoringEvent polls until a dtwiz CUSTOM_INFO event matching q

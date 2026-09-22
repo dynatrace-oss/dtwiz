@@ -3,141 +3,98 @@
 package e2e_test
 
 import (
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 	"github.com/dynatrace-oss/dtwiz/test/integration"
 	"github.com/dynatrace-oss/dtwiz/test/integration/grail"
 )
 
-// selfMonitoringCase describes one self-monitoring event to send and assert.
-// wantFields lists fields to check on the returned Grail record (command,
-// subcommand, etc.). Only fields the instrumentation derives independently
-// are worth asserting on, not values we fabricate in the test.
-type selfMonitoringCase struct {
-	label      string
-	params     selfmonitoring.EventParams
-	wantFields map[string]string
-}
-
-// eventName derives the expected Grail event.name from a case's params,
-// matching the title logic in selfmonitoring.SendEvent.
-func eventName(tc selfMonitoringCase) string {
-	name := "dtwiz"
-	if tc.params.CmdID != "" {
-		name += " " + tc.params.CmdID
-	}
-	if tc.params.SubID != "" {
-		name += " " + tc.params.SubID
-	}
-	return name
-}
-
-// TestSelfMonitoringEventsIngested verifies that self-monitoring events for
-// dtwiz watch and dtwiz setup are sent via the Events v2 API, appear in Grail,
-// and carry the expected field values.
+// TestSelfMonitoringInstrumentation verifies that each instrumented dtwiz command
+// emits at least one self-monitoring event that lands in Grail.
 //
-// To add coverage for a new command or step: append one entry to cases.
-func TestSelfMonitoringEventsIngested(t *testing.T) {
-	integration.Parallelize(t)
+// Every command fires StepInvoked via root's PersistentPreRun, so that is the
+// minimal check. Commands that run indefinitely (watch) are killed after a short
+// warmup — long enough for the event goroutine to complete its HTTP call (3s timeout).
+func TestSelfMonitoringInstrumentation(t *testing.T) {
+	_, testFile, _, _ := runtime.Caller(0)
+	repoRoot := filepath.Join(filepath.Dir(testFile), "..", "..")
+
+	// Compile once so each subtest runs the binary directly.
+	// go run spawns a child process; killing go run leaves the grandchild running
+	// with the pipe open, causing CombinedOutput to block forever for long-running
+	// commands like watch.
+	binary := filepath.Join(t.TempDir(), "dtwiz-test")
+	buildOut, err := exec.Command("go", "build", "-o", binary, repoRoot).CombinedOutput()
+	if err != nil {
+		t.Fatalf("go build failed: %v\n%s", err, buildOut)
+	}
+
+	cases := []struct {
+		cmd       string        // dtwiz sub-command; also the expected event.name suffix
+		args      []string      // full args passed to the binary
+		stdin     string        // optional stdin (for interactive prompts)
+		killAfter time.Duration // if >0, kill the process after this delay
+	}{
+		{cmd: "status", args: []string{"status"}},
+		{cmd: "setup", args: []string{"setup", "--dry-run"}, stdin: "1\n"},
+		{cmd: "watch", args: []string{"watch"}, killAfter: 6 * time.Second},
+	}
+
 	env := integration.SetupIntegration(t)
 
-	// Absolute lower bound for DQL queries — events older than this test run
-	// cannot produce a false positive even if test_run is somehow reused.
-	startTime := time.Now()
-
-	classicURL := installer.APIURL(env.EnvURL)
-	token := env.PlatformToken
-	testRun := env.TestID
-
-	cases := []selfMonitoringCase{
-		// --- dtwiz watch ---
-		// StepInvoked: fired at command start via fireInvokedEvent.
-		{
-			label:      "watch StepInvoked",
-			params:     selfmonitoring.EventParams{CmdID: "wch", StepID: selfmonitoring.StepInvoked, Mode: "ntt"},
-			wantFields: map[string]string{"command": "wch"},
-		},
-		// StepCompleted: fired by buildWatchEventCallback when first data arrives.
-		// CmdID is cleared, signal timing goes into ExtraProps.
-		{
-			label: "watch StepCompleted",
-			params: selfmonitoring.EventParams{
-				StepID:     selfmonitoring.StepCompleted,
-				Mode:       "ntt",
-				Type:       "0,0,1,0,0,0,0,0",
-				ExtraProps: map[string]string{"hosts": "850"},
-			},
-		},
-
-		// --- dtwiz setup ---
-		// StepInvoked, StepAnalyze, StepRecommend, StepInstall fired in sequence.
-		{
-			label:      "setup StepInvoked",
-			params:     selfmonitoring.EventParams{CmdID: "set", StepID: selfmonitoring.StepInvoked, Mode: "ntt"},
-			wantFields: map[string]string{"command": "set"},
-		},
-		{
-			label:      "setup StepAnalyze",
-			params:     selfmonitoring.EventParams{CmdID: "set", StepID: selfmonitoring.StepAnalyze, Mode: "ntt"},
-			wantFields: map[string]string{"command": "set"},
-		},
-		{
-			label:      "setup StepRecommend",
-			params:     selfmonitoring.EventParams{CmdID: "set", SubID: "otel", StepID: selfmonitoring.StepRecommend, Mode: "ntt"},
-			wantFields: map[string]string{"command": "set", "subcommand": "otel"},
-		},
-		{
-			label:      "setup StepInstall",
-			params:     selfmonitoring.EventParams{CmdID: "set", SubID: "otel", StepID: selfmonitoring.StepInstall, Mode: "ntt"},
-			wantFields: map[string]string{"command": "set", "subcommand": "otel"},
-		},
-	}
-
-	// Inject test_run into every case's ExtraProps.
-	for i := range cases {
-		if cases[i].params.ExtraProps == nil {
-			cases[i].params.ExtraProps = map[string]string{}
-		}
-		cases[i].params.ExtraProps["test_run"] = testRun
-	}
-
-	// Phase 1: send all events before polling so Grail has the full set by the
-	// time the first DQL query runs.
-	for _, tc := range cases {
-		if err := selfmonitoring.SendEvent(classicURL, token, tc.params); err != nil {
-			t.Fatalf("SendEvent (%s): %v", tc.label, err)
-		}
-	}
-
-	opts := []grail.PollOption{
+	pollOpts := []grail.PollOption{
 		grail.WithTimeout(3 * time.Minute),
 		grail.WithInterval(10 * time.Second),
 	}
 
-	// Phase 2: assert each event appears in Grail with the expected fields.
 	for _, tc := range cases {
-		step := tc.params.StepID
-		if step == "" {
-			step = selfmonitoring.StepInvoked
-		}
-		q := grail.SelfMonitoringQuery{
-			EventName: eventName(tc),
-			Step:      step,
-			TestRun:   testRun,
-			From:      startTime,
-		}
-		t.Logf("waiting for %s (event.name=%q step=%q)", tc.label, q.EventName, q.Step)
+		tc := tc
+		t.Run(tc.cmd, func(t *testing.T) {
+			t.Parallel()
 
-		records := grail.RequireSelfMonitoringEvent(t, env.Client, q, opts...)
+			startTime := time.Now()
 
-		for field, want := range tc.wantFields {
-			got, _ := records[0][field].(string)
-			if got != want {
-				t.Errorf("%s: field %q = %q, want %q", tc.label, field, got, want)
+			var cmd *exec.Cmd
+			if tc.killAfter > 0 {
+				ctx, cancel := context.WithTimeout(context.Background(), tc.killAfter)
+				defer cancel()
+				cmd = exec.CommandContext(ctx, binary, tc.args...)
+			} else {
+				cmd = exec.Command(binary, tc.args...)
 			}
-		}
+
+			if tc.stdin != "" {
+				cmd.Stdin = strings.NewReader(tc.stdin)
+			}
+			cmd.Env = append(os.Environ(),
+				"DT_ENVIRONMENT="+env.EnvURL,
+				"DT_PLATFORM_TOKEN="+env.PlatformToken,
+				"DTWIZ_SELF_MONITORING_POC=true",
+			)
+
+			out, runErr := cmd.CombinedOutput()
+			t.Logf("output:\n%s", out)
+
+			// For commands killed by context (watch), non-zero exit is expected.
+			if tc.killAfter == 0 && runErr != nil {
+				t.Fatalf("dtwiz %s failed: %v", tc.cmd, runErr)
+			}
+
+			q := grail.SelfMonitoringQuery{
+				EventName: "dtwiz " + tc.cmd,
+				Step:      selfmonitoring.StepInvoked,
+				From:      startTime,
+			}
+			t.Logf("waiting for dtwiz %s StepInvoked in Grail", tc.cmd)
+			grail.RequireSelfMonitoringEvent(t, env.Client, q, pollOpts...)
+		})
 	}
 }
