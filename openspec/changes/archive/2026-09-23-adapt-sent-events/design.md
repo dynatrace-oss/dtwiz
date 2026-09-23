@@ -1,3 +1,5 @@
+# Design
+
 ## Context
 
 The watch completion event (`st=com`) is emitted by `buildWatchEventCallback` in `cmd/selfmonitoring.go`. This callback is passed to `installer.WatchIngestWithEvent` and fires when first data arrives across any signal. It can be triggered from:
@@ -11,11 +13,13 @@ Currently `buildWatchEventCallback` zeroes `params.Cmd` after calling `buildEven
 ## Goals / Non-Goals
 
 **Goals:**
+
 - The watch completion event always carries `c=wch` in the User-Agent
 - Correlation between the watch event and the triggering command is achieved via the shared `execID` in Tab-Id
 - The User-Agent stays within 64 chars in all cases
 
 **Non-Goals:**
+
 - Changing the `t=` encoding granularity or format
 - Surfacing triggering-command information directly in the watch event header
 
@@ -27,7 +31,7 @@ Because the watch session is a distinct observability step independent of what t
 
 This also solves the header budget problem without changing the `t=` format: with no subcommand, the worst-case header is:
 
-```
+```text
 dtwiz/1.9.0;c=wch;st=com;t=600,600,600,600,600,600,600,600  = 58 chars  ✓
 ```
 

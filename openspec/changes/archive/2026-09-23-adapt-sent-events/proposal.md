@@ -1,3 +1,5 @@
+# Proposal
+
 ## Why
 
 The watch completion event (`st=com`) currently clears the `c=` (command) field from the User-Agent header to save space, but this drops the context of which command triggered the watch session. Because the watch callback fires from multiple call sites (standalone `dtwiz watch`, post-install watches from `install *`, `setup`), the missing command field makes it impossible to distinguish them in HAProxy-captured telemetry.
@@ -15,6 +17,7 @@ The watch completion event (`st=com`) currently clears the `c=` (command) field 
 <!-- none -->
 
 ### Modified Capabilities
+
 - `selfmonitoring-watch`: The `st=com` event now always carries `c=wch` in the User-Agent; the spec previously stated `c=` was absent from watch completion events
 
 ## Impact

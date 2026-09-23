@@ -8,37 +8,43 @@ The system SHALL emit two self-monitoring events per `dtwiz watch` invocation: o
 
 #### Scenario: Command is invoked
 
-- **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and credentials are configured
+- **GIVEN** self-monitoring is enabled and credentials are configured
 - **WHEN** the user runs `dtwiz watch`
-- **THEN** the system sends one `st=inv` event immediately via the standard root `PersistentPreRun` hook, with User-Agent `dtwiz/<ver>;c=wch;st=inv`
+- **THEN** the system sends one `st=inv` event immediately, with User-Agent `dtwiz/<ver>;c=wch;st=inv`
 
 #### Scenario: First data is received during watch
 
-- **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and credentials are configured
+- **GIVEN** self-monitoring is enabled and credentials are configured
 - **WHEN** the first poll cycle after `dtwiz watch` starts returns at least one signal with data
-- **THEN** the system sends one `st=com` event asynchronously (without waiting for the user to exit) with User-Agent `dtwiz/<ver>;st=com;t=<signals>` where `<signals>` is a positional comma-separated list of whole-second values (see "Signal timing encoding" below); the `c=` field is absent; each seen signal also appears as a named property in the event body (e.g. `hst: "12"`); the watch display continues uninterrupted
+- **THEN** the system sends one `st=com` event asynchronously (without waiting for the user to exit) with User-Agent `dtwiz/<ver>;c=wch;st=com;t=<signals>` where `<signals>` is a positional comma-separated list of whole-second values (see "Signal timing encoding" below); the `s=` subcommand field is absent; each seen signal also appears as a named property in the event body (e.g. `hst: "12"`); the watch display continues uninterrupted
 
 #### Scenario: Watch session ends with no data — user exits
 
-- **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and credentials are configured
+- **GIVEN** self-monitoring is enabled and credentials are configured
 - **WHEN** the user runs `dtwiz watch` and presses Enter before any signal receives data
 - **THEN** only the `st=inv` event is present — no `st=com` event is sent; absence of the completion event indicates the user exited before data arrived
 
 #### Scenario: Watch session times out with no data
 
-- **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and credentials are configured
+- **GIVEN** self-monitoring is enabled and credentials are configured
 - **WHEN** the watch session reaches the 10-minute timeout and no signal data was seen
-- **THEN** the system sends one `st=com` event with User-Agent `dtwiz/<ver>;st=com` — the `t=` field is absent because no signals were seen
+- **THEN** the system sends one `st=com` event with User-Agent `dtwiz/<ver>;c=wch;st=com` — the `t=` field is absent because no signals were seen
 
 #### Scenario: Watch session times out after data was already received
 
-- **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and credentials are configured and first data was already received (`st=com` already fired)
+- **GIVEN** self-monitoring is enabled and credentials are configured and first data was already received (`st=com` already fired)
 - **WHEN** the watch session subsequently reaches the 10-minute timeout
 - **THEN** no second completion event is sent — the `st=com` event was already emitted at first-data time
 
+#### Scenario: Watch session triggered by post-install watch
+
+- **GIVEN** self-monitoring is enabled and a `dtwiz install <method>` command triggers a post-install watch
+- **WHEN** the watch session emits its `st=com` event
+- **THEN** the User-Agent carries `c=wch` (not the triggering install command)
+
 #### Scenario: Feature flag disabled
 
-- **GIVEN** `DTWIZ_SELF_MONITORING_POC` is not enabled
+- **GIVEN** self-monitoring is disabled
 - **WHEN** the user runs `dtwiz watch` and exits
 - **THEN** no self-monitoring event is sent
 
@@ -49,8 +55,6 @@ The `t=` field in the User-Agent of the `st=com` event encodes time-to-first-dat
 **Fixed signal order (alphabetical):** `cld`, `exc`, `hst`, `k8s`, `log`, `rel`, `req`, `svc`
 
 **Encoding invariant:** `0` always means the signal was not seen. A signal that was seen encodes as the whole-second duration (minimum `1`, even if the actual time was under 1 second). This preserves the ability to distinguish "absent" from "present but very fast".
-
-**Worst-case header length:** `dtwiz/1.8.0;st=com;t=600,600,600,600,600,600,600,600` = 53 characters, well within the 64-character HAProxy capture limit.
 
 #### Scenario: Partial signal data
 
@@ -81,13 +85,3 @@ The system SHALL set the event title to `"dtwiz <cmd>"` or `"dtwiz <cmd> <sub>"`
 - **GIVEN** a self-monitoring event is sent for a subcommand (e.g. `install otel`)
 - **WHEN** the event is ingested
 - **THEN** the event title is `"dtwiz <cmd> <sub>"` (e.g. `"dtwiz ins otel"`)
-
-### Requirement: st=com for watch omits c= from the User-Agent
-
-For the completed event sent by `dtwiz watch`, the command field SHALL be absent from the User-Agent header.
-
-#### Scenario: Completion event header format
-
-- **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and a watch session ends with data
-- **WHEN** the `st=com` event is sent
-- **THEN** the User-Agent is `dtwiz/<ver>;st=com;t=<signals>` — no `c=wch` segment is present

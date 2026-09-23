@@ -1,3 +1,5 @@
+# Spec: Self-Monitoring Watch Workflow (delta)
+
 ## MODIFIED Requirements
 
 ### Requirement: dtwiz watch emits two self-monitoring events per invocation
