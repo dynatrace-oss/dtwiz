@@ -3,6 +3,7 @@ package cmd
 import (
 	"testing"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 )
 
@@ -77,5 +78,27 @@ func TestWatchSignalCSV_EmptyMapReturnsEmpty(t *testing.T) {
 	got := watchSignalCSV(nil)
 	if got != "" {
 		t.Errorf("watchSignalCSV(nil) = %q, want empty string", got)
+	}
+}
+
+// ── buildWatchEventCallback ──────────────────────────────────────────────────
+
+func TestBuildWatchEventCallback_AlwaysEmitsWatchCmd(t *testing.T) {
+	var captured selfmonitoring.EventParams
+	original := eventSink
+	eventSink = func(p selfmonitoring.EventParams) { captured = p }
+	defer func() { eventSink = original }()
+
+	// Simulate callback invoked from a post-install context (install otel).
+	// Cmd and Sub must always be overridden to "watch" / "" regardless of the
+	// triggering command.
+	cb := buildWatchEventCallback(installCmd)
+	cb(installer.WatchSessionResult{FirstDataMs: map[string]int64{"hst": 5000}})
+
+	if captured.Cmd != "watch" {
+		t.Errorf("Cmd = %q, want %q", captured.Cmd, "watch")
+	}
+	if captured.Sub != "" {
+		t.Errorf("Sub = %q, want empty", captured.Sub)
 	}
 }

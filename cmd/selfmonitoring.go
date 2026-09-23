@@ -138,7 +138,8 @@ func watchSignalCSV(firstDataMs map[string]int64) string {
 func buildWatchEventCallback(cmd *cobra.Command) func(installer.WatchSessionResult) {
 	return func(r installer.WatchSessionResult) {
 		params := buildEventParams(cmd, selfmonitoring.StepCompleted)
-		params.Cmd = ""
+		params.Cmd = "watch"
+		params.Sub = ""
 		params.Type = watchSignalCSV(r.FirstDataMs)
 		params.ExtraProps = watchSignalProps(r.FirstDataMs)
 		fireSelfMonitoringEvent(params)
