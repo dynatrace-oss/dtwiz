@@ -1,0 +1,75 @@
+## MODIFIED Requirements
+
+### Requirement: dtwiz watch emits two self-monitoring events per invocation
+
+The system SHALL emit two self-monitoring events per `dtwiz watch` invocation: one on invocation and one when first data is received or the session times out.
+
+#### Scenario: Command is invoked
+
+- **GIVEN** self-monitoring is enabled and credentials are configured
+- **WHEN** the user runs `dtwiz watch`
+- **THEN** the system sends one `st=inv` event immediately, with User-Agent `dtwiz/<ver>;c=wch;st=inv`
+
+#### Scenario: First data is received during watch
+
+- **GIVEN** self-monitoring is enabled and credentials are configured
+- **WHEN** the first poll cycle after `dtwiz watch` starts returns at least one signal with data
+- **THEN** the system sends one `st=com` event asynchronously (without waiting for the user to exit) with User-Agent `dtwiz/<ver>;c=wch;st=com;t=<signals>` where `<signals>` is a positional comma-separated list of whole-second values (see "Signal timing encoding" below); the `s=` subcommand field is absent; each seen signal also appears as a named property in the event body (e.g. `hst: "12"`); the watch display continues uninterrupted
+
+#### Scenario: Watch session ends with no data — user exits
+
+- **GIVEN** self-monitoring is enabled and credentials are configured
+- **WHEN** the user runs `dtwiz watch` and presses Enter before any signal receives data
+- **THEN** only the `st=inv` event is present — no `st=com` event is sent; absence of the completion event indicates the user exited before data arrived
+
+#### Scenario: Watch session times out with no data
+
+- **GIVEN** self-monitoring is enabled and credentials are configured
+- **WHEN** the watch session reaches the 10-minute timeout and no signal data was seen
+- **THEN** the system sends one `st=com` event with User-Agent `dtwiz/<ver>;c=wch;st=com` — the `t=` field is absent because no signals were seen
+
+#### Scenario: Watch session times out after data was already received
+
+- **GIVEN** self-monitoring is enabled and credentials are configured and first data was already received (`st=com` already fired)
+- **WHEN** the watch session subsequently reaches the 10-minute timeout
+- **THEN** no second completion event is sent — the `st=com` event was already emitted at first-data time
+
+#### Scenario: Watch session triggered by post-install watch
+
+- **GIVEN** self-monitoring is enabled and a `dtwiz install <method>` command triggers a post-install watch
+- **WHEN** the watch session emits its `st=com` event
+- **THEN** the User-Agent carries `c=wch` (not the triggering install command)
+
+#### Scenario: Feature flag disabled
+
+- **GIVEN** self-monitoring is disabled
+- **WHEN** the user runs `dtwiz watch` and exits
+- **THEN** no self-monitoring event is sent
+
+### Requirement: Signal timing is encoded in the User-Agent header using positional CSV
+
+The `t=` field in the User-Agent of the `st=com` event encodes time-to-first-data per signal type. The format is a positional comma-separated list of whole-second values, one per signal, in a fixed order. A signal that received no data is encoded as `0`; a signal that received data encodes as the number of whole seconds to first data, with a minimum of `1` (sub-second arrivals are encoded as `1`, not `0`). The `t=` field is omitted entirely when no signals received data.
+
+**Fixed signal order (alphabetical):** `cld`, `exc`, `hst`, `k8s`, `log`, `rel`, `req`, `svc`
+
+**Encoding invariant:** `0` always means the signal was not seen. A signal that was seen encodes as the whole-second duration (minimum `1`, even if the actual time was under 1 second). This preserves the ability to distinguish "absent" from "present but very fast".
+
+#### Scenario: Partial signal data
+
+- **GIVEN** a watch session where only some signals received data
+- **WHEN** the `st=com` event is assembled
+- **THEN** the `t=` value has a `0` for each absent signal and a whole-second value for each present signal, in fixed positional order
+
+#### Scenario: All signals present
+
+- **GIVEN** a watch session where all 8 signals received data
+- **WHEN** the `st=com` event is assembled
+- **THEN** the `t=` value has 8 comma-separated whole-second values in fixed order
+
+## REMOVED Requirements
+
+### Requirement: st=com for watch omits c= from the User-Agent
+
+**Reason:** The `c=` field is now always present and set to `wch` for all watch completion events.
+
+**Migration:** N/A
