@@ -75,6 +75,8 @@ const (
 type EventParams struct {
 	Cmd        string            // top-level command: install, update, uninstall, analyze, etc.
 	Sub        string            // subcommand: otel, kubernetes, oneagent, etc.
+	Opt        string            // setup menu option (method presented/selected); encoded as opt= in header, distinct from Sub
+	Tech       string            // single detected project runtime (e.g. "Node.js"); abbreviated in header as tx=, full name in body
 	StepID     string            // execution step shortcode; defaults to StepInvoked when empty
 	Mode       Mode              // ModeDebug, ModeTTY, or ModeNonTTY
 	Err        string            // error category; omitted when empty
@@ -84,13 +86,15 @@ type EventParams struct {
 
 // stepFullNames maps step shortcodes to human-readable names used in the event body.
 var stepFullNames = map[string]string{
-	StepInvoked:   "invoked",
-	StepAnalyze:   "analyze",
-	StepRecommend: "recommend",
-	StepInstall:   "install",
-	StepCompleted: "completed",
-	StepFailed:    "failed",
-	StepCancelled: "cancelled",
+	StepInvoked:                  "invoked",
+	StepAnalyze:                  "analyze",
+	StepRecommend:                "recommend",
+	StepInstall:                  "install",
+	StepCompleted:                "completed",
+	StepFailed:                   "failed",
+	StepCancelled:                "cancelled",
+	StepRecommendationsPresented: "recommendations_presented",
+	StepRecommendationsSelected:  "recommendations_selected",
 }
 
 // cmdShortMap and subShortMap abbreviate natural command names for the User-Agent header.
@@ -116,6 +120,25 @@ var errShortMap = map[string]string{
 	string(installer.ErrTypeNetworkError):        "net",
 	string(installer.ErrTypeInstallFailed):       "ifl",
 	string(installer.ErrTypePlatformUnsupported): "plt",
+}
+
+// techShortMap abbreviates the runtime names produced by pkg/analyzer/detect_project.go.
+var techShortMap = map[string]string{
+	"Node.js": "nd",
+	"Go":      "go",
+	"Python":  "py",
+	"Java":    "jv",
+	"Rust":    "rs",
+	"Ruby":    "rb",
+	"PHP":     "ph",
+	".NET":    "dn",
+}
+
+func shortTech(name string) string {
+	if s, ok := techShortMap[name]; ok {
+		return s
+	}
+	return ""
 }
 
 var subShortMap = map[string]string{
@@ -151,12 +174,19 @@ const (
 	StepFailed    = "fai"
 	StepCancelled = "can"
 
+	// StepRecommendationsPresented marks an event fired when a setup menu option is shown to the user.
+	StepRecommendationsPresented = "rpr"
+	// StepRecommendationsSelected marks an event fired when the user picks a setup menu option.
+	StepRecommendationsSelected = "rsl"
+
 	propExecID = "e"
 	propCmd    = "c"
 	propStep   = "st"
 	propSub    = "s"
 	propErr    = "er"
 	propType   = "t"
+	propOpt    = "opt"
+	propTech   = "tx"
 )
 
 type eventPayload struct {
@@ -243,10 +273,14 @@ func buildEventProps(p EventParams) map[string]string {
 		{"subcommand", p.Sub},
 		{"error", p.Err},
 		{"type", p.Type},
+		{"option", p.Opt},
 	} {
 		if kv.v != "" {
 			props[kv.k] = kv.v
 		}
+	}
+	if p.Tech != "" {
+		props["technology"] = p.Tech
 	}
 	maps.Copy(props, p.ExtraProps)
 	return props
@@ -266,6 +300,8 @@ func buildUserAgent(p EventParams) string {
 		{propSub, shortSub(p.Sub)},
 		{propErr, shortErr(p.Err)},
 		{propType, p.Type},
+		{propOpt, shortSub(p.Opt)},
+		{propTech, shortTech(p.Tech)},
 	} {
 		if kv.v != "" {
 			fmt.Fprintf(&b, ";%s=%s", kv.k, kv.v)

@@ -14,6 +14,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
+	"github.com/dynatrace-oss/dtwiz/pkg/recommender"
 	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 )
 
@@ -70,6 +71,9 @@ func buildEventParams(cmd *cobra.Command, stepID string) selfmonitoring.EventPar
 }
 
 func deriveCommandNames(cmd *cobra.Command) (cmdName, subName string) {
+	if cmd == nil {
+		return "", ""
+	}
 	parent := cmd.Parent()
 	if parent == nil || parent.Name() == "dtwiz" {
 		return cmd.Name(), ""
@@ -170,10 +174,30 @@ func fireSetupAnalyzeEvent(cmd *cobra.Command, err error) {
 	fireSelfMonitoringEvent(p)
 }
 
-func fireSetupRecommendEvent(cmd *cobra.Command, sub string) {
-	p := buildEventParams(cmd, selfmonitoring.StepRecommend)
-	p.Sub = sub
+func fireSetupRecommendEvent(cmd *cobra.Command, method string) {
+	p := buildEventParams(cmd, selfmonitoring.StepRecommendationsSelected)
+	p.Opt = method
 	fireSelfMonitoringEvent(p)
+}
+
+// fireSetupMenuEvent fires one self-monitoring event per presented recommendation.
+// For the OTel collector option with detected runtimes, it fires one event per runtime
+// instead of a single event, keeping each tx= field to a single value.
+func fireSetupMenuEvent(cmd *cobra.Command, recs []recommender.Recommendation, techNames []string) {
+	for _, r := range recs {
+		if r.Method == recommender.MethodOtelCollector && len(techNames) > 0 {
+			for _, tech := range techNames {
+				p := buildEventParams(cmd, selfmonitoring.StepRecommendationsPresented)
+				p.Opt = string(r.Method)
+				p.Tech = tech
+				fireSelfMonitoringEvent(p)
+			}
+		} else {
+			p := buildEventParams(cmd, selfmonitoring.StepRecommendationsPresented)
+			p.Opt = string(r.Method)
+			fireSelfMonitoringEvent(p)
+		}
+	}
 }
 
 func fireSetupInstallEvent(cmd *cobra.Command, sub string, err error) {
