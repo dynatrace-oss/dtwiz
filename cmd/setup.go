@@ -91,6 +91,8 @@ var setupCmd = &cobra.Command{
 		}
 
 		fmt.Print(recommender.FormatSetupMenu(recs, demoRunning, featureflags.IsEnabled(featureflags.Experimental)))
+
+		fireSetupMenuEvent(cmd, actionable)
 		fmt.Println()
 		fmt.Printf("  %s  %s\n", display.ColorDefault.Sprint("[u]"), display.ColorDefault.Sprint("Show uninstall commands"))
 		fmt.Printf("  %s  %s\n", display.ColorDefault.Sprint("[0]"), display.ColorDefault.Sprint("Cancel"))

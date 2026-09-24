@@ -298,14 +298,16 @@ func TestStepConstants(t *testing.T) {
 // shortcode and the event body carries e.g. "can" instead of "cancelled".
 func TestStepFullNames(t *testing.T) {
 	want := map[string]string{
-		StepInvoked:   "invoked",
-		StepAnalyze:   "analyze",
-		StepRecommend: "recommend",
-		StepInstall:   "install",
-		StepSnapshot:  "snapshot",
-		StepCompleted: "completed",
-		StepFailed:    "failed",
-		StepCancelled: "cancelled",
+		StepInvoked:                  "invoked",
+		StepAnalyze:                  "analyze",
+		StepRecommend:                "recommend",
+		StepInstall:                  "install",
+		StepSnapshot:                 "snapshot",
+		StepCompleted:                "completed",
+		StepFailed:                   "failed",
+		StepCancelled:                "cancelled",
+		StepRecommendationsPresented: "recommendations_presented",
+		StepRecommendationsSelected:  "recommendations_selected",
 	}
 
 	for code, name := range want {
@@ -388,6 +390,81 @@ func TestBuildUserAgentWithinCaptureLimit(t *testing.T) {
 	})
 	if len(ua) > limit {
 		t.Errorf("analyze User-Agent %q is %d chars, exceeds %d-char limit", ua, len(ua), limit)
+	}
+}
+
+func TestBuildUserAgentOpt(t *testing.T) {
+	tests := []struct {
+		name        string
+		params      EventParams
+		wantKeys    []string
+		notWantKeys []string
+	}{
+		{
+			name: "opt_set_appears_as_opt_not_s",
+			params: EventParams{
+				Cmd:    "setup",
+				StepID: StepRecommendationsPresented,
+				Mode:   ModeTTY,
+				Opt:    "otel",
+			},
+			wantKeys:    []string{"c=set", "st=rpr", "opt=otel"},
+			notWantKeys: []string{";s=otel"},
+		},
+		{
+			name: "step_selected",
+			params: EventParams{
+				Cmd:    "setup",
+				StepID: StepRecommendationsSelected,
+				Mode:   ModeTTY,
+				Opt:    "kubernetes",
+			},
+			wantKeys:    []string{"st=rsl", "opt=k8s"},
+			notWantKeys: []string{},
+		},
+		{
+			name: "unmapped_opt_passes_through",
+			params: EventParams{
+				Cmd:    "setup",
+				StepID: StepRecommendationsPresented,
+				Mode:   ModeTTY,
+				Opt:    "aws",
+			},
+			wantKeys:    []string{"st=rpr", "opt=aws"},
+			notWantKeys: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ua := buildUserAgent(tt.params)
+			if len(ua) > 64 {
+				t.Errorf("User-Agent too long: %d > 64: %s", len(ua), ua)
+			}
+			for _, key := range tt.wantKeys {
+				if !strings.Contains(ua, key) {
+					t.Errorf("missing key %q in User-Agent: %s", key, ua)
+				}
+			}
+			for _, key := range tt.notWantKeys {
+				if strings.Contains(ua, key) {
+					t.Errorf("key %q should be absent in User-Agent: %s", key, ua)
+				}
+			}
+		})
+	}
+}
+
+func TestBuildEventPropsOpt(t *testing.T) {
+	params := EventParams{
+		Cmd:    "setup",
+		StepID: StepRecommendationsPresented,
+		Mode:   ModeTTY,
+		Opt:    "otel",
+	}
+	props := buildEventProps(params)
+	if props["option"] != "otel" {
+		t.Errorf("body[option] = %q, want %q", props["option"], "otel")
 	}
 }
 

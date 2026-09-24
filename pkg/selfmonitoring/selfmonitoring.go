@@ -74,6 +74,7 @@ const (
 type EventParams struct {
 	Cmd           string            // top-level command: install, update, uninstall, analyze, etc.
 	Sub           string            // subcommand: otel, kubernetes, oneagent, etc.
+	Opt           string            // setup menu option (method presented/selected); encoded as opt= in header, distinct from Sub
 	StepID        string            // execution step shortcode; defaults to StepInvoked when empty
 	Mode          Mode              // ModeDebug, ModeTTY, or ModeNonTTY
 	Err           string            // error category; omitted when empty
@@ -85,14 +86,16 @@ type EventParams struct {
 
 // stepFullNames maps step shortcodes to human-readable names used in the event body.
 var stepFullNames = map[string]string{
-	StepInvoked:   "invoked",
-	StepAnalyze:   "analyze",
-	StepRecommend: "recommend",
-	StepInstall:   "install",
-	StepSnapshot:  "snapshot",
-	StepCompleted: "completed",
-	StepFailed:    "failed",
-	StepCancelled: "cancelled",
+	StepInvoked:                  "invoked",
+	StepAnalyze:                  "analyze",
+	StepRecommend:                "recommend",
+	StepInstall:                  "install",
+	StepSnapshot:                 "snapshot",
+	StepCompleted:                "completed",
+	StepFailed:                   "failed",
+	StepCancelled:                "cancelled",
+	StepRecommendationsPresented: "recommendations_presented",
+	StepRecommendationsSelected:  "recommendations_selected",
 }
 
 // cmdShortMap and subShortMap abbreviate natural command names for the User-Agent header.
@@ -165,14 +168,16 @@ const (
 	headerKey   = "dtwiz-monitoring"
 	headerValue = "dtwiz-start"
 
-	StepInvoked   = "inv"
-	StepAnalyze   = "ana"
-	StepRecommend = "rec"
-	StepInstall   = "ist"
-	StepSnapshot  = "snp"
-	StepCompleted = "com"
-	StepFailed    = "fai"
-	StepCancelled = "can"
+	StepInvoked                  = "inv"
+	StepAnalyze                  = "ana"
+	StepRecommend                = "rec"
+	StepInstall                  = "ist"
+	StepSnapshot                 = "snp"
+	StepCompleted                = "com"
+	StepFailed                   = "fai"
+	StepCancelled                = "can"
+	StepRecommendationsPresented = "rpr"
+	StepRecommendationsSelected  = "rsl"
 
 	propExecID        = "e"
 	propCmd           = "c"
@@ -182,6 +187,7 @@ const (
 	propType          = "t"
 	propK8sDistro     = "kd"
 	propCloudProvider = "cp"
+	propOpt           = "opt"
 )
 
 type eventPayload struct {
@@ -270,6 +276,7 @@ func buildEventProps(p EventParams) map[string]string {
 		{"type", p.Type},
 		{"k8s.distro", p.K8sDistro},
 		{"cloud.provider", p.CloudProvider},
+		{"option", p.Opt},
 	} {
 		if kv.v != "" {
 			props[kv.k] = kv.v
@@ -294,6 +301,7 @@ func buildUserAgent(p EventParams) string {
 		{propErr, shortErr(p.Err)},
 		{propType, p.Type},
 		{propCloudProvider, shortCloudProvider(p.CloudProvider)},
+		{propOpt, shortSub(p.Opt)},
 	}
 	// kd= is only included for analyze events;
 	if p.StepID == StepAnalyze {

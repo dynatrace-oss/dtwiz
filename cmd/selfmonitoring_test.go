@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/recommender"
 	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 )
 
@@ -124,4 +125,45 @@ func withCleanCredentialFlags(t *testing.T) {
 	origEnv, origTok := environmentFlag, platformTokenFlag
 	environmentFlag, platformTokenFlag = "", ""
 	t.Cleanup(func() { environmentFlag, platformTokenFlag = origEnv, origTok })
+}
+
+func TestFireSetupMenuEvent(t *testing.T) {
+	k8sRec := recommender.Recommendation{Method: recommender.MethodKubernetes}
+	awsRec := recommender.Recommendation{Method: recommender.MethodAWS}
+	otelRec := recommender.Recommendation{Method: recommender.MethodOtelCollector}
+
+	t.Run("one_event_per_presented_method", func(t *testing.T) {
+		var captured []selfmonitoring.EventParams
+		original := eventSink
+		eventSink = func(p selfmonitoring.EventParams) { captured = append(captured, p) }
+		defer func() { eventSink = original }()
+
+		fireSetupMenuEvent(nil, []recommender.Recommendation{k8sRec, awsRec, otelRec})
+
+		if len(captured) != 3 {
+			t.Fatalf("expected 3 events, got %d", len(captured))
+		}
+		wantOpts := []string{"kubernetes", "aws", "otel"}
+		for i, want := range wantOpts {
+			if captured[i].Opt != want {
+				t.Errorf("event %d: opt = %q, want %q", i, captured[i].Opt, want)
+			}
+			if captured[i].StepID != selfmonitoring.StepRecommendationsPresented {
+				t.Errorf("event %d: step = %q, want %q", i, captured[i].StepID, selfmonitoring.StepRecommendationsPresented)
+			}
+		}
+	})
+
+	t.Run("no_recommendations_fires_nothing", func(t *testing.T) {
+		var captured []selfmonitoring.EventParams
+		original := eventSink
+		eventSink = func(p selfmonitoring.EventParams) { captured = append(captured, p) }
+		defer func() { eventSink = original }()
+
+		fireSetupMenuEvent(nil, nil)
+
+		if len(captured) != 0 {
+			t.Fatalf("expected no events, got %d", len(captured))
+		}
+	})
 }

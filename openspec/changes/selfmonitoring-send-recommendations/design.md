@@ -36,7 +36,6 @@ Self-monitoring is always enabled, so this is not an opt-in PoC path: one `dtwiz
 
 Emission stays fire-and-forget on the existing pipeline: sends happen on background goroutines and are flushed on exit, delivery failures are logged at debug level only, and an unconfigured tenant simply drops the event. Adding events to the menu path therefore cannot block the prompt or surface an error to the user.
 
-
 ## Correlation across events
 
 All events emitted for a single `dtwiz setup` invocation share the same `executionId` in the event body, letting DQL queries correlate presented and selected events for the same session. This is what turns the two steps into a funnel: group by `executionId`, then compare the `recommendations_presented` set against the single `recommendations_selected` entry.
