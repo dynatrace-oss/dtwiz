@@ -236,7 +236,7 @@ func installGCPWithRunner(
 	display.ColorMessage.Println("  Google Cloud integration setup complete!")
 	fmt.Println()
 
-	installer.WatchIngestCloudFromTime(cfg.EnvURL, cfg.PlatformToken, startTime)
+	installer.WatchIngestCloudFromTimeWithEvent(cfg.EnvURL, cfg.PlatformToken, startTime, installer.OnWatchComplete)
 	return nil
 }
 
