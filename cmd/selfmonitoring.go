@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -191,6 +192,55 @@ func fireSetupInstallEvent(cmd *cobra.Command, sub string, err error) {
 				p.ExtraProps[k] = v
 			}
 		}
+	}
+	fireSelfMonitoringEvent(p)
+}
+
+// installMethodFeatures returns the static per-method feature flags included in
+// the install.ist event. Only fields applicable to the method are present; absent
+// fields are intentionally omitted rather than set to false.
+func installMethodFeatures(method string) map[string]string {
+	switch method {
+	case "oneagent", "kubernetes", "docker":
+		return map[string]string{
+			"install.host_monitoring_enabled": "true",
+		}
+	case "otel", "otel-collector", "demo":
+		return map[string]string{
+			"install.host_monitoring_enabled": "true",
+			"install.otel_pipelines":          "traces,metrics,logs",
+		}
+	case "otel-python", "otel-node", "otel-java":
+		return map[string]string{
+			"install.otel_pipelines": "traces,metrics,logs",
+		}
+	default:
+		return nil
+	}
+}
+
+// fireInstallEvent fires the StepInstall event for a direct dtwiz install <method>
+// invocation. Silently skipped when err is ErrInstallCancelled (user declined prompt).
+// duration is the elapsed time from user confirmation to install completion; it is
+// omitted when zero (e.g. install was never executed due to dry-run).
+func fireInstallEvent(cmd *cobra.Command, duration time.Duration, err error) {
+	if errors.Is(err, installer.ErrInstallCancelled) {
+		return
+	}
+	_, sub := deriveCommandNames(cmd)
+	p := buildEventParams(cmd, selfmonitoring.StepInstall)
+	if err != nil {
+		p.Err = "err"
+	}
+	extra := make(map[string]string)
+	if duration > 0 {
+		extra["install.duration_ms"] = strconv.FormatInt(duration.Milliseconds(), 10)
+	}
+	for k, v := range installMethodFeatures(sub) {
+		extra[k] = v
+	}
+	if len(extra) > 0 {
+		p.ExtraProps = extra
 	}
 	fireSelfMonitoringEvent(p)
 }
