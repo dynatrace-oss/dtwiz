@@ -36,10 +36,10 @@ func TestSelfMonitoringInstrumentation(t *testing.T) {
 	}
 
 	cases := []struct {
-		cmd       string        // dtwiz sub-command; also the expected event.name suffix
-		args      []string      // full args passed to the binary
-		stdin     string        // optional stdin (for interactive prompts)
-		killAfter time.Duration // if >0, kill the process after this delay
+		cmd       string
+		args      []string
+		stdin     string
+		killAfter time.Duration
 	}{
 		{cmd: "status", args: []string{"status"}},
 		{cmd: "setup", args: []string{"setup", "--dry-run"}, stdin: "1\n"},
@@ -49,7 +49,7 @@ func TestSelfMonitoringInstrumentation(t *testing.T) {
 	env := integration.SetupIntegration(t)
 
 	pollOpts := []grail.PollOption{
-		grail.WithTimeout(3 * time.Minute),
+		grail.WithTimeout(1 * time.Minute),
 		grail.WithInterval(10 * time.Second),
 	}
 
@@ -83,7 +83,7 @@ func TestSelfMonitoringInstrumentation(t *testing.T) {
 
 			// For commands killed by context (watch), non-zero exit is expected.
 			if tc.killAfter == 0 && runErr != nil {
-				t.Fatalf("dtwiz %s failed: %v", tc.cmd, runErr)
+				t.Fatalf("[%s] unexpected exit: %v\n%s", tc.cmd, runErr, out)
 			}
 
 			q := grail.SelfMonitoringQuery{
