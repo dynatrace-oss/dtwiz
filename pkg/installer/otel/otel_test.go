@@ -1484,3 +1484,78 @@ func TestInstallOtelCollector_Darwin_NeverShowsUnavailableNotice(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderOtelTemplate_DebugExporter_Included(t *testing.T) {
+	data := otelConfigData{
+		Endpoint:    "https://example.live.dynatrace.com",
+		AuthHeader:  "Bearer tok",
+		GRPCPort:    4317,
+		HTTPPort:    4318,
+		MetricsPort: 8888,
+		Debug:       true,
+	}
+	out, err := renderOtelTemplate(data)
+	if err != nil {
+		t.Fatalf("renderOtelTemplate: %v", err)
+	}
+	checks := []string{
+		"debug:",
+		"verbosity: normal",
+		"- debug",
+	}
+	for _, want := range checks {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in rendered config (Debug=true):\n%s", want, out)
+		}
+	}
+}
+
+func TestRenderOtelTemplate_DebugExporter_HostMonitoring_Included(t *testing.T) {
+	data := otelConfigData{
+		Endpoint:        "https://example.live.dynatrace.com",
+		AuthHeader:      "Bearer tok",
+		GRPCPort:        4317,
+		HTTPPort:        4318,
+		MetricsPort:     8888,
+		HealthCheckPort: 13133,
+		Debug:           true,
+	}
+	out, err := renderOtelTemplate(data)
+	if err != nil {
+		t.Fatalf("renderOtelTemplate: %v", err)
+	}
+	if !strings.Contains(out, "debug:") {
+		t.Errorf("expected debug exporter declaration in rendered config:\n%s", out)
+	}
+	if !strings.Contains(out, "verbosity: normal") {
+		t.Errorf("expected verbosity: normal in rendered config:\n%s", out)
+	}
+	// All four pipelines (traces, metrics/apps, metrics/host, logs) must include the debug exporter.
+	// Each contributes one "- debug" line, so we expect exactly 4 occurrences.
+	const wantDebugCount = 4
+	gotDebugCount := strings.Count(out, "        - debug")
+	if gotDebugCount != wantDebugCount {
+		t.Errorf("expected %d '- debug' exporter entries (one per pipeline), got %d:\n%s", wantDebugCount, gotDebugCount, out)
+	}
+}
+
+func TestRenderOtelTemplate_DebugExporter_Excluded(t *testing.T) {
+	data := otelConfigData{
+		Endpoint:    "https://example.live.dynatrace.com",
+		AuthHeader:  "Bearer tok",
+		GRPCPort:    4317,
+		HTTPPort:    4318,
+		MetricsPort: 8888,
+		Debug:       false,
+	}
+	out, err := renderOtelTemplate(data)
+	if err != nil {
+		t.Fatalf("renderOtelTemplate: %v", err)
+	}
+	if strings.Contains(out, "debug:") {
+		t.Errorf("unexpected debug exporter in rendered config (Debug=false):\n%s", out)
+	}
+	if strings.Contains(out, "- debug") {
+		t.Errorf("unexpected '- debug' in pipeline exporters (Debug=false):\n%s", out)
+	}
+}
