@@ -13,7 +13,7 @@ The system SHALL provide a `dtwiz watch` command that polls the Dynatrace DQL AP
 #### Scenario: User runs watch command standalone
 
 - **WHEN** user runs `dtwiz watch` with valid environment and platform token
-- **THEN** the system polls Dynatrace every 5 seconds and displays counts and details for Services, Cloud, Kubernetes, Relationships, Logs, Requests, and Exceptions
+- **THEN** the system polls Dynatrace every 5 seconds and displays counts and details for Services, Hosts, Kubernetes, Cloud, Relationships, Logs, Requests, and Exceptions
 
 #### Scenario: Watch starts after successful install
 
@@ -46,19 +46,26 @@ The system SHALL use ANSI cursor movement to update the display in-place without
 - **WHEN** stdout is not a TTY
 - **THEN** the system falls back to append-only output without ANSI cursor movement
 
-### Requirement: Seven data sections with deep links
+### Requirement: Eight data sections with deep links
 
-The system SHALL display seven data sections, each showing counts, details, and a deep link to the relevant Dynatrace app once data arrives.
+The system SHALL display eight data sections, each showing counts, details, and a deep link to the relevant Dynatrace app once data arrives.
 
 #### Scenario: Services section with data
 
 - **WHEN** Dynatrace returns service entities
 - **THEN** the system displays section "Services" with count, up to 5 service names, "+N more" if needed, and a link to the services explorer
 
+#### Scenario: Hosts section with data
+
+- **WHEN** Dynatrace returns regular host or OpenTelemetry host entities
+- **THEN** the system displays section "Hosts" with a combined host count
+- **AND** regular host and OpenTelemetry host entries are listed together under "Hosts"
+- **AND** each listed host has a link to that host's detail page
+
 #### Scenario: Cloud section with data
 
-- **WHEN** Dynatrace returns AWS\_\* entity types
-- **THEN** the system displays section "Cloud" with total count, top 5 types by count with humanized names (strip AWS\_ prefix, lowercase, pluralize), and a link to the clouds app
+- **WHEN** Dynatrace returns AWS\_\*, AZURE\_\*, or GCP\_\* entity types
+- **THEN** the system displays section "Cloud" with total count, top 5 types by count with humanized names, and a link to the clouds app
 
 #### Scenario: Kubernetes section with data
 
@@ -84,6 +91,11 @@ The system SHALL display seven data sections, each showing counts, details, and 
 
 - **WHEN** Dynatrace returns spans with exception events
 - **THEN** the system displays "Exceptions" with count and a link to the exceptions explorer
+
+#### Scenario: Section order
+
+- **WHEN** the watch display renders
+- **THEN** the sections appear in this order: Services, Hosts, Kubernetes, Cloud, Relationships, Logs, Requests, Exceptions
 
 #### Scenario: Section with no data yet
 
