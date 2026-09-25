@@ -1,6 +1,6 @@
-# Spec: Self-Monitoring Watch Workflow
+# Spec: Self-Monitoring Watch Workflow (delta)
 
-## NEW Requirements
+## MODIFIED Requirements
 
 ### Requirement: dtwiz watch emits two self-monitoring events per invocation
 
@@ -68,20 +68,10 @@ The `t=` field in the User-Agent of the `st=com` event encodes time-to-first-dat
 - **WHEN** the `st=com` event is assembled
 - **THEN** the `t=` value has 8 comma-separated whole-second values in fixed order
 
-## MODIFIED Requirements
+## REMOVED Requirements
 
-### Requirement: Self-monitoring events carry a meaningful title
+### Requirement: st=com for watch omits c= from the User-Agent
 
-The system SHALL set the event title to `"dtwiz <cmd>"` or `"dtwiz <cmd> <sub>"` (using the normalized command and subcommand identifiers) for all self-monitoring events.
+**Reason:** The `c=` field is now always present and set to `wch` for all watch completion events.
 
-#### Scenario: Top-level command event
-
-- **GIVEN** a self-monitoring event is sent for a top-level command (e.g. `watch`, `status`)
-- **WHEN** the event is ingested
-- **THEN** the event title is `"dtwiz <cmd>"` (e.g. `"dtwiz wch"`)
-
-#### Scenario: Subcommand event
-
-- **GIVEN** a self-monitoring event is sent for a subcommand (e.g. `install otel`)
-- **WHEN** the event is ingested
-- **THEN** the event title is `"dtwiz <cmd> <sub>"` (e.g. `"dtwiz ins otel"`)
+**Migration:** N/A
