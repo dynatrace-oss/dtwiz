@@ -73,6 +73,12 @@ var setupCmd = &cobra.Command{
 		}
 
 		fmt.Print(recommender.FormatSetupMenu(recs, demoRunning, featureflags.IsEnabled(featureflags.Experimental)))
+
+		techNames := make([]string, 0, len(info.ProjectTechs))
+		for _, t := range info.ProjectTechs {
+			techNames = append(techNames, t.Name)
+		}
+		fireSetupMenuEvent(cmd, actionable, techNames)
 		fmt.Println()
 		fmt.Printf("  %s  %s\n", display.ColorDefault.Sprint("[u]"), display.ColorDefault.Sprint("Show uninstall commands"))
 		fmt.Printf("  %s  %s\n", display.ColorDefault.Sprint("[0]"), display.ColorDefault.Sprint("Cancel"))

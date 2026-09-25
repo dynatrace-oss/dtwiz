@@ -271,13 +271,15 @@ func TestStepConstants(t *testing.T) {
 // shortcode and the event body carries e.g. "can" instead of "cancelled".
 func TestStepFullNames(t *testing.T) {
 	want := map[string]string{
-		StepInvoked:   "invoked",
-		StepAnalyze:   "analyze",
-		StepRecommend: "recommend",
-		StepInstall:   "install",
-		StepCompleted: "completed",
-		StepFailed:    "failed",
-		StepCancelled: "cancelled",
+		StepInvoked:                  "invoked",
+		StepAnalyze:                  "analyze",
+		StepRecommend:                "recommend",
+		StepInstall:                  "install",
+		StepCompleted:                "completed",
+		StepFailed:                   "failed",
+		StepCancelled:                "cancelled",
+		StepRecommendationsPresented: "recommendations_presented",
+		StepRecommendationsSelected:  "recommendations_selected",
 	}
 
 	for code, name := range want {
@@ -344,6 +346,149 @@ func TestBuildUserAgentWithinCaptureLimit(t *testing.T) {
 		if len(ua) > limit {
 			t.Errorf("User-Agent %q is %d chars, exceeds %d-char limit", ua, len(ua), limit)
 		}
+	}
+}
+
+func TestBuildUserAgentOptAndTechs(t *testing.T) {
+	tests := []struct {
+		name        string
+		params      EventParams
+		wantKeys    []string
+		notWantKeys []string
+	}{
+		{
+			name: "opt_set_appears_as_opt_not_s",
+			params: EventParams{
+				Cmd:    "setup",
+				StepID: StepRecommendationsPresented,
+				Mode:   ModeTTY,
+				Opt:    "otel",
+			},
+			wantKeys:    []string{"c=set", "st=rpr", "opt=otel"},
+			notWantKeys: []string{";s=otel"},
+		},
+		{
+			name: "tech_set_appears_as_tx",
+			params: EventParams{
+				Cmd:    "setup",
+				StepID: StepRecommendationsPresented,
+				Mode:   ModeTTY,
+				Opt:    "otel",
+				Tech:   "Node.js",
+			},
+			wantKeys:    []string{"opt=otel", "tx=nd"},
+			notWantKeys: []string{},
+		},
+		{
+			name: "opt_and_tech_both_set",
+			params: EventParams{
+				Cmd:    "setup",
+				StepID: StepRecommendationsPresented,
+				Mode:   ModeTTY,
+				Opt:    "otel",
+				Tech:   "Python",
+			},
+			wantKeys:    []string{"st=rpr", "opt=otel", "tx=py"},
+			notWantKeys: []string{},
+		},
+		{
+			name: "step_selected",
+			params: EventParams{
+				Cmd:    "setup",
+				StepID: StepRecommendationsSelected,
+				Mode:   ModeTTY,
+				Opt:    "kubernetes",
+			},
+			wantKeys:    []string{"st=rsl", "opt=k8s"},
+			notWantKeys: []string{"tx="},
+		},
+		{
+			name: "no_techs_omits_tx",
+			params: EventParams{
+				Cmd:    "setup",
+				StepID: StepRecommendationsPresented,
+				Mode:   ModeTTY,
+				Opt:    "aws",
+			},
+			wantKeys:    []string{"st=rpr", "opt=aws"},
+			notWantKeys: []string{"tx="},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ua := buildUserAgent(tt.params)
+			if len(ua) > 64 {
+				t.Errorf("User-Agent too long: %d > 64: %s", len(ua), ua)
+			}
+			for _, key := range tt.wantKeys {
+				if !strings.Contains(ua, key) {
+					t.Errorf("missing key %q in User-Agent: %s", key, ua)
+				}
+			}
+			for _, key := range tt.notWantKeys {
+				if strings.Contains(ua, key) {
+					t.Errorf("key %q should be absent in User-Agent: %s", key, ua)
+				}
+			}
+		})
+	}
+}
+
+func TestBuildEventPropsOptAndTechs(t *testing.T) {
+	t.Run("opt_in_body_as_option_key", func(t *testing.T) {
+		params := EventParams{
+			Cmd:    "setup",
+			StepID: StepRecommendationsPresented,
+			Mode:   ModeTTY,
+			Opt:    "otel",
+		}
+		props := buildEventProps(params)
+		if props["option"] != "otel" {
+			t.Errorf("body[option] = %q, want %q", props["option"], "otel")
+		}
+		if _, ok := props["technology"]; ok {
+			t.Errorf("body[technology] should be absent when Tech is empty, got %q", props["technology"])
+		}
+	})
+
+	t.Run("tech_full_name_in_body_as_technology_key", func(t *testing.T) {
+		params := EventParams{
+			Cmd:    "setup",
+			StepID: StepRecommendationsPresented,
+			Mode:   ModeTTY,
+			Opt:    "otel",
+			Tech:   "Node.js",
+		}
+		props := buildEventProps(params)
+		if props["technology"] != "Node.js" {
+			t.Errorf("body[technology] = %q, want full name %q", props["technology"], "Node.js")
+		}
+	})
+}
+
+func TestShortTech(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"Node.js", "nd"},
+		{"Go", "go"},
+		{"Python", "py"},
+		{"Java", "jv"},
+		{"Rust", "rs"},
+		{"Ruby", "rb"},
+		{"PHP", "ph"},
+		{".NET", "dn"},
+		{"Unknown", ""}, // unmapped returns empty
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := shortTech(tt.input)
+			if got != tt.want {
+				t.Errorf("shortTech(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
 	}
 }
 

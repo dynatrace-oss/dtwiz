@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/recommender"
 	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 )
 
@@ -126,4 +127,94 @@ func withCleanCredentialFlags(t *testing.T) {
 	origEnv, origTok := environmentFlag, platformTokenFlag
 	environmentFlag, platformTokenFlag = "", ""
 	t.Cleanup(func() { environmentFlag, platformTokenFlag = origEnv, origTok })
+}
+
+func TestFireSetupMenuEvent(t *testing.T) {
+	k8sRec := recommender.Recommendation{Method: recommender.MethodKubernetes}
+	awsRec := recommender.Recommendation{Method: recommender.MethodAWS}
+	otelRec := recommender.Recommendation{Method: recommender.MethodOtelCollector}
+
+	t.Run("no_techs_fires_one_event_per_method", func(t *testing.T) {
+		var captured []selfmonitoring.EventParams
+		original := eventSink
+		eventSink = func(p selfmonitoring.EventParams) { captured = append(captured, p) }
+		defer func() { eventSink = original }()
+
+		fireSetupMenuEvent(nil, []recommender.Recommendation{k8sRec, awsRec}, nil)
+
+		if len(captured) != 2 {
+			t.Fatalf("expected 2 events, got %d", len(captured))
+		}
+		if captured[0].Opt != "kubernetes" || captured[1].Opt != "aws" {
+			t.Errorf("unexpected opt values: %q, %q", captured[0].Opt, captured[1].Opt)
+		}
+		for _, p := range captured {
+			if p.StepID != selfmonitoring.StepRecommendationsPresented {
+				t.Errorf("expected step %q, got %q", selfmonitoring.StepRecommendationsPresented, p.StepID)
+			}
+			if p.Tech != "" {
+				t.Errorf("expected no tech for non-otel method, got %q", p.Tech)
+			}
+		}
+	})
+
+	t.Run("otel_with_two_techs_fires_two_events", func(t *testing.T) {
+		var captured []selfmonitoring.EventParams
+		original := eventSink
+		eventSink = func(p selfmonitoring.EventParams) { captured = append(captured, p) }
+		defer func() { eventSink = original }()
+
+		fireSetupMenuEvent(nil, []recommender.Recommendation{otelRec}, []string{"Node.js", "Python"})
+
+		if len(captured) != 2 {
+			t.Fatalf("expected 2 events for otel with 2 techs, got %d", len(captured))
+		}
+		if captured[0].Tech != "Node.js" || captured[1].Tech != "Python" {
+			t.Errorf("unexpected tech values: %q, %q", captured[0].Tech, captured[1].Tech)
+		}
+		for _, p := range captured {
+			if p.Opt != "otel" {
+				t.Errorf("expected opt=otel, got %q", p.Opt)
+			}
+			if p.StepID != selfmonitoring.StepRecommendationsPresented {
+				t.Errorf("expected step %q, got %q", selfmonitoring.StepRecommendationsPresented, p.StepID)
+			}
+		}
+	})
+
+	t.Run("mixed_methods_correct_event_count", func(t *testing.T) {
+		var captured []selfmonitoring.EventParams
+		original := eventSink
+		eventSink = func(p selfmonitoring.EventParams) { captured = append(captured, p) }
+		defer func() { eventSink = original }()
+
+		// k8s + otel with 2 techs → 1 + 2 = 3 events
+		fireSetupMenuEvent(nil, []recommender.Recommendation{k8sRec, otelRec}, []string{"Node.js", "Python"})
+
+		if len(captured) != 3 {
+			t.Fatalf("expected 3 events (1 for k8s + 2 for otel), got %d", len(captured))
+		}
+		if captured[0].Opt != "kubernetes" {
+			t.Errorf("first event should be kubernetes, got %q", captured[0].Opt)
+		}
+		if captured[1].Opt != "otel" || captured[2].Opt != "otel" {
+			t.Errorf("events 2 and 3 should be otel, got %q, %q", captured[1].Opt, captured[2].Opt)
+		}
+	})
+
+	t.Run("non_otel_does_not_carry_techs_even_when_present", func(t *testing.T) {
+		var captured []selfmonitoring.EventParams
+		original := eventSink
+		eventSink = func(p selfmonitoring.EventParams) { captured = append(captured, p) }
+		defer func() { eventSink = original }()
+
+		fireSetupMenuEvent(nil, []recommender.Recommendation{k8sRec}, []string{"Node.js"})
+
+		if len(captured) != 1 {
+			t.Fatalf("expected 1 event, got %d", len(captured))
+		}
+		if captured[0].Tech != "" {
+			t.Errorf("k8s event should have no tech, got %q", captured[0].Tech)
+		}
+	})
 }
