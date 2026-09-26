@@ -9,7 +9,7 @@
 - Each `dtwiz install <method>` handler emits an `ist` step event when the installer returns, carrying:
   - `install.duration_ms` — elapsed time from user confirmation to install completion, excluding think time at the prompt
   - Per-method feature flags (`install.host_monitoring_enabled`, `install.otel_pipelines`) — only fields applicable to the method are present; inapplicable fields are absent
-  - An error field when the install fails; event is suppressed entirely on `ErrInstallCancelled`
+  - An error field when the install fails or the user cancels; cancellation emits `ist` with `error.type = user_cancelled` so drop-off is visible even without a subsequent data event
 - Each handler also wires up a `com` event callback to the post-install WatchIngest session, so first-data timing is captured for all methods (matching the setup pattern)
 - A new `ExecutionStart` package-level var in `pkg/installer` records the moment the user confirms, giving accurate duration that excludes the time spent reading the confirmation prompt
 - A new `OnWatchComplete` package-level var allows cloud installers (AWS, Azure, GCP) that run WatchIngest internally to receive the event callback without changing their function signatures or breaking existing tests

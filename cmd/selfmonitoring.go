@@ -220,17 +220,21 @@ func installMethodFeatures(method string) map[string]string {
 }
 
 // fireInstallEvent fires the StepInstall event for a direct dtwiz install <method>
-// invocation. Silently skipped when err is ErrInstallCancelled (user declined prompt).
+// invocation, including cancellations (error.type = user_cancelled).
 // duration is the elapsed time from user confirmation to install completion; it is
-// omitted when zero (e.g. install was never executed due to dry-run).
+// omitted when zero (e.g. install was never executed due to dry-run or cancellation).
 func fireInstallEvent(cmd *cobra.Command, duration time.Duration, err error) {
-	if errors.Is(err, installer.ErrInstallCancelled) {
-		return
-	}
 	_, sub := deriveCommandNames(cmd)
 	p := buildEventParams(cmd, selfmonitoring.StepInstall)
 	if err != nil {
-		p.Err = "err"
+		errType, attrs := selfmonitoring.ClassifyError(err)
+		p.Err = string(errType)
+		if len(attrs) > 0 {
+			p.ExtraProps = make(map[string]string, len(attrs)+4)
+			for k, v := range attrs {
+				p.ExtraProps[k] = v
+			}
+		}
 	}
 	extra := make(map[string]string)
 	if duration > 0 {
@@ -240,7 +244,13 @@ func fireInstallEvent(cmd *cobra.Command, duration time.Duration, err error) {
 		extra[k] = v
 	}
 	if len(extra) > 0 {
-		p.ExtraProps = extra
+		if p.ExtraProps == nil {
+			p.ExtraProps = extra
+		} else {
+			for k, v := range extra {
+				p.ExtraProps[k] = v
+			}
+		}
 	}
 	fireSelfMonitoringEvent(p)
 }

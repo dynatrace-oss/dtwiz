@@ -2,15 +2,34 @@
 
 ## Purpose
 
-Instrument each `dtwiz install <method>` subcommand with self-monitoring telemetry events so that install sessions are observable end-to-end: invocation, install completion or failure, and first-data confirmation in the post-install watch session.
+Instrument each `dtwiz install <method>` subcommand with self-monitoring telemetry events so that install sessions are observable end-to-end: invocation, install completion or failure (including user cancellation), and first-data confirmation in the post-install watch session.
+
+## Event flow per session
+
+For every `dtwiz install <method>` invocation (not via `dtwiz setup`), exactly two self-monitoring events are emitted in sequence:
+
+1. `inv` (invoked) — fired immediately when the subcommand's `RunE` begins, before any install logic. Ensures the invocation is recorded even if the process is killed mid-install.
+2. `ist` (install) — fired when the installer returns, regardless of outcome. Carries `install.duration_ms`, per-method feature flags, and a classified error type when applicable.
+
+A third event, `com` (completed), is fired asynchronously by the post-install WatchIngest session when signals are first detected or when the session times out. It is owned entirely by WatchIngest and is absent when the user exits before data arrives.
+
+Pre-install failures (credential lookup, token validation, client setup) emit `fai` (failed) instead of `ist` — the installer was never reached.
 
 ## ADDED Requirements
 
-### Requirement: Install commands emit an ist event on completion or failure
+### Requirement: Install commands emit an inv event on invocation
 
-When the self-monitoring feature flag is enabled and a `dtwiz install <method>` subcommand is invoked directly (not via `dtwiz setup`), the system SHALL emit an `ist` step event when the installer returns — whether it succeeded or failed — carrying the install method as the subcommand identifier.
+When the self-monitoring feature flag is enabled and a `dtwiz install <method>` subcommand is invoked directly, the system SHALL emit an `inv` step event immediately when the command starts, before any install logic executes.
 
-The event SHALL be suppressed entirely when the user declines the install confirmation prompt (`ErrInstallCancelled`). Absence of the `ist` event signals that the user never confirmed.
+#### Scenario: inv fires before install logic
+
+- **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled
+- **WHEN** the user runs `dtwiz install <method>`
+- **THEN** an `inv` event is emitted immediately in `PersistentPreRun`, before credential resolution or install execution
+
+### Requirement: Install commands emit an ist event on completion, failure, or cancellation
+
+When the self-monitoring feature flag is enabled and a `dtwiz install <method>` subcommand is invoked directly (not via `dtwiz setup`), the system SHALL emit an `ist` step event when the installer returns — whether it succeeded, failed, or was cancelled by the user.
 
 #### Scenario: Successful install emits ist with no error field
 
@@ -18,23 +37,29 @@ The event SHALL be suppressed entirely when the user declines the install confir
 - **WHEN** the user runs `dtwiz install <method>` and the installer completes successfully
 - **THEN** a self-monitoring event with step `ist`, command `ins`, and subcommand matching the method shortcode is emitted with no error field
 
-#### Scenario: Failed install emits ist with error field
+#### Scenario: Failed install emits ist with classified error type
 
 - **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled
 - **WHEN** the installer returns a non-cancellation error
-- **THEN** a self-monitoring event with step `ist`, command `ins`, and error field `"err"` is emitted
+- **THEN** a self-monitoring event with step `ist`, command `ins`, and error field set to the classified error type from the taxonomy (e.g. `install_failed`, `network_error`, `dependency_missing`) is emitted
 
-#### Scenario: Cancelled install emits no ist event
+#### Scenario: Cancelled install emits ist with error type user_cancelled
 
 - **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled
 - **WHEN** the user declines the install confirmation prompt
-- **THEN** no `ist` event is emitted; only the initial `inv` event is present for the session
+- **THEN** an `ist` event is emitted with `error = "user_cancelled"`; `install.duration_ms` is absent because `ExecutionStart` was never set
 
 #### Scenario: Dry-run emits ist with no duration
 
 - **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and `--dry-run` is passed
 - **WHEN** the dry-run exits without executing anything
 - **THEN** an `ist` event is emitted with no error field and no `install.duration_ms` property
+
+#### Scenario: Pre-install failure emits fai instead of ist
+
+- **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled
+- **WHEN** credential resolution (`getDtEnvironment`) or token validation (`validateCredentials`) fails before the installer is called
+- **THEN** a `fai` event is emitted with a classified error type; no `ist` event is emitted
 
 ### Requirement: The ist event carries install.duration_ms excluding user think time
 
@@ -60,10 +85,16 @@ The property SHALL be absent when the install was not executed (dry-run or cance
 
 The `ist` event SHALL include feature flag properties that identify which Dynatrace capabilities were activated during the install. Only properties applicable to the install method SHALL be present; inapplicable fields SHALL be absent rather than set to false.
 
-The following properties are defined:
+The following properties are defined for current install methods:
 
 - `install.host_monitoring_enabled` (`"true"`) — present for methods that activate Dynatrace host monitoring: `oneagent`, `kubernetes`, `otel`, `otel-collector`, `docker`, `demo`
-- `install.otel_pipelines` (`"traces,metrics,logs"`) — present for methods that generate an OTel Collector config with all three pipeline types: `otel`, `otel-collector`, `otel-python`, `otel-node`, `otel-java`, `demo`
+- `install.otel_pipelines` (`"traces,metrics,logs"`) — present for methods that generate an OTel Collector config. Currently a static value: all OTel installers always configure all three pipelines.
+
+The following properties are defined but not yet applicable to any current install method (absent for all current methods):
+
+- `install.rum_enabled` — whether the RUM snippet was generated and injected. No current install method activates RUM.
+- `install.synthetic_enabled` — whether a Synthetic monitor was created. No current install method activates Synthetic.
+- `install.rds_extension_enabled` — whether the AWS RDS extension was auto-enabled. The `aws` installer deploys a generic CloudFormation data-acquisition stack; it does not detect or return RDS extension status. This field is absent for all current methods.
 
 #### Scenario: oneagent ist event includes host_monitoring_enabled
 
@@ -93,7 +124,9 @@ The following properties are defined:
 
 When the self-monitoring feature flag is enabled and a `dtwiz install <method>` subcommand runs a post-install WatchIngest session, the system SHALL fire a `com` step event when the first signal data is received OR when the session times out without data — using the same signal timing encoding as `dtwiz setup` and `dtwiz watch`.
 
-For methods where no data is received before the user exits, no `com` event is emitted.
+When the user exits WatchIngest early (Enter key) before data arrives, no `com` event is emitted.
+
+The `com` event is fired asynchronously by WatchIngest via `buildWatchEventCallback`. It is not fired by the install command handler itself.
 
 #### Scenario: com event fires on first data after install
 
@@ -114,7 +147,7 @@ For methods where no data is received before the user exits, no `com` event is e
 
 ### Requirement: Install methods cover all production and experimental subcommands
 
-The following install subcommands SHALL be instrumented with `ist` and `com` events:
+The following install subcommands SHALL be instrumented with `inv`, `ist`, and (when applicable) `com` events:
 
 - Production: `oneagent`, `kubernetes`, `otel`, `otel-collector`, `otel-python`, `otel-node`, `otel-java`, `aws`, `aws-lambda`, `azure`, `gcp`
 - Experimental (gated by `DTWIZ_EXPERIMENTAL`): `docker`, `demo`
