@@ -17,7 +17,7 @@ The complication is that the AWS, Azure, and GCP installers call WatchIngest the
 
 **Non-Goals:**
 
-- A separate `cnf` (confirmed) event — cancellation is inferred from absence of `ist`
+- A separate `cnf` (confirmed) event — cancellation is captured as `ist` with `error.type = user_cancelled`; a dedicated confirmed step is not needed
 - Dynamic feature detection (e.g. detecting actual host-monitoring extension activation success vs. attempt) — static per-method constants are sufficient for v1
 - Instrumenting `dtwiz update` or `dtwiz uninstall` — out of scope for this change
 - Tracking `install.rds_extension_enabled`, `install.rum_enabled`, `install.synthetic_enabled` — these features are not yet implemented in any installer; fields are absent rather than false
