@@ -157,6 +157,26 @@ func WatchIngestCloud(envURL, pToken, fromClause string) {
 	watchIngest(envURL, pToken, fromClause, nil, "", true, "", nil)
 }
 
+// WatchIngestCloudWithEvent is like WatchIngestCloud but calls onEvent as soon
+// as the first signal data is received OR the session times out.
+func WatchIngestCloudWithEvent(envURL, pToken, fromClause string, onEvent func(WatchSessionResult)) {
+	watchIngest(envURL, pToken, fromClause, nil, "", true, "", onEvent)
+}
+
+// WatchIngestCloudFromTimeWithEvent is like WatchIngestCloudFromTime but calls onEvent.
+func WatchIngestCloudFromTimeWithEvent(envURL, pToken string, startTime time.Time, onEvent func(WatchSessionResult)) {
+	if startTime.IsZero() {
+		return
+	}
+	WatchIngestCloudWithEvent(envURL, pToken, startTime.UTC().Format(IngestTimeFormat), onEvent)
+}
+
+// WatchIngestAWSWithEvent is like WatchIngestAWS but calls onEvent as soon
+// as the first signal data is received OR the session times out.
+func WatchIngestAWSWithEvent(envURL, pToken, fromClause string, statusCh <-chan string, awsAccountID string, onEvent func(WatchSessionResult)) {
+	watchIngest(envURL, pToken, fromClause, statusCh, awsAccountID, true, "", onEvent)
+}
+
 // otelLangNames maps a manual-language URL slug to its display name.
 var otelLangNames = map[string]string{
 	"php":    "PHP",
