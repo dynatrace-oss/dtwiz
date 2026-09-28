@@ -24,6 +24,7 @@
 - [Flags](#flags)
   - [`--yes` / `-y`](#--yes---y)
   - [`--project <path>`](#--project-path)
+- [Self-monitoring](#self-monitoring)
 - [Demo](#demo)
 - [Example workflow](#example-workflow)
 - [JSON output](#json-output)
@@ -178,6 +179,12 @@ Point `install otel`, `install otel-python`, `install otel-java`, or `install ot
 dtwiz install otel --project ./my-service
 dtwiz install otel-python --project ./my-python-app
 ```
+
+## Self-monitoring
+
+`dtwiz` sends a `CUSTOM_INFO` event to your Dynatrace environment on every command invocation. These events let you monitor the state of `dtwiz` executions and keep a history of which commands were run, when, and whether they succeeded. You can query them with DQL in your tenant.
+
+Events are sent to the Events v2 API and count against your environment's event ingest quota.
 
 ## Demo
 

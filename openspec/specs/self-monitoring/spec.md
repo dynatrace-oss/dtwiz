@@ -4,29 +4,24 @@
 
 ### Requirement: Self-monitoring events capture command invocations
 
-The system SHALL send a `CUSTOM_INFO` event to the Dynatrace Events v2 API on every dtwiz command invocation when the self-monitoring feature is enabled, capturing per-invocation metadata in both the event body and HTTP headers.
+The system SHALL send a `CUSTOM_INFO` event to the Dynatrace Events v2 API on every dtwiz command invocation, capturing per-invocation metadata in both the event body and HTTP headers.
 
-#### Scenario: Event sent on command invocation with feature flag enabled
+#### Scenario: Event sent on command invocation
 
-- **WHEN** `DTWIZ_SELF_MONITORING_POC=true` and user runs any dtwiz command
+- **WHEN** user runs any dtwiz command
 - **THEN** the system sends a `CUSTOM_INFO` event to `/api/v2/events/ingest` within 3 seconds
 - **AND** the event contains metadata in the request body and headers
 
-#### Scenario: No event sent when feature flag disabled
-
-- **WHEN** `DTWIZ_SELF_MONITORING_POC` is not set or false
-- **THEN** the system does not send any self-monitoring events
-
 #### Scenario: Event silently fails if credentials not configured
 
-- **WHEN** user runs a command with the feature enabled but no Dynatrace credentials configured
+- **WHEN** user runs a command but no Dynatrace credentials configured
 - **THEN** the system does not send an event
 - **AND** the command continues executing normally
 - **AND** no error is shown to the user
 
 #### Scenario: Asynchronous event send does not block command execution
 
-- **WHEN** a command is invoked with the feature enabled
+- **WHEN** a command is invoked
 - **THEN** event parameters are captured synchronously in `PersistentPreRun`
 - **AND** the HTTP send operation runs in a background goroutine
 - **AND** the command continues executing immediately without waiting for the event to be sent

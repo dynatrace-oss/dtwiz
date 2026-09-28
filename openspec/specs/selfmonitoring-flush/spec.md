@@ -17,32 +17,31 @@ the user.
 
 #### Scenario: Events delivered after a successful command
 
-- **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and credentials are configured
+- **GIVEN** credentials are configured
 - **WHEN** a command completes successfully
 - **THEN** all pending events are delivered before the process exits
 - **AND** no flush status is shown to the user
 
 #### Scenario: Events delivered after a command failure
 
-- **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and credentials are configured
+- **GIVEN** credentials are configured
 - **WHEN** a command fails
 - **THEN** all pending events, including the failure event, are delivered before the process exits
 
 #### Scenario: Events delivered after user cancellation
 
-- **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and credentials are configured
+- **GIVEN** credentials are configured
 - **WHEN** a command exits because the user declined a confirmation prompt
 - **THEN** all pending events are delivered before the process exits
 
 #### Scenario: A fast-failing command still delivers its event
 
-- **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and the tenant URL is known
+- **GIVEN** the tenant URL is known
 - **WHEN** a command fails quickly enough that it would otherwise exit before delivery completes
 - **THEN** the event is still delivered
 
 #### Scenario: Exceeding the wait is accepted silently
 
-- **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled
 - **WHEN** pending events cannot be delivered within the bounded wait
 - **THEN** the process exits without further delay
 - **AND** no error or warning is shown to the user
@@ -53,12 +52,6 @@ the user.
 - **GIVEN** no events are pending
 - **WHEN** the process exits
 - **THEN** it exits with no added delay
-
-#### Scenario: Feature flag disabled
-
-- **GIVEN** `DTWIZ_SELF_MONITORING_POC` is not enabled
-- **WHEN** any dtwiz command runs
-- **THEN** no events are produced and no network call is made
 
 ### Requirement: Events are delivered when they occur
 
