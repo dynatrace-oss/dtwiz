@@ -9,7 +9,7 @@ Instrument each `dtwiz install <method>` subcommand with self-monitoring telemet
 For every `dtwiz install <method>` invocation (not via `dtwiz setup`), exactly two self-monitoring events are emitted in sequence:
 
 1. `inv` (invoked) — fired immediately when the subcommand's `RunE` begins, before any install logic. Ensures the invocation is recorded even if the process is killed mid-install.
-2. `ist` (install) — fired when the installer returns, regardless of outcome. Carries `install.duration_ms`, per-method feature flags, and a classified error type when applicable.
+2. `ist` (install) — fired when the installer returns, regardless of outcome. Carries `install.duration_s`, per-method feature flags, and a classified error type when applicable.
 
 A third event, `com` (completed), is fired asynchronously by the post-install WatchIngest session when signals are first detected or when the session times out. It is owned entirely by WatchIngest and is absent when the user exits before data arrives.
 
@@ -47,13 +47,13 @@ When the self-monitoring feature flag is enabled and a `dtwiz install <method>` 
 
 - **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled
 - **WHEN** the user declines the install confirmation prompt
-- **THEN** an `ist` event is emitted with `error = "user_cancelled"`; `install.duration_ms` is absent because `ExecutionStart` was never set
+- **THEN** an `ist` event is emitted with `error = "user_cancelled"`; `install.duration_s` is absent because `ExecutionStart` was never set
 
 #### Scenario: Dry-run emits ist with no duration
 
 - **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and `--dry-run` is passed
 - **WHEN** the dry-run exits without executing anything
-- **THEN** an `ist` event is emitted with no error field and no `install.duration_ms` property
+- **THEN** an `ist` event is emitted with no error field and no `install.duration_s` property
 
 #### Scenario: Pre-install failure emits fai instead of ist
 
@@ -61,9 +61,9 @@ When the self-monitoring feature flag is enabled and a `dtwiz install <method>` 
 - **WHEN** credential resolution (`getDtEnvironment`) or token validation (`validateCredentials`) fails before the installer is called
 - **THEN** a `fai` event is emitted with a classified error type; no `ist` event is emitted
 
-### Requirement: The ist event carries install.duration_ms excluding user think time
+### Requirement: The ist event carries install.duration_s excluding user think time
 
-The `ist` event SHALL include an `install.duration_ms` property encoding the elapsed time in milliseconds from the moment the user confirmed the install prompt to the moment the installer returned. User think time (the time between prompt display and keystroke) SHALL be excluded from this value.
+The `ist` event SHALL include an `install.duration_s` property encoding the elapsed time in whole seconds from the moment the user confirmed the install prompt to the moment the installer returned. User think time (the time between prompt display and keystroke) SHALL be excluded from this value.
 
 For install methods that have no interactive confirmation prompt (currently `oneagent`), the duration starts when the installer function is called.
 
@@ -73,13 +73,13 @@ The property SHALL be absent when the install was not executed (dry-run or cance
 
 - **GIVEN** the installer ran with an interactive confirmation prompt
 - **WHEN** the `ist` event is assembled after the installer returns
-- **THEN** `install.duration_ms` is present and reflects the time from user confirmation to install completion, not from command invocation
+- **THEN** `install.duration_s` is present and reflects the time from user confirmation to install completion, not from command invocation
 
 #### Scenario: Duration is absent on dry-run
 
 - **GIVEN** `--dry-run` is passed and the installer did not execute
 - **WHEN** the `ist` event is assembled
-- **THEN** `install.duration_ms` is absent from the event properties
+- **THEN** `install.duration_s` is absent from the event properties
 
 ### Requirement: The ist event carries per-method feature flags
 

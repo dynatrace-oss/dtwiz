@@ -12,7 +12,7 @@ The complication is that the AWS, Azure, and GCP installers call WatchIngest the
 
 - Emit `ist` on install completion for all 13 methods, carrying duration, per-method feature flags, and error indicator
 - Emit `com` from WatchIngest for all 13 methods when first data is received or the session times out
-- Exclude user think time from `install.duration_ms` so the metric reflects actual install execution time
+- Exclude user think time from `install.duration_s` so the metric reflects actual install execution time
 - Zero behavior change for existing tests
 
 **Non-Goals:**
