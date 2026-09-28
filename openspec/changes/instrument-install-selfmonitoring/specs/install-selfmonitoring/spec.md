@@ -87,7 +87,7 @@ The `ist` event SHALL include feature flag properties that identify which Dynatr
 
 The following properties are defined for current install methods:
 
-- `install.host_monitoring_enabled` (`"true"`) — present for methods that activate Dynatrace host monitoring: `oneagent`, `kubernetes`, `otel`, `otel-collector`, `docker`, `demo`
+- `install.host_monitoring_enabled` (`"true"`) — present for OTel methods that configure the host metrics collector component: `otel`, `otel-collector`, `demo`. Absent for all other methods — OneAgent, Kubernetes Operator, and cloud installers are not OTel-based; language-specific OTel methods (`otel-python`, `otel-node`, `otel-java`) do not install a host metrics collector.
 - `install.otel_pipelines` (`"traces,metrics,logs"`) — present for methods that generate an OTel Collector config. Currently a static value: all OTel installers always configure all three pipelines.
 
 The following properties are defined but not yet applicable to any current install method (absent for all current methods):
@@ -96,11 +96,11 @@ The following properties are defined but not yet applicable to any current insta
 - `install.synthetic_enabled` — whether a Synthetic monitor was created. No current install method activates Synthetic.
 - `install.rds_extension_enabled` — whether the AWS RDS extension was auto-enabled. The `aws` installer deploys a generic CloudFormation data-acquisition stack; it does not detect or return RDS extension status. This field is absent for all current methods.
 
-#### Scenario: oneagent ist event includes host_monitoring_enabled
+#### Scenario: oneagent ist event includes no feature flag fields
 
 - **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled
 - **WHEN** `dtwiz install oneagent` completes
-- **THEN** the `ist` event properties include `install.host_monitoring_enabled: "true"` and no `install.otel_pipelines` field
+- **THEN** the `ist` event properties include no `install.*` feature flag fields
 
 #### Scenario: otel ist event includes both feature flags
 

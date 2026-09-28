@@ -201,10 +201,6 @@ func fireSetupInstallEvent(cmd *cobra.Command, sub string, err error) {
 // fields are intentionally omitted rather than set to false.
 func installMethodFeatures(method string) map[string]string {
 	switch method {
-	case "oneagent", "kubernetes", "docker":
-		return map[string]string{
-			"install.host_monitoring_enabled": "true",
-		}
 	case "otel", "otel-collector", "demo":
 		return map[string]string{
 			"install.host_monitoring_enabled": "true",
