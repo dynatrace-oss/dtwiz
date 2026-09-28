@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Self-monitoring (`DTWIZ_SELF_MONITORING_POC`): all 13 `dtwiz install <method>` subcommands now emit two events per session — `inv` on command start and `ist` on installer return. This is enabling funnel drop-off analysis, per-method pass/fail rates, and install duration tracking. The `ist` event carries `install.duration_s` (execution time excluding user think time), per-method feature flags (`install.host_monitoring_enabled`, `install.otel_pipelines`), and a classified error type. Cancellations emit `ist` with `error=user_cancelled` so drop-off is visible without a separate event. A `com` event is wired for all methods via the existing WatchIngest callback path.
+
 ## [1.9.0] - 2026-09-22
 
 ### Added
