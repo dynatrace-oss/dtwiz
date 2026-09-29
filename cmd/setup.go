@@ -167,6 +167,7 @@ var setupCmd = &cobra.Command{
 			return err
 		}
 
+		installer.OnWatchComplete = buildWatchEventCallback(cmd)
 		var installErr error
 		var otelManualLang string
 		switch selected.Method {
