@@ -87,7 +87,6 @@ func TestEventSink_sendsEvenWithoutToken(t *testing.T) {
 	defer srv.Close()
 
 	withCleanCredentialFlags(t)
-	t.Setenv("DTWIZ_SELF_MONITORING_POC", "true")
 	t.Setenv("DT_ENVIRONMENT", srv.URL)
 	t.Setenv("DT_PLATFORM_TOKEN", "")
 
@@ -110,7 +109,6 @@ func TestEventSink_sendsEvenWithoutToken(t *testing.T) {
 
 func TestEventSink_dropsEventWhenTenantUnknown(t *testing.T) {
 	withCleanCredentialFlags(t)
-	t.Setenv("DTWIZ_SELF_MONITORING_POC", "true")
 	t.Setenv("DT_ENVIRONMENT", "")
 	t.Setenv("DT_PLATFORM_TOKEN", "dt0s16.doesnotmatter")
 

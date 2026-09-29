@@ -7,6 +7,8 @@
 ![dtwiz - automatic data onboarding](docs/assets/dtwiz-animated.gif)
 
 > **Early Development**: This project is in active development. If you encounter any bugs or issues, please [file a GitHub issue](https://github.com/dynatrace-oss/dtwiz/issues/new). Contributions and feedback are welcome!
+>
+> **Note:** `dtwiz` sends a telemetry event to your Dynatrace environment on every command invocation. These events count against your environment's event ingest quota. See [Self-monitoring](#self-monitoring) for details and how to query them.
 
 ## Table of Contents
 
@@ -24,6 +26,7 @@
 - [Flags](#flags)
   - [`--yes` / `-y`](#--yes---y)
   - [`--project <path>`](#--project-path)
+- [Self-monitoring](#self-monitoring)
 - [Demo](#demo)
 - [Example workflow](#example-workflow)
 - [JSON output](#json-output)
@@ -178,6 +181,34 @@ Point `install otel`, `install otel-python`, `install otel-java`, or `install ot
 dtwiz install otel --project ./my-service
 dtwiz install otel-python --project ./my-python-app
 ```
+
+## Self-monitoring
+
+`dtwiz` sends a `CUSTOM_INFO` event to your Dynatrace environment on every command invocation. These events let you monitor the state of `dtwiz` executions and keep a history of which commands were run, when, and whether they succeeded.
+
+Use the following DQL query in your tenant's **Notebooks** or **Dashboards** app to explore them:
+
+```sql
+fetch events
+| filter event.type == "CUSTOM_INFO" and startsWith(event.name, "dtwiz")
+| fields timestamp, event.name, step, command, subcommand, error, version, os
+| sort timestamp desc
+| limit 100
+```
+
+Key fields:
+
+| Field | Values | Description |
+|-------|--------|-------------|
+| `event.name` | `dtwiz status`, `dtwiz install otel`, … | Command that was run |
+| `step` | `invoked`, `install`, `completed`, `failed`, `cancelled` | Execution stage |
+| `command` | `install`, `setup`, `watch`, … | Top-level command |
+| `subcommand` | `otel`, `kubernetes`, `oneagent`, … | Subcommand, when applicable |
+| `error` | `auth_error`, `dependency_missing`, `user_cancelled`, … | Error category on failures |
+| `version` | `1.9.0` | dtwiz version that ran |
+| `os` | `darwin`, `linux`, `windows` | Operating system |
+
+Events are sent to the Events v2 API and count against your environment's event ingest quota.
 
 ## Demo
 

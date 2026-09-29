@@ -14,7 +14,6 @@ type Flag int
 const (
 	AllRuntimes Flag = iota
 	Experimental
-	SelfMonitoringPoC
 )
 
 // CLIFeatureFlag defines a single feature flag with its metadata.
@@ -42,14 +41,6 @@ var registry = []CLIFeatureFlag{
 		"DTWIZ_EXPERIMENTAL",
 		false,
 		"enable experimental features (demo installation, Docker and OTel update in recommendations)",
-		false,
-	},
-	{
-		SelfMonitoringPoC,
-		"self-monitoring-poc",
-		"DTWIZ_SELF_MONITORING_POC",
-		false,
-		"enable self-monitoring PoC event (internal use only)",
 		false,
 	},
 }

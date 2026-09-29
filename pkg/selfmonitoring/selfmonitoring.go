@@ -1,5 +1,4 @@
 // Package selfmonitoring sends per-invocation telemetry events to the Dynatrace Events v2 API.
-// Gated by DTWIZ_SELF_MONITORING_POC feature flag — not intended for production use yet.
 package selfmonitoring
 
 import (

@@ -81,7 +81,6 @@ func TestSelfMonitoringInstrumentation(t *testing.T) {
 			cmd.Env = append(os.Environ(),
 				"DT_ENVIRONMENT="+env.EnvURL,
 				"DT_PLATFORM_TOKEN="+env.PlatformToken,
-				"DTWIZ_SELF_MONITORING_POC=true",
 			)
 
 			out, runErr := cmd.CombinedOutput()

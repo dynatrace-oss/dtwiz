@@ -16,30 +16,24 @@ completed event on success.
 
 #### Scenario: Command fails with an error
 
-- **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and credentials are configured
+- **GIVEN** credentials are configured
 - **WHEN** a command fails for any reason other than user cancellation
 - **THEN** one failed event is emitted before the command returns
 - **AND** the event reports the classified error category
 
 #### Scenario: Command is cancelled by the user
 
-- **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and credentials are configured
+- **GIVEN** credentials are configured
 - **WHEN** the user declines a confirmation prompt or selects the cancel entry at the recommendation menu
 - **THEN** one cancelled event is emitted before the command returns
 - **AND** the event reports the user-cancelled category
 
 #### Scenario: Command completes successfully
 
-- **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and credentials are configured
+- **GIVEN** credentials are configured
 - **WHEN** a command succeeds
 - **THEN** one completed event is emitted
 - **AND** no error category is reported
-
-#### Scenario: Feature flag disabled
-
-- **GIVEN** `DTWIZ_SELF_MONITORING_POC` is not enabled
-- **WHEN** a command fails or is cancelled
-- **THEN** no terminal event is emitted
 
 ### Requirement: Errors are classified using the structured taxonomy
 
@@ -115,12 +109,11 @@ events.
 
 #### Scenario: Invocation event has no error category
 
-- **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled
 - **WHEN** a command is invoked
 - **THEN** the invocation event reports no error category
 
 #### Scenario: Failure event reports its category
 
-- **GIVEN** `DTWIZ_SELF_MONITORING_POC` is enabled and a command fails
+- **GIVEN** a command fails
 - **WHEN** the failed event is sent
 - **THEN** it reports the classified error category

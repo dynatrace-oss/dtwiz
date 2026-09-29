@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
@@ -21,9 +20,6 @@ import (
 // eventSink is the function that handles a fully-built EventParams.
 // Replaced in tests to capture params without firing a real HTTP request.
 var eventSink = func(params selfmonitoring.EventParams) {
-	if !featureflags.IsEnabled(featureflags.SelfMonitoringPoC) {
-		return
-	}
 	selfmonitoring.TrackSend()
 	go func() {
 		defer selfmonitoring.SendDone()
