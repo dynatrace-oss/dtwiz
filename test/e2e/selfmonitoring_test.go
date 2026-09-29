@@ -36,14 +36,20 @@ func TestSelfMonitoringInstrumentation(t *testing.T) {
 	}
 
 	cases := []struct {
-		cmd       string
+		cmd       string // test name and default suffix for event.name ("dtwiz <cmd>")
 		args      []string
 		stdin     string
 		killAfter time.Duration
+		eventName string // overrides the default "dtwiz <cmd>" when set
 	}{
 		{cmd: "status", args: []string{"status"}},
 		{cmd: "setup", args: []string{"setup", "--dry-run"}, stdin: "1\n"},
 		{cmd: "watch", args: []string{"watch"}, killAfter: 6 * time.Second},
+		{
+			cmd:       "install otel",
+			args:      []string{"install", "otel", "--dry-run", "-y"},
+			eventName: "dtwiz install otel",
+		},
 	}
 
 	env := integration.SetupIntegration(t)
@@ -86,8 +92,12 @@ func TestSelfMonitoringInstrumentation(t *testing.T) {
 				t.Fatalf("[%s] unexpected exit: %v\n%s", tc.cmd, runErr, out)
 			}
 
+			eventName := tc.eventName
+			if eventName == "" {
+				eventName = "dtwiz " + tc.cmd
+			}
 			q := grail.SelfMonitoringQuery{
-				EventName: "dtwiz " + tc.cmd,
+				EventName: eventName,
 				Step:      "invoked",
 				From:      startTime,
 			}
