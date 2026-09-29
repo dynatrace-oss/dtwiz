@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-09-29
+
 ### Changed
 
 - Self-monitoring is now always enabled; the `DTWIZ_SELF_MONITORING_POC` feature flag and `--self-monitoring-poc` CLI flag have been removed. Every `dtwiz` command invocation sends a `CUSTOM_INFO` event to the Dynatrace Events v2 API, which lets you monitor the state of `dtwiz` executions and keep a history of them in your tenant.
@@ -14,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Self-monitoring: all 13 `dtwiz install <method>` subcommands now emit two events per session — `inv` on command start and `ist` on installer return. This is enabling funnel drop-off analysis, per-method pass/fail rates, and install duration tracking. The `ist` event carries `install.duration_s` (execution time excluding user think time), per-method feature flags (`install.host_monitoring_enabled`, `install.otel_pipelines`), and a classified error type. Cancellations emit `ist` with `error=user_cancelled` so drop-off is visible without a separate event. A `com` event is wired for all methods via the existing WatchIngest callback path.
+- `install otel`: when running with `--debug`, the generated OTel Collector config now includes the `debug` exporter in all pipelines, making raw telemetry visible in the collector log for troubleshooting.
+
+### Fixed
+
+- Self-monitoring: the watch-completion event (`com`) now correctly sets `cmd=watch` instead of an empty string, so watch sessions are distinguishable from other events in the funnel.
 
 ## [1.9.0] - 2026-09-22
 
@@ -592,7 +599,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.8.1...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.9.0...v1.10.0
+[1.9.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.8.1...v1.9.0
 [1.8.1]: https://github.com/dynatrace-oss/dtwiz/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.6.0...v1.7.0
