@@ -50,7 +50,7 @@ var AutoConfirm bool
 
 // ExecutionStart is set to time.Now() when the user confirms the install prompt (or
 // AutoConfirm is true). Install command handlers read this after the installer returns
-// to compute install.duration_ms, excluding user think time at the confirmation prompt.
+// to compute install.duration_s, excluding user think time at the confirmation prompt.
 // Zero when the installer did not call confirmProceed (e.g. no interactive prompt).
 var ExecutionStart time.Time
 

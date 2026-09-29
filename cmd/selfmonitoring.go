@@ -234,7 +234,7 @@ func fireInstallEvent(cmd *cobra.Command, duration time.Duration, err error) {
 	}
 	extra := make(map[string]string)
 	if duration > 0 {
-		extra["install.duration_s"] = strconv.FormatInt(int64(duration.Seconds()), 10)
+		extra["install.duration_s"] = strconv.FormatInt(int64(duration/time.Second), 10)
 	}
 	for k, v := range installMethodFeatures(sub) {
 		extra[k] = v

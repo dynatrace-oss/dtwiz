@@ -89,7 +89,9 @@ var installOneAgentCmd = &cobra.Command{
 			Quiet:                 quiet,
 		}
 
-		installer.ExecutionStart = time.Now() // oneagent installer has no interactive confirmation
+		if !installDryRun {
+			installer.ExecutionStart = time.Now()
+		}
 		installErr := oneagent.InstallOneAgentV2(c, opts)
 		fireInstallEvent(cmd, installDuration(), installErr)
 		if installErr != nil {
@@ -347,7 +349,6 @@ var installAWSCmd = &cobra.Command{
 		installer.ExecutionStart = time.Time{}
 		installer.OnWatchComplete = buildWatchEventCallback(cmd)
 		installErr := awspkg.InstallAWS(envURL, platformTok, installDryRun, StartTime.UTC().Format(installer.IngestTimeFormat))
-		installer.OnWatchComplete = nil
 		fireInstallEvent(cmd, installDuration(), installErr)
 		if installErr != nil {
 			if errors.Is(installErr, installer.ErrInstallCancelled) {
@@ -407,7 +408,6 @@ var installAzureCmd = &cobra.Command{
 		installer.ExecutionStart = time.Time{}
 		installer.OnWatchComplete = buildWatchEventCallback(cmd)
 		installErr := azure.InstallAzure(envURL, platformTok, installDryRun, StartTime)
-		installer.OnWatchComplete = nil
 		fireInstallEvent(cmd, installDuration(), installErr)
 		if installErr != nil {
 			if errors.Is(installErr, installer.ErrInstallCancelled) {
@@ -432,7 +432,6 @@ var installGCPCmd = &cobra.Command{
 		installer.ExecutionStart = time.Time{}
 		installer.OnWatchComplete = buildWatchEventCallback(cmd)
 		installErr := gcp.InstallGCP(envURL, platformTok, installDryRun, StartTime)
-		installer.OnWatchComplete = nil
 		fireInstallEvent(cmd, installDuration(), installErr)
 		if installErr != nil {
 			if errors.Is(installErr, installer.ErrInstallCancelled) {
