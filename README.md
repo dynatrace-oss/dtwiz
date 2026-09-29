@@ -182,7 +182,29 @@ dtwiz install otel-python --project ./my-python-app
 
 ## Self-monitoring
 
-`dtwiz` sends a `CUSTOM_INFO` event to your Dynatrace environment on every command invocation. These events let you monitor the state of `dtwiz` executions and keep a history of which commands were run, when, and whether they succeeded. You can query them with DQL in your tenant.
+`dtwiz` sends a `CUSTOM_INFO` event to your Dynatrace environment on every command invocation. These events let you monitor the state of `dtwiz` executions and keep a history of which commands were run, when, and whether they succeeded.
+
+Use the following DQL query in your tenant's **Notebooks** or **Dashboards** app to explore them:
+
+```
+fetch events
+| filter event.type == "CUSTOM_INFO" and startsWith(event.name, "dtwiz")
+| fields timestamp, event.name, step, command, subcommand, error, version, os
+| sort timestamp desc
+| limit 100
+```
+
+Key fields:
+
+| Field | Values | Description |
+|-------|--------|-------------|
+| `event.name` | `dtwiz status`, `dtwiz install otel`, … | Command that was run |
+| `step` | `invoked`, `install`, `completed`, `failed`, `cancelled` | Execution stage |
+| `command` | `install`, `setup`, `watch`, … | Top-level command |
+| `subcommand` | `otel`, `kubernetes`, `oneagent`, … | Subcommand, when applicable |
+| `error` | `auth_error`, `dependency_missing`, `user_cancelled`, … | Error category on failures |
+| `version` | `1.9.0` | dtwiz version that ran |
+| `os` | `darwin`, `linux`, `windows` | Operating system |
 
 Events are sent to the Events v2 API and count against your environment's event ingest quota.
 
