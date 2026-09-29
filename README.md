@@ -7,7 +7,7 @@
 ![dtwiz - automatic data onboarding](docs/assets/dtwiz-animated.gif)
 
 > **Early Development**: This project is in active development. If you encounter any bugs or issues, please [file a GitHub issue](https://github.com/dynatrace-oss/dtwiz/issues/new). Contributions and feedback are welcome!
-
+>
 > **Note:** `dtwiz` sends a telemetry event to your Dynatrace environment on every command invocation. These events count against your environment's event ingest quota. See [Self-monitoring](#self-monitoring) for details and how to query them.
 
 ## Table of Contents
@@ -188,7 +188,7 @@ dtwiz install otel-python --project ./my-python-app
 
 Use the following DQL query in your tenant's **Notebooks** or **Dashboards** app to explore them:
 
-```
+```sql
 fetch events
 | filter event.type == "CUSTOM_INFO" and startsWith(event.name, "dtwiz")
 | fields timestamp, event.name, step, command, subcommand, error, version, os
