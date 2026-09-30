@@ -103,27 +103,27 @@ type WatchSessionResult struct {
 // fromClause is injected directly into DQL queries — accepts RFC3339 timestamps
 // or DQL relative expressions (e.g. "now()-1h").
 func WatchIngest(envURL, pToken, fromClause string) WatchSessionResult {
-	return watchIngest(envURL, pToken, fromClause, nil, "", false, "", nil)
+	return watchIngest(envURL, pToken, fromClause, nil, "", false, "", nil, nil)
 }
 
-// WatchIngestWithEvent is like WatchIngest but calls onEvent as soon as the
-// first signal data is received OR the session times out — without waiting for
-// the user to exit the watch display.
-func WatchIngestWithEvent(envURL, pToken, fromClause string, onEvent func(WatchSessionResult)) WatchSessionResult {
-	return watchIngest(envURL, pToken, fromClause, nil, "", false, "", onEvent)
+// WatchIngestWithEvent is like WatchIngest but calls onSnapshot each time a new
+// signal type first receives data, and onComplete when the session ends — both
+// without waiting for the user to exit the watch display.
+func WatchIngestWithEvent(envURL, pToken, fromClause string, onSnapshot, onComplete func(WatchSessionResult)) WatchSessionResult {
+	return watchIngest(envURL, pToken, fromClause, nil, "", false, "", onSnapshot, onComplete)
 }
 
 // WatchIngestOtel is like WatchIngest but also shows a call to action to
 // instrument the application when manualLang is the URL slug of a language
 // the user selected for manual instrumentation (e.g. "go", "php").
 func WatchIngestOtel(envURL, pToken, fromClause, manualLang string) {
-	watchIngest(envURL, pToken, fromClause, nil, "", false, manualLang, nil)
+	watchIngest(envURL, pToken, fromClause, nil, "", false, manualLang, nil, nil)
 }
 
-// WatchIngestOtelWithEvent is like WatchIngestOtel but calls onEvent as soon
-// as the first signal data is received OR the session times out.
-func WatchIngestOtelWithEvent(envURL, pToken, fromClause, manualLang string, onEvent func(WatchSessionResult)) {
-	watchIngest(envURL, pToken, fromClause, nil, "", false, manualLang, onEvent)
+// WatchIngestOtelWithEvent is like WatchIngestOtel but reports snapshot and
+// completion events the way WatchIngestWithEvent does.
+func WatchIngestOtelWithEvent(envURL, pToken, fromClause, manualLang string, onSnapshot, onComplete func(WatchSessionResult)) {
+	watchIngest(envURL, pToken, fromClause, nil, "", false, manualLang, onSnapshot, onComplete)
 }
 
 // WatchIngestCloudFromTime is like WatchIngest but calls WatchIngestCloud.
@@ -140,41 +140,42 @@ func WatchIngestCloudFromTime(envURL, pToken string, startTime time.Time) {
 // The caller sends status messages to statusCh; the most recent message is
 // shown on every render. Passing a nil channel disables status updates.
 func WatchIngestWithStatus(envURL, pToken, fromClause string, statusCh <-chan string) {
-	watchIngest(envURL, pToken, fromClause, statusCh, "", false, "", nil)
+	watchIngest(envURL, pToken, fromClause, statusCh, "", false, "", nil, nil)
 }
 
 // WatchIngestAWS is like WatchIngestWithStatus but additionally scopes the
 // cloud-platform signal queries (metrics + da-* logs) to a specific AWS
 // account ID so noise from other accounts in the same tenant is filtered out.
 func WatchIngestAWS(envURL, pToken, fromClause string, statusCh <-chan string, awsAccountID string) {
-	watchIngest(envURL, pToken, fromClause, statusCh, awsAccountID, true, "", nil)
+	watchIngest(envURL, pToken, fromClause, statusCh, awsAccountID, true, "", nil, nil)
 }
 
 // WatchIngestCloud is like WatchIngest but shows a "See your cloud resources
 // in the Clouds app" footer instead of the QuickStart link. Use this for
 // AWS, GCP, and Azure installs.
 func WatchIngestCloud(envURL, pToken, fromClause string) {
-	watchIngest(envURL, pToken, fromClause, nil, "", true, "", nil)
+	watchIngest(envURL, pToken, fromClause, nil, "", true, "", nil, nil)
 }
 
-// WatchIngestCloudWithEvent is like WatchIngestCloud but calls onEvent as soon
-// as the first signal data is received OR the session times out.
-func WatchIngestCloudWithEvent(envURL, pToken, fromClause string, onEvent func(WatchSessionResult)) {
-	watchIngest(envURL, pToken, fromClause, nil, "", true, "", onEvent)
+// WatchIngestCloudWithEvent is like WatchIngestCloud but reports snapshot and
+// completion events the way WatchIngestWithEvent does.
+func WatchIngestCloudWithEvent(envURL, pToken, fromClause string, onSnapshot, onComplete func(WatchSessionResult)) {
+	watchIngest(envURL, pToken, fromClause, nil, "", true, "", onSnapshot, onComplete)
 }
 
-// WatchIngestCloudFromTimeWithEvent is like WatchIngestCloudFromTime but calls onEvent.
-func WatchIngestCloudFromTimeWithEvent(envURL, pToken string, startTime time.Time, onEvent func(WatchSessionResult)) {
+// WatchIngestCloudFromTimeWithEvent is like WatchIngestCloudFromTime but reports
+// snapshot and completion events.
+func WatchIngestCloudFromTimeWithEvent(envURL, pToken string, startTime time.Time, onSnapshot, onComplete func(WatchSessionResult)) {
 	if startTime.IsZero() {
 		return
 	}
-	WatchIngestCloudWithEvent(envURL, pToken, startTime.UTC().Format(IngestTimeFormat), onEvent)
+	WatchIngestCloudWithEvent(envURL, pToken, startTime.UTC().Format(IngestTimeFormat), onSnapshot, onComplete)
 }
 
-// WatchIngestAWSWithEvent is like WatchIngestAWS but calls onEvent as soon
-// as the first signal data is received OR the session times out.
-func WatchIngestAWSWithEvent(envURL, pToken, fromClause string, statusCh <-chan string, awsAccountID string, onEvent func(WatchSessionResult)) {
-	watchIngest(envURL, pToken, fromClause, statusCh, awsAccountID, true, "", onEvent)
+// WatchIngestAWSWithEvent is like WatchIngestAWS but reports snapshot and
+// completion events.
+func WatchIngestAWSWithEvent(envURL, pToken, fromClause string, statusCh <-chan string, awsAccountID string, onSnapshot, onComplete func(WatchSessionResult)) {
+	watchIngest(envURL, pToken, fromClause, statusCh, awsAccountID, true, "", onSnapshot, onComplete)
 }
 
 // otelLangNames maps a manual-language URL slug to its display name.
@@ -189,7 +190,7 @@ var otelLangNames = map[string]string{
 	"rust":   "Rust",
 }
 
-func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsAccountID string, cloudInstall bool, manualLang string, onEvent func(WatchSessionResult)) (result WatchSessionResult) {
+func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsAccountID string, cloudInstall bool, manualLang string, onSnapshot, onComplete func(WatchSessionResult)) (result WatchSessionResult) {
 	if pToken == "" {
 		fmt.Println("  Platform token required for watch. Set --platform-token or DT_PLATFORM_TOKEN.")
 		return
@@ -197,16 +198,24 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsA
 
 	result.FirstDataMs = make(map[string]int64)
 	appsURL := AppsURL(envURL)
-	sessionStart := time.Now() // never reset — used for event Duration
-	watchStart := sessionStart // reset on "Y" continuation; used for elapsed display
-	defer func() { result.Duration = time.Since(watchStart) }()
-	var eventFired bool
+	sessionStart := time.Now() // never reset — the epoch for all signal timings
+	watchStart := sessionStart // reset on "Y" continuation; used for elapsed display only
+	defer func() { result.Duration = time.Since(sessionStart) }()
+	var emitter snapshotEmitter
 	snapEvent := func(exitReason string) WatchSessionResult {
+		// Clone before the value escapes to a goroutine: the display loop keeps
+		// writing to result.FirstDataMs on every poll.
 		return WatchSessionResult{
 			Duration:    time.Since(sessionStart),
 			ExitReason:  exitReason,
 			FirstDataMs: maps.Clone(result.FirstDataMs),
 		}
+	}
+	// Fires on every real exit path (stdin error, Enter, timeout reached or declined).
+	// Registered after the token guard above, so a session that never watched anything
+	// reports nothing.
+	if onComplete != nil {
+		defer func() { onComplete(snapEvent(result.ExitReason)) }()
 	}
 	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
 	// Colors
@@ -293,18 +302,12 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsA
 		// After 10 minutes, prompt the user to decide whether to continue.
 		if elapsed >= watchTimeout {
 			if !isTTY {
-				if onEvent != nil && !eventFired {
-					onEvent(snapEvent("timeout")) // synchronous — must complete before watchIngest returns
-				}
 				result.ExitReason = "timeout"
 				return
 			}
 			dim.Printf(" Continue watching? [Y/n] ")
 			resp := <-inputCh
 			if resp.err != nil || strings.HasPrefix(strings.ToLower(resp.line), "n") {
-				if onEvent != nil && !eventFired {
-					onEvent(snapEvent("timeout")) // synchronous — must complete before watchIngest returns
-				}
 				result.ExitReason = "timeout"
 				return
 			}
@@ -326,11 +329,10 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsA
 		}
 
 		state := pollAll(appsURL, pToken, fromClause, awsAccountID, &qs)
-		trackWatchSignals(&result, watchStart, state)
-		if onEvent != nil && !eventFired && len(result.FirstDataMs) > 0 {
-			eventFired = true
-			snap := snapEvent("first_data")
-			go onEvent(snap) // asynchronous — must not block the watch display loop
+		trackWatchSignals(&result, sessionStart, state)
+		if onSnapshot != nil && emitter.due(len(result.FirstDataMs)) {
+			snap := snapEvent("snapshot") // clone synchronously, before the goroutine
+			go onSnapshot(snap)           // asynchronous — must not block the watch display loop
 		}
 
 		var buf strings.Builder
@@ -940,6 +942,22 @@ func toInt(v interface{}) int {
 	default:
 		return 0
 	}
+}
+
+// snapshotEmitter tracks how many signal types the last emitted snapshot covered.
+// FirstDataMs only ever grows and entries are never removed, so its length is a
+// sufficient watermark for "a new signal type appeared since we last reported".
+type snapshotEmitter struct{ emitted int }
+
+// due reports whether a snapshot event is owed for the current number of seen signal
+// types, and records that number as reported. Signal types that become visible within
+// the same poll cycle coalesce into one event, because due is consulted once per cycle.
+func (e *snapshotEmitter) due(seen int) bool {
+	if seen <= e.emitted {
+		return false
+	}
+	e.emitted = seen
+	return true
 }
 
 // trackWatchSignals records the first-data timestamp for each signal that

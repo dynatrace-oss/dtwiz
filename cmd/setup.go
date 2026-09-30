@@ -145,7 +145,7 @@ var setupCmd = &cobra.Command{
 			}
 			fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
 			if !setupDryRun {
-				installer.WatchIngestWithEvent(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), buildWatchEventCallback(cmd))
+				installer.WatchIngestWithEvent(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), buildWatchSnapshotEventCallback(cmd), buildWatchEventCallback(cmd))
 			}
 			return nil
 		}
@@ -184,6 +184,7 @@ var setupCmd = &cobra.Command{
 			return err
 		}
 
+		installer.OnWatchSnapshot = buildWatchSnapshotEventCallback(cmd)
 		installer.OnWatchComplete = buildWatchEventCallback(cmd)
 		var installErr error
 		var otelManualLang string
@@ -242,9 +243,9 @@ var setupCmd = &cobra.Command{
 			recommender.MethodKubernetes,
 			recommender.MethodDocker,
 			recommender.MethodOtelUpdate:
-			installer.WatchIngestWithEvent(envURL, platformTok, fromClause, buildWatchEventCallback(cmd))
+			installer.WatchIngestWithEvent(envURL, platformTok, fromClause, buildWatchSnapshotEventCallback(cmd), buildWatchEventCallback(cmd))
 		case recommender.MethodOtelCollector:
-			installer.WatchIngestOtelWithEvent(envURL, platformTok, fromClause, otelManualLang, buildWatchEventCallback(cmd))
+			installer.WatchIngestOtelWithEvent(envURL, platformTok, fromClause, otelManualLang, buildWatchSnapshotEventCallback(cmd), buildWatchEventCallback(cmd))
 		}
 		return nil
 	},

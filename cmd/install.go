@@ -101,7 +101,7 @@ var installOneAgentCmd = &cobra.Command{
 			return installErr
 		}
 		if !installDryRun {
-			installer.WatchIngestWithEvent(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), buildWatchEventCallback(cmd))
+			installer.WatchIngestWithEvent(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), buildWatchSnapshotEventCallback(cmd), buildWatchEventCallback(cmd))
 		}
 		return nil
 	},
@@ -138,7 +138,7 @@ var installKubernetesCmd = &cobra.Command{
 			return installErr
 		}
 		if !installDryRun {
-			installer.WatchIngestWithEvent(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), buildWatchEventCallback(cmd))
+			installer.WatchIngestWithEvent(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), buildWatchSnapshotEventCallback(cmd), buildWatchEventCallback(cmd))
 		}
 		return nil
 	},
@@ -170,7 +170,7 @@ var installDockerCmd = &cobra.Command{
 			return installErr
 		}
 		if !installDryRun {
-			installer.WatchIngestWithEvent(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), buildWatchEventCallback(cmd))
+			installer.WatchIngestWithEvent(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), buildWatchSnapshotEventCallback(cmd), buildWatchEventCallback(cmd))
 		}
 		return nil
 	},
@@ -201,7 +201,7 @@ var installOtelCmd = &cobra.Command{
 			return installErr
 		}
 		if !installDryRun {
-			installer.WatchIngestOtelWithEvent(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), manualLang, buildWatchEventCallback(cmd))
+			installer.WatchIngestOtelWithEvent(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), manualLang, buildWatchSnapshotEventCallback(cmd), buildWatchEventCallback(cmd))
 		}
 		return nil
 	},
@@ -232,7 +232,7 @@ var installOtelCollectorCmd = &cobra.Command{
 			return installErr
 		}
 		if !installDryRun {
-			installer.WatchIngestWithEvent(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), buildWatchEventCallback(cmd))
+			installer.WatchIngestWithEvent(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), buildWatchSnapshotEventCallback(cmd), buildWatchEventCallback(cmd))
 		}
 		return nil
 	},
@@ -265,7 +265,7 @@ var installOtelPythonCmd = &cobra.Command{
 			return installErr
 		}
 		if !installDryRun {
-			installer.WatchIngestWithEvent(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), buildWatchEventCallback(cmd))
+			installer.WatchIngestWithEvent(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), buildWatchSnapshotEventCallback(cmd), buildWatchEventCallback(cmd))
 		}
 		return nil
 	},
@@ -326,7 +326,7 @@ var installOtelJavaCmd = &cobra.Command{
 			return installErr
 		}
 		if !installDryRun {
-			installer.WatchIngestWithEvent(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), buildWatchEventCallback(cmd))
+			installer.WatchIngestWithEvent(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), buildWatchSnapshotEventCallback(cmd), buildWatchEventCallback(cmd))
 		}
 		return nil
 	},
@@ -347,6 +347,7 @@ var installAWSCmd = &cobra.Command{
 			return err
 		}
 		installer.ExecutionStart = time.Time{}
+		installer.OnWatchSnapshot = buildWatchSnapshotEventCallback(cmd)
 		installer.OnWatchComplete = buildWatchEventCallback(cmd)
 		installErr := awspkg.InstallAWS(envURL, platformTok, installDryRun, StartTime.UTC().Format(installer.IngestTimeFormat))
 		fireInstallEvent(cmd, installDuration(), installErr)
@@ -385,7 +386,7 @@ var installAWSLambdaCmd = &cobra.Command{
 			return installErr
 		}
 		if !installDryRun {
-			installer.WatchIngestWithEvent(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), buildWatchEventCallback(cmd))
+			installer.WatchIngestWithEvent(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), buildWatchSnapshotEventCallback(cmd), buildWatchEventCallback(cmd))
 		}
 		return nil
 	},
@@ -406,6 +407,7 @@ var installAzureCmd = &cobra.Command{
 			return err
 		}
 		installer.ExecutionStart = time.Time{}
+		installer.OnWatchSnapshot = buildWatchSnapshotEventCallback(cmd)
 		installer.OnWatchComplete = buildWatchEventCallback(cmd)
 		installErr := azure.InstallAzure(envURL, platformTok, installDryRun, StartTime)
 		fireInstallEvent(cmd, installDuration(), installErr)
@@ -430,6 +432,7 @@ var installGCPCmd = &cobra.Command{
 			return err
 		}
 		installer.ExecutionStart = time.Time{}
+		installer.OnWatchSnapshot = buildWatchSnapshotEventCallback(cmd)
 		installer.OnWatchComplete = buildWatchEventCallback(cmd)
 		installErr := gcp.InstallGCP(envURL, platformTok, installDryRun, StartTime)
 		fireInstallEvent(cmd, installDuration(), installErr)
@@ -468,7 +471,7 @@ var installDemoCmd = &cobra.Command{
 			return installErr
 		}
 		if !installDryRun {
-			installer.WatchIngestWithEvent(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), buildWatchEventCallback(cmd))
+			installer.WatchIngestWithEvent(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), buildWatchSnapshotEventCallback(cmd), buildWatchEventCallback(cmd))
 		}
 		return nil
 	},

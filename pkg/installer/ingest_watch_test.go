@@ -1073,3 +1073,86 @@ func TestTrackWatchSignals_AllSignals(t *testing.T) {
 		}
 	}
 }
+
+// Signal timings are measured from session start, not from the "Y" continuation reset,
+// so a signal first seen in a continued session reports its true age.
+func TestTrackWatchSignals_MeasuresFromSessionStart(t *testing.T) {
+	result := WatchSessionResult{FirstDataMs: make(map[string]int64)}
+	sessionStart := time.Now().Add(-15 * time.Minute)
+
+	trackWatchSignals(&result, sessionStart, watchState{Services: watchSection{Count: 1}})
+
+	if ms := result.FirstDataMs["svc"]; ms <= 600_000 {
+		t.Errorf("svc recorded %d ms, want > 600000 (measured from session start, not continuation)", ms)
+	}
+}
+
+// A session that never starts watching (no platform token) must report nothing at all:
+// the completion event is what marks a session as having ended cleanly, so emitting one
+// here would invent a session that never ran.
+func TestWatchIngest_NoTokenFiresNeitherCallback(t *testing.T) {
+	var snapshots, completions int
+
+	watchIngest("https://abc12345.example.com", "", "now()-1h", nil, "", false, "",
+		func(WatchSessionResult) { snapshots++ },
+		func(WatchSessionResult) { completions++ })
+
+	if snapshots != 0 || completions != 0 {
+		t.Errorf("snapshots = %d, completions = %d; want 0 and 0", snapshots, completions)
+	}
+}
+
+// ── snapshotEmitter ─────────────────────────────────────────────────────────
+
+// A poll cycle that reports nothing new must not emit: the seen set did not grow.
+func TestSnapshotEmitter_OnlyEmitsOnGrowth(t *testing.T) {
+	var e snapshotEmitter
+
+	if !e.due(1) {
+		t.Error("due(1) on a fresh emitter = false, want true")
+	}
+	if e.due(1) {
+		t.Error("due(1) again = true, want false — the seen set did not grow")
+	}
+	if !e.due(2) {
+		t.Error("due(2) after due(1) = false, want true")
+	}
+	if e.due(2) {
+		t.Error("due(2) again = true, want false")
+	}
+}
+
+// Signal types that become visible in the same poll cycle share one event.
+func TestSnapshotEmitter_CoalescesSameCycleSignals(t *testing.T) {
+	result := WatchSessionResult{FirstDataMs: make(map[string]int64)}
+	var e snapshotEmitter
+	emissions := 0
+
+	poll := func(state watchState) {
+		trackWatchSignals(&result, time.Now(), state)
+		if e.due(len(result.FirstDataMs)) {
+			emissions++
+		}
+	}
+
+	// Two previously unseen signal types arrive together.
+	poll(watchState{Hosts: watchSection{Count: 1}, Services: watchSection{Count: 3}})
+	if emissions != 1 {
+		t.Errorf("emissions = %d after one cycle with two new signals, want 1", emissions)
+	}
+	if len(result.FirstDataMs) != 2 {
+		t.Errorf("tracked %d signals, want 2", len(result.FirstDataMs))
+	}
+
+	// Same state again: nothing new, so nothing emitted.
+	poll(watchState{Hosts: watchSection{Count: 1}, Services: watchSection{Count: 3}})
+	if emissions != 1 {
+		t.Errorf("emissions = %d after a repeat cycle, want 1", emissions)
+	}
+
+	// A third type appears: one more event.
+	poll(watchState{Hosts: watchSection{Count: 1}, Services: watchSection{Count: 3}, Logs: watchSection{Count: 7}})
+	if emissions != 2 {
+		t.Errorf("emissions = %d after a third signal appeared, want 2", emissions)
+	}
+}

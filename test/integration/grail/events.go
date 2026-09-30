@@ -12,10 +12,11 @@ import (
 // SelfMonitoringQuery holds the filter parameters for a self-monitoring event DQL query.
 // EventName and TestRun are optional; when empty their filters are omitted.
 // Step is the full step name as stored in the event body (e.g. "invoked", "analyze").
+// Watch signal timings live on "snapshot" events; "completed" only marks session end.
 // From is the absolute lower bound — events before this timestamp are excluded.
 type SelfMonitoringQuery struct {
 	EventName string    // optional: filter on event.name (exact match)
-	Step      string    // required: full step name ("invoked", "analyze", "recommend", "install", "completed")
+	Step      string    // required: full step name ("invoked", "analyze", "recommend", "install", "snapshot", "completed")
 	TestRun   string    // optional: filter on test_run property
 	From      time.Time // required: absolute lower bound
 }

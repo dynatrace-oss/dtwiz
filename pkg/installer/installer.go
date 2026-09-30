@@ -54,9 +54,14 @@ var AutoConfirm bool
 // Zero when the installer did not call confirmProceed (e.g. no interactive prompt).
 var ExecutionStart time.Time
 
-// OnWatchComplete is called by the post-install WatchIngest session when it records
-// its first data signal or times out. Set by install command handlers before invoking
-// cloud installers (AWS, Azure, GCP) that run WatchIngest internally; nil disables.
+// OnWatchSnapshot is called by the post-install WatchIngest session each time a new
+// signal type first receives data, once per newly seen type. Set by install command
+// handlers before invoking cloud installers (AWS, Azure, GCP) that run WatchIngest
+// internally; nil disables.
+var OnWatchSnapshot func(WatchSessionResult)
+
+// OnWatchComplete is called once by the post-install WatchIngest session when it ends,
+// whichever way it ends. Set alongside OnWatchSnapshot; nil disables.
 var OnWatchComplete func(WatchSessionResult)
 
 // ConfirmProceed is the exported variant of confirmProceed for use by

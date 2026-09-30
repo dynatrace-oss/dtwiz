@@ -106,9 +106,16 @@ func watchSignalProps(firstDataMs map[string]int64) map[string]string {
 	return props
 }
 
+// watchSignalSecondsCap bounds each value in the positional CSV to three digits.
+// Sessions extended past the 10-minute prompt can run arbitrarily long, and the
+// User-Agent has a 64-char capture limit; the event body carries the unclamped
+// milliseconds, so clamping only degrades the fallback channel.
+const watchSignalSecondsCap = 999
+
 // watchSignalCSV encodes time-to-first-data in a positional format.
 // Format: "0,0,12,5,0,9,0,3" — one value per signal in watchSignalOrder.
-// 0 = signal not seen; ≥1 = whole seconds to first data (minimum 1, even if sub-second).
+// 0 = signal not seen; ≥1 = whole seconds to first data (minimum 1, even if sub-second),
+// clamped to watchSignalSecondsCap.
 // Returns "" when no signals were seen (t= field is then omitted from the header).
 func watchSignalCSV(firstDataMs map[string]int64) string {
 	if len(firstDataMs) == 0 {
@@ -117,9 +124,13 @@ func watchSignalCSV(firstDataMs map[string]int64) string {
 	parts := make([]string, len(watchSignalOrder))
 	for i, sig := range watchSignalOrder {
 		if ms, ok := firstDataMs[sig]; ok {
-			if secs := ms / 1000; secs > 0 {
+			secs := ms / 1000
+			switch {
+			case secs > watchSignalSecondsCap:
+				parts[i] = strconv.Itoa(watchSignalSecondsCap)
+			case secs > 0:
 				parts[i] = strconv.FormatInt(secs, 10)
-			} else {
+			default:
 				parts[i] = "1" // present but sub-second — distinguish from absent (0)
 			}
 		} else {
@@ -129,17 +140,35 @@ func watchSignalCSV(firstDataMs map[string]int64) string {
 	return strings.Join(parts, ",")
 }
 
-// buildWatchEventCallback returns the onEvent callback used by all post-install
-// and standalone watch sessions to emit a selfmonitoring StepCompleted event
-// encoding which signals arrived and how quickly.
-func buildWatchEventCallback(cmd *cobra.Command) func(installer.WatchSessionResult) {
+// watchEventParams builds the params shared by both watch events. Cmd is pinned to
+// "watch" and Sub cleared so post-install watch sessions report as watch rather than
+// as the install command that triggered them.
+func watchEventParams(cmd *cobra.Command, stepID string) selfmonitoring.EventParams {
+	params := buildEventParams(cmd, stepID)
+	params.Cmd = "watch"
+	params.Sub = ""
+	return params
+}
+
+// buildWatchSnapshotEventCallback returns the onSnapshot callback used by all
+// post-install and standalone watch sessions. It fires once per signal type that
+// newly received data, carrying the cumulative timings for every type seen so far.
+func buildWatchSnapshotEventCallback(cmd *cobra.Command) func(installer.WatchSessionResult) {
 	return func(r installer.WatchSessionResult) {
-		params := buildEventParams(cmd, selfmonitoring.StepCompleted)
-		params.Cmd = "watch"
-		params.Sub = ""
+		params := watchEventParams(cmd, selfmonitoring.StepSnapshot)
 		params.Type = watchSignalCSV(r.FirstDataMs)
 		params.ExtraProps = watchSignalProps(r.FirstDataMs)
 		fireSelfMonitoringEvent(params)
+	}
+}
+
+// buildWatchEventCallback returns the onComplete callback used by all post-install
+// and standalone watch sessions. It fires once when the session ends and carries no
+// signal data: the timings live in the snapshot events. Its absence for an execution
+// means the process ended before the session could report.
+func buildWatchEventCallback(cmd *cobra.Command) func(installer.WatchSessionResult) {
+	return func(installer.WatchSessionResult) {
+		fireSelfMonitoringEvent(watchEventParams(cmd, selfmonitoring.StepCompleted))
 	}
 }
 
