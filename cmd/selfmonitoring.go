@@ -159,8 +159,10 @@ func fireCompletedEvent(cmd *cobra.Command, err error) {
 	fireSelfMonitoringEvent(completedEventParams(cmd, err))
 }
 
-func fireSetupAnalyzeEvent(cmd *cobra.Command, err error) {
+func fireSetupAnalyzeEvent(cmd *cobra.Command, cloudProvider, k8sDistro string, err error) {
 	p := buildEventParams(cmd, selfmonitoring.StepAnalyze)
+	p.CloudProvider = cloudProvider
+	p.K8sDistro = k8sDistro
 	if err != nil {
 		p.Err = "err"
 	}

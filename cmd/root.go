@@ -99,6 +99,17 @@ func init() {
 			printBanner()
 		}
 		defaultHelp(cmd, args)
+		sub := ""
+		if cmd != rootCmd {
+			sub = cmd.Name()
+		}
+		fireSelfMonitoringEvent(selfmonitoring.EventParams{
+			Cmd:    "help",
+			Sub:    sub,
+			StepID: selfmonitoring.StepInvoked,
+			Mode:   resolveMode(),
+		})
+		selfmonitoring.Flush(500 * time.Millisecond)
 	})
 	rootCmd.Run = func(cmd *cobra.Command, args []string) {
 		_ = cmd.Help()

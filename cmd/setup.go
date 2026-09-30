@@ -54,7 +54,24 @@ var setupCmd = &cobra.Command{
 		go func() { demoRunningCh <- otel.IsDemoRunning() }()
 
 		info, err := analyzeSystem()
-		fireSetupAnalyzeEvent(cmd, err)
+		analyzeK8sDistro := ""
+		var cloudProviders []string
+		if info != nil {
+			if info.AWS != nil && info.AWS.Available {
+				cloudProviders = append(cloudProviders, "aws")
+			}
+			if info.AzureDetected() {
+				cloudProviders = append(cloudProviders, "azure")
+			}
+			if info.GCPDetected() {
+				cloudProviders = append(cloudProviders, "gcp")
+			}
+			if info.Kubernetes != nil && info.Kubernetes.Available {
+				analyzeK8sDistro = info.Kubernetes.Distribution
+			}
+		}
+		analyzeCloudProvider := strings.Join(cloudProviders, ",")
+		fireSetupAnalyzeEvent(cmd, analyzeCloudProvider, analyzeK8sDistro, err)
 		if err != nil {
 			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return fmt.Errorf("analysis failed: %w", err)

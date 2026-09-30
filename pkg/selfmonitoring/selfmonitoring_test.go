@@ -63,7 +63,31 @@ func TestBuildUserAgent(t *testing.T) {
 				Type:   "retry",
 			},
 			wantKeys:    []string{"c=upd", "s=otel", "er=net", "t=retry"},
-			notWantKeys: []string{},
+			notWantKeys: []string{";kd="},
+			maxLen:      64,
+		},
+		{
+			name: "with_k8s_distro_in_analyze_event",
+			params: EventParams{
+				Cmd:       "setup",
+				StepID:    StepAnalyze,
+				Mode:      ModeTTY,
+				K8sDistro: "GKE-Autopilot",
+			},
+			wantKeys:    []string{"c=set", "st=ana", "kd=gka"},
+			notWantKeys: []string{"GKE-Autopilot"}, // full name must not appear in header
+			maxLen:      64,
+		},
+		{
+			name: "k8s_distro_absent_from_install_event",
+			params: EventParams{
+				Cmd:    "install",
+				Sub:    "kubernetes",
+				StepID: StepInstall,
+				Mode:   ModeTTY,
+			},
+			wantKeys:    []string{"s=k8s"},
+			notWantKeys: []string{";kd="},
 			maxLen:      64,
 		},
 	}
@@ -333,8 +357,13 @@ func TestBuildUserAgentWithinCaptureLimit(t *testing.T) {
 
 	longestCmd := longestKey(cmdShortMap)
 	longestSub := longestKey(subShortMap)
+	longestDistro := longestKey(distroShortMap)
+	// Worst-case cloud provider: all three detected, comma-separated abbreviated form.
+	// analyzeSystem never returns an error, so er= never appears in analyze events.
+	longestCloud := "aws,az,gcp"
 
 	for errType := range errShortMap {
+		// Install/uninstall events: have subcommand + error, never cloud provider or k8s distro.
 		ua := buildUserAgent(EventParams{
 			Cmd:    longestCmd,
 			Sub:    longestSub,
@@ -342,8 +371,19 @@ func TestBuildUserAgentWithinCaptureLimit(t *testing.T) {
 			Err:    errType,
 		})
 		if len(ua) > limit {
-			t.Errorf("User-Agent %q is %d chars, exceeds %d-char limit", ua, len(ua), limit)
+			t.Errorf("install User-Agent %q is %d chars, exceeds %d-char limit", ua, len(ua), limit)
 		}
+	}
+
+	// Analyze events: have kd= + cp= but never er= (analyzeSystem never fails).
+	ua := buildUserAgent(EventParams{
+		Cmd:           longestCmd,
+		StepID:        StepAnalyze,
+		K8sDistro:     longestDistro,
+		CloudProvider: longestCloud,
+	})
+	if len(ua) > limit {
+		t.Errorf("analyze User-Agent %q is %d chars, exceeds %d-char limit", ua, len(ua), limit)
 	}
 }
 
@@ -389,9 +429,14 @@ func TestEventBodyCarriesFullNamesForAllHeaderFields(t *testing.T) {
 			t.Errorf("body[%q] = %q, want full name %q", k, props[k], v)
 		}
 		// The whole point: the header is abbreviated, the body is not.
+		// "type" full value may legitimately appear since it passes through
+		// unabbreviated when no short form applies, so skip the header check for it.
 		if k != "type" && strings.Contains(ua, v) {
 			t.Errorf("User-Agent %q carries full-length %q; it should be abbreviated", ua, v)
 		}
+	}
+	if strings.Contains(ua, "kd=") {
+		t.Errorf("User-Agent %q carries kd= for a non-analyze step", ua)
 	}
 }
 
@@ -459,5 +504,41 @@ func TestShortSub(t *testing.T) {
 				t.Errorf("shortSub(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+// Every known distro must have a short code no longer than 3 chars so the 64-char
+// User-Agent capture budget holds when combined with the other abbreviated fields.
+func TestShortDistro(t *testing.T) {
+	want := map[string]string{
+		"GKE":              "gke",
+		"EKS":              "eks",
+		"AKS":              "aks",
+		"IKS":              "iks",
+		"OpenShift":        "ocp",
+		"k3s":              "k3s",
+		"RKE":              "rke",
+		"kubernetes":       "k8s",
+		"GKE-Autopilot":    "gka",
+		"EKS-Bottlerocket": "ekb",
+		"minikube":         "mnk",
+		"kind":             "knd",
+		"TKGI":             "tkg",
+	}
+
+	for distro, code := range want {
+		if got := shortDistro(distro); got != code {
+			t.Errorf("shortDistro(%q) = %q, want %q", distro, got, code)
+		}
+		if len(code) > 3 {
+			t.Errorf("distroShortMap[%q] = %q is longer than 3 chars, risks exceeding User-Agent capture limit", distro, code)
+		}
+	}
+	if len(distroShortMap) != len(want) {
+		t.Errorf("distroShortMap has %d entries, want %d — a distro is missing a short code", len(distroShortMap), len(want))
+	}
+	// Unknown values pass through unchanged.
+	if got := shortDistro("unknown-distro"); got != "unknown-distro" {
+		t.Errorf("shortDistro passthrough = %q, want %q", got, "unknown-distro")
 	}
 }
