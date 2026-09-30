@@ -175,3 +175,38 @@ func TestWatchSignalCSV_ClampsToThreeDigits(t *testing.T) {
 		t.Errorf("props[hosts] = %q, want %q (body must stay unclamped)", got, "1500000")
 	}
 }
+
+// ── invoked-event ownership ─────────────────────────────────────────────────
+
+// Cobra runs only the closest PersistentPreRun in the parent chain, so exactly one
+// place fires the inv event per invocation: root's hook, unless a subcommand overrides
+// it and takes over the job. A command that overrides must call fireInvokedEvent
+// itself; a command that does not must leave it to root.
+//
+// This pins which subcommands override. It fails if one gains or loses an override
+// without the matching change to its event firing — which is how `setup` ended up
+// sending two inv events per run.
+func TestPersistentPreRunOwnership(t *testing.T) {
+	overrides := map[string]bool{
+		"install":   true,
+		"update":    true,
+		"uninstall": true,
+	}
+
+	if rootCmd.PersistentPreRun == nil {
+		t.Fatal("rootCmd.PersistentPreRun is nil; nothing fires the inv event")
+	}
+
+	for _, cmd := range rootCmd.Commands() {
+		name := cmd.Name()
+		hasOverride := cmd.PersistentPreRun != nil
+		switch {
+		case hasOverride && !overrides[name]:
+			t.Errorf("%q now overrides PersistentPreRun, which suppresses root's inv event; "+
+				"it must call fireInvokedEvent itself, then be added to this test", name)
+		case !hasOverride && overrides[name]:
+			t.Errorf("%q no longer overrides PersistentPreRun, so root now fires the inv event; "+
+				"remove its own fireInvokedEvent call and drop it from this test", name)
+		}
+	}
+}

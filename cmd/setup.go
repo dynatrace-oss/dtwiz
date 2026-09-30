@@ -34,8 +34,9 @@ var setupCmd = &cobra.Command{
   4. Runs the selected installer`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fireInvokedEvent(cmd)
-
+		// No fireInvokedEvent here: setupCmd does not override root's PersistentPreRun,
+		// so root already fired the inv event. install/update/uninstall must re-fire it
+		// only because their own PersistentPreRun suppresses root's.
 		printBanner()
 
 		if env := environmentHint(); env != "" {
