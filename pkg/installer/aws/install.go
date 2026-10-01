@@ -275,7 +275,7 @@ func installAWSWithClient(envURL, token string, dryRun bool, startTime string, d
 	// cloud-platform signal queries to this AWS account to filter out noise
 	// from other accounts in the same tenant.
 	if startTime != "" && token != "" {
-		installer.WatchIngestAWSWithEvent(envURL, token, startTime, statusCh, accountID, installer.OnWatchComplete)
+		installer.WatchIngestAWSWithEvent(envURL, token, startTime, statusCh, accountID, installer.OnWatchSnapshot, installer.OnWatchComplete)
 	}
 
 	wg.Wait()

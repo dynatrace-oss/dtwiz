@@ -289,6 +289,9 @@ func TestStepConstants(t *testing.T) {
 	if StepInstall != "ist" {
 		t.Errorf("StepInstall = %q, want %q", StepInstall, "ist")
 	}
+	if StepSnapshot != "snp" {
+		t.Errorf("StepSnapshot = %q, want %q", StepSnapshot, "snp")
+	}
 }
 
 // Every step constant must map to a full name, otherwise SendEvent falls back to the
@@ -299,6 +302,7 @@ func TestStepFullNames(t *testing.T) {
 		StepAnalyze:   "analyze",
 		StepRecommend: "recommend",
 		StepInstall:   "install",
+		StepSnapshot:  "snapshot",
 		StepCompleted: "completed",
 		StepFailed:    "failed",
 		StepCancelled: "cancelled",
@@ -540,5 +544,54 @@ func TestShortDistro(t *testing.T) {
 	// Unknown values pass through unchanged.
 	if got := shortDistro("unknown-distro"); got != "unknown-distro" {
 		t.Errorf("shortDistro passthrough = %q, want %q", got, "unknown-distro")
+	}
+}
+
+// Watch snapshot events are the only ones carrying st=snp; the body must spell it out
+// in full so queries filter on "snapshot" rather than the shortcode.
+func TestSnapshotStepEncoding(t *testing.T) {
+	params := EventParams{Cmd: "watch", StepID: StepSnapshot, Type: "0,0,1,0,0,0,0,8"}
+
+	if got := buildEventProps(params)["step"]; got != "snapshot" {
+		t.Errorf("body step = %q, want %q", got, "snapshot")
+	}
+	if ua := buildUserAgent(params); !strings.Contains(ua, ";st=snp") {
+		t.Errorf("User-Agent %q missing %q", ua, ";st=snp")
+	}
+}
+
+// The watch snapshot event is the longest User-Agent dtwiz produces: it carries a
+// t= field with one clamped 3-digit value per signal type. This pins the budget left
+// over for the version string, so anything that lengthens the header (another field,
+// a wider clamp, more signal types) fails here instead of truncating the tail of t=
+// at the HAProxy capture limit.
+//
+// NOTE: 11 chars is exactly what goreleaser's "{{ incpatch .Version }}-next" snapshot
+// template produces today ("1.10.1-next"). There is no slack: a two-digit patch number
+// ("1.10.10-next", 12 chars) overflows. That cliff predates the snapshot event, because
+// the completion event it replaced encoded the same 8 three-digit values.
+func TestWatchSnapshotUserAgentVersionBudget(t *testing.T) {
+	const (
+		limit         = 64
+		wantVersionCS = 11
+	)
+
+	origVersion := version.Version
+	defer func() { version.Version = origVersion }()
+	version.Version = ""
+
+	// Worst case: all 8 signal types seen, every value clamped to 3 digits.
+	// Mirrors cmd.watchSignalCSV output at cmd.watchSignalSecondsCap.
+	worstCaseType := strings.TrimSuffix(strings.Repeat("999,", 8), ",")
+
+	overhead := len(buildUserAgent(EventParams{
+		Cmd:    "watch",
+		StepID: StepSnapshot,
+		Type:   worstCaseType,
+	}))
+
+	if budget := limit - overhead; budget < wantVersionCS {
+		t.Errorf("version budget is %d chars, want at least %d; worst-case header overhead grew to %d of the %d-char limit",
+			budget, wantVersionCS, overhead, limit)
 	}
 }

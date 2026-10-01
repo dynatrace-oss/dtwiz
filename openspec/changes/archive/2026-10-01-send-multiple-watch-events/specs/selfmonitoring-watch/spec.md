@@ -1,11 +1,6 @@
 # Spec: Self-Monitoring Watch Workflow
 
-## Purpose
-
-Record how quickly each kind of data first appears in the tenant during a watch session, so the
-time-to-first-data of different signal types can be compared across sessions and installs.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: dtwiz watch emits two self-monitoring events per invocation
 
@@ -106,19 +101,3 @@ The `t=` field of the `st=snp` event SHALL encode time-to-first-data per signal 
 - **GIVEN** a watch session in which all 8 signal types are first seen beyond the clamp threshold
 - **WHEN** the `st=snp` event is assembled
 - **THEN** the full User-Agent header is at most 64 characters long
-
-### Requirement: Self-monitoring events carry a meaningful title
-
-The system SHALL set the event title to `"dtwiz <cmd>"` or `"dtwiz <cmd> <sub>"` (using the normalized command and subcommand identifiers) for all self-monitoring events.
-
-#### Scenario: Top-level command event
-
-- **GIVEN** a self-monitoring event is sent for a top-level command (e.g. `watch`, `status`)
-- **WHEN** the event is ingested
-- **THEN** the event title is `"dtwiz <cmd>"` (e.g. `"dtwiz wch"`)
-
-#### Scenario: Subcommand event
-
-- **GIVEN** a self-monitoring event is sent for a subcommand (e.g. `install otel`)
-- **WHEN** the event is ingested
-- **THEN** the event title is `"dtwiz <cmd> <sub>"` (e.g. `"dtwiz ins otel"`)

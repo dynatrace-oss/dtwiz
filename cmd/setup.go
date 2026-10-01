@@ -34,8 +34,9 @@ var setupCmd = &cobra.Command{
   4. Runs the selected installer`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fireInvokedEvent(cmd)
-
+		// No fireInvokedEvent here: setupCmd does not override root's PersistentPreRun,
+		// so root already fired the inv event. install/update/uninstall must re-fire it
+		// only because their own PersistentPreRun suppresses root's.
 		printBanner()
 
 		if env := environmentHint(); env != "" {
@@ -145,7 +146,7 @@ var setupCmd = &cobra.Command{
 			}
 			fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
 			if !setupDryRun {
-				installer.WatchIngestWithEvent(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), buildWatchEventCallback(cmd))
+				installer.WatchIngestWithEvent(envURL, platformTok, StartTime.UTC().Format(installer.IngestTimeFormat), buildWatchSnapshotEventCallback(cmd), buildWatchEventCallback(cmd))
 			}
 			return nil
 		}
@@ -184,6 +185,7 @@ var setupCmd = &cobra.Command{
 			return err
 		}
 
+		installer.OnWatchSnapshot = buildWatchSnapshotEventCallback(cmd)
 		installer.OnWatchComplete = buildWatchEventCallback(cmd)
 		var installErr error
 		var otelManualLang string
@@ -242,9 +244,9 @@ var setupCmd = &cobra.Command{
 			recommender.MethodKubernetes,
 			recommender.MethodDocker,
 			recommender.MethodOtelUpdate:
-			installer.WatchIngestWithEvent(envURL, platformTok, fromClause, buildWatchEventCallback(cmd))
+			installer.WatchIngestWithEvent(envURL, platformTok, fromClause, buildWatchSnapshotEventCallback(cmd), buildWatchEventCallback(cmd))
 		case recommender.MethodOtelCollector:
-			installer.WatchIngestOtelWithEvent(envURL, platformTok, fromClause, otelManualLang, buildWatchEventCallback(cmd))
+			installer.WatchIngestOtelWithEvent(envURL, platformTok, fromClause, otelManualLang, buildWatchSnapshotEventCallback(cmd), buildWatchEventCallback(cmd))
 		}
 		return nil
 	},

@@ -89,6 +89,7 @@ var stepFullNames = map[string]string{
 	StepAnalyze:   "analyze",
 	StepRecommend: "recommend",
 	StepInstall:   "install",
+	StepSnapshot:  "snapshot",
 	StepCompleted: "completed",
 	StepFailed:    "failed",
 	StepCancelled: "cancelled",
@@ -168,6 +169,7 @@ const (
 	StepAnalyze   = "ana"
 	StepRecommend = "rec"
 	StepInstall   = "ist"
+	StepSnapshot  = "snp"
 	StepCompleted = "com"
 	StepFailed    = "fai"
 	StepCancelled = "can"

@@ -34,7 +34,7 @@ var watchCmd = &cobra.Command{
 			fromClause = StartTime.UTC().Format(installer.IngestTimeFormat)
 		}
 
-		installer.WatchIngestWithEvent(envURL, pTok, fromClause, buildWatchEventCallback(cmd))
+		installer.WatchIngestWithEvent(envURL, pTok, fromClause, buildWatchSnapshotEventCallback(cmd), buildWatchEventCallback(cmd))
 	},
 }
 

@@ -87,6 +87,7 @@ var updateAzureCmd = &cobra.Command{
 			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
+		installer.OnWatchSnapshot = buildWatchSnapshotEventCallback(cmd)
 		installer.OnWatchComplete = buildWatchEventCallback(cmd)
 		err = azure.UpdateAzure(envURL, platformTok, updateDryRun, StartTime)
 		if err != nil {
@@ -116,6 +117,7 @@ var updateGcpCmd = &cobra.Command{
 			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
+		installer.OnWatchSnapshot = buildWatchSnapshotEventCallback(cmd)
 		installer.OnWatchComplete = buildWatchEventCallback(cmd)
 		err = gcp.UpdateGCP(envURL, platformTok, updateDryRun, StartTime)
 		if err != nil {

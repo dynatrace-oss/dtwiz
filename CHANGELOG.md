@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Self-monitoring: `dtwiz setup` sent two `invoked` events per run. `setup` does not override the root `PersistentPreRun` hook, so the root hook already fired the event and the additional call in the command body was redundant. Commands that do override the hook (`install`, `update`, `uninstall`) still fire it themselves, because cobra runs only the closest hook in the parent chain.
+
+### Changed
+
+- **Self-monitoring (breaking for queries):** watch sessions now report signal timings on a new `snapshot` step instead of `completed`. Previously a single event fired on the first poll cycle where any signal type had data, so a session where hosts appeared at 1s and services at 8s recorded only the hosts. Now one `snapshot` event is sent each time a signal type first receives data, each carrying the cumulative time-to-first-data for every type seen so far, which makes per-type ingest latency measurable. Queries reading watch timings must move from `step == "completed"` to `step == "snapshot"`, taking the last snapshot per `executionId` for a session's full tally.
+- Self-monitoring: watch sessions now emit a `completed` event on every exit path, carrying no signal data. Its absence for an execution means the process ended before the session could report.
+- Self-monitoring: watch signal timings are measured from session start rather than from the 10-minute continuation prompt, so signals first seen in an extended session no longer report against a reset clock. Values in the `t=` header are clamped to 999 seconds to stay inside the User-Agent capture limit; the event body carries the unclamped milliseconds.
+
 ## [1.10.0] - 2026-09-29
 
 ### Changed
