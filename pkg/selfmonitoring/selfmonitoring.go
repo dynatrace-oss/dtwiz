@@ -293,7 +293,7 @@ func buildUserAgent(p EventParams) string {
 		{propType, p.Type},
 		{propCloudProvider, shortCloudProvider(p.CloudProvider)},
 	}
-	// kd= is only included for analyze events; install events carry the full name in the body.
+	// kd= is only included for analyze events;
 	if p.StepID == StepAnalyze {
 		pairs = append(pairs, struct{ k, v string }{propK8sDistro, shortDistro(p.K8sDistro)})
 	}
@@ -334,17 +334,16 @@ func shortDistro(name string) string {
 }
 
 // cloudProviderShortMap abbreviates cloud provider names for the User-Agent header.
-// "azure" is the only value that needs shortening; "aws" and "gcp" are already ≤3 chars.
 var cloudProviderShortMap = map[string]string{
+	"aws":   "aws",
 	"azure": "az",
+	"gcp":   "gcp",
 }
 
 func shortCloudProvider(name string) string {
 	parts := strings.Split(name, ",")
 	for i, p := range parts {
-		if s, ok := cloudProviderShortMap[p]; ok {
-			parts[i] = s
-		}
+		parts[i] = cloudProviderShortMap[p]
 	}
 	return strings.Join(parts, ",")
 }
