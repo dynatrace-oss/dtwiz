@@ -72,13 +72,15 @@ const (
 // Cmd and Sub carry the full, natural command names (e.g. "install", "kubernetes").
 // Abbreviation for the 64-char User-Agent header is handled internally by this package.
 type EventParams struct {
-	Cmd        string            // top-level command: install, update, uninstall, analyze, etc.
-	Sub        string            // subcommand: otel, kubernetes, oneagent, etc.
-	StepID     string            // execution step shortcode; defaults to StepInvoked when empty
-	Mode       Mode              // ModeDebug, ModeTTY, or ModeNonTTY
-	Err        string            // error category; omitted when empty
-	Type       string            // event type qualifier; omitted when empty
-	ExtraProps map[string]string // merged into event body properties; not included in User-Agent
+	Cmd           string            // top-level command: install, update, uninstall, analyze, etc.
+	Sub           string            // subcommand: otel, kubernetes, oneagent, etc.
+	StepID        string            // execution step shortcode; defaults to StepInvoked when empty
+	Mode          Mode              // ModeDebug, ModeTTY, or ModeNonTTY
+	Err           string            // error category; omitted when empty
+	Type          string            // event type qualifier; omitted when empty
+	K8sDistro     string            // kubernetes distribution (e.g. "GKE", "EKS"); abbreviated in User-Agent, full name in body
+	CloudProvider string            // detected cloud provider ("aws", "azure", "gcp"); abbreviated in User-Agent, full name in body
+	ExtraProps    map[string]string // merged into event body properties; not included in User-Agent
 }
 
 // stepFullNames maps step shortcodes to human-readable names used in the event body.
@@ -103,6 +105,7 @@ var cmdShortMap = map[string]string{
 	"watch":     "wch",
 	"setup":     "set",
 	"version":   "ver",
+	"help":      "hlp",
 }
 
 // errShortMap abbreviates error taxonomy values for the User-Agent header.
@@ -115,6 +118,25 @@ var errShortMap = map[string]string{
 	string(installer.ErrTypeNetworkError):        "net",
 	string(installer.ErrTypeInstallFailed):       "ifl",
 	string(installer.ErrTypePlatformUnsupported): "plt",
+}
+
+// distroShortMap abbreviates Kubernetes distribution names for the User-Agent header.
+// All codes are 3 chars to fit the 64-char capture budget alongside other fields.
+// The event body always carries the full name from K8sDistro.
+var distroShortMap = map[string]string{
+	"GKE":              "gke",
+	"EKS":              "eks",
+	"AKS":              "aks",
+	"IKS":              "iks",
+	"OpenShift":        "ocp",
+	"k3s":              "k3s",
+	"RKE":              "rke",
+	"kubernetes":       "k8s",
+	"GKE-Autopilot":    "gka",
+	"EKS-Bottlerocket": "ekb",
+	"minikube":         "mnk",
+	"kind":             "knd",
+	"TKGI":             "tkg",
 }
 
 var subShortMap = map[string]string{
@@ -150,12 +172,14 @@ const (
 	StepFailed    = "fai"
 	StepCancelled = "can"
 
-	propExecID = "e"
-	propCmd    = "c"
-	propStep   = "st"
-	propSub    = "s"
-	propErr    = "er"
-	propType   = "t"
+	propExecID        = "e"
+	propCmd           = "c"
+	propStep          = "st"
+	propSub           = "s"
+	propErr           = "er"
+	propType          = "t"
+	propK8sDistro     = "kd"
+	propCloudProvider = "cp"
 )
 
 type eventPayload struct {
@@ -242,6 +266,8 @@ func buildEventProps(p EventParams) map[string]string {
 		{"subcommand", p.Sub},
 		{"error", p.Err},
 		{"type", p.Type},
+		{"k8s.distro", p.K8sDistro},
+		{"cloud.provider", p.CloudProvider},
 	} {
 		if kv.v != "" {
 			props[kv.k] = kv.v
@@ -259,13 +285,19 @@ func buildEventProps(p EventParams) map[string]string {
 func buildUserAgent(p EventParams) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "dtwiz/%s", version.Version)
-	for _, kv := range []struct{ k, v string }{
+	pairs := []struct{ k, v string }{
 		{propCmd, shortCmd(p.Cmd)},
 		{propStep, p.StepID},
 		{propSub, shortSub(p.Sub)},
 		{propErr, shortErr(p.Err)},
 		{propType, p.Type},
-	} {
+		{propCloudProvider, shortCloudProvider(p.CloudProvider)},
+	}
+	// kd= is only included for analyze events;
+	if p.StepID == StepAnalyze {
+		pairs = append(pairs, struct{ k, v string }{propK8sDistro, shortDistro(p.K8sDistro)})
+	}
+	for _, kv := range pairs {
 		if kv.v != "" {
 			fmt.Fprintf(&b, ";%s=%s", kv.k, kv.v)
 		}
@@ -292,6 +324,28 @@ func shortErr(name string) string {
 		return s
 	}
 	return name
+}
+
+func shortDistro(name string) string {
+	if s, ok := distroShortMap[name]; ok {
+		return s
+	}
+	return name
+}
+
+// cloudProviderShortMap abbreviates cloud provider names for the User-Agent header.
+var cloudProviderShortMap = map[string]string{
+	"aws":   "aws",
+	"azure": "az",
+	"gcp":   "gcp",
+}
+
+func shortCloudProvider(name string) string {
+	parts := strings.Split(name, ",")
+	for i, p := range parts {
+		parts[i] = cloudProviderShortMap[p]
+	}
+	return strings.Join(parts, ",")
 }
 
 // buildTabID encodes execution context into Tab-Id (16-char HAProxy capture limit).
