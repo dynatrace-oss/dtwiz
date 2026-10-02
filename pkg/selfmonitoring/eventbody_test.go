@@ -150,3 +150,25 @@ func TestBuildEventTitle(t *testing.T) {
 		})
 	}
 }
+
+// Install feature outcomes and work time are User-Agent fields; the body carries them
+// as readable properties through ExtraProps, never under the header keys.
+func TestBuildEventPropsInstallOutcomesAreHeaderOnly(t *testing.T) {
+	props := buildEventProps(EventParams{
+		Cmd:        "install",
+		Sub:        "otel",
+		StepID:     StepInstall,
+		Features:   "11---",
+		DurationS:  "42",
+		ExtraProps: map[string]string{"install.duration_ms": "42123"},
+	})
+
+	if props["install.duration_ms"] != "42123" {
+		t.Errorf("body install.duration_ms = %q, want %q", props["install.duration_ms"], "42123")
+	}
+	for _, k := range []string{"f", "d", "Features", "DurationS", "features", "duration"} {
+		if _, ok := props[k]; ok {
+			t.Errorf("body[%q] must be absent: Features and DurationS are User-Agent only", k)
+		}
+	}
+}

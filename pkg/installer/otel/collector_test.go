@@ -5,6 +5,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -1054,6 +1055,56 @@ func TestCollectorPlanPrintDryRun(t *testing.T) {
 
 // buildPreviewConfig builds a synthetic config for preview tests.
 // Structure: headLines head lines, middleLines middle lines, optional pipelines, then 5 exporter lines.
+func stubCollectorDownload(t *testing.T, binaryPath string, err error) {
+	t.Helper()
+	orig := downloadOtelCollectorFn
+	downloadOtelCollectorFn = func(string) (string, error) { return binaryPath, err }
+	t.Cleanup(func() { downloadOtelCollectorFn = orig })
+}
+
+func TestCollectorPlanExecute_DownloadFailure_ConfigNotTried(t *testing.T) {
+	resetOutcomes(t)
+	dir := t.TempDir()
+	stubCollectorDownload(t, "", errors.New("download failed"))
+	cp := &collectorPlan{installDir: dir, configPath: filepath.Join(dir, "config.yaml"), configContent: "a: b\n"}
+
+	if err := cp.execute("https://env.example.com", "dt0s16.test", true); err == nil {
+		t.Fatal("expected the download error")
+	}
+	if got := installer.FeatureOutcomes()[installer.FeatureOtelConfig]; got != installer.OutcomeNotTried {
+		t.Errorf("OTel config outcome = %v, want not tried: the install failed before the config write", got)
+	}
+}
+
+func TestCollectorPlanExecute_ConfigWriteFailure_RecordsFailed(t *testing.T) {
+	resetOutcomes(t)
+	dir := t.TempDir()
+	stubCollectorDownload(t, filepath.Join(dir, "collector"), nil)
+	cp := &collectorPlan{installDir: dir, configPath: filepath.Join(dir, "missing", "config.yaml"), configContent: "a: b\n"}
+
+	if err := cp.execute("https://env.example.com", "dt0s16.test", true); err == nil {
+		t.Fatal("expected the config write error")
+	}
+	if got := installer.FeatureOutcomes()[installer.FeatureOtelConfig]; got != installer.OutcomeFailed {
+		t.Errorf("OTel config outcome = %v, want failed", got)
+	}
+}
+
+func TestCollectorPlanExecute_ConfigWritten_RecordsSucceededEvenIfStartFails(t *testing.T) {
+	resetOutcomes(t)
+	dir := t.TempDir()
+	// The binary does not exist, so starting the collector fails after the config was written.
+	stubCollectorDownload(t, filepath.Join(dir, "no-such-collector"), nil)
+	cp := &collectorPlan{installDir: dir, configPath: filepath.Join(dir, "config.yaml"), configContent: "a: b\n"}
+
+	if err := cp.execute("https://env.example.com", "dt0s16.test", true); err == nil {
+		t.Fatal("expected the collector start to fail")
+	}
+	if got := installer.FeatureOutcomes()[installer.FeatureOtelConfig]; got != installer.OutcomeSucceeded {
+		t.Errorf("OTel config outcome = %v, want succeeded: the config was written", got)
+	}
+}
+
 func buildPreviewConfig(headLines, middleLines int, withPipelines bool) string {
 	var b strings.Builder
 	for i := range headLines {

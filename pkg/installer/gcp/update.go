@@ -85,6 +85,7 @@ func updateGCPWithRunner(
 	display.ColorMessage.Println("  Google Cloud integration updated!")
 	fmt.Println()
 
+	installer.MarkInstallDone()
 	installer.WatchIngestCloudFromTimeWithEvent(cfg.EnvURL, cfg.PlatformToken, startTime, installer.OnWatchSnapshot, installer.OnWatchComplete)
 	return nil
 }

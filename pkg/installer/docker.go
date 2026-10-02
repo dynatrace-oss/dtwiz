@@ -60,8 +60,10 @@ func InstallDocker(envURL, token string, dryRun bool) error {
 
 	fmt.Printf("  Starting Dynatrace OneAgent container %q...\n", containerName)
 	if err := RunCommand("docker", dockerArgs...); err != nil {
+		RecordFeature(FeatureHostMonitoring, false)
 		return fmt.Errorf("starting Dynatrace OneAgent container: %w", err)
 	}
+	RecordFeature(FeatureHostMonitoring, true)
 
 	fmt.Printf("  OneAgent container %q started successfully.\n", containerName)
 	fmt.Println("  To view logs: docker logs -f " + containerName)

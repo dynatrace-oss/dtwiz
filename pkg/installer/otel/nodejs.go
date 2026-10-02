@@ -118,7 +118,7 @@ func DetectNodePlan(collectorEndpoint string) (*NodeInstrumentationPlan, bool) {
 		}
 
 		// Project can't be auto-instrumented; ask if the user wants to try another.
-		ok, err := installer.ConfirmProceed("  Select another project?")
+		ok, err := installer.ConfirmQuestion("  Select another project?")
 		if err != nil || !ok {
 			return nil, true
 		}

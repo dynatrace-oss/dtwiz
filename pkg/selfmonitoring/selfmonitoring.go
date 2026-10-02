@@ -48,6 +48,8 @@ type EventParams struct {
 	Type          string            // event type qualifier; omitted when empty
 	K8sDistro     string            // kubernetes distribution (e.g. "GKE", "EKS"); abbreviated in User-Agent, full name in body
 	CloudProvider string            // detected cloud provider ("aws", "azure", "gcp"); abbreviated in User-Agent, full name in body
+	Features      string            // install feature outcomes, one char per feature; User-Agent only (the body gets them via ExtraProps)
+	DurationS     string            // install work time in whole seconds; User-Agent only (the body gets it via ExtraProps)
 	ExtraProps    map[string]string // merged into event body properties; not included in User-Agent
 }
 

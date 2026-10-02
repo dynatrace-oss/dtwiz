@@ -618,3 +618,78 @@ func TestInstallOneAgentV2_UpdateQuiet(t *testing.T) {
 		t.Error("expected download to be attempted in quiet mode with existing agent")
 	}
 }
+
+// ── host monitoring outcome ───────────────────────────────────────────────────
+
+func TestInstallOneAgentV2_DryRun_HostMonitoringNotTried(t *testing.T) {
+	skipNonLinux(t)
+	withInstallDir(t, filepath.Join(t.TempDir(), "nonexistent"))
+	withNeedsSudo(t, false)
+	installer.ResetInstallTelemetry()
+	t.Cleanup(installer.ResetInstallTelemetry)
+
+	srv := httptest.NewServer(http.NotFoundHandler())
+	defer srv.Close()
+
+	if err := InstallOneAgentV2(newMockClient(t, srv.URL), InstallOptions{DryRun: true, MonitoringMode: "fullstack"}); err != nil {
+		t.Fatalf("dry-run returned unexpected error: %v", err)
+	}
+	if got := installer.FeatureOutcomes()[installer.FeatureHostMonitoring]; got != installer.OutcomeNotTried {
+		t.Errorf("host monitoring outcome = %v, want not tried after a dry-run", got)
+	}
+}
+
+func TestInstallOneAgentV2_ConnectivityCheckOnly_HostMonitoringNotTried(t *testing.T) {
+	skipNonLinux(t)
+	withInstallDir(t, filepath.Join(t.TempDir(), "nonexistent"))
+	installer.ResetInstallTelemetry()
+	t.Cleanup(installer.ResetInstallTelemetry)
+
+	ln, addr := startTCPListener(t)
+	defer ln.Close()
+	go acceptLoop(ln)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == endpointsAPIPath {
+			_, _ = w.Write([]byte(addr))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	if err := InstallOneAgentV2(newMockClient(t, srv.URL), InstallOptions{ConnectivityCheckOnly: true}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := installer.FeatureOutcomes()[installer.FeatureHostMonitoring]; got != installer.OutcomeNotTried {
+		t.Errorf("host monitoring outcome = %v, want not tried: OneAgent was not installed", got)
+	}
+}
+
+func TestInstallOneAgentV2_DownloadFails_HostMonitoringNotTried(t *testing.T) {
+	skipNonLinux(t)
+	withInstallDir(t, filepath.Join(t.TempDir(), "nonexistent"))
+	installer.ResetInstallTelemetry()
+	t.Cleanup(installer.ResetInstallTelemetry)
+
+	ln, addr := startTCPListener(t)
+	defer ln.Close()
+	go acceptLoop(ln)
+
+	// Every request except the endpoints lookup (including the installer download) is a 404.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == endpointsAPIPath {
+			_, _ = w.Write([]byte(addr))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	if err := InstallOneAgentV2(newMockClient(t, srv.URL), InstallOptions{MonitoringMode: "fullstack"}); err == nil {
+		t.Fatal("expected the download to fail")
+	}
+	if got := installer.FeatureOutcomes()[installer.FeatureHostMonitoring]; got != installer.OutcomeNotTried {
+		t.Errorf("host monitoring outcome = %v, want not tried: the install failed before the installer command ran", got)
+	}
+}
