@@ -81,25 +81,30 @@ func activateHostMonitoringExtension(envURL, platformToken string) {
 	if err != nil {
 		logger.Debug("failed to create extension client for host monitoring activation", "error", err)
 		fmt.Println("  Warning: could not connect to extensions API; host entity creation may not be available.")
+		installer.RecordFeature(installer.FeatureHostMonitoring, false)
 		return
 	}
 	_, err = ec.EnsureInstalled(otelHostMonitoringExtension)
 	if err != nil {
 		logger.Debug("failed to ensure OTel host monitoring extension installed", "error", err)
 		fmt.Println("  Warning: could not install OTel Host Monitoring extension; host entity creation may not be available.")
+		installer.RecordFeature(installer.FeatureHostMonitoring, false)
 		return
 	}
 	version, err := ec.LatestExtensionVersion(otelHostMonitoringExtension)
 	if err != nil {
 		logger.Debug("failed to get OTel host monitoring extension version", "error", err)
 		fmt.Println("  Warning: could not determine OTel Host Monitoring extension version; host entity creation may not be available.")
+		installer.RecordFeature(installer.FeatureHostMonitoring, false)
 		return
 	}
 	if err := ec.ActivateExtension(otelHostMonitoringExtension, version); err != nil {
 		logger.Debug("failed to activate OTel host monitoring extension", "error", err)
 		fmt.Println("  Warning: could not activate OTel Host Monitoring extension; host entity creation may not be available.")
+		installer.RecordFeature(installer.FeatureHostMonitoring, false)
 		return
 	}
+	installer.RecordFeature(installer.FeatureHostMonitoring, true)
 	display.ColorOK.Println("  ✓ OTel Host Monitoring extension active")
 }
 
@@ -624,7 +629,7 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 				break
 			}
 			// Project can't be auto-instrumented; ask if the user wants to try another.
-			again, err := installer.ConfirmProceed("  Select another project?")
+			again, err := installer.ConfirmQuestion("  Select another project?")
 			if err != nil || !again {
 				break
 			}

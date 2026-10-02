@@ -950,3 +950,35 @@ func TestAzureStep4RetrySucceeds(t *testing.T) {
 		t.Errorf("expected 2 sleep calls between retries, got %d", sleepCount)
 	}
 }
+
+// assertInstallWorkTimeEnded fails unless the install work time was marked as ended,
+// i.e. it no longer grows after the installer returned (the post-install watch is
+// not counted).
+func assertInstallWorkTimeEnded(t *testing.T) {
+	t.Helper()
+	d1, started := installer.InstallWorkTime()
+	if !started {
+		t.Fatal("install stopwatch was not started")
+	}
+	time.Sleep(30 * time.Millisecond)
+	if d2, _ := installer.InstallWorkTime(); d2 != d1 {
+		t.Errorf("install work time kept growing after the installer returned (%v -> %v): the end was not marked before the watch", d1, d2)
+	}
+}
+
+func TestAzureInstall_MarksInstallWorkTimeEnded(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+	installer.ResetInstallTelemetry()
+	t.Cleanup(installer.ResetInstallTelemetry)
+
+	err := captureStdoutErr(func() error {
+		return installAzureWithRunner("https://abc.live.dynatrace.com", "dt0s16.fake.token", false, time.Time{}, buildHappyPathAzRunner(t).run, noSleep, happyFakeDTClient())
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertInstallWorkTimeEnded(t)
+}

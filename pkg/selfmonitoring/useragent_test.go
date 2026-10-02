@@ -371,3 +371,79 @@ func TestWatchSnapshotUserAgentVersionBudget(t *testing.T) {
 			budget, wantVersionCS, overhead, limit)
 	}
 }
+
+func TestBuildUserAgentInstallOutcomes(t *testing.T) {
+	origVersion := version.Version
+	defer func() { version.Version = origVersion }()
+	version.Version = "1.2.3"
+
+	tests := []struct {
+		name   string
+		params EventParams
+		want   string
+	}{
+		{
+			name:   "features_and_duration_after_error",
+			params: EventParams{Cmd: "install", Sub: "otel-collector", StepID: StepInstall, Err: "install_failed", Features: "11---", DurationS: "42"},
+			want:   "dtwiz/1.2.3;c=ins;st=ist;s=otlc;er=ifl;f=11---;d=42",
+		},
+		{
+			name:   "no_error",
+			params: EventParams{Cmd: "setup", Sub: "otel-collector", StepID: StepInstall, Features: "-1---", DurationS: "7"},
+			want:   "dtwiz/1.2.3;c=set;st=ist;s=otlc;f=-1---;d=7",
+		},
+		{
+			name:   "omitted_when_no_install_work_started",
+			params: EventParams{Cmd: "install", Sub: "otel", StepID: StepInstall, Err: "user_cancelled"},
+			want:   "dtwiz/1.2.3;c=ins;st=ist;s=otel;er=ucl",
+		},
+		{
+			name:   "zero_seconds_is_still_reported",
+			params: EventParams{Cmd: "install", Sub: "oneagent", StepID: StepInstall, Features: "-----", DurationS: "0"},
+			want:   "dtwiz/1.2.3;c=ins;st=ist;s=oa;f=-----;d=0",
+		},
+		{
+			name:   "not_emitted_on_other_steps",
+			params: EventParams{Cmd: "install", Sub: "otel", StepID: StepFailed, Features: "11---", DurationS: "42"},
+			want:   "dtwiz/1.2.3;c=ins;st=fai;s=otel",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := buildUserAgent(tt.params); got != tt.want {
+				t.Errorf("buildUserAgent() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// The install event carries f= and d= on top of the command, subcommand and error. This
+// pins the version budget left over, so anything that lengthens the header fails here
+// instead of truncating the tail at the HAProxy capture limit. The same 11-char budget
+// ("1.10.1-next") applies as for the watch snapshot event.
+func TestInstallUserAgentVersionBudget(t *testing.T) {
+	const (
+		limit         = 64
+		wantVersionCS = 11
+	)
+
+	origVersion := version.Version
+	defer func() { version.Version = origVersion }()
+	version.Version = ""
+
+	longestSub := longestKey(subShortMap)
+	for errType := range errShortMap {
+		overhead := len(buildUserAgent(EventParams{
+			Cmd:       "setup",
+			Sub:       longestSub,
+			StepID:    StepInstall,
+			Err:       errType,
+			Features:  "-----",
+			DurationS: "9999",
+		}))
+		if budget := limit - overhead; budget < wantVersionCS {
+			t.Errorf("err %q: version budget is %d chars, want at least %d; header overhead grew to %d of %d",
+				errType, budget, wantVersionCS, overhead, limit)
+		}
+	}
+}

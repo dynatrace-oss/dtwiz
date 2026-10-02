@@ -230,61 +230,111 @@ func fireSetupInstallEvent(cmd *cobra.Command, sub string, err error) {
 			}
 		}
 	}
+	applyInstallOutcomes(&p, err)
 	fireSelfMonitoringEvent(p)
 }
 
-// installMethodFeatures returns the static per-method feature flags included in
-// the install.ist event. Only fields applicable to the method are present; absent
-// fields are intentionally omitted rather than set to false.
-func installMethodFeatures(method string) map[string]string {
-	switch method {
-	case "otel", "otel-collector", "demo":
-		return map[string]string{
-			"install.host_monitoring_enabled": "true",
-			"install.otel_pipelines":          "traces,metrics,logs",
-		}
-	case "otel-python", "otel-node", "otel-java":
-		return map[string]string{
-			"install.otel_pipelines": "traces,metrics,logs",
-		}
+// installFeatures lists the features reported in the install event, in the fixed order
+// of their characters in the User-Agent f= field, with the body property of each.
+// Positions are add-only: never reorder or reuse them, so a position keeps its meaning
+// across versions. A shorter f= from an older version means the trailing features were
+// unknown to it, which is not the same as "-" (not tried).
+var installFeatures = []struct {
+	feature installer.Feature
+	prop    string
+}{
+	{installer.FeatureOtelConfig, "install.otel_config_written"},
+	{installer.FeatureHostMonitoring, "install.host_monitoring"},
+	{installer.FeatureRUM, "install.rum"},
+	{installer.FeatureSynthetic, "install.synthetic_monitoring"},
+	{installer.FeatureRDSExtensions, "install.rds_extensions"},
+}
+
+// installDurationSecondsCap bounds d= in the User-Agent to four digits. The body carries
+// the unclamped milliseconds, so clamping only degrades the fallback channel.
+const installDurationSecondsCap = 9999
+
+func installFeatureChar(o installer.Outcome) string {
+	switch o {
+	case installer.OutcomeSucceeded:
+		return "1"
+	case installer.OutcomeFailed:
+		return "0"
 	default:
-		return nil
+		return "-"
 	}
 }
 
+func installFeatureValue(o installer.Outcome) string {
+	switch o {
+	case installer.OutcomeSucceeded:
+		return "succeeded"
+	case installer.OutcomeFailed:
+		return "failed"
+	default:
+		return "not_tried"
+	}
+}
+
+// applyInstallOutcomes adds the install work time and the feature outcomes to an ist
+// event: the compact forms for the User-Agent and the readable properties for the body.
+// It adds nothing when no install work started: dry-run, a declined confirmation, or a
+// failure before the confirmation.
+func applyInstallOutcomes(p *selfmonitoring.EventParams, err error) {
+	if errors.Is(err, installer.ErrInstallCancelled) {
+		return
+	}
+	elapsed, started := installer.InstallWorkTime()
+	if !started {
+		return
+	}
+	features, durationS, body := installOutcomeFields(elapsed, installer.FeatureOutcomes())
+	p.Features = features
+	p.DurationS = durationS
+
+	if p.ExtraProps == nil {
+		p.ExtraProps = body
+		return
+	}
+	for k, v := range body {
+		p.ExtraProps[k] = v
+	}
+}
+
+// installOutcomeFields encodes the install work time and feature outcomes: the f= and
+// d= values for the User-Agent, and the readable properties for the event body.
+func installOutcomeFields(elapsed time.Duration, outcomes map[installer.Feature]installer.Outcome) (features, durationS string, body map[string]string) {
+	var chars strings.Builder
+	body = make(map[string]string, len(installFeatures)+1)
+	for _, f := range installFeatures {
+		chars.WriteString(installFeatureChar(outcomes[f.feature]))
+		body[f.prop] = installFeatureValue(outcomes[f.feature])
+	}
+	body["install.duration_ms"] = strconv.FormatInt(elapsed.Milliseconds(), 10)
+
+	secs := int64(elapsed / time.Second)
+	if secs > installDurationSecondsCap {
+		secs = installDurationSecondsCap
+	}
+	return chars.String(), strconv.FormatInt(secs, 10), body
+}
+
 // fireInstallEvent fires the StepInstall event for a direct dtwiz install <method>
-// invocation, including cancellations (error.type = user_cancelled).
-// duration is the elapsed time from user confirmation to install completion; it is
-// omitted when zero (e.g. install was never executed due to dry-run or cancellation).
-func fireInstallEvent(cmd *cobra.Command, duration time.Duration, err error) {
-	_, sub := deriveCommandNames(cmd)
+// invocation, including cancellations (error = user_cancelled). The install work time
+// and feature outcomes are included when install work started.
+func fireInstallEvent(cmd *cobra.Command, err error) {
 	p := buildEventParams(cmd, selfmonitoring.StepInstall)
 	if err != nil {
 		errType, attrs := selfmonitoring.ClassifyError(err)
 		p.Err = string(errType)
 		if len(attrs) > 0 {
-			p.ExtraProps = make(map[string]string, len(attrs)+4)
+			p.ExtraProps = make(map[string]string, len(attrs)+len(installFeatures)+1)
 			for k, v := range attrs {
 				p.ExtraProps[k] = v
 			}
 		}
 	}
-	extra := make(map[string]string)
-	if duration > 0 {
-		extra["install.duration_s"] = strconv.FormatInt(int64(duration/time.Second), 10)
-	}
-	for k, v := range installMethodFeatures(sub) {
-		extra[k] = v
-	}
-	if len(extra) > 0 {
-		if p.ExtraProps == nil {
-			p.ExtraProps = extra
-		} else {
-			for k, v := range extra {
-				p.ExtraProps[k] = v
-			}
-		}
-	}
+	applyInstallOutcomes(&p, err)
 	fireSelfMonitoringEvent(p)
 }
 

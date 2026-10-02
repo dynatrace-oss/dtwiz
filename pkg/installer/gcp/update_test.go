@@ -146,3 +146,24 @@ func TestUpdateGCPFreshExtensionInstallWaitsBeforeReconcile(t *testing.T) {
 		t.Errorf("expected monitoring config reconciled, got %v", dtc.updateMonConfigIDs)
 	}
 }
+
+func TestGCPUpdate_MarksInstallWorkTimeEnded(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+	installer.ResetInstallTelemetry()
+	t.Cleanup(installer.ResetInstallTelemetry)
+
+	dtc := &fakeDTClient{
+		findConnRefs:    []connRef{{objectID: "conn-1", serviceAccountEmail: "dtwiz-gcp@my-project.iam.gserviceaccount.com"}},
+		findMonConfigID: "mon-1",
+	}
+	err := captureStdoutErr(func() error {
+		return updateGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, uninstallGcloudRunner("my-project"), noSleep, dtc)
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertInstallWorkTimeEnded(t)
+}

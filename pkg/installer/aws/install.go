@@ -241,10 +241,12 @@ func installAWSWithClient(envURL, token string, dryRun bool, startTime string, d
 	// no meaningful intermediate output.
 	var wg sync.WaitGroup
 	var deployErr error
+	var cfnDone time.Time // written by the goroutine, read after wg.Wait()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer func() { cfnDone = time.Now() }()
 		statusCh <- fmt.Sprintf("CloudFormation stack %q deploying... (this may take a few minutes)", cfg.StackName)
 		if err := installer.RunCommandQuiet("aws", realArgs...); err != nil {
 			deployErr = fmt.Errorf("CloudFormation deployment failed: %w", err)
@@ -265,6 +267,7 @@ func installAWSWithClient(envURL, token string, dryRun bool, startTime string, d
 	// Run Lambda instrumentation on the main thread — it is quick but produces
 	// a lot of output, so let it finish before handing the terminal to watch.
 	lambdaErr := installer.InstallAWSLambda(envURL, token, false, false)
+	lambdaDone := time.Now()
 	if lambdaErr != nil {
 		fmt.Printf("\n  Warning: Lambda instrumentation encountered an error: %s\n", lambdaErr)
 		fmt.Println("  You can retry with: dtwiz install aws-lambda")
@@ -281,5 +284,16 @@ func installAWSWithClient(envURL, token string, dryRun bool, startTime string, d
 	wg.Wait()
 	close(statusCh)
 
+	// The install work ends when the slower of the CloudFormation deploy and the Lambda
+	// instrumentation finished, not when the watch ended.
+	installer.MarkInstallDoneAt(laterOf(cfnDone, lambdaDone))
+
 	return deployErr
+}
+
+func laterOf(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+	return b
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
 	"github.com/dynatrace-oss/dtwiz/pkg/recommender"
 	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 )
@@ -169,4 +170,279 @@ func TestFireSetupMenuEvent(t *testing.T) {
 			t.Fatalf("expected no events, got %d", len(captured))
 		}
 	})
+}
+
+// captureInstallEvents replaces the event sink and resets the install telemetry state
+// for the duration of the test.
+func captureInstallEvents(t *testing.T) *[]selfmonitoring.EventParams {
+	t.Helper()
+	var captured []selfmonitoring.EventParams
+	original := eventSink
+	eventSink = func(p selfmonitoring.EventParams) { captured = append(captured, p) }
+	installer.ResetInstallTelemetry()
+	t.Cleanup(func() {
+		eventSink = original
+		installer.ResetInstallTelemetry()
+	})
+	return &captured
+}
+
+func singleEvent(t *testing.T, captured *[]selfmonitoring.EventParams) selfmonitoring.EventParams {
+	t.Helper()
+	if len(*captured) != 1 {
+		t.Fatalf("expected exactly 1 event, got %d", len(*captured))
+	}
+	return (*captured)[0]
+}
+
+func TestInstallEvent_FeatureOutcomes(t *testing.T) {
+	tests := []struct {
+		name         string
+		record       func()
+		wantFeatures string
+		wantBody     map[string]string
+	}{
+		{
+			name: "otel_config_and_host_monitoring_succeeded",
+			record: func() {
+				installer.RecordFeature(installer.FeatureOtelConfig, true)
+				installer.RecordFeature(installer.FeatureHostMonitoring, true)
+			},
+			wantFeatures: "11---",
+			wantBody: map[string]string{
+				"install.otel_config_written":  "succeeded",
+				"install.host_monitoring":      "succeeded",
+				"install.rum":                  "not_tried",
+				"install.synthetic_monitoring": "not_tried",
+				"install.rds_extensions":       "not_tried",
+			},
+		},
+		{
+			name: "host_monitoring_failed_install_succeeded",
+			record: func() {
+				installer.RecordFeature(installer.FeatureOtelConfig, true)
+				installer.RecordFeature(installer.FeatureHostMonitoring, false)
+			},
+			wantFeatures: "10---",
+			wantBody:     map[string]string{"install.otel_config_written": "succeeded", "install.host_monitoring": "failed"},
+		},
+		{
+			name:         "failed_before_reaching_config_write",
+			record:       func() { installer.RecordFeature(installer.FeatureHostMonitoring, true) },
+			wantFeatures: "-1---",
+			wantBody:     map[string]string{"install.otel_config_written": "not_tried", "install.host_monitoring": "succeeded"},
+		},
+		{
+			name:         "nothing_tried",
+			record:       func() {},
+			wantFeatures: "-----",
+			wantBody:     map[string]string{"install.otel_config_written": "not_tried", "install.host_monitoring": "not_tried"},
+		},
+		{
+			name: "reserved_features_stay_not_tried_even_when_recorded_failed_elsewhere",
+			record: func() {
+				installer.RecordFeature(installer.FeatureOtelConfig, true)
+			},
+			wantFeatures: "1----",
+			wantBody:     map[string]string{"install.rum": "not_tried", "install.synthetic_monitoring": "not_tried", "install.rds_extensions": "not_tried"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			captured := captureInstallEvents(t)
+			installer.StartInstallTimer()
+			tt.record()
+
+			fireInstallEvent(installOtelCollectorCmd, nil)
+
+			p := singleEvent(t, captured)
+			if p.StepID != selfmonitoring.StepInstall {
+				t.Errorf("step = %q, want %q", p.StepID, selfmonitoring.StepInstall)
+			}
+			if p.Features != tt.wantFeatures {
+				t.Errorf("Features = %q, want %q", p.Features, tt.wantFeatures)
+			}
+			if p.DurationS == "" {
+				t.Error("DurationS must be present when install work started")
+			}
+			if p.ExtraProps["install.duration_ms"] == "" {
+				t.Error("body install.duration_ms must be present when install work started")
+			}
+			for k, want := range tt.wantBody {
+				if got := p.ExtraProps[k]; got != want {
+					t.Errorf("body[%q] = %q, want %q", k, got, want)
+				}
+			}
+			if len(p.ExtraProps) != len(installFeatures)+1 {
+				t.Errorf("body has %d install properties, want all %d features plus the duration: %v", len(p.ExtraProps), len(installFeatures), p.ExtraProps)
+			}
+		})
+	}
+}
+
+func TestInstallEvent_NoOutcomesWhenNoWorkStarted(t *testing.T) {
+	captured := captureInstallEvents(t)
+	// Dry-run: the installer returned without confirming or doing anything.
+	fireInstallEvent(installOtelCmd, nil)
+
+	p := singleEvent(t, captured)
+	if p.Features != "" || p.DurationS != "" {
+		t.Errorf("Features/DurationS = %q/%q, want both empty", p.Features, p.DurationS)
+	}
+	for k := range p.ExtraProps {
+		t.Errorf("unexpected body property %q for an install that did no work", k)
+	}
+}
+
+func TestInstallEvent_CancelledOmitsOutcomesEvenWhenTimerStarted(t *testing.T) {
+	captured := captureInstallEvents(t)
+	// OneAgent starts the timer in the cmd layer and can still be declined at its update prompt.
+	installer.StartInstallTimer()
+
+	fireInstallEvent(installOneAgentCmd, installer.ErrInstallCancelled)
+
+	p := singleEvent(t, captured)
+	if p.Err != "user_cancelled" {
+		t.Errorf("Err = %q, want user_cancelled", p.Err)
+	}
+	if p.Features != "" || p.DurationS != "" || len(p.ExtraProps) != 0 {
+		t.Errorf("a cancelled install must carry no outcomes, got Features=%q DurationS=%q props=%v", p.Features, p.DurationS, p.ExtraProps)
+	}
+}
+
+func TestInstallEvent_FailureStillCarriesWorkTimeAndOutcomes(t *testing.T) {
+	captured := captureInstallEvents(t)
+	installer.StartInstallTimer()
+	installer.RecordFeature(installer.FeatureHostMonitoring, false)
+
+	fireInstallEvent(installOneAgentCmd, &installer.InstallFailedError{Step: "download"})
+
+	p := singleEvent(t, captured)
+	if p.Err == "" {
+		t.Error("Err must carry the classified error type")
+	}
+	if p.Features != "-0---" || p.DurationS == "" {
+		t.Errorf("Features/DurationS = %q/%q, want -0---/non-empty", p.Features, p.DurationS)
+	}
+	if p.ExtraProps["install.step"] != "download" {
+		t.Errorf("error attributes must be kept next to the outcomes, got %v", p.ExtraProps)
+	}
+}
+
+func TestInstallOutcomeFields_ClampsHeaderOnly(t *testing.T) {
+	features, durationS, body := installOutcomeFields(3*time.Hour, nil)
+
+	if features != "-----" {
+		t.Errorf("features = %q, want -----", features)
+	}
+	if durationS != "9999" {
+		t.Errorf("durationS = %q, want 9999 (clamped)", durationS)
+	}
+	if body["install.duration_ms"] != "10800000" {
+		t.Errorf("body install.duration_ms = %q, want the unclamped 10800000", body["install.duration_ms"])
+	}
+}
+
+func TestInstallOutcomeFields_RoundsDownToWholeSeconds(t *testing.T) {
+	_, durationS, body := installOutcomeFields(2999*time.Millisecond, nil)
+
+	if durationS != "2" {
+		t.Errorf("durationS = %q, want 2", durationS)
+	}
+	if body["install.duration_ms"] != "2999" {
+		t.Errorf("body install.duration_ms = %q, want 2999", body["install.duration_ms"])
+	}
+}
+
+func TestInstallFeatures_PositionsAreStable(t *testing.T) {
+	// Positions in f= are a contract with whoever queries the data: add-only.
+	want := []installer.Feature{
+		installer.FeatureOtelConfig,
+		installer.FeatureHostMonitoring,
+		installer.FeatureRUM,
+		installer.FeatureSynthetic,
+		installer.FeatureRDSExtensions,
+	}
+	if len(installFeatures) != len(want) {
+		t.Fatalf("installFeatures has %d entries, want %d", len(installFeatures), len(want))
+	}
+	for i, f := range want {
+		if installFeatures[i].feature != f {
+			t.Errorf("position %d holds feature %v, want %v", i+1, installFeatures[i].feature, f)
+		}
+	}
+}
+
+func TestSetupInstallEvent_CarriesSameOutcomesAsDirectInstall(t *testing.T) {
+	captured := captureInstallEvents(t)
+	installer.StartInstallTimer()
+	installer.RecordFeature(installer.FeatureOtelConfig, true)
+	installer.RecordFeature(installer.FeatureHostMonitoring, true)
+
+	fireInstallEvent(installOtelCollectorCmd, nil)
+	fireSetupInstallEvent(setupCmd, "otel-collector", nil)
+
+	if len(*captured) != 2 {
+		t.Fatalf("expected 2 events, got %d", len(*captured))
+	}
+	direct, setup := (*captured)[0], (*captured)[1]
+	if setup.Cmd != "setup" || setup.Sub != "otel-collector" {
+		t.Errorf("setup event cmd/sub = %q/%q", setup.Cmd, setup.Sub)
+	}
+	if setup.Features != direct.Features || setup.Features != "11---" {
+		t.Errorf("setup Features = %q, direct = %q, want both 11---", setup.Features, direct.Features)
+	}
+	for k, v := range direct.ExtraProps {
+		if k == "install.duration_ms" {
+			continue // differs by the time elapsed between the two calls
+		}
+		if setup.ExtraProps[k] != v {
+			t.Errorf("setup body[%q] = %q, direct = %q", k, setup.ExtraProps[k], v)
+		}
+	}
+	if setup.ExtraProps["install.duration_ms"] == "" || setup.DurationS == "" {
+		t.Error("setup event must carry the work time")
+	}
+}
+
+func TestSetupInstallEvent_FailureCarriesOutcomes(t *testing.T) {
+	captured := captureInstallEvents(t)
+	installer.StartInstallTimer()
+	installer.RecordFeature(installer.FeatureHostMonitoring, false)
+
+	fireSetupInstallEvent(setupCmd, "oneagent", &installer.InstallFailedError{Step: "download"})
+
+	p := singleEvent(t, captured)
+	if p.Err == "" || p.Features != "-0---" || p.ExtraProps["install.step"] != "download" {
+		t.Errorf("unexpected failure event: err=%q features=%q props=%v", p.Err, p.Features, p.ExtraProps)
+	}
+}
+
+func TestSetupInstallEvent_NoEventOnCancelOrUpToDate(t *testing.T) {
+	for name, err := range map[string]error{
+		"cancelled":  installer.ErrInstallCancelled,
+		"up_to_date": otel.ErrUpToDate,
+	} {
+		t.Run(name, func(t *testing.T) {
+			captured := captureInstallEvents(t)
+			installer.StartInstallTimer()
+
+			fireSetupInstallEvent(setupCmd, "otel-update", err)
+
+			if len(*captured) != 0 {
+				t.Errorf("expected no ist event, got %d", len(*captured))
+			}
+		})
+	}
+}
+
+func TestSetupInstallEvent_NoOutcomesOnDryRun(t *testing.T) {
+	captured := captureInstallEvents(t)
+
+	fireSetupInstallEvent(setupCmd, "kubernetes", nil)
+
+	p := singleEvent(t, captured)
+	if p.Features != "" || p.DurationS != "" || len(p.ExtraProps) != 0 {
+		t.Errorf("a dry-run must carry no outcomes, got Features=%q DurationS=%q props=%v", p.Features, p.DurationS, p.ExtraProps)
+	}
 }

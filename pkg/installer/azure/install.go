@@ -180,6 +180,7 @@ func installAzureWithRunner(
 	display.ColorMessage.Println("  Azure Monitor integration setup complete!")
 	fmt.Println()
 
+	installer.MarkInstallDone()
 	installer.WatchIngestCloudFromTimeWithEvent(cfg.EnvURL, cfg.PlatformToken, startTime, installer.OnWatchSnapshot, installer.OnWatchComplete)
 	return nil
 }

@@ -1129,6 +1129,46 @@ func TestActivateHostMonitoringExtension_ActivationFails_WarnsAndContinues(t *te
 	}
 }
 
+func resetOutcomes(t *testing.T) {
+	t.Helper()
+	installer.ResetInstallTelemetry()
+	t.Cleanup(installer.ResetInstallTelemetry)
+}
+
+func TestActivateHostMonitoringExtension_RecordsOutcome(t *testing.T) {
+	tests := []struct {
+		name       string
+		manager    *fakeExtensionManager
+		managerErr error
+		want       installer.Outcome
+	}{
+		{"activated", &fakeExtensionManager{version: "3.1.1"}, nil, installer.OutcomeSucceeded},
+		{"freshly installed then activated", &fakeExtensionManager{ensureFresh: true, version: "3.1.1"}, nil, installer.OutcomeSucceeded},
+		{"client creation fails", nil, errors.New("no client"), installer.OutcomeFailed},
+		{"ensure installed fails", &fakeExtensionManager{ensureErr: errors.New("boom")}, nil, installer.OutcomeFailed},
+		{"version lookup fails", &fakeExtensionManager{versionErr: errors.New("boom")}, nil, installer.OutcomeFailed},
+		{"activation fails", &fakeExtensionManager{version: "3.1.1", activateErr: errors.New("boom")}, nil, installer.OutcomeFailed},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetOutcomes(t)
+			var mgr extensionManager
+			if tt.manager != nil {
+				mgr = tt.manager
+			}
+			stubExtensionManager(t, mgr, tt.managerErr)
+
+			captureActivationOutput(t, func() {
+				activateHostMonitoringExtension("https://env.example.com", "dt0s16.test")
+			})
+
+			if got := installer.FeatureOutcomes()[installer.FeatureHostMonitoring]; got != tt.want {
+				t.Errorf("host monitoring outcome = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 // ── deactivateHostMonitoringExtension unit tests ─────────────────────────────
 
 // stubGrailRouteRemoval replaces removeHostMonitoringGrailRoutesFn for the
