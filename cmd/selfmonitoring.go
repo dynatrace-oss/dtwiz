@@ -14,6 +14,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
+	"github.com/dynatrace-oss/dtwiz/pkg/recommender"
 	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 )
 
@@ -198,10 +199,19 @@ func fireSetupAnalyzeEvent(cmd *cobra.Command, cloudProvider, k8sDistro string, 
 	fireSelfMonitoringEvent(p)
 }
 
-func fireSetupRecommendEvent(cmd *cobra.Command, sub string) {
-	p := buildEventParams(cmd, selfmonitoring.StepRecommend)
-	p.Sub = sub
+func fireSetupRecommendEvent(cmd *cobra.Command, method string) {
+	p := buildEventParams(cmd, selfmonitoring.StepRecommendationsSelected)
+	p.Opt = method
 	fireSelfMonitoringEvent(p)
+}
+
+// fireSetupMenuEvent fires one self-monitoring event per presented recommendation.
+func fireSetupMenuEvent(cmd *cobra.Command, recs []recommender.Recommendation) {
+	for _, r := range recs {
+		p := buildEventParams(cmd, selfmonitoring.StepRecommendationsPresented)
+		p.Opt = string(r.Method)
+		fireSelfMonitoringEvent(p)
+	}
 }
 
 func fireSetupInstallEvent(cmd *cobra.Command, sub string, err error) {

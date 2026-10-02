@@ -3,50 +3,17 @@ package selfmonitoring
 
 import (
 	"bytes"
-	"context"
 	"crypto/rand"
-	"encoding/json"
 	"fmt"
 	"io"
-	"maps"
 	"net/http"
-	"runtime"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
-	"github.com/dynatrace-oss/dtwiz/pkg/version"
 )
 
 var smHTTPClient = &http.Client{Timeout: 3 * time.Second}
-
-var wg sync.WaitGroup
-
-// TrackSend registers one in-flight send with the WaitGroup. Must be called before the goroutine is spawned.
-func TrackSend() { wg.Add(1) }
-
-// SendDone signals that one in-flight send has completed.
-func SendDone() { wg.Done() }
-
-// Flush waits for all in-flight self-monitoring sends to complete, or until timeout elapses.
-// Silent on timeout — any remaining sends are accepted as lost.
-func Flush(timeout time.Duration) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-	case <-ctx.Done():
-	}
-}
 
 var execID string
 
@@ -74,6 +41,7 @@ const (
 type EventParams struct {
 	Cmd           string            // top-level command: install, update, uninstall, analyze, etc.
 	Sub           string            // subcommand: otel, kubernetes, oneagent, etc.
+	Opt           string            // setup menu option (method presented/selected); encoded as opt= in header, distinct from Sub
 	StepID        string            // execution step shortcode; defaults to StepInvoked when empty
 	Mode          Mode              // ModeDebug, ModeTTY, or ModeNonTTY
 	Err           string            // error category; omitted when empty
@@ -83,112 +51,20 @@ type EventParams struct {
 	ExtraProps    map[string]string // merged into event body properties; not included in User-Agent
 }
 
-// stepFullNames maps step shortcodes to human-readable names used in the event body.
-var stepFullNames = map[string]string{
-	StepInvoked:   "invoked",
-	StepAnalyze:   "analyze",
-	StepRecommend: "recommend",
-	StepInstall:   "install",
-	StepSnapshot:  "snapshot",
-	StepCompleted: "completed",
-	StepFailed:    "failed",
-	StepCancelled: "cancelled",
-}
-
-// cmdShortMap and subShortMap abbreviate natural command names for the User-Agent header.
-var cmdShortMap = map[string]string{
-	"install":   "ins",
-	"uninstall": "uni",
-	"update":    "upd",
-	"analyze":   "ana",
-	"recommend": "rec",
-	"status":    "sta",
-	"watch":     "wch",
-	"setup":     "set",
-	"version":   "ver",
-	"help":      "hlp",
-}
-
-// errShortMap abbreviates error taxonomy values for the User-Agent header.
-// The event body always carries the full name.
-var errShortMap = map[string]string{
-	string(installer.ErrTypeUserCancelled):       "ucl",
-	string(installer.ErrTypeAuthError):           "aut",
-	string(installer.ErrTypeConfigError):         "cfg",
-	string(installer.ErrTypeDependencyMissing):   "dep",
-	string(installer.ErrTypeNetworkError):        "net",
-	string(installer.ErrTypeInstallFailed):       "ifl",
-	string(installer.ErrTypePlatformUnsupported): "plt",
-}
-
-// distroShortMap abbreviates Kubernetes distribution names for the User-Agent header.
-// All codes are 3 chars to fit the 64-char capture budget alongside other fields.
-// The event body always carries the full name from K8sDistro.
-var distroShortMap = map[string]string{
-	"GKE":              "gke",
-	"EKS":              "eks",
-	"AKS":              "aks",
-	"IKS":              "iks",
-	"OpenShift":        "ocp",
-	"k3s":              "k3s",
-	"RKE":              "rke",
-	"kubernetes":       "k8s",
-	"GKE-Autopilot":    "gka",
-	"EKS-Bottlerocket": "ekb",
-	"minikube":         "mnk",
-	"kind":             "knd",
-	"TKGI":             "tkg",
-}
-
-var subShortMap = map[string]string{
-	"otel":           "otel",
-	"otel-collector": "otlc",
-	"otel-python":    "otlp",
-	"otel-node":      "otln",
-	"otel-java":      "otlj",
-	"kubernetes":     "k8s",
-	"oneagent":       "oa",
-	"gcp":            "gcp",
-	"azure":          "az",
-	"aws":            "aws",
-	"aws-lambda":     "awsl",
-	"docker":         "dock",
-	"demo":           "demo",
-	"self":           "self",
-	"uninstall":      "uni",
-	"otel-update":    "otlu",
-	"azure-update":   "azu",
-	"gcp-update":     "gcpu",
-}
-
 const (
 	headerKey   = "dtwiz-monitoring"
 	headerValue = "dtwiz-start"
 
-	StepInvoked   = "inv"
-	StepAnalyze   = "ana"
-	StepRecommend = "rec"
-	StepInstall   = "ist"
-	StepSnapshot  = "snp"
-	StepCompleted = "com"
-	StepFailed    = "fai"
-	StepCancelled = "can"
-
-	propExecID        = "e"
-	propCmd           = "c"
-	propStep          = "st"
-	propSub           = "s"
-	propErr           = "er"
-	propType          = "t"
-	propK8sDistro     = "kd"
-	propCloudProvider = "cp"
+	StepInvoked                  = "inv"
+	StepAnalyze                  = "ana"
+	StepInstall                  = "ist"
+	StepSnapshot                 = "snp"
+	StepCompleted                = "com"
+	StepFailed                   = "fai"
+	StepCancelled                = "can"
+	StepRecommendationsPresented = "rpr"
+	StepRecommendationsSelected  = "rsl"
 )
-
-type eventPayload struct {
-	EventType  string            `json:"eventType"`
-	Title      string            `json:"title"`
-	Properties map[string]string `json:"properties"`
-}
 
 // SendEvent ingests a self-monitoring event into the given classic Dynatrace environment.
 // Errors are logged at debug level only — this must never surface to the user.
@@ -197,21 +73,9 @@ func SendEvent(classicURL, token string, params EventParams) error {
 		params.StepID = StepInvoked
 	}
 
-	props := buildEventProps(params)
-	title := "dtwiz"
-	if params.Cmd != "" {
-		title += " " + params.Cmd
-	}
-	if params.Sub != "" {
-		title += " " + params.Sub
-	}
-	eventBody, err := json.Marshal(eventPayload{
-		EventType:  "CUSTOM_INFO",
-		Title:      title,
-		Properties: props,
-	})
+	eventBody, err := buildEventBody(params)
 	if err != nil {
-		return fmt.Errorf("marshal event: %w", err)
+		return err
 	}
 
 	url := strings.TrimRight(classicURL, "/") + "/api/v2/events/ingest"
@@ -244,141 +108,6 @@ func SendEvent(classicURL, token string, params EventParams) error {
 
 	logger.Debug(fmt.Sprintf("selfmonitoring: event sent to %s (status %d): %s", url, resp.StatusCode, string(respBody)))
 	return nil
-}
-
-// buildEventProps assembles the event body properties. Unlike the User-Agent, these carry
-// full, unabbreviated values: the body is the query surface, so its encoding stays stable
-// while the header is free to be shortened to fit the capture limit.
-// Callers must resolve an empty StepID to its default first.
-func buildEventProps(p EventParams) map[string]string {
-	stepFull := stepFullNames[p.StepID]
-	if stepFull == "" {
-		stepFull = p.StepID
-	}
-
-	props := map[string]string{
-		"executionId": execID,
-		"step":        stepFull,
-		"version":     version.Version,
-		"mode":        string(p.Mode),
-		"os":          runtime.GOOS,
-	}
-	for _, kv := range []struct{ k, v string }{
-		{"command", p.Cmd},
-		{"subcommand", p.Sub},
-		{"error", p.Err},
-		{"type", p.Type},
-		{"k8s.distro", p.K8sDistro},
-		{"cloud.provider", p.CloudProvider},
-	} {
-		if kv.v != "" {
-			props[kv.k] = kv.v
-		}
-	}
-	maps.Copy(props, p.ExtraProps)
-	return props
-}
-
-// buildUserAgent encodes operation identity into User-Agent (64-char HAProxy capture limit).
-// Format: dtwiz/<version>[;c=<cmd>];st=<step>[;s=<sub>][;er=<err>][;t=<type>]
-// c= is omitted when Cmd is empty. ExecID, mode, and OS go into Tab-Id via buildTabID.
-// Command, subcommand, and error are abbreviated to fit the limit; the event body carries
-// the full names.
-func buildUserAgent(p EventParams) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "dtwiz/%s", version.Version)
-	pairs := []struct{ k, v string }{
-		{propCmd, shortCmd(p.Cmd)},
-		{propStep, p.StepID},
-		{propSub, shortSub(p.Sub)},
-		{propErr, shortErr(p.Err)},
-		{propType, p.Type},
-		{propCloudProvider, shortCloudProvider(p.CloudProvider)},
-	}
-	// kd= is only included for analyze events;
-	if p.StepID == StepAnalyze {
-		pairs = append(pairs, struct{ k, v string }{propK8sDistro, shortDistro(p.K8sDistro)})
-	}
-	for _, kv := range pairs {
-		if kv.v != "" {
-			fmt.Fprintf(&b, ";%s=%s", kv.k, kv.v)
-		}
-	}
-	return b.String()
-}
-
-func shortCmd(name string) string {
-	if s, ok := cmdShortMap[name]; ok {
-		return s
-	}
-	return name
-}
-
-func shortSub(name string) string {
-	if s, ok := subShortMap[name]; ok {
-		return s
-	}
-	return name
-}
-
-func shortErr(name string) string {
-	if s, ok := errShortMap[name]; ok {
-		return s
-	}
-	return name
-}
-
-func shortDistro(name string) string {
-	if s, ok := distroShortMap[name]; ok {
-		return s
-	}
-	return name
-}
-
-// cloudProviderShortMap abbreviates cloud provider names for the User-Agent header.
-var cloudProviderShortMap = map[string]string{
-	"aws":   "aws",
-	"azure": "az",
-	"gcp":   "gcp",
-}
-
-func shortCloudProvider(name string) string {
-	parts := strings.Split(name, ",")
-	for i, p := range parts {
-		parts[i] = cloudProviderShortMap[p]
-	}
-	return strings.Join(parts, ",")
-}
-
-// buildTabID encodes execution context into Tab-Id (16-char HAProxy capture limit).
-// Format: <execid>;m=<mode>;o=<os> — execid is positional (always 3 hex chars), mode and os are 3 chars each.
-// Worst case: "3ab;m=deb;o=win" = 15 chars.
-func buildTabID(p EventParams) string {
-	return execID + ";m=" + shortMode(p.Mode) + ";o=" + resolveOS()
-}
-
-func shortMode(m Mode) string {
-	switch m {
-	case ModeDebug:
-		return "deb"
-	case ModeNonTTY:
-		return "ntt"
-	default:
-		return string(m)
-	}
-}
-
-func resolveOS() string {
-	switch runtime.GOOS {
-	case "darwin":
-		return "mac"
-	case "linux":
-		return "lin"
-	case "windows":
-		return "win"
-	default:
-		return runtime.GOOS
-	}
 }
 
 func authHeader(token string) string {
