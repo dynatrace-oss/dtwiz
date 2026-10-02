@@ -97,3 +97,23 @@ func TestSnapshotStepEncoding(t *testing.T) {
 		t.Errorf("User-Agent %q missing %q", ua, ";st=snp")
 	}
 }
+
+func TestBuildEventTitle(t *testing.T) {
+	tests := []struct {
+		name   string
+		params EventParams
+		want   string
+	}{
+		{"no_command", EventParams{}, "dtwiz"},
+		{"command_only", EventParams{Cmd: "analyze"}, "dtwiz analyze"},
+		{"command_and_subcommand", EventParams{Cmd: "install", Sub: "otel"}, "dtwiz install otel"},
+		{"subcommand_only", EventParams{Sub: "otel"}, "dtwiz otel"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := buildEventTitle(tt.params); got != tt.want {
+				t.Errorf("buildEventTitle() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

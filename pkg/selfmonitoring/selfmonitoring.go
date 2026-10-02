@@ -4,7 +4,6 @@ package selfmonitoring
 import (
 	"bytes"
 	"crypto/rand"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -75,21 +74,9 @@ func SendEvent(classicURL, token string, params EventParams) error {
 		params.StepID = StepInvoked
 	}
 
-	props := buildEventProps(params)
-	title := "dtwiz"
-	if params.Cmd != "" {
-		title += " " + params.Cmd
-	}
-	if params.Sub != "" {
-		title += " " + params.Sub
-	}
-	eventBody, err := json.Marshal(eventPayload{
-		EventType:  "CUSTOM_INFO",
-		Title:      title,
-		Properties: props,
-	})
+	eventBody, err := buildEventBody(params)
 	if err != nil {
-		return fmt.Errorf("marshal event: %w", err)
+		return err
 	}
 
 	url := strings.TrimRight(classicURL, "/") + "/api/v2/events/ingest"
