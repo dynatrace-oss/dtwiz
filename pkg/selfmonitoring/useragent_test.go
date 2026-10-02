@@ -56,13 +56,13 @@ func TestBuildUserAgent(t *testing.T) {
 			params: EventParams{
 				Cmd:    "update",
 				Sub:    "otel",
-				StepID: "inv",
+				StepID: StepSnapshot,
 				Mode:   ModeDebug,
 				Err:    "net",
 				Type:   "retry",
 			},
-			wantKeys:    []string{"c=upd", "s=otel", "er=net", "t=retry"},
-			notWantKeys: []string{";kd="},
+			wantKeys:    []string{"c=upd", "st=snp", "s=otel", "er=net", "t=retry"},
+			notWantKeys: []string{";kd=", ";cp=", ";opt="},
 			maxLen:      64,
 		},
 		{

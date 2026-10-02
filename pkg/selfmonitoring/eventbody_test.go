@@ -56,7 +56,6 @@ func TestEventBodyCarriesFullNamesForAllHeaderFields(t *testing.T) {
 		StepID: StepCancelled,
 		Mode:   ModeTTY,
 		Err:    string(installer.ErrTypePlatformUnsupported),
-		Type:   "retry",
 	}
 
 	props := buildEventProps(params)
@@ -67,21 +66,56 @@ func TestEventBodyCarriesFullNamesForAllHeaderFields(t *testing.T) {
 		"subcommand": "otel-collector",
 		"step":       "cancelled",
 		"error":      "platform_unsupported",
-		"type":       "retry",
 	}
 	for k, v := range want {
 		if props[k] != v {
 			t.Errorf("body[%q] = %q, want full name %q", k, props[k], v)
 		}
 		// The whole point: the header is abbreviated, the body is not.
-		// "type" full value may legitimately appear since it passes through
-		// unabbreviated when no short form applies, so skip the header check for it.
-		if k != "type" && strings.Contains(ua, v) {
+		if strings.Contains(ua, v) {
 			t.Errorf("User-Agent %q carries full-length %q; it should be abbreviated", ua, v)
 		}
 	}
 	if strings.Contains(ua, "kd=") {
 		t.Errorf("User-Agent %q carries kd= for a non-analyze step", ua)
+	}
+}
+
+func TestBuildEventPropsStepSpecificFields(t *testing.T) {
+	all := EventParams{
+		Cmd:           "setup",
+		Type:          "0,0,1",
+		Opt:           "otel",
+		CloudProvider: "aws",
+		K8sDistro:     "GKE",
+	}
+	tests := []struct {
+		step    string
+		want    map[string]string
+		wantNot []string
+	}{
+		{StepSnapshot, map[string]string{"type": "0,0,1"}, []string{"option", "cloud.provider", "k8s.distro"}},
+		{StepAnalyze, map[string]string{"cloud.provider": "aws", "k8s.distro": "GKE"}, []string{"type", "option"}},
+		{StepRecommendationsPresented, map[string]string{"option": "otel"}, []string{"type", "cloud.provider", "k8s.distro"}},
+		{StepRecommendationsSelected, map[string]string{"option": "otel"}, []string{"type", "cloud.provider", "k8s.distro"}},
+		{StepInstall, nil, []string{"type", "option", "cloud.provider", "k8s.distro"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.step, func(t *testing.T) {
+			p := all
+			p.StepID = tt.step
+			props := buildEventProps(p)
+			for k, v := range tt.want {
+				if props[k] != v {
+					t.Errorf("body[%q] = %q, want %q", k, props[k], v)
+				}
+			}
+			for _, k := range tt.wantNot {
+				if _, ok := props[k]; ok {
+					t.Errorf("body[%q] should be absent for step %q", k, tt.step)
+				}
+			}
+		})
 	}
 }
 

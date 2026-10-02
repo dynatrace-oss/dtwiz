@@ -71,9 +71,15 @@ func buildEventTitle(p EventParams) string {
 	return title
 }
 
-// buildEventProps assembles the event body properties. Unlike the User-Agent, these carry
-// full, unabbreviated values: the body is the query surface, so its encoding stays stable
-// while the header is free to be shortened to fit the capture limit.
+// buildEventProps assembles the event body properties. Values are full and unabbreviated.
+// The step, mode, os, version, and executionId properties are always present; command,
+// subcommand, and error are added when non-empty. Further fields depend on the step:
+//
+//	snapshot:                           type
+//	analyze:                            cloud.provider, k8s.distro
+//	recommendations presented/selected: option
+//
+// ExtraProps are merged in last for every step.
 // Callers must resolve an empty StepID to its default first.
 func buildEventProps(p EventParams) map[string]string {
 	stepFull := stepFullNames[p.StepID]
@@ -88,19 +94,26 @@ func buildEventProps(p EventParams) map[string]string {
 		bodyMode:        string(p.Mode),
 		bodyOS:          runtime.GOOS,
 	}
-	for _, kv := range []struct{ k, v string }{
-		{bodyCommand, p.Cmd},
-		{bodySubcommand, p.Sub},
-		{bodyError, p.Err},
-		{bodyType, p.Type},
-		{bodyK8sDistro, p.K8sDistro},
-		{bodyCloudProvider, p.CloudProvider},
-		{bodyOption, p.Opt},
-	} {
-		if kv.v != "" {
-			props[kv.k] = kv.v
+	add := func(k, v string) {
+		if v != "" {
+			props[k] = v
 		}
 	}
+
+	add(bodyCommand, p.Cmd)
+	add(bodySubcommand, p.Sub)
+	add(bodyError, p.Err)
+
+	switch p.StepID {
+	case StepSnapshot:
+		add(bodyType, p.Type)
+	case StepAnalyze:
+		add(bodyCloudProvider, p.CloudProvider)
+		add(bodyK8sDistro, p.K8sDistro)
+	case StepRecommendationsPresented, StepRecommendationsSelected:
+		add(bodyOption, p.Opt)
+	}
+
 	maps.Copy(props, p.ExtraProps)
 	return props
 }

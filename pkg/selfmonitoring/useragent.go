@@ -20,30 +20,36 @@ const (
 )
 
 // buildUserAgent encodes operation identity into User-Agent (64-char HAProxy capture limit).
-// Format: dtwiz/<version>[;c=<cmd>];st=<step>[;s=<sub>][;er=<err>][;t=<type>]
-// c= is omitted when Cmd is empty. ExecID, mode, and OS go into Tab-Id via buildTabID.
-// Command, subcommand, and error are abbreviated to fit the limit; the event body carries
-// the full names.
+// Format: dtwiz/<version>;c=<cmd>;st=<step>[;s=<sub>][;er=<err>] followed by step-specific fields:
+//
+//	snapshot:                         ;t=<type>
+//	analyze:                          ;cp=<cloud providers>;kd=<k8s distro>
+//	recommendations presented/selected: ;opt=<option>
+//
+// Empty values are omitted, so c= is dropped when Cmd is empty. Command, subcommand, option,
+// error, cloud provider, and distro are abbreviated to fit the limit.
 func buildUserAgent(p EventParams) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "dtwiz/%s", version.Version)
-	pairs := []struct{ k, v string }{
-		{propCmd, shortCmd(p.Cmd)},
-		{propStep, p.StepID},
-		{propSub, shortSub(p.Sub)},
-		{propErr, shortErr(p.Err)},
-		{propType, p.Type},
-		{propCloudProvider, shortCloudProvider(p.CloudProvider)},
-		{propOpt, shortSub(p.Opt)},
-	}
-	// kd= is only included for analyze events;
-	if p.StepID == StepAnalyze {
-		pairs = append(pairs, struct{ k, v string }{propK8sDistro, shortDistro(p.K8sDistro)})
-	}
-	for _, kv := range pairs {
-		if kv.v != "" {
-			fmt.Fprintf(&b, ";%s=%s", kv.k, kv.v)
+	add := func(k, v string) {
+		if v != "" {
+			fmt.Fprintf(&b, ";%s=%s", k, v)
 		}
+	}
+
+	add(propCmd, shortCmd(p.Cmd))
+	add(propStep, p.StepID)
+	add(propSub, shortSub(p.Sub))
+	add(propErr, shortErr(p.Err))
+
+	switch p.StepID {
+	case StepSnapshot:
+		add(propType, p.Type)
+	case StepAnalyze:
+		add(propCloudProvider, shortCloudProvider(p.CloudProvider))
+		add(propK8sDistro, shortDistro(p.K8sDistro))
+	case StepRecommendationsPresented, StepRecommendationsSelected:
+		add(propOpt, shortSub(p.Opt))
 	}
 	return b.String()
 }
