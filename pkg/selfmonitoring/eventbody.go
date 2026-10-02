@@ -13,7 +13,6 @@ import (
 var stepFullNames = map[string]string{
 	StepInvoked:                  "invoked",
 	StepAnalyze:                  "analyze",
-	StepRecommend:                "recommend",
 	StepInstall:                  "install",
 	StepSnapshot:                 "snapshot",
 	StepCompleted:                "completed",

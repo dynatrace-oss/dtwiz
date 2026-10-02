@@ -44,9 +44,6 @@ func TestStepConstants(t *testing.T) {
 	if StepAnalyze != "ana" {
 		t.Errorf("StepAnalyze = %q, want %q", StepAnalyze, "ana")
 	}
-	if StepRecommend != "rec" {
-		t.Errorf("StepRecommend = %q, want %q", StepRecommend, "rec")
-	}
 	if StepInstall != "ist" {
 		t.Errorf("StepInstall = %q, want %q", StepInstall, "ist")
 	}

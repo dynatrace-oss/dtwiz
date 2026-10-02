@@ -57,7 +57,6 @@ const (
 
 	StepInvoked                  = "inv"
 	StepAnalyze                  = "ana"
-	StepRecommend                = "rec"
 	StepInstall                  = "ist"
 	StepSnapshot                 = "snp"
 	StepCompleted                = "com"

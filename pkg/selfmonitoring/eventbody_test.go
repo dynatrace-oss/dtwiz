@@ -13,7 +13,6 @@ func TestStepFullNames(t *testing.T) {
 	want := map[string]string{
 		StepInvoked:                  "invoked",
 		StepAnalyze:                  "analyze",
-		StepRecommend:                "recommend",
 		StepInstall:                  "install",
 		StepSnapshot:                 "snapshot",
 		StepCompleted:                "completed",
