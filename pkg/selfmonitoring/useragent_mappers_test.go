@@ -137,6 +137,40 @@ func TestShortSub(t *testing.T) {
 	}
 }
 
+// Every valid setup option must have an explicit entry, even when its short form equals the name.
+func TestShortOpt(t *testing.T) {
+	want := map[string]string{
+		"oneagent":     "oa",
+		"kubernetes":   "k8s",
+		"docker":       "dock",
+		"otel":         "otel",
+		"otel-update":  "otlu",
+		"aws":          "aws",
+		"azure":        "az",
+		"azure-update": "azu",
+		"gcp":          "gcp",
+		"gcp-update":   "gcpu",
+		"uninstall":    "uni",
+		"demo":         "demo",
+	}
+
+	for name, code := range want {
+		if got, ok := optShortMap[name]; !ok || got != code {
+			t.Errorf("optShortMap[%q] = %q (present=%v), want %q", name, got, ok, code)
+		}
+		if got := shortOpt(name); got != code {
+			t.Errorf("shortOpt(%q) = %q, want %q", name, got, code)
+		}
+	}
+	if len(optShortMap) != len(want) {
+		t.Errorf("optShortMap has %d entries, want %d", len(optShortMap), len(want))
+	}
+	// Unknown values pass through unchanged.
+	if got := shortOpt("unknown-opt"); got != "unknown-opt" {
+		t.Errorf("shortOpt passthrough = %q, want %q", got, "unknown-opt")
+	}
+}
+
 // Every known distro must have a short code no longer than 3 chars so the 64-char
 // User-Agent capture budget holds when combined with the other abbreviated fields.
 func TestShortDistro(t *testing.T) {

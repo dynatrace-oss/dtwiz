@@ -20,15 +20,36 @@ The distinction between "options shown" and "option picked" is encoded as two ne
 
 The presented or selected ingestion method is encoded in a dedicated `opt=` header field, distinct from `s=` (subcommand), which is reserved for actual Cobra subcommands. Both fields reuse the same abbreviated method identifiers.
 
-Body key: `option` (full method name, for example `otel-collector`).
+Body key: `option` (full method name, for example `otel-update`).
+
+### Possible options
+
+Every value `option` can take, with the abbreviated code used in the `opt=` header field:
+
+| Option         | `opt=` code | Source                                              |
+| -------------- | ----------- | --------------------------------------------------- |
+| `oneagent`     | `oa`        | Recommended method                                  |
+| `kubernetes`   | `k8s`       | Recommended method                                  |
+| `docker`       | `dock`      | Recommended method (experimental only)              |
+| `otel`         | `otel`      | Recommended method (OTel Collector)                 |
+| `otel-update`  | `otlu`      | Recommended method (experimental only)              |
+| `aws`          | `aws`       | Recommended method                                  |
+| `azure`        | `az`        | Recommended method                                  |
+| `azure-update` | `azu`       | Recommended method                                  |
+| `gcp`          | `gcp`       | Recommended method                                  |
+| `gcp-update`   | `gcpu`      | Recommended method                                  |
+| `uninstall`    | `uni`       | Setup menu entry `[u]` (selected event only)        |
+| `demo`         | `demo`      | Setup menu entry `[d]` (selected event only)        |
+
+The recommended methods are those returned by `recommender.ActionableItems`, so `already-installed` and `not-supported` never appear. `opt=` is only emitted on the two recommendation steps.
 
 ## Worst-case header example
 
 ```text
-dtwiz/0.18.0;c=set;st=rpr;opt=otlc
+dtwiz/0.18.0;c=set;st=rpr;opt=otlu
 ```
 
-Length: 33 chars, well within the 64-char limit.
+Length: 34 chars, well within the 64-char limit. The longest `opt=` code is 4 chars (`dock`, `otlu`, `gcpu`).
 
 ## Event volume
 

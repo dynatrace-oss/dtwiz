@@ -49,7 +49,7 @@ func buildUserAgent(p EventParams) string {
 		add(propCloudProvider, shortCloudProvider(p.CloudProvider))
 		add(propK8sDistro, shortDistro(p.K8sDistro))
 	case StepRecommendationsPresented, StepRecommendationsSelected:
-		add(propOpt, shortSub(p.Opt))
+		add(propOpt, shortOpt(p.Opt))
 	}
 	return b.String()
 }

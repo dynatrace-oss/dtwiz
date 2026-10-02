@@ -73,6 +73,22 @@ var subShortMap = map[string]string{
 	"gcp-update":     "gcpu",
 }
 
+// optShortMap abbreviates setup menu options for the User-Agent header.
+var optShortMap = map[string]string{
+	"oneagent":     "oa",
+	"kubernetes":   "k8s",
+	"docker":       "dock",
+	"otel":         "otel",
+	"otel-update":  "otlu",
+	"aws":          "aws",
+	"azure":        "az",
+	"azure-update": "azu",
+	"gcp":          "gcp",
+	"gcp-update":   "gcpu",
+	"uninstall":    "uni",
+	"demo":         "demo",
+}
+
 // cloudProviderShortMap abbreviates cloud provider names for the User-Agent header.
 var cloudProviderShortMap = map[string]string{
 	"aws":   "aws",
@@ -89,6 +105,13 @@ func shortCmd(name string) string {
 
 func shortSub(name string) string {
 	if s, ok := subShortMap[name]; ok {
+		return s
+	}
+	return name
+}
+
+func shortOpt(name string) string {
+	if s, ok := optShortMap[name]; ok {
 		return s
 	}
 	return name

@@ -230,6 +230,34 @@ func TestBuildUserAgentWithinCaptureLimit(t *testing.T) {
 	if len(ua) > limit {
 		t.Errorf("analyze User-Agent %q is %d chars, exceeds %d-char limit", ua, len(ua), limit)
 	}
+
+	// Setup recommendation events: have opt= but no subcommand, error, cloud provider, or distro.
+	longestOpt := longestKey(optShortMap)
+	for _, step := range []string{StepRecommendationsPresented, StepRecommendationsSelected} {
+		ua := buildUserAgent(EventParams{
+			Cmd:    longestCmd,
+			StepID: step,
+			Opt:    longestOpt,
+		})
+		if len(ua) > limit {
+			t.Errorf("%s User-Agent %q is %d chars, exceeds %d-char limit", step, ua, len(ua), limit)
+		}
+	}
+}
+
+// Every valid option must show up in the header as its abbreviated code, on both
+// recommendation steps, and never at full length when an abbreviation exists.
+func TestBuildUserAgentOptAllOptions(t *testing.T) {
+	for opt, code := range optShortMap {
+		for _, step := range []string{StepRecommendationsPresented, StepRecommendationsSelected} {
+			t.Run(step+"/"+opt, func(t *testing.T) {
+				ua := buildUserAgent(EventParams{Cmd: "setup", StepID: step, Mode: ModeTTY, Opt: opt})
+				if want := ";opt=" + code; !strings.HasSuffix(ua, want) {
+					t.Errorf("User-Agent %q should end with %q", ua, want)
+				}
+			})
+		}
+	}
 }
 
 func TestBuildUserAgentOpt(t *testing.T) {

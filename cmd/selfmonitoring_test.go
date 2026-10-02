@@ -138,7 +138,7 @@ func TestFireSetupMenuEvent(t *testing.T) {
 		eventSink = func(p selfmonitoring.EventParams) { captured = append(captured, p) }
 		defer func() { eventSink = original }()
 
-		fireSetupMenuEvent(nil, []recommender.Recommendation{k8sRec, awsRec, otelRec})
+		fireSetupMenuEvent(setupCmd, []recommender.Recommendation{k8sRec, awsRec, otelRec})
 
 		if len(captured) != 3 {
 			t.Fatalf("expected 3 events, got %d", len(captured))
@@ -147,6 +147,9 @@ func TestFireSetupMenuEvent(t *testing.T) {
 		for i, want := range wantOpts {
 			if captured[i].Opt != want {
 				t.Errorf("event %d: opt = %q, want %q", i, captured[i].Opt, want)
+			}
+			if captured[i].Cmd != "setup" || captured[i].Sub != "" {
+				t.Errorf("event %d: cmd/sub = %q/%q, want %q/%q", i, captured[i].Cmd, captured[i].Sub, "setup", "")
 			}
 			if captured[i].StepID != selfmonitoring.StepRecommendationsPresented {
 				t.Errorf("event %d: step = %q, want %q", i, captured[i].StepID, selfmonitoring.StepRecommendationsPresented)
@@ -160,7 +163,7 @@ func TestFireSetupMenuEvent(t *testing.T) {
 		eventSink = func(p selfmonitoring.EventParams) { captured = append(captured, p) }
 		defer func() { eventSink = original }()
 
-		fireSetupMenuEvent(nil, nil)
+		fireSetupMenuEvent(setupCmd, nil)
 
 		if len(captured) != 0 {
 			t.Fatalf("expected no events, got %d", len(captured))

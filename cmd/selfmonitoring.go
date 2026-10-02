@@ -68,9 +68,6 @@ func buildEventParams(cmd *cobra.Command, stepID string) selfmonitoring.EventPar
 }
 
 func deriveCommandNames(cmd *cobra.Command) (cmdName, subName string) {
-	if cmd == nil {
-		return "", ""
-	}
 	parent := cmd.Parent()
 	if parent == nil || parent.Name() == "dtwiz" {
 		return cmd.Name(), ""
