@@ -188,6 +188,15 @@ Each package has a single responsibility. Before adding a file to an existing pa
 
 **The folder-per-method rule is mandatory.** Every `dtwiz install <method>` maps to `pkg/installer/<method>/`. If that subfolder does not exist yet, create it before writing any code. Shared utilities used across multiple methods stay in the `pkg/installer/` root; anything specific to one method lives in its subfolder.
 
+**Split a package into files by concern.** Within one package, group code that logically belongs together into its own file, named after what it holds (e.g. `install_telemetry.go`, `useragent.go`, `eventbody.go`). This makes code easy to find and keeps files short enough to read without fatigue. Do not grow one catch-all file (`utils.go`, or a single `<package>.go`) with unrelated functions.
+
+- **New concern, new file.** When adding code that forms its own cohesive unit (a type with its methods, an encoder, a set of helpers around one external call), put it in a new file rather than appending to the nearest existing one.
+- **Flag split opportunities, do not split unprompted.** When you touch a long file and find several independent concerns in it, tell the user and ask whether to split it. Moving code can turn a small change into a diff of hundreds of lines, so the user decides whether it is worth it.
+  - **Moving code and changing logic never share a commit.** If the user agrees, do the split as a separate housekeeping step so it can be committed on its own, either before the logic work or after it. Offer both.
+  - **Do not switch between files mid-task.** If you find a split opportunity in file A while the logic work still has open items in file A, or has already touched other files, finish all the logic changes in all files first. Suggest the splits once, afterwards, as a list. Splitting before starting is also fine if the user asks for it up front.
+- **Tests mirror production files.** Tests for code in `foo.go` live in `foo_test.go`. A test file with no matching production file, such as `feature_outcomes_test.go` covering three other files, makes the code under test hard to find. If a test covers several files, put each test next to the file it exercises.
+- **Shared test helpers** (fakes, stubs, capture functions) live in the `_test.go` file of the production code they support, or in a dedicated `helpers_test.go` when several files use them.
+
 > The codebase contains existing violations of these rules. Do not treat any existing file placement as a precedent — follow the rules above, not the current layout.
 
 ### Error handling
