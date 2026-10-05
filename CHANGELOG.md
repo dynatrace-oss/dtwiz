@@ -7,9 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-10-05
+
 ### Added
 
 - Self-monitoring: `dtwiz setup` now reports the recommendation menu itself, emitting one `rpr` (`recommendations_presented`) event per actionable option shown. This gives the funnel a denominator: presented against selected can be read as a per-method conversion rate rather than a bare selection count, showing which options are offered often but rarely chosen. All events from a run share an `executionId`, so a session's presented set correlates directly with what it selected.
+- Self-monitoring: the `analyze` step of `dtwiz setup` now records detected cloud provider(s) (`aws`, `azure`, `gcp`) and Kubernetes distribution, so the funnel can be broken down by environment instead of only by command outcome. A `help` invocation event is also fired whenever a command's help text is shown, capturing discovery activity that previously left no trace.
 
 ### Fixed
 
@@ -614,7 +617,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.10.0...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.11.0...HEAD
+[1.11.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.8.1...v1.9.0
 [1.8.1]: https://github.com/dynatrace-oss/dtwiz/compare/v1.8.0...v1.8.1
