@@ -671,6 +671,172 @@ func TestDqlFromLiteral_AbsoluteTimestamp(t *testing.T) {
 	}
 }
 
+// ── quickstartURL ────────────────────────────────────────────────────────
+
+func TestQuickstartURL_AbsoluteTimestamp(t *testing.T) {
+	got := quickstartURL("https://abc123.apps.dynatrace.com", "2024-01-15T10:30:00Z")
+	want := "https://abc123.apps.dynatrace.com/ui/apps/dynatrace.quickstart/?tf=2024-01-15T10%3A30%3A00Z%3Bnow"
+	if got != want {
+		t.Errorf("quickstartURL() = %q, want %q", got, want)
+	}
+}
+
+func TestQuickstartURL_RelativeExpression(t *testing.T) {
+	// DQL relative expressions have no fixed point in time, so the tf param
+	// is omitted and QuickStart falls back to its own default timeframe.
+	got := quickstartURL("https://abc123.apps.dynatrace.com", "now()-1h")
+	want := "https://abc123.apps.dynatrace.com/ui/apps/dynatrace.quickstart/"
+	if got != want {
+		t.Errorf("quickstartURL() = %q, want %q", got, want)
+	}
+}
+
+func TestQuickstartURL_EmptyFromClause(t *testing.T) {
+	got := quickstartURL("https://abc123.apps.dynatrace.com", "")
+	want := "https://abc123.apps.dynatrace.com/ui/apps/dynatrace.quickstart/"
+	if got != want {
+		t.Errorf("quickstartURL() = %q, want %q", got, want)
+	}
+}
+
+// ── withTimeframe ──────────────────────────────────────────────────────────
+
+func TestWithTimeframe_NoExistingQuery(t *testing.T) {
+	got := withTimeframe("/ui/apps/dynatrace.services/explorer-new/services-new", "2024-01-15T10:30:00Z")
+	want := "/ui/apps/dynatrace.services/explorer-new/services-new?tf=2024-01-15T10%3A30%3A00Z%3Bnow"
+	if got != want {
+		t.Errorf("withTimeframe() = %q, want %q", got, want)
+	}
+}
+
+func TestWithTimeframe_ExistingQueryAppendsWithAmpersand(t *testing.T) {
+	got := withTimeframe("/ui/apps/dynatrace.infraops/smartscape/Compute/Hosts?perspective=Health", "2024-01-15T10:30:00Z")
+	want := "/ui/apps/dynatrace.infraops/smartscape/Compute/Hosts?perspective=Health&tf=2024-01-15T10%3A30%3A00Z%3Bnow"
+	if got != want {
+		t.Errorf("withTimeframe() = %q, want %q", got, want)
+	}
+}
+
+func TestWithTimeframe_RelativeExpressionUnchanged(t *testing.T) {
+	path := "/ui/apps/dynatrace.logs/"
+	if got := withTimeframe(path, "now()-1h"); got != path {
+		t.Errorf("withTimeframe() = %q, want unchanged %q", got, path)
+	}
+}
+
+func TestWithTimeframe_EmptyInputsUnchanged(t *testing.T) {
+	path := "/ui/apps/dynatrace.logs/"
+	if got := withTimeframe(path, ""); got != path {
+		t.Errorf("withTimeframe() with empty fromClause = %q, want unchanged %q", got, path)
+	}
+	if got := withTimeframe("", "2024-01-15T10:30:00Z"); got != "" {
+		t.Errorf("withTimeframe() with empty path = %q, want empty", got)
+	}
+}
+
+// ── withRelationshipsTimeframe ────────────────────────────────────────────
+
+func TestWithRelationshipsTimeframe_AbsoluteTimestamp(t *testing.T) {
+	got := withRelationshipsTimeframe("/ui/apps/dynatrace.smartscape/view/dynatrace.smartscape.smartscape-on-grail", "2026-07-07T13:18:13Z")
+	want := "/ui/apps/dynatrace.smartscape/view/dynatrace.smartscape.smartscape-on-grail#from=2026-07-07T13%3A18%3A13Z&to=now"
+	if got != want {
+		t.Errorf("withRelationshipsTimeframe() = %q, want %q", got, want)
+	}
+}
+
+func TestWithRelationshipsTimeframe_RelativeExpressionPassedThrough(t *testing.T) {
+	// Unlike withTimeframe, smartscape's hash fragment accepts DQL relative
+	// expressions directly (e.g. the app's own default link uses "now()-2h").
+	got := withRelationshipsTimeframe("/ui/apps/dynatrace.smartscape/view/dynatrace.smartscape.smartscape-on-grail", "now()-2h")
+	want := "/ui/apps/dynatrace.smartscape/view/dynatrace.smartscape.smartscape-on-grail#from=now%28%29-2h&to=now"
+	if got != want {
+		t.Errorf("withRelationshipsTimeframe() = %q, want %q", got, want)
+	}
+}
+
+func TestWithRelationshipsTimeframe_EmptyInputsUnchanged(t *testing.T) {
+	path := "/ui/apps/dynatrace.smartscape/view/dynatrace.smartscape.smartscape-on-grail"
+	if got := withRelationshipsTimeframe(path, ""); got != path {
+		t.Errorf("withRelationshipsTimeframe() with empty fromClause = %q, want unchanged %q", got, path)
+	}
+	if got := withRelationshipsTimeframe("", "2026-07-07T13:18:13Z"); got != "" {
+		t.Errorf("withRelationshipsTimeframe() with empty path = %q, want empty", got)
+	}
+}
+
+// ── withLogsTimeframe ──────────────────────────────────────────────────────
+
+func TestWithLogsTimeframe_AbsoluteTimestamp(t *testing.T) {
+	got := withLogsTimeframe("/ui/apps/dynatrace.logs/", "2026-07-07T13:18:13Z")
+	want := `/ui/apps/dynatrace.logs/#%7B%22version%22%3A2%2C%22dt.timeframe%22%3A%7B%22from%22%3A%222026-07-07T13%3A18%3A13Z%22%2C%22to%22%3A%22now%28%29%22%7D%7D`
+	if got != want {
+		t.Errorf("withLogsTimeframe() = %q, want %q", got, want)
+	}
+}
+
+func TestWithLogsTimeframe_RelativeExpressionPassedThrough(t *testing.T) {
+	got := withLogsTimeframe("/ui/apps/dynatrace.logs/", "now()-2h")
+	want := `/ui/apps/dynatrace.logs/#%7B%22version%22%3A2%2C%22dt.timeframe%22%3A%7B%22from%22%3A%22now%28%29-2h%22%2C%22to%22%3A%22now%28%29%22%7D%7D`
+	if got != want {
+		t.Errorf("withLogsTimeframe() = %q, want %q", got, want)
+	}
+}
+
+func TestWithLogsTimeframe_EmptyInputsUnchanged(t *testing.T) {
+	path := "/ui/apps/dynatrace.logs/"
+	if got := withLogsTimeframe(path, ""); got != path {
+		t.Errorf("withLogsTimeframe() with empty fromClause = %q, want unchanged %q", got, path)
+	}
+	if got := withLogsTimeframe("", "2026-07-07T13:18:13Z"); got != "" {
+		t.Errorf("withLogsTimeframe() with empty path = %q, want empty", got)
+	}
+}
+
+// ── applyTimeframeLinks ──────────────────────────────────────────────────
+
+func TestApplyTimeframeLinks_ScopesAllSectionsAndHostItems(t *testing.T) {
+	state := watchState{
+		Services:      watchSection{Link: "/ui/apps/dynatrace.services/explorer-new/services-new"},
+		Hosts:         watchSection{Link: "/ui/apps/dynatrace.infraops/smartscape/Compute/Hosts?perspective=Health", Items: []watchDetail{{Label: "host-1", Link: "/ui/apps/dynatrace.infraops/smartscape/Compute/Hosts?perspective=Health&fullPageId=HOST-1"}}},
+		Cloud:         watchSection{Link: "/ui/apps/dynatrace.clouds/smartscape/services"},
+		Kubernetes:    watchSection{Link: "/ui/apps/dynatrace.kubernetes/smartscape/K8S_CLUSTER"},
+		Relationships: watchSection{Link: "/ui/apps/dynatrace.smartscape/view/dynatrace.smartscape.smartscape-on-grail"},
+		Logs:          watchSection{Link: "/ui/apps/dynatrace.logs/"},
+		Requests:      watchSection{Link: "/ui/apps/dynatrace.distributedtracing/explorer"},
+		Exceptions:    watchSection{Link: "/ui/apps/dynatrace.distributedtracing/exceptions"},
+	}
+
+	applyTimeframeLinks(&state, "2024-01-15T10:30:00Z")
+
+	const suffix = "tf=2024-01-15T10%3A30%3A00Z%3Bnow"
+	sections := map[string]string{
+		"Services":   state.Services.Link,
+		"Hosts":      state.Hosts.Link,
+		"Cloud":      state.Cloud.Link,
+		"Kubernetes": state.Kubernetes.Link,
+		"Requests":   state.Requests.Link,
+		"Exceptions": state.Exceptions.Link,
+	}
+	for name, link := range sections {
+		if !strings.HasSuffix(link, suffix) {
+			t.Errorf("%s.Link = %q, want suffix %q", name, link, suffix)
+		}
+	}
+	if !strings.HasSuffix(state.Hosts.Items[0].Link, suffix) {
+		t.Errorf("Hosts.Items[0].Link = %q, want suffix %q", state.Hosts.Items[0].Link, suffix)
+	}
+
+	const relSuffix = "#from=2024-01-15T10%3A30%3A00Z&to=now"
+	if !strings.HasSuffix(state.Relationships.Link, relSuffix) {
+		t.Errorf("Relationships.Link = %q, want suffix %q", state.Relationships.Link, relSuffix)
+	}
+
+	const logsSuffix = "#%7B%22version%22%3A2%2C%22dt.timeframe%22%3A%7B%22from%22%3A%222024-01-15T10%3A30%3A00Z%22%2C%22to%22%3A%22now%28%29%22%7D%7D"
+	if !strings.HasSuffix(state.Logs.Link, logsSuffix) {
+		t.Errorf("Logs.Link = %q, want suffix %q", state.Logs.Link, logsSuffix)
+	}
+}
+
 // ── parseLogs ──────────────────────────────────────────────────────────────
 
 // logsResp builds records for the logs query (loglevel + count fields).

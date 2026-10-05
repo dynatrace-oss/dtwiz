@@ -373,7 +373,7 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsA
 			fmt.Fprintf(&buf, "    %s\n", linkFn(appsURL+"/ui/apps/dynatrace.clouds/smartscape/services", "→ Open Clouds"))
 		} else {
 			highlight.Fprintf(&buf, " 👉 See all your data and findings in Dynatrace QuickStart\n")
-			fmt.Fprintf(&buf, "    %s\n", linkFn(appsURL+"/ui/apps/dynatrace.quickstart/", "→ Open Dynatrace QuickStart"))
+			fmt.Fprintf(&buf, "    %s\n", linkFn(quickstartURL(appsURL, fromClause), "→ Open Dynatrace QuickStart"))
 		}
 		highlight.Fprint(&buf, separator)
 		buf.WriteString("\n")
@@ -473,16 +473,97 @@ func renderRelationships(buf *strings.Builder, sec watchSection, appsURL string,
 	buf.WriteString("\n")
 }
 
+// isDQLRelativeExpr reports whether fromClause is a DQL relative expression
+// (e.g. "now()-1h") rather than an absolute RFC3339 timestamp.
+func isDQLRelativeExpr(fromClause string) bool {
+	for _, ch := range fromClause {
+		if ch == '(' || ch == ')' {
+			return true
+		}
+	}
+	return false
+}
+
 // dqlFromLiteral formats a fromClause for use in DQL queries.
 // DQL relative expressions (containing parentheses, e.g. "now()-1h") must not
 // be quoted; RFC3339 absolute timestamps must be quoted.
 func dqlFromLiteral(fromClause string) string {
-	for _, ch := range fromClause {
-		if ch == '(' || ch == ')' {
-			return fromClause
-		}
+	if isDQLRelativeExpr(fromClause) {
+		return fromClause
 	}
 	return `"` + fromClause + `"`
+}
+
+// quickstartURL builds the Dynatrace QuickStart app link, scoping its
+// timeframe to start at fromClause (when dtwiz started watching) and run
+// through "now" — otherwise QuickStart defaults to its own lookback window
+// and can miss data ingested before the user opens the link. DQL relative
+// expressions (e.g. "now()-1h") have no fixed point in time, so the tf param
+// is omitted and QuickStart falls back to its default timeframe.
+func quickstartURL(appsURL, fromClause string) string {
+	return appsURL + withTimeframe("/ui/apps/dynatrace.quickstart/", fromClause)
+}
+
+// withTimeframe appends a tf=<from>;now query param to a relative deep-link
+// path, scoping it to start at fromClause and run through "now" instead of
+// the target app's own default lookback window. path is returned unchanged
+// when empty, when fromClause is empty, or when fromClause is a DQL relative
+// expression (e.g. "now()-1h") with no fixed point in time. Existing query
+// params on path (e.g. "?perspective=Health") are preserved.
+func withTimeframe(path, fromClause string) string {
+	if path == "" || fromClause == "" || isDQLRelativeExpr(fromClause) {
+		return path
+	}
+	sep := "?"
+	if strings.Contains(path, "?") {
+		sep = "&"
+	}
+	return path + sep + "tf=" + url.QueryEscape(fromClause+";now")
+}
+
+// withRelationshipsTimeframe scopes the Relationships deep link, which points
+// into the dynatrace.smartscape app. Unlike other apps, smartscape reads its
+// timeframe from a "#from=...&to=now" hash fragment rather than a tf= query
+// param, and accepts both absolute timestamps and DQL relative expressions
+// (e.g. "now()-2h") in that fragment, so fromClause is passed through as-is.
+func withRelationshipsTimeframe(path, fromClause string) string {
+	if path == "" || fromClause == "" {
+		return path
+	}
+	return path + "#from=" + url.QueryEscape(fromClause) + "&to=now"
+}
+
+// withLogsTimeframe scopes the Logs deep link, which points into the
+// dynatrace.logs app. Unlike other apps, dynatrace.logs reads its timeframe
+// from a JSON object encoded into the hash fragment (e.g.
+// #{"version":2,"dt.timeframe":{"from":"...","to":"now()"}}) rather than a
+// tf= query param or a #from=...&to=now fragment. The app fills in its own
+// defaults for any other state (table columns, analysis mode) that's
+// missing, so only version and dt.timeframe need to be sent.
+func withLogsTimeframe(path, fromClause string) string {
+	if path == "" || fromClause == "" {
+		return path
+	}
+	state := logsAppState{Version: 2}
+	state.DTTimeframe.From = fromClause
+	state.DTTimeframe.To = "now()"
+	b, err := json.Marshal(state)
+	if err != nil {
+		return path
+	}
+	return path + "#" + url.QueryEscape(string(b))
+}
+
+// logsAppState mirrors the JSON shape the dynatrace.logs app reads from its
+// hash fragment. json.Marshal guarantees a well-formed JSON string even if
+// fromClause contains characters (quotes, backslashes) that would corrupt a
+// hand-built literal.
+type logsAppState struct {
+	Version     int `json:"version"`
+	DTTimeframe struct {
+		From string `json:"from"`
+		To   string `json:"to"`
+	} `json:"dt.timeframe"`
 }
 
 // dqlEscapeString escapes a value for safe interpolation into a DQL
@@ -603,7 +684,27 @@ func pollAll(appsURL, token, fromClause, awsAccountID string, qs *watchQueryStat
 	// Exceptions
 	state.Exceptions = parseExceptions(results["exceptions"])
 
+	applyTimeframeLinks(&state, fromClause)
+
 	return state
+}
+
+// applyTimeframeLinks scopes every section (and item) deep link to start at
+// fromClause and run through "now", so following a link from the watch
+// display lands on the same data the DQL queries above are reporting on,
+// rather than falling back to the target app's own default lookback window.
+func applyTimeframeLinks(state *watchState, fromClause string) {
+	state.Services.Link = withTimeframe(state.Services.Link, fromClause)
+	state.Hosts.Link = withTimeframe(state.Hosts.Link, fromClause)
+	for i := range state.Hosts.Items {
+		state.Hosts.Items[i].Link = withTimeframe(state.Hosts.Items[i].Link, fromClause)
+	}
+	state.Cloud.Link = withTimeframe(state.Cloud.Link, fromClause)
+	state.Kubernetes.Link = withTimeframe(state.Kubernetes.Link, fromClause)
+	state.Relationships.Link = withRelationshipsTimeframe(state.Relationships.Link, fromClause)
+	state.Logs.Link = withLogsTimeframe(state.Logs.Link, fromClause)
+	state.Requests.Link = withTimeframe(state.Requests.Link, fromClause)
+	state.Exceptions.Link = withTimeframe(state.Exceptions.Link, fromClause)
 }
 
 func executeDQL(appsURL, token, dql string) dqlRecords {
