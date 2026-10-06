@@ -645,6 +645,131 @@ func TestPollAllQueriesHosts(t *testing.T) {
 	}
 }
 
+func TestPollAllScopesServicesHostsNodesAndEdgesToFromClause(t *testing.T) {
+	var mu sync.Mutex
+	queries := map[string]string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			Query string `json:"query"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode query payload: %v", err)
+		}
+
+		mu.Lock()
+		switch {
+		case strings.Contains(payload.Query, "smartscapeNodes SERVICE"):
+			queries["services"] = payload.Query
+		case strings.Contains(payload.Query, `fields id, name, type`):
+			queries["hosts"] = payload.Query
+		case strings.Contains(payload.Query, "summarize count=count(), by:{type}") && strings.Contains(payload.Query, "smartscapeNodes"):
+			queries["nodes"] = payload.Query
+		case strings.Contains(payload.Query, "smartscapeEdges"):
+			queries["relationships"] = payload.Query
+		}
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
+			"result": map[string]interface{}{"records": []map[string]interface{}{}},
+		}); err != nil {
+			t.Fatalf("encode query response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	pollAll(server.URL, "dt0s16.token", "2024-01-15T10:30:00Z", "", &watchQueryState{})
+
+	wantFrom := `from:"2024-01-15T10:30:00Z"`
+	for _, name := range []string{"services", "hosts", "nodes", "relationships"} {
+		if !strings.Contains(queries[name], wantFrom) {
+			t.Errorf("%s query = %q, want to contain %q", name, queries[name], wantFrom)
+		}
+	}
+}
+
+func TestPollAllHostsFirstSeen_RecordedOnceOnFirstData(t *testing.T) {
+	var mu sync.Mutex
+	returnHost := false
+	var lastHostsQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			Query string `json:"query"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode query payload: %v", err)
+		}
+
+		var records []map[string]interface{}
+		mu.Lock()
+		if strings.Contains(payload.Query, `fields id, name, type`) {
+			lastHostsQuery = payload.Query
+			if returnHost {
+				records = append(records, map[string]interface{}{
+					"id":   "HOST-51166F7740C48393",
+					"name": "dt-host",
+					"type": "HOST",
+				})
+			}
+		}
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
+			"result": map[string]interface{}{"records": records},
+		}); err != nil {
+			t.Fatalf("encode query response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	qs := &watchQueryState{}
+	fromClause := "2024-01-15T10:30:00Z"
+
+	state := pollAll(server.URL, "dt0s16.token", fromClause, "", qs)
+	if state.Hosts.Count != 0 || qs.hostsFirstSeen != "" {
+		t.Fatalf("before any host data: Count=%d hostsFirstSeen=%q, want 0 and empty", state.Hosts.Count, qs.hostsFirstSeen)
+	}
+
+	mu.Lock()
+	returnHost = true
+	mu.Unlock()
+
+	state = pollAll(server.URL, "dt0s16.token", fromClause, "", qs)
+	if state.Hosts.Count != 1 {
+		t.Fatalf("after host data: Count=%d, want 1", state.Hosts.Count)
+	}
+	firstSeen := qs.hostsFirstSeen
+	if firstSeen == "" || firstSeen == fromClause {
+		t.Fatalf("hostsFirstSeen = %q, want a discovered timestamp distinct from fromClause", firstSeen)
+	}
+	if !strings.HasSuffix(state.Hosts.Link, "tf="+strings.ReplaceAll(firstSeen, ":", "%3A")+"%3Bnow") {
+		t.Errorf("Hosts.Link = %q, want scoped to hostsFirstSeen %q, not fromClause", state.Hosts.Link, firstSeen)
+	}
+	// The query that produced this very discovery was necessarily built before
+	// hostsFirstSeen existed, so it still used fromClause.
+	mu.Lock()
+	queryOnDiscovery := lastHostsQuery
+	mu.Unlock()
+	if !strings.Contains(queryOnDiscovery, fromClause) {
+		t.Errorf("hosts query on discovery poll = %q, want to use fromClause %q", queryOnDiscovery, fromClause)
+	}
+
+	state = pollAll(server.URL, "dt0s16.token", fromClause, "", qs)
+	if qs.hostsFirstSeen != firstSeen {
+		t.Errorf("hostsFirstSeen changed on later poll: got %q, want unchanged %q", qs.hostsFirstSeen, firstSeen)
+	}
+	// Once hostsFirstSeen is known, subsequent polls narrow the hosts query to
+	// it instead of fromClause, keeping the query and its deep link in sync.
+	mu.Lock()
+	queryAfterDiscovery := lastHostsQuery
+	mu.Unlock()
+	if !strings.Contains(queryAfterDiscovery, firstSeen) {
+		t.Errorf("hosts query after discovery = %q, want to use hostsFirstSeen %q", queryAfterDiscovery, firstSeen)
+	}
+	_ = state
+}
+
 // ── dqlFromLiteral ─────────────────────────────────────────────────────────
 
 func TestDqlFromLiteral_RelativeExpression(t *testing.T) {
@@ -668,6 +793,25 @@ func TestDqlFromLiteral_AbsoluteTimestamp(t *testing.T) {
 		if got := dqlFromLiteral(tc.in); got != tc.want {
 			t.Errorf("dqlFromLiteral(%q) = %q, want %q", tc.in, got, tc.want)
 		}
+	}
+}
+
+// ── dqlTimestampExpr ───────────────────────────────────────────────────────
+
+func TestDqlTimestampExpr_RelativeExpression(t *testing.T) {
+	// Relative expressions already evaluate to a timestamp and must not be wrapped.
+	for _, in := range []string{"now()-1h", "now()-5m", "now()"} {
+		if got := dqlTimestampExpr(in); got != in {
+			t.Errorf("dqlTimestampExpr(%q) = %q, want unchanged", in, got)
+		}
+	}
+}
+
+func TestDqlTimestampExpr_AbsoluteTimestamp(t *testing.T) {
+	got := dqlTimestampExpr("2024-01-15T10:30:00Z")
+	want := `toTimestamp("2024-01-15T10:30:00Z")`
+	if got != want {
+		t.Errorf("dqlTimestampExpr(...) = %q, want %q", got, want)
 	}
 }
 
@@ -806,7 +950,7 @@ func TestApplyTimeframeLinks_ScopesAllSectionsAndHostItems(t *testing.T) {
 		Exceptions:    watchSection{Link: "/ui/apps/dynatrace.distributedtracing/exceptions"},
 	}
 
-	applyTimeframeLinks(&state, "2024-01-15T10:30:00Z")
+	applyTimeframeLinks(&state, "2024-01-15T10:30:00Z", "2024-01-15T10:30:00Z")
 
 	const suffix = "tf=2024-01-15T10%3A30%3A00Z%3Bnow"
 	sections := map[string]string{
