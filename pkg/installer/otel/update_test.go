@@ -9,6 +9,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/test/helpers"
 )
 
@@ -259,6 +260,24 @@ func TestWriteConfig_Error(t *testing.T) {
 	_, err := writeConfig("/nonexistent/dir/config.yaml", []byte("data"))
 	if err == nil {
 		t.Error("expected error writing to non-existent directory")
+	}
+}
+
+func TestWriteConfig_RecordsOutcome(t *testing.T) {
+	resetOutcomes(t)
+	if _, err := writeConfig(filepath.Join(t.TempDir(), "config.yaml"), []byte("a: b\n")); err != nil {
+		t.Fatalf("writeConfig: %v", err)
+	}
+	if got := installer.FeatureOutcomes()[installer.FeatureOtelConfig]; got != installer.OutcomeSucceeded {
+		t.Errorf("after a successful write, OTel config outcome = %v, want succeeded", got)
+	}
+
+	resetOutcomes(t)
+	if _, err := writeConfig(filepath.Join(t.TempDir(), "missing", "config.yaml"), []byte("a: b\n")); err == nil {
+		t.Fatal("expected an error writing into a missing directory")
+	}
+	if got := installer.FeatureOutcomes()[installer.FeatureOtelConfig]; got != installer.OutcomeFailed {
+		t.Errorf("after a failed write, OTel config outcome = %v, want failed", got)
 	}
 }
 

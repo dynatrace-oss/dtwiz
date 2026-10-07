@@ -136,6 +136,7 @@ var setupCmd = &cobra.Command{
 			}
 
 			display.Header("Installing: Demo app (schnitzel)")
+			installer.ResetInstallTelemetry()
 			demoInstErr := otel.InstallDemo(envURL, classicTok, platformTok, setupDryRun)
 			fireSetupInstallEvent(cmd, "demo", demoInstErr)
 			if demoInstErr != nil {
@@ -189,10 +190,15 @@ var setupCmd = &cobra.Command{
 
 		installer.OnWatchSnapshot = buildWatchSnapshotEventCallback(cmd)
 		installer.OnWatchComplete = buildWatchEventCallback(cmd)
+		installer.ResetInstallTelemetry()
 		var installErr error
 		var otelManualLang string
 		switch selected.Method {
 		case recommender.MethodOneAgent:
+			if !setupDryRun {
+				// OneAgent has no install confirmation of its own, so the work time starts here.
+				installer.StartInstallTimer()
+			}
 			installErr = oneagent.InstallOneAgentV2(c, oneagent.InstallOptions{
 				DryRun:         setupDryRun,
 				MonitoringMode: string(oneagent.InstallModeFullStack),
@@ -206,6 +212,10 @@ var setupCmd = &cobra.Command{
 			}
 			installErr = k8s.InstallKubernetes(envURL, classicTok, k8sClusterName, k8sDistro, setupDryRun)
 		case recommender.MethodDocker:
+			if !setupDryRun {
+				// Docker has no install confirmation, so the work time starts here.
+				installer.StartInstallTimer()
+			}
 			installErr = installer.InstallDocker(envURL, classicTok, setupDryRun)
 		case recommender.MethodOtelCollector:
 			otelManualLang, installErr = otel.InstallOtelCollector(envURL, classicTok, platformTok, setupDryRun)

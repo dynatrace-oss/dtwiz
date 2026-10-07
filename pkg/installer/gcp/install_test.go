@@ -732,3 +732,35 @@ func (r *retryingDTClient) updateConnection(objectID, name, serviceAccountEmail 
 	}
 	return r.fakeDTClient.updateConnection(objectID, name, serviceAccountEmail)
 }
+
+// assertInstallWorkTimeEnded fails unless the install work time was marked as ended,
+// i.e. it no longer grows after the installer returned (the post-install watch is
+// not counted).
+func assertInstallWorkTimeEnded(t *testing.T) {
+	t.Helper()
+	d1, started := installer.InstallWorkTime()
+	if !started {
+		t.Fatal("install stopwatch was not started")
+	}
+	time.Sleep(30 * time.Millisecond)
+	if d2, _ := installer.InstallWorkTime(); d2 != d1 {
+		t.Errorf("install work time kept growing after the installer returned (%v -> %v): the end was not marked before the watch", d1, d2)
+	}
+}
+
+func TestGCPInstall_MarksInstallWorkTimeEnded(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+	installer.ResetInstallTelemetry()
+	t.Cleanup(installer.ResetInstallTelemetry)
+
+	err := captureStdoutErr(func() error {
+		return installGCPWithRunner("https://abc.live.dynatrace.com", "dt0s16.fake.token", false, time.Time{}, happyGcloudRunner(nil), noSleep, happyFakeDTClient())
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertInstallWorkTimeEnded(t)
+}

@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestMaskTokenArgs(t *testing.T) {
@@ -127,5 +128,20 @@ func TestFormatDeployCmd(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("formatDeployCmd() = %q, want substring %q", got, want)
 		}
+	}
+}
+
+func TestLaterOf(t *testing.T) {
+	early := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	late := early.Add(4 * time.Minute)
+
+	if got := laterOf(early, late); !got.Equal(late) {
+		t.Errorf("laterOf(early, late) = %v, want %v", got, late)
+	}
+	if got := laterOf(late, early); !got.Equal(late) {
+		t.Errorf("laterOf(late, early) = %v, want %v", got, late)
+	}
+	if got := laterOf(time.Time{}, early); !got.Equal(early) {
+		t.Errorf("laterOf(zero, early) = %v, want %v", got, early)
 	}
 }

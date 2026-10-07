@@ -395,3 +395,20 @@ func isErrInstallCancelled(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "install cancelled") ||
 		err == installer.ErrInstallCancelled
 }
+
+func TestUpdateAzure_MarksInstallWorkTimeEnded(t *testing.T) {
+	old := installer.AutoConfirm
+	installer.AutoConfirm = true
+	defer func() { installer.AutoConfirm = old }()
+	defer stubExecLookPath(t)()
+	installer.ResetInstallTelemetry()
+	t.Cleanup(installer.ResetInstallTelemetry)
+
+	err := captureStdoutErr(func() error {
+		return updateAzureWithRunner("https://abc.live.dynatrace.com", "dt0s16.fake.token", false, time.Time{}, updateAzRunner(t), noSleep, happyUninstallFakeDTClient())
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertInstallWorkTimeEnded(t)
+}

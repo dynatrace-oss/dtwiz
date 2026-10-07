@@ -301,6 +301,9 @@ func TestUpdateDynatraceCollector_ConfigUpToDate_StillRunsPrerequisites(t *testi
 	installer.AutoConfirm = true
 	t.Cleanup(func() { installer.AutoConfirm = origAC })
 
+	installer.ResetInstallTelemetry()
+	t.Cleanup(installer.ResetInstallTelemetry)
+
 	var runErr error
 	captureUpdateOutput(t, func() {
 		runErr = updateDynatraceCollector(configPath, nil, "https://env.example.com", "tok", "dt0s16.test", false)
@@ -308,6 +311,9 @@ func TestUpdateDynatraceCollector_ConfigUpToDate_StillRunsPrerequisites(t *testi
 
 	if runErr != nil {
 		t.Errorf("expected success when config is up to date but prerequisites need checking, got: %v", runErr)
+	}
+	if got := installer.FeatureOutcomes()[installer.FeatureOtelConfig]; got != installer.OutcomeSucceeded {
+		t.Errorf("OTel config outcome = %v, want succeeded: a current config counts as written", got)
 	}
 	if !*activationCalled {
 		t.Error("expected activateHostMonitoringExtensionFn to be called even when config is up to date")

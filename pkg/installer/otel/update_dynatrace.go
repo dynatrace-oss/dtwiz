@@ -192,6 +192,8 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 	applyOTLPMetricDimensions(context.Background(), prereqs.otlpDimensionsClient, prereqs.otlpDimensionsPlan)
 
 	if !configChanged {
+		// The config is already current, which counts as written.
+		installer.RecordFeature(installer.FeatureOtelConfig, true)
 		display.ColorOK.Println("  Collector configuration is up to date.")
 		return nil
 	}
@@ -283,6 +285,7 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 
 	display.ColorOK.Println("  ✓ Collector restarted and verified.")
 
+	installer.MarkInstallDone()
 	installer.WatchIngest(envURL, platformTok, startTime.UTC().Format(installer.IngestTimeFormat))
 	return nil
 }

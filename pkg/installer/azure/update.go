@@ -90,6 +90,7 @@ func updateAzureWithRunner(
 	display.ColorMessage.Println("  Azure Monitor integration updated!")
 	fmt.Println()
 
+	installer.MarkInstallDone()
 	installer.WatchIngestCloudFromTimeWithEvent(cfg.EnvURL, cfg.PlatformToken, startTime, installer.OnWatchSnapshot, installer.OnWatchComplete)
 	return nil
 }
