@@ -17,12 +17,15 @@ const (
 	propK8sDistro     = "kd"
 	propCloudProvider = "cp"
 	propOpt           = "opt"
+	propFeatures      = "f"
+	propDurationS     = "d"
 )
 
 // buildUserAgent encodes operation identity into User-Agent (64-char HAProxy capture limit).
 // Format: dtwiz/<version>;c=<cmd>;st=<step>[;s=<sub>][;er=<err>] followed by step-specific fields:
 //
 //	snapshot:                         ;t=<type>
+//	install:                          ;f=<feature outcomes>;d=<work time seconds>
 //	analyze:                          ;cp=<cloud providers>;kd=<k8s distro>
 //	recommendations presented/selected: ;opt=<option>
 //
@@ -45,6 +48,11 @@ func buildUserAgent(p EventParams) string {
 	switch p.StepID {
 	case StepSnapshot:
 		add(propType, p.Type)
+	case StepInstall:
+		if p.Install != nil {
+			add(propFeatures, p.Install.featuresHeader())
+			add(propDurationS, p.Install.durationHeader())
+		}
 	case StepAnalyze:
 		add(propCloudProvider, shortCloudProvider(p.CloudProvider))
 		add(propK8sDistro, shortDistro(p.K8sDistro))

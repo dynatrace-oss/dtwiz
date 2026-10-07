@@ -77,6 +77,7 @@ func buildEventTitle(p EventParams) string {
 //	snapshot:                           type
 //	analyze:                            cloud.provider, k8s.distro
 //	recommendations presented/selected: option
+//	install:                            install.* feature outcomes and install.duration_ms
 //
 // ExtraProps are merged in last for every step.
 // Callers must resolve an empty StepID to its default first.
@@ -111,6 +112,10 @@ func buildEventProps(p EventParams) map[string]string {
 		add(bodyK8sDistro, p.K8sDistro)
 	case StepRecommendationsPresented, StepRecommendationsSelected:
 		add(bodyOption, p.Opt)
+	case StepInstall:
+		if p.Install != nil {
+			maps.Copy(props, p.Install.bodyProps())
+		}
 	}
 
 	maps.Copy(props, p.ExtraProps)

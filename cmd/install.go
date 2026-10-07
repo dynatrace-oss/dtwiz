@@ -3,7 +3,6 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -22,16 +21,6 @@ import (
 
 var installDryRun bool
 var installAutoConfirm bool
-
-// installDuration returns the elapsed time since installer.ExecutionStart was set
-// by the confirmation prompt. Returns 0 when the install was never executed (dry-run
-// or user declined), so fireInstallEvent can omit the duration field.
-func installDuration() time.Duration {
-	if installer.ExecutionStart.IsZero() {
-		return 0
-	}
-	return time.Since(installer.ExecutionStart)
-}
 
 var (
 	flagMonitoringMode        string
@@ -95,7 +84,7 @@ var installOneAgentCmd = &cobra.Command{
 			installer.StartInstallTimer()
 		}
 		installErr := oneagent.InstallOneAgentV2(c, opts)
-		fireInstallEvent(cmd, installDuration(), installErr)
+		fireInstallEvent(cmd, installErr)
 		if installErr != nil {
 			if errors.Is(installErr, installer.ErrInstallCancelled) {
 				return nil
@@ -132,7 +121,7 @@ var installKubernetesCmd = &cobra.Command{
 		}
 		installer.ResetInstallTelemetry()
 		installErr := k8s.InstallKubernetes(envURL, classicTok, clusterName, distro, installDryRun)
-		fireInstallEvent(cmd, installDuration(), installErr)
+		fireInstallEvent(cmd, installErr)
 		if installErr != nil {
 			if errors.Is(installErr, installer.ErrInstallCancelled) {
 				return nil
@@ -171,7 +160,7 @@ var installDockerCmd = &cobra.Command{
 			installer.StartInstallTimer()
 		}
 		installErr := installer.InstallDocker(envURL, classicTok, installDryRun)
-		fireInstallEvent(cmd, installDuration(), installErr)
+		fireInstallEvent(cmd, installErr)
 		if installErr != nil {
 			return installErr
 		}
@@ -199,7 +188,7 @@ var installOtelCmd = &cobra.Command{
 		}
 		installer.ResetInstallTelemetry()
 		manualLang, installErr := otel.InstallOtelCollectorWithProject(envURL, classicTok, platformTok, otelProject, installDryRun)
-		fireInstallEvent(cmd, installDuration(), installErr)
+		fireInstallEvent(cmd, installErr)
 		if installErr != nil {
 			if errors.Is(installErr, installer.ErrInstallCancelled) {
 				return nil
@@ -230,7 +219,7 @@ var installOtelCollectorCmd = &cobra.Command{
 		}
 		installer.ResetInstallTelemetry()
 		installErr := otel.InstallOtelCollectorOnly(envURL, classicTok, platformTok, installDryRun)
-		fireInstallEvent(cmd, installDuration(), installErr)
+		fireInstallEvent(cmd, installErr)
 		if installErr != nil {
 			if errors.Is(installErr, installer.ErrInstallCancelled) {
 				return nil
@@ -263,7 +252,7 @@ var installOtelPythonCmd = &cobra.Command{
 		}
 		installer.ResetInstallTelemetry()
 		installErr := otel.InstallOtelPython(envURL, classicTok, platformTok, otelPythonServiceName, otelProject, installDryRun)
-		fireInstallEvent(cmd, installDuration(), installErr)
+		fireInstallEvent(cmd, installErr)
 		if installErr != nil {
 			if errors.Is(installErr, installer.ErrInstallCancelled) {
 				return nil
@@ -295,7 +284,7 @@ var installOtelNodeCmd = &cobra.Command{
 		}
 		installer.ResetInstallTelemetry()
 		installErr := otel.InstallOtelNode(envURL, classicTok, platformTok, otelNodeServiceName, otelProject, installDryRun)
-		fireInstallEvent(cmd, installDuration(), installErr)
+		fireInstallEvent(cmd, installErr)
 		if installErr != nil {
 			if errors.Is(installErr, installer.ErrInstallCancelled) {
 				return nil
@@ -324,7 +313,7 @@ var installOtelJavaCmd = &cobra.Command{
 		}
 		installer.ResetInstallTelemetry()
 		installErr := otel.InstallOtelJava(envURL, classicTok, otelJavaServiceName, otelProject, installDryRun)
-		fireInstallEvent(cmd, installDuration(), installErr)
+		fireInstallEvent(cmd, installErr)
 		if installErr != nil {
 			if errors.Is(installErr, installer.ErrInstallCancelled) {
 				return nil
@@ -356,7 +345,7 @@ var installAWSCmd = &cobra.Command{
 		installer.OnWatchSnapshot = buildWatchSnapshotEventCallback(cmd)
 		installer.OnWatchComplete = buildWatchEventCallback(cmd)
 		installErr := awspkg.InstallAWS(envURL, platformTok, installDryRun, StartTime.UTC().Format(installer.IngestTimeFormat))
-		fireInstallEvent(cmd, installDuration(), installErr)
+		fireInstallEvent(cmd, installErr)
 		if installErr != nil {
 			if errors.Is(installErr, installer.ErrInstallCancelled) {
 				return nil
@@ -384,7 +373,7 @@ var installAWSLambdaCmd = &cobra.Command{
 		}
 		installer.ResetInstallTelemetry()
 		installErr := installer.InstallAWSLambda(envURL, classicTok, installDryRun, true)
-		fireInstallEvent(cmd, installDuration(), installErr)
+		fireInstallEvent(cmd, installErr)
 		if installErr != nil {
 			if errors.Is(installErr, installer.ErrInstallCancelled) {
 				return nil
@@ -416,7 +405,7 @@ var installAzureCmd = &cobra.Command{
 		installer.OnWatchSnapshot = buildWatchSnapshotEventCallback(cmd)
 		installer.OnWatchComplete = buildWatchEventCallback(cmd)
 		installErr := azure.InstallAzure(envURL, platformTok, installDryRun, StartTime)
-		fireInstallEvent(cmd, installDuration(), installErr)
+		fireInstallEvent(cmd, installErr)
 		if installErr != nil {
 			if errors.Is(installErr, installer.ErrInstallCancelled) {
 				return nil
@@ -441,7 +430,7 @@ var installGCPCmd = &cobra.Command{
 		installer.OnWatchSnapshot = buildWatchSnapshotEventCallback(cmd)
 		installer.OnWatchComplete = buildWatchEventCallback(cmd)
 		installErr := gcp.InstallGCP(envURL, platformTok, installDryRun, StartTime)
-		fireInstallEvent(cmd, installDuration(), installErr)
+		fireInstallEvent(cmd, installErr)
 		if installErr != nil {
 			if errors.Is(installErr, installer.ErrInstallCancelled) {
 				return nil
@@ -469,7 +458,7 @@ var installDemoCmd = &cobra.Command{
 		}
 		installer.ResetInstallTelemetry()
 		installErr := otel.InstallDemo(envURL, classicTok, platformTok, installDryRun)
-		fireInstallEvent(cmd, installDuration(), installErr)
+		fireInstallEvent(cmd, installErr)
 		if installErr != nil {
 			if errors.Is(installErr, installer.ErrInstallCancelled) {
 				return nil

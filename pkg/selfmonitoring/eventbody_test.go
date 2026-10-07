@@ -3,6 +3,7 @@ package selfmonitoring
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 )
@@ -148,5 +149,56 @@ func TestBuildEventTitle(t *testing.T) {
 				t.Errorf("buildEventTitle() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+// The install report reaches the body as readable install.* properties, never under the
+// header keys.
+func TestBuildEventPropsInstallReport(t *testing.T) {
+	props := buildEventProps(EventParams{
+		Cmd:    "install",
+		Sub:    "otel",
+		StepID: StepInstall,
+		Install: &InstallReport{
+			Features: map[installer.Feature]installer.Outcome{installer.FeatureHostMonitoring: installer.OutcomeFailed},
+			Duration: 42123 * time.Millisecond,
+		},
+	})
+
+	want := map[string]string{
+		"install.otel_config_written":  "not_tried",
+		"install.host_monitoring":      "failed",
+		"install.rum":                  "not_tried",
+		"install.synthetic_monitoring": "not_tried",
+		"install.rds_extensions":       "not_tried",
+		"install.duration_ms":          "42123",
+	}
+	for k, v := range want {
+		if props[k] != v {
+			t.Errorf("body[%q] = %q, want %q", k, props[k], v)
+		}
+	}
+	for _, k := range []string{"f", "d", "Install", "features", "duration"} {
+		if _, ok := props[k]; ok {
+			t.Errorf("body[%q] must be absent: header keys do not appear in the body", k)
+		}
+	}
+}
+
+func TestBuildEventPropsNoInstallReport(t *testing.T) {
+	props := buildEventProps(EventParams{Cmd: "install", Sub: "otel", StepID: StepInstall, Err: "user_cancelled"})
+	for k := range props {
+		if strings.HasPrefix(k, "install.") {
+			t.Errorf("body[%q] must be absent when no install work started", k)
+		}
+	}
+}
+
+func TestBuildEventPropsInstallReportOnlyOnInstallStep(t *testing.T) {
+	props := buildEventProps(EventParams{Cmd: "install", StepID: StepFailed, Install: &InstallReport{}})
+	for k := range props {
+		if strings.HasPrefix(k, "install.") {
+			t.Errorf("body[%q] must be absent on a non-install step", k)
+		}
 	}
 }

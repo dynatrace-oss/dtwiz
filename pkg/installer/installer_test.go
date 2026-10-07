@@ -318,3 +318,15 @@ func TestMergePathEntries(t *testing.T) {
 		})
 	}
 }
+
+func TestInstallDocker_DryRun_HostMonitoringNotTried(t *testing.T) {
+	ResetInstallTelemetry()
+	t.Cleanup(ResetInstallTelemetry)
+
+	if err := InstallDocker("https://env.example.com", "tok", true); err != nil {
+		t.Fatalf("dry-run returned unexpected error: %v", err)
+	}
+	if got := FeatureOutcomes()[FeatureHostMonitoring]; got != OutcomeNotTried {
+		t.Errorf("host monitoring outcome = %v, want not tried after a dry-run", got)
+	}
+}

@@ -628,7 +628,7 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 				break
 			}
 			// Project can't be auto-instrumented; ask if the user wants to try another.
-			again, err := installer.ConfirmProceed("  Select another project?")
+			again, err := installer.ConfirmQuestion("  Select another project?")
 			if err != nil || !again {
 				break
 			}
