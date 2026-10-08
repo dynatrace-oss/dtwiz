@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dynatrace-oss/dtctl/sdk/auth"
+
 	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/azure"
@@ -90,7 +92,7 @@ func checkPlatformTokenClassicAccess(envURL, token string) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", installer.AuthHeader(token))
+	req.Header.Set("Authorization", auth.AuthHeader(token))
 	resp, err := credentialHTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("classic API not reachable (%s)", classicURL)
@@ -137,7 +139,7 @@ func checkAccessToken(envURL, token string) error {
 		return fmt.Errorf("✗ Access token: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", installer.AuthHeader(token))
+	req.Header.Set("Authorization", auth.AuthHeader(token))
 
 	resp, err := credentialHTTPClient.Do(req)
 	if err != nil {

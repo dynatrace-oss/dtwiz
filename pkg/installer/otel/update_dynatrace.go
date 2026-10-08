@@ -14,6 +14,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/dynatrace-oss/dtctl/sdk/auth"
+
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
@@ -93,7 +95,7 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 	hostname, _ := os.Hostname()
 	cfgData := otelConfigData{
 		Endpoint:    strings.TrimRight(apiURL, "/"),
-		AuthHeader:  installer.AuthHeader(token),
+		AuthHeader:  auth.AuthHeader(token),
 		HostGroupID: hostname,
 		GRPCPort:    grpcPort,
 		HTTPPort:    httpPort,

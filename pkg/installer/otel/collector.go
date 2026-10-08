@@ -27,6 +27,8 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
+
+	"github.com/dynatrace-oss/dtctl/sdk/auth"
 )
 
 //go:embed otel.tmpl
@@ -722,7 +724,7 @@ func generateOtelConfig(apiURL, token string, opts ...otelConfigOpt) (generatedO
 	hostname, _ := os.Hostname()
 	data := otelConfigData{
 		Endpoint:    strings.TrimRight(apiURL, "/"),
-		AuthHeader:  installer.AuthHeader(token),
+		AuthHeader:  auth.AuthHeader(token),
 		HostGroupID: hostname,
 		MetricsPort: metricsPort,
 		GRPCPort:    grpcPort,
