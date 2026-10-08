@@ -146,15 +146,6 @@ func MaskSecret(s, secret string) string {
 	return strings.ReplaceAll(s, secret, "***")
 }
 
-// AuthHeader returns the correct Authorization header value for a given token.
-// API tokens (dt0c01.*) use the "Api-Token" scheme; all others use "Bearer".
-func AuthHeader(token string) string {
-	if strings.HasPrefix(token, "dt0c01.") {
-		return "Api-Token " + token
-	}
-	return "Bearer " + token
-}
-
 // APIURL converts any Dynatrace environment URL to the Classic API base URL.
 //
 // Mapping rules:

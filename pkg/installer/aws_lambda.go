@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/dynatrace-oss/dtctl/sdk/auth"
+
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 )
 
@@ -178,7 +180,7 @@ func getDTConnectionInfo(envURL, token string) (*dtConnectionInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("building connection info request: %w", err)
 	}
-	req.Header.Set("Authorization", AuthHeader(token))
+	req.Header.Set("Authorization", auth.AuthHeader(token))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -232,7 +234,7 @@ func getClusterID(envURL, token string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("building cluster ID request: %w", err)
 	}
-	req.Header.Set("Authorization", AuthHeader(token))
+	req.Header.Set("Authorization", auth.AuthHeader(token))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -275,7 +277,7 @@ func getAgentConnectionToken(envURL, token string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("building agent connection token request: %w", err)
 	}
-	req.Header.Set("Authorization", AuthHeader(token))
+	req.Header.Set("Authorization", auth.AuthHeader(token))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -332,7 +334,7 @@ func getLambdaLayerARN(cache layerARNCache, envURL, token, techtype, arch, regio
 	if err != nil {
 		return "", fmt.Errorf("building layer ARN request: %w", err)
 	}
-	req.Header.Set("Authorization", AuthHeader(token))
+	req.Header.Set("Authorization", auth.AuthHeader(token))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
