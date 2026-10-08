@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `dtwiz watch` deep links (Services, Hosts, Cloud, Kubernetes, Relationships, Logs, Requests, Exceptions, and QuickStart) now open scoped from when the watch started through "now", instead of falling back to each target app's own default lookback window, which could miss data ingested before the link is opened. Most apps take this as a `tf=<from>;now` query param; the smartscape app (Relationships) instead reads a `#from=...&to=now` hash fragment, and the logs app reads a JSON object (`version`, `dt.timeframe`) encoded into the hash fragment — both accept the same absolute timestamp or DQL relative expression (e.g. `now()-2h`) dtwiz already uses for its DQL queries.
+
 ## [1.11.0] - 2026-10-05
 
 ### Added
