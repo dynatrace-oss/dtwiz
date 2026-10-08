@@ -1,7 +1,7 @@
 github.com/cpuguy83/go-md2man/v2 v2.0.6/go.mod h1:oOW0eioCTA6cOiMLiUPZOpcVxMig6NIQQ7OS05n1F4g=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
-github.com/dynatrace-oss/dtctl/sdk v0.39.0 h1:zt1ufUSz6LgJhWcjf+UXss7Mb7FPW64fCo0u3MQzdhM=
-github.com/dynatrace-oss/dtctl/sdk v0.39.0/go.mod h1:a8/GThLmTK3S8xJWHxF4ZDb4RVrU4lzeWjTJWktGmSM=
+github.com/dynatrace-oss/dtctl/sdk v0.41.0 h1:y5TLoCqoGbEyyMRVuvpZuN32Bp/kDEMgxQgo0C3cOQg=
+github.com/dynatrace-oss/dtctl/sdk v0.41.0/go.mod h1:a8/GThLmTK3S8xJWHxF4ZDb4RVrU4lzeWjTJWktGmSM=
 github.com/fatih/color v1.19.0 h1:Zp3PiM21/9Ld6FzSKyL5c/BULoe/ONr9KlbYVOfG8+w=
 github.com/fatih/color v1.19.0/go.mod h1:zNk67I0ZUT1bEGsSGyCZYZNrHuTkJJB+r6Q9VuMi0LE=
 github.com/go-resty/resty/v2 v2.17.2 h1:FQW5oHYcIlkCNrMD2lloGScxcHJ0gkjshV3qcQAyHQk=
