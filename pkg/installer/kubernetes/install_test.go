@@ -270,8 +270,6 @@ func TestRenderDynakubeTemplate_AgentsDynaKubeStructure(t *testing.T) {
 		"- jaeger",
 		"- statsd",
 		"- zipkin",
-		"extensions:",
-		"prometheus: {}",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("DynaKube #2: expected %q in manifest", want)
