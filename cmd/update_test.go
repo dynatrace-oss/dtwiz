@@ -41,12 +41,10 @@ func TestUpdateGcpCmd_Registered(t *testing.T) {
 }
 
 func TestUpdateGcpCmd_RunE_ValidatesPlatformToken(t *testing.T) {
-	origCredentialHTTPClient := credentialHTTPClient
 	origEnvironmentFlag := environmentFlag
 	origPlatformTokenFlag := platformTokenFlag
 	origAccessTokenFlag := accessTokenFlag
 	t.Cleanup(func() {
-		credentialHTTPClient = origCredentialHTTPClient
 		environmentFlag = origEnvironmentFlag
 		platformTokenFlag = origPlatformTokenFlag
 		accessTokenFlag = origAccessTokenFlag
@@ -69,7 +67,6 @@ func TestUpdateGcpCmd_RunE_ValidatesPlatformToken(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	credentialHTTPClient = srv.Client()
 	environmentFlag = srv.URL
 	platformTokenFlag = "dt0s16.platform"
 	accessTokenFlag = "dt0c01.access"
@@ -84,12 +81,10 @@ func TestUpdateGcpCmd_RunE_ValidatesPlatformToken(t *testing.T) {
 }
 
 func TestUpdateAzureCmd_RunE_ValidatesPlatformToken(t *testing.T) {
-	origCredentialHTTPClient := credentialHTTPClient
 	origEnvironmentFlag := environmentFlag
 	origPlatformTokenFlag := platformTokenFlag
 	origAccessTokenFlag := accessTokenFlag
 	t.Cleanup(func() {
-		credentialHTTPClient = origCredentialHTTPClient
 		environmentFlag = origEnvironmentFlag
 		platformTokenFlag = origPlatformTokenFlag
 		accessTokenFlag = origAccessTokenFlag
@@ -112,7 +107,6 @@ func TestUpdateAzureCmd_RunE_ValidatesPlatformToken(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	credentialHTTPClient = srv.Client()
 	environmentFlag = srv.URL
 	platformTokenFlag = "dt0s16.platform"
 	accessTokenFlag = "dt0c01.access"

@@ -14,6 +14,8 @@ import (
 
 	"github.com/fatih/color"
 
+	"github.com/dynatrace-oss/dtctl/sdk/auth"
+
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 )
 
@@ -276,7 +278,7 @@ func TestUpdateDynatraceCollector_ConfigUpToDate_StillRunsPrerequisites(t *testi
 	hostname, _ := os.Hostname()
 	cfgData := otelConfigData{
 		Endpoint:        strings.TrimRight(installer.APIURL("https://env.example.com"), "/"),
-		AuthHeader:      installer.AuthHeader("tok"),
+		AuthHeader:      auth.AuthHeader("tok"),
 		HostGroupID:     hostname,
 		GRPCPort:        4317,
 		HTTPPort:        4318,
