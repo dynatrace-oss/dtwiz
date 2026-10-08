@@ -48,12 +48,6 @@ func ShouldProceed(dryRun bool, verb string) (bool, error) {
 // Set by the --yes / -y flag on install, update, and uninstall command groups.
 var AutoConfirm bool
 
-// ExecutionStart is set to time.Now() when the user confirms the install prompt (or
-// AutoConfirm is true). Install command handlers read this after the installer returns
-// to compute install.duration_s, excluding user think time at the confirmation prompt.
-// Zero when the installer did not call confirmProceed (e.g. no interactive prompt).
-var ExecutionStart time.Time
-
 // OnWatchSnapshot is called by the post-install WatchIngest session each time a new
 // signal type first receives data, once per newly seen type. Set by install command
 // handlers before invoking cloud installers (AWS, Azure, GCP) that run WatchIngest
@@ -66,7 +60,14 @@ var OnWatchComplete func(WatchSessionResult)
 
 // ConfirmProceed is the exported variant of confirmProceed for use by
 // sub-packages (e.g. pkg/installer/oneagent, pkg/installer/otel).
+// Every prompt shown during an install must go through ConfirmProceed or ConfirmQuestion:
+// they keep the time the user spends answering out of the install work time.
 func ConfirmProceed(prompt string) (bool, error) { return confirmProceed(prompt) }
+
+// ConfirmQuestion asks a yes/no question that is not the install confirmation, such as
+// a project-selection prompt shown before it. It never starts the install work-time
+// stopwatch, but the time spent answering is excluded when the stopwatch is running.
+func ConfirmQuestion(prompt string) (bool, error) { return confirm(prompt, false) }
 
 // confirmProceed prints the prompt and returns true if the user confirms.
 // When AutoConfirm is true it returns true immediately without prompting.

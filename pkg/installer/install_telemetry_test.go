@@ -302,3 +302,35 @@ func TestConfirmProceed_SecondPromptDoesNotRestartStopwatch(t *testing.T) {
 		t.Errorf("InstallWorkTime() = %v, want 15s", d)
 	}
 }
+
+func TestConfirmQuestion_NeverStartsStopwatch(t *testing.T) {
+	old := AutoConfirm
+	AutoConfirm = false
+	defer func() { AutoConfirm = old }()
+	ResetInstallTelemetry()
+	t.Cleanup(ResetInstallTelemetry)
+
+	withStdin(t, "y\n", func() {
+		if ok, err := ConfirmQuestion("  Select another project?"); !ok || err != nil {
+			t.Fatalf("ConfirmQuestion = %v, %v; want true, nil", ok, err)
+		}
+	})
+	if _, started := InstallWorkTime(); started {
+		t.Error("ConfirmQuestion must not start the stopwatch")
+	}
+}
+
+func TestConfirmQuestion_AutoConfirmNeverStartsStopwatch(t *testing.T) {
+	old := AutoConfirm
+	AutoConfirm = true
+	defer func() { AutoConfirm = old }()
+	ResetInstallTelemetry()
+	t.Cleanup(ResetInstallTelemetry)
+
+	if ok, _ := ConfirmQuestion("  Select another project?"); !ok {
+		t.Fatal("AutoConfirm must answer yes")
+	}
+	if _, started := InstallWorkTime(); started {
+		t.Error("ConfirmQuestion must not start the stopwatch, even with AutoConfirm")
+	}
+}

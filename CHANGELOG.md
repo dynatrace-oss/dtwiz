@@ -7,13 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Self-monitoring: the `ist` event now reports the real outcome of each feature an install tries to enable: OTel collector config written, Host Monitoring, and the reserved RUM, Synthetic Monitoring and RDS extensions. Each is `succeeded`, `failed` or `not_tried` in the event body (`install.otel_config_written`, `install.host_monitoring`, `install.rum`, `install.synthetic_monitoring`, `install.rds_extensions`), and the `User-Agent` carries them as one positional character per feature in `f=` (`1` succeeded, `0` failed, `-` not tried, e.g. `f=11---`). Positions are add-only. `dtwiz setup` now sends the same outcomes and install time as `dtwiz install <method>`.
+
 ### Fixed
 
 - `dtwiz watch`: the Services, Cloud, and Kubernetes sections could show entities that existed long before dtwiz started, because Smartscape's `from:` argument matches any node whose lifetime *overlaps* the queried window rather than one first discovered within it. Those sections' queries now additionally filter on `lifetime.start`, so only entities created on or after the watch's start time are shown. Hosts are exempt — a host entity commonly predates the run (e.g. already monitored via another agent, or a prior dtwiz session on the same machine), and filtering it out would hide a host genuinely receiving new data from this install. Instead, once the Hosts section first returns data, that poll's timestamp is recorded as an approximation of when the collector started, and both the Hosts query and its deep link narrow to that timestamp instead of dtwiz's own start time.
+- Self-monitoring: install time no longer includes the post-install watch for `install aws`, `azure` and `gcp` (and setup's Azure and GCP updates), and no longer loses work done before a later prompt such as the Python "recreate virtualenv?" question. Installs without a confirmation prompt (OneAgent, Docker) now report an install time too, and AWS ends when both the CloudFormation deploy and the Lambda instrumentation have finished.
 
 ### Changed
 
 - `dtwiz watch` deep links (Services, Hosts, Cloud, Kubernetes, Relationships, Logs, Requests, Exceptions, and QuickStart) now open scoped from when the watch started through "now", instead of falling back to each target app's own default lookback window, which could miss data ingested before the link is opened. Most apps take this as a `tf=<from>;now` query param; the smartscape app (Relationships) instead reads a `#from=...&to=now` hash fragment, and the logs app reads a JSON object (`version`, `dt.timeframe`) encoded into the hash fragment — both accept the same absolute timestamp or DQL relative expression (e.g. `now()-2h`) dtwiz already uses for its DQL queries.
+- **Self-monitoring (breaking for queries):** the `ist` event properties shipped in 1.10.0 are replaced. `install.duration_s` (whole seconds) becomes `install.duration_ms` (milliseconds), and `d=` in the `User-Agent` carries whole seconds, capped at 9999. `install.host_monitoring_enabled` becomes `install.host_monitoring` (only `succeeded` means enabled; it is now the actual result, not a fixed per-method value, and OneAgent and Docker report it too). `install.otel_pipelines` is removed; use `install.otel_config_written`. The new properties are present only when install work started, so dry-runs and declined installs carry none.
 
 ## [1.11.0] - 2026-10-05
 
