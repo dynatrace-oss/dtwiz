@@ -343,8 +343,10 @@ func mergeExporterIntoYAML(data []byte, apiURL, token string) ([]byte, error) {
 
 func writeConfig(configPath string, updatedData []byte) (*UpdateResult, error) {
 	if err := os.WriteFile(configPath, updatedData, 0o600); err != nil {
+		installer.RecordFeature(installer.FeatureOtelConfig, false)
 		return nil, fmt.Errorf("writing updated config to %s: %w", configPath, err)
 	}
+	installer.RecordFeature(installer.FeatureOtelConfig, true)
 
 	return &UpdateResult{
 		ConfigPath:  configPath,

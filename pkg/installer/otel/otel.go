@@ -78,6 +78,9 @@ func removeHostMonitoringGrailRoutes(envURL, platformToken string) {
 // All errors are advisory: a failure logs a warning and returns without aborting the install.
 func activateHostMonitoringExtension(envURL, platformToken string) {
 	ec, err := newExtensionManagerFn(envURL, platformToken)
+
+	installer.RecordFeature(installer.FeatureHostMonitoring, false)
+
 	if err != nil {
 		logger.Debug("failed to create extension client for host monitoring activation", "error", err)
 		fmt.Println("  Warning: could not connect to extensions API; host entity creation may not be available.")
@@ -100,6 +103,7 @@ func activateHostMonitoringExtension(envURL, platformToken string) {
 		fmt.Println("  Warning: could not activate OTel Host Monitoring extension; host entity creation may not be available.")
 		return
 	}
+	installer.RecordFeature(installer.FeatureHostMonitoring, true)
 	display.ColorOK.Println("  ✓ OTel Host Monitoring extension active")
 }
 

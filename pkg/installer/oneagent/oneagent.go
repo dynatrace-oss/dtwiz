@@ -9,6 +9,7 @@ import (
 
 	"github.com/dynatrace-oss/dtwiz/pkg/client"
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -130,6 +131,7 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 	}
 
 	_, err = ExecuteInstallCommand(argv, opts.Quiet)
+	installer.RecordFeature(installer.FeatureHostMonitoring, err == nil)
 	return err
 }
 

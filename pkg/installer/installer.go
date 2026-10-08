@@ -70,10 +70,19 @@ func ConfirmProceed(prompt string) (bool, error) { return confirmProceed(prompt)
 
 // confirmProceed prints the prompt and returns true if the user confirms.
 // When AutoConfirm is true it returns true immediately without prompting.
-// Sets ExecutionStart when the user (or AutoConfirm) confirms.
-func confirmProceed(prompt string) (bool, error) {
+// The first confirmation starts the install work-time stopwatch; later ones pause it
+// while the user answers.
+func confirmProceed(prompt string) (bool, error) { return confirm(prompt, true) }
+
+func confirm(prompt string, startsTimer bool) (bool, error) {
+	promptStart := nowFn()
+	ok, err := askYesNo(prompt)
+	afterPrompt(promptStart, ok && err == nil, startsTimer)
+	return ok, err
+}
+
+func askYesNo(prompt string) (bool, error) {
 	if AutoConfirm {
-		ExecutionStart = time.Now()
 		return true, nil
 	}
 	fmt.Printf("%s [Y/n] ", prompt)
@@ -82,11 +91,7 @@ func confirmProceed(prompt string) (bool, error) {
 		return false, scanner.Err()
 	}
 	answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
-	ok := answer == "" || answer == "y" || answer == "yes"
-	if ok {
-		ExecutionStart = time.Now()
-	}
-	return ok, nil
+	return answer == "" || answer == "y" || answer == "yes", nil
 }
 
 // KillAndWaitProcess kills a process and waits for it to fully exit.

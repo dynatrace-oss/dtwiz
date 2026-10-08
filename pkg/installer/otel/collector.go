@@ -183,6 +183,9 @@ func otelReleaseURL(version, assetName string) string {
 	)
 }
 
+// downloadOtelCollectorFn is overridable in tests.
+var downloadOtelCollectorFn = downloadOtelCollector
+
 // downloadOtelCollector downloads and extracts the OTel Collector binary to
 // the specified destination path.
 func downloadOtelCollector(destDir string) (string, error) {
@@ -1007,14 +1010,16 @@ func (cp *collectorPlan) execute(envURL, platformToken string, skipVerification 
 	}
 
 	// Download after the old process is stopped so the binary file is not locked on Windows.
-	binaryPath, err := downloadOtelCollector(cp.installDir)
+	binaryPath, err := downloadOtelCollectorFn(cp.installDir)
 	if err != nil {
 		return err
 	}
 
 	if err := os.WriteFile(cp.configPath, []byte(cp.configContent), 0o600); err != nil {
+		installer.RecordFeature(installer.FeatureOtelConfig, false)
 		return fmt.Errorf("writing OTel Collector config: %w", err)
 	}
+	installer.RecordFeature(installer.FeatureOtelConfig, true)
 	fmt.Printf("  Config written to: %s\n", cp.configPath)
 
 	crashed, err := startOtelCollector(binaryPath, cp.configPath)

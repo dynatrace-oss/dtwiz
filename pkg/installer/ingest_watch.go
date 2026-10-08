@@ -164,7 +164,8 @@ func WatchIngestCloudWithEvent(envURL, pToken, fromClause string, onSnapshot, on
 }
 
 // WatchIngestCloudFromTimeWithEvent is like WatchIngestCloudFromTime but reports
-// snapshot and completion events.
+// snapshot and completion events. Installers that call it themselves must call
+// MarkInstallDone first, so the watch session is not counted as install work time.
 func WatchIngestCloudFromTimeWithEvent(envURL, pToken string, startTime time.Time, onSnapshot, onComplete func(WatchSessionResult)) {
 	if startTime.IsZero() {
 		return
@@ -173,7 +174,8 @@ func WatchIngestCloudFromTimeWithEvent(envURL, pToken string, startTime time.Tim
 }
 
 // WatchIngestAWSWithEvent is like WatchIngestAWS but reports snapshot and
-// completion events.
+// completion events. Installers that call it themselves must mark the end of the
+// install work (MarkInstallDone/MarkInstallDoneAt) so the watch session is not counted.
 func WatchIngestAWSWithEvent(envURL, pToken, fromClause string, statusCh <-chan string, awsAccountID string, onSnapshot, onComplete func(WatchSessionResult)) {
 	watchIngest(envURL, pToken, fromClause, statusCh, awsAccountID, true, "", onSnapshot, onComplete)
 }
