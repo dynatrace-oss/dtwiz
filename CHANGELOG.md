@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `dtwiz watch`: the Services, Cloud, and Kubernetes sections could show entities that existed long before dtwiz started, because Smartscape's `from:` argument matches any node whose lifetime *overlaps* the queried window rather than one first discovered within it. Those sections' queries now additionally filter on `lifetime.start`, so only entities created on or after the watch's start time are shown. Hosts are exempt — a host entity commonly predates the run (e.g. already monitored via another agent, or a prior dtwiz session on the same machine), and filtering it out would hide a host genuinely receiving new data from this install. Instead, once the Hosts section first returns data, that poll's timestamp is recorded as an approximation of when the collector started, and both the Hosts query and its deep link narrow to that timestamp instead of dtwiz's own start time.
+
 ### Changed
 
 - `dtwiz watch` deep links (Services, Hosts, Cloud, Kubernetes, Relationships, Logs, Requests, Exceptions, and QuickStart) now open scoped from when the watch started through "now", instead of falling back to each target app's own default lookback window, which could miss data ingested before the link is opened. Most apps take this as a `tf=<from>;now` query param; the smartscape app (Relationships) instead reads a `#from=...&to=now` hash fragment, and the logs app reads a JSON object (`version`, `dt.timeframe`) encoded into the hash fragment — both accept the same absolute timestamp or DQL relative expression (e.g. `now()-2h`) dtwiz already uses for its DQL queries.

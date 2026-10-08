@@ -42,6 +42,11 @@ const (
 type watchQueryState struct {
 	logs     watchPhase
 	requests watchPhase
+	// hostsFirstSeen is the RFC3339 timestamp of the first poll where Hosts
+	// returned data, approximating when the collector started. Empty until
+	// discovered. Used in place of fromClause for Hosts deep links, since a
+	// host entity often predates this run (see pollAll).
+	hostsFirstSeen string
 }
 
 // watchInput holds a line read from stdin by the input goroutine.
@@ -494,6 +499,16 @@ func dqlFromLiteral(fromClause string) string {
 	return `"` + fromClause + `"`
 }
 
+// dqlTimestampExpr formats fromClause for comparison against timestamp-typed
+// fields like lifetime.start. Relative expressions already evaluate to a
+// timestamp; absolute RFC3339 strings need toTimestamp() to parse as one.
+func dqlTimestampExpr(fromClause string) string {
+	if isDQLRelativeExpr(fromClause) {
+		return fromClause
+	}
+	return `toTimestamp("` + fromClause + `")`
+}
+
 // quickstartURL builds the Dynatrace QuickStart app link, scoping its
 // timeframe to start at fromClause (when dtwiz started watching) and run
 // through "now" — otherwise QuickStart defaults to its own lookback window
@@ -585,9 +600,16 @@ func pollAll(appsURL, token, fromClause, awsAccountID string, qs *watchQueryStat
 
 	from := dqlFromLiteral(fromClause)
 
+	// Narrows to hostsFirstSeen once known (from the previous poll — this
+	// poll's own discovery, if any, is applied below for the deep link).
+	hostsFrom := from
+	if qs.hostsFirstSeen != "" {
+		hostsFrom = dqlFromLiteral(qs.hostsFirstSeen)
+	}
+
 	queries := map[string]string{
 		"services":      fmt.Sprintf(`smartscapeNodes SERVICE, from:%s | fields name | limit 100`, from),
-		"hosts":         fmt.Sprintf(`smartscapeNodes "*", from:%s | filter type == "HOST" or type == "OTEL_HOST" | fields id, name, type | sort name asc | limit 100`, from),
+		"hosts":         fmt.Sprintf(`smartscapeNodes "*", from:%s | filter type == "HOST" or type == "OTEL_HOST" | fields id, name, type | sort name asc | limit 100`, hostsFrom),
 		"nodes":         fmt.Sprintf(`smartscapeNodes "*", from:%s | summarize count=count(), by:{type} | limit 200`, from),
 		"relationships": fmt.Sprintf(`smartscapeEdges "*", from:%s | summarize count=count(), by:{type}`, from),
 		"exceptions":    fmt.Sprintf(`fetch spans, from:%s | expand events = span.events | filter events[type] == "exception" | summarize count=count()`, from),
@@ -642,6 +664,9 @@ func pollAll(appsURL, token, fromClause, awsAccountID string, qs *watchQueryStat
 	state.Services = parseServices(results["services"])
 	// Hosts
 	state.Hosts = parseHosts(results["hosts"])
+	if qs.hostsFirstSeen == "" && state.Hosts.Count > 0 {
+		qs.hostsFirstSeen = time.Now().UTC().Format(IngestTimeFormat)
+	}
 	// Cloud + Kubernetes from nodes
 	state.Cloud, state.Kubernetes = parseNodes(results["nodes"])
 	// Cloud platform signals (metrics + logs from da-* integrations)
@@ -684,7 +709,13 @@ func pollAll(appsURL, token, fromClause, awsAccountID string, qs *watchQueryStat
 	// Exceptions
 	state.Exceptions = parseExceptions(results["exceptions"])
 
-	applyTimeframeLinks(&state, fromClause)
+	// Recomputed from the now-current qs.hostsFirstSeen, so a host discovered
+	// on this very poll gets a narrowed link immediately rather than next cycle.
+	hostsFromClause := fromClause
+	if qs.hostsFirstSeen != "" {
+		hostsFromClause = qs.hostsFirstSeen
+	}
+	applyTimeframeLinks(&state, fromClause, hostsFromClause)
 
 	return state
 }
@@ -693,11 +724,12 @@ func pollAll(appsURL, token, fromClause, awsAccountID string, qs *watchQueryStat
 // fromClause and run through "now", so following a link from the watch
 // display lands on the same data the DQL queries above are reporting on,
 // rather than falling back to the target app's own default lookback window.
-func applyTimeframeLinks(state *watchState, fromClause string) {
+// hostsFromClause scopes the Hosts section specifically (see its call site).
+func applyTimeframeLinks(state *watchState, fromClause, hostsFromClause string) {
 	state.Services.Link = withTimeframe(state.Services.Link, fromClause)
-	state.Hosts.Link = withTimeframe(state.Hosts.Link, fromClause)
+	state.Hosts.Link = withTimeframe(state.Hosts.Link, hostsFromClause)
 	for i := range state.Hosts.Items {
-		state.Hosts.Items[i].Link = withTimeframe(state.Hosts.Items[i].Link, fromClause)
+		state.Hosts.Items[i].Link = withTimeframe(state.Hosts.Items[i].Link, hostsFromClause)
 	}
 	state.Cloud.Link = withTimeframe(state.Cloud.Link, fromClause)
 	state.Kubernetes.Link = withTimeframe(state.Kubernetes.Link, fromClause)
