@@ -3,9 +3,22 @@ package cmd
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/dynatrace-oss/dtctl/sdk/httpclient"
 )
+
+// TestMain disables credential-probe retries so 5xx and unreachable-host cases fail fast.
+func TestMain(m *testing.M) {
+	credentialClientOpts = []httpclient.Option{
+		httpclient.WithTimeout(5 * time.Second),
+		httpclient.WithRetry(0, 0, 0),
+	}
+	os.Exit(m.Run())
+}
 
 func TestCheckPlatformToken(t *testing.T) {
 	tests := []struct {
@@ -34,10 +47,6 @@ func TestCheckPlatformToken(t *testing.T) {
 				w.WriteHeader(tt.statusCode)
 			}))
 			defer srv.Close()
-
-			orig := credentialHTTPClient
-			credentialHTTPClient = srv.Client()
-			defer func() { credentialHTTPClient = orig }()
 
 			err := checkPlatformToken(srv.URL, "dt0s16.testtoken")
 			if (err != nil) != tt.wantErr {
@@ -80,10 +89,6 @@ func TestCheckAccessToken(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			orig := credentialHTTPClient
-			credentialHTTPClient = srv.Client()
-			defer func() { credentialHTTPClient = orig }()
-
 			err := checkAccessToken(srv.URL, "dt0c01.testtoken")
 			if (err != nil) != tt.wantErr {
 				t.Errorf("checkAccessToken() error = %v, wantErr %v", err, tt.wantErr)
@@ -116,10 +121,6 @@ func TestCheckClassicAccess(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			orig := credentialHTTPClient
-			credentialHTTPClient = srv.Client()
-			defer func() { credentialHTTPClient = orig }()
-
 			err := checkPlatformTokenClassicAccess(srv.URL, "dt0s16.testtoken")
 			if (err != nil) != tt.wantErr {
 				t.Errorf("checkPlatformTokenClassicAccess() error = %v, wantErr %v", err, tt.wantErr)
@@ -129,10 +130,6 @@ func TestCheckClassicAccess(t *testing.T) {
 }
 
 func TestCheckClassicAccess_NetworkFailure(t *testing.T) {
-	orig := credentialHTTPClient
-	credentialHTTPClient = &http.Client{}
-	defer func() { credentialHTTPClient = orig }()
-
 	// Point at a closed server so the TCP dial fails immediately.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
 	srv.Close()
@@ -272,10 +269,6 @@ func TestValidateCredentials(t *testing.T) {
 				}
 			}))
 			defer srv.Close()
-
-			orig := credentialHTTPClient
-			credentialHTTPClient = srv.Client()
-			defer func() { credentialHTTPClient = orig }()
 
 			classicTok, err := validateCredentials(srv.URL, tt.accessTok, platformTok)
 			if (err != nil) != tt.wantErr {
