@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/dynatrace-oss/dtctl/sdk/httpclient"
+	"github.com/spf13/cobra"
 )
 
 // TestMain disables credential-probe retries so 5xx and unreachable-host cases fail fast.
@@ -343,5 +344,39 @@ func TestEnvironmentURLHints(t *testing.T) {
 				t.Errorf("environmentURLHints(%q) = %q, want it to contain %q", tt.appsURL, got, tt.want)
 			}
 		})
+	}
+}
+
+// assertRunEValidatesPlatformToken runs cmd against a server that rejects the
+// platform token and checks that RunE probed the DQL endpoint and failed.
+func assertRunEValidatesPlatformToken(t *testing.T, cmd *cobra.Command) {
+	t.Helper()
+	origEnvironmentFlag := environmentFlag
+	origPlatformTokenFlag := platformTokenFlag
+	t.Cleanup(func() {
+		environmentFlag = origEnvironmentFlag
+		platformTokenFlag = origPlatformTokenFlag
+	})
+
+	validationCalled := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/platform/storage/query/v1/query:execute" {
+			t.Errorf("unexpected request path: %s", r.URL.Path)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		validationCalled = true
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	environmentFlag = srv.URL
+	platformTokenFlag = "dt0s16.platform"
+
+	if err := cmd.RunE(cmd, nil); err == nil {
+		t.Fatal("expected platform token validation error, got nil")
+	}
+	if !validationCalled {
+		t.Fatalf("expected %q to validate the platform token", cmd.CommandPath())
 	}
 }

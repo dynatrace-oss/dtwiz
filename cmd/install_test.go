@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 )
 
@@ -101,5 +103,11 @@ func TestInstallAzureCmd_RunE_ValidatesPlatformToken(t *testing.T) {
 	}
 	if !validationCalled {
 		t.Fatal("expected Azure install command to validate the platform token")
+	}
+}
+
+func TestInstallCloudCmds_RunE_ValidatePlatformToken(t *testing.T) {
+	for _, c := range []*cobra.Command{installAWSCmd, installGCPCmd} {
+		t.Run(c.Use, func(t *testing.T) { assertRunEValidatesPlatformToken(t, c) })
 	}
 }

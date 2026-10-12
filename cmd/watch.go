@@ -28,6 +28,10 @@ var watchCmd = &cobra.Command{
 			fmt.Fprintln(os.Stderr, "no Dynatrace platform token configured\n\nSet one with --platform-token or the DT_PLATFORM_TOKEN env var:\n  export DT_PLATFORM_TOKEN=dt0s16.****")
 			os.Exit(1)
 		}
+		if err := checkPlatformToken(envURL, pTok); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 
 		fromClause := watchFromFlag
 		if fromClause == "" {

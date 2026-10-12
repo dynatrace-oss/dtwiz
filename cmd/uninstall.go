@@ -85,7 +85,7 @@ var uninstallAWSCmd = &cobra.Command{
 			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
-		if _, err := validateCredentials(envURL, "", platformTok); err != nil {
+		if err := checkPlatformToken(envURL, platformTok); err != nil {
 			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
@@ -153,6 +153,10 @@ var uninstallAzureCmd = &cobra.Command{
 			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
+		if err := checkPlatformToken(envURL, platformTok); err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
+			return err
+		}
 		if err := azure.UninstallAzure(envURL, platformTok, uninstallDryRun); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
 				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), err)
@@ -173,6 +177,10 @@ var uninstallGCPCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		envURL, _, platformTok, err := getDtEnvironment()
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
+			return err
+		}
+		if err := checkPlatformToken(envURL, platformTok); err != nil {
 			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
