@@ -11,3 +11,18 @@ func TestUninstallCloudCmds_RunE_ValidatePlatformToken(t *testing.T) {
 		t.Run(c.Use, func(t *testing.T) { assertRunEValidatesPlatformToken(t, c) })
 	}
 }
+
+// TestUninstallCmd_AWSLambdaCancelledSubcommand verifies the uninstall
+// aws-lambda subcommand is registered.
+func TestUninstallCmd_AWSLambdaCancelledSubcommand(t *testing.T) {
+	found := false
+	for _, c := range uninstallCmd.Commands() {
+		if c.Use == "aws-lambda" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected uninstall aws-lambda subcommand to be registered")
+	}
+}

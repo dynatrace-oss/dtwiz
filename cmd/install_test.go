@@ -111,3 +111,32 @@ func TestInstallCloudCmds_RunE_ValidatePlatformToken(t *testing.T) {
 		t.Run(c.Use, func(t *testing.T) { assertRunEValidatesPlatformToken(t, c) })
 	}
 }
+
+// TestInstallCmd_CancelledSubcommands verifies each install subcommand that
+// carries a ErrInstallCancelled guard is actually registered.
+//
+// Note: these tests verify command registration (structural wiring), not that
+// the guard is present in RunE. Testing the real RunE paths requires injectable
+// installer dependencies; that is tracked as a separate refactor.
+func TestInstallCmd_CancelledSubcommands(t *testing.T) {
+	guarded := []string{
+		"kubernetes",
+		"otel",
+		"otel-collector",
+		"otel-python",
+		"otel-node",
+		"otel-java",
+		"aws",
+		"aws-lambda",
+		"demo",
+	}
+	registered := map[string]bool{}
+	for _, c := range installCmd.Commands() {
+		registered[c.Use] = true
+	}
+	for _, name := range guarded {
+		if !registered[name] {
+			t.Errorf("expected install subcommand %q to be registered", name)
+		}
+	}
+}
