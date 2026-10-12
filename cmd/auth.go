@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/dynatrace-oss/dtctl/sdk/httpclient"
+	"github.com/dynatrace-oss/dtctl/sdk/urls"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
@@ -17,12 +18,26 @@ import (
 )
 
 // environmentHint returns the Dynatrace environment URL from the --environment
-// flag or the DT_ENVIRONMENT env var (flag takes precedence).
+// flag or the DT_ENVIRONMENT env var (flag takes precedence). A bare host such as
+// "abc12345.apps.dynatrace.com" gets an "https://" scheme so API calls do not fail
+// with "unsupported protocol scheme".
 func environmentHint() string {
 	if environmentFlag != "" {
-		return environmentFlag
+		return urls.Normalize(environmentFlag)
 	}
-	return os.Getenv("DT_ENVIRONMENT")
+	return urls.Normalize(os.Getenv("DT_ENVIRONMENT"))
+}
+
+// environmentURLHints returns troubleshooting lines for an environment URL that
+// cannot work (e.g. a Managed /e/<id> URL), formatted for appending to an error.
+// It inspects the derived Platform URL, not the raw input: dtwiz converts
+// .live/bare/dev/sprint domains itself, so flagging those would be misleading.
+func environmentURLHints(appsURL string) string {
+	var b strings.Builder
+	for _, s := range urls.Suggestions(appsURL) {
+		b.WriteString("\n  " + s)
+	}
+	return b.String()
 }
 
 // accessToken returns the Dynatrace API access token from the --access-token
@@ -218,8 +233,8 @@ func checkPlatformToken(envURL, token string) error {
 		}).
 		Post("/platform/storage/query/v1/query:execute")
 	if err != nil {
-		return fmt.Errorf("✗ Platform token: environment not reachable (%s): %w",
-			appsURL, &installer.NetworkError{Reason: "environment_not_reachable", URL: appsURL})
+		return fmt.Errorf("✗ Platform token: environment not reachable (%s): %w%s",
+			appsURL, &installer.NetworkError{Reason: "environment_not_reachable", URL: appsURL}, environmentURLHints(appsURL))
 	}
 
 	apiErr := httpclient.CheckResponse(resp)
@@ -233,7 +248,7 @@ func checkPlatformToken(envURL, token string) error {
 		return fmt.Errorf("✗ Platform token: insufficient permissions: %w",
 			&installer.AuthError{Reason: "invalid_token"})
 	default:
-		return fmt.Errorf("✗ Platform token: unexpected response %d from %s: %w",
-			resp.StatusCode(), queryURL, &installer.NetworkError{Reason: "environment_not_reachable", URL: appsURL})
+		return fmt.Errorf("✗ Platform token: unexpected response %d from %s: %w%s",
+			resp.StatusCode(), queryURL, &installer.NetworkError{Reason: "environment_not_reachable", URL: appsURL}, environmentURLHints(appsURL))
 	}
 }

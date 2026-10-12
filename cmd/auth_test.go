@@ -280,3 +280,68 @@ func TestValidateCredentials(t *testing.T) {
 		})
 	}
 }
+
+func TestEnvironmentHint_NormalizesScheme(t *testing.T) {
+	tests := []struct {
+		name   string
+		flag   string
+		envVar string
+		want   string
+	}{
+		{"bare host from flag", "abc12345.apps.dynatrace.com", "", "https://abc12345.apps.dynatrace.com"},
+		{"bare host from env var", "", "abc12345.live.dynatrace.com", "https://abc12345.live.dynatrace.com"},
+		{"https kept", "https://abc12345.apps.dynatrace.com", "", "https://abc12345.apps.dynatrace.com"},
+		{"http kept", "http://localhost:8080", "", "http://localhost:8080"},
+		{"unset stays empty", "", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orig := environmentFlag
+			environmentFlag = tt.flag
+			defer func() { environmentFlag = orig }()
+			t.Setenv("DT_ENVIRONMENT", tt.envVar)
+
+			if got := environmentHint(); got != tt.want {
+				t.Errorf("environmentHint() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCheckPlatformToken_ManagedURLHint(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	err := checkPlatformToken(srv.URL+"/e/abc12345", "dt0s16.testtoken")
+	if err == nil {
+		t.Fatal("expected error for Managed URL, got nil")
+	}
+	if !strings.Contains(err.Error(), "Dynatrace Managed or ActiveGate URL") {
+		t.Errorf("error = %q, want it to contain the Managed URL hint", err.Error())
+	}
+}
+
+func TestEnvironmentURLHints(t *testing.T) {
+	tests := []struct {
+		name    string
+		appsURL string
+		want    string
+	}{
+		{"platform URL has no hints", "https://abc12345.apps.dynatrace.com", ""},
+		{"labs platform URL has no hints", "https://abc12345.sprint.apps.dynatracelabs.com", ""},
+		{"managed URL gets a hint", "https://managed.example.com/e/abc12345", "Possible wrong environment URL"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := environmentURLHints(tt.appsURL)
+			if tt.want == "" && got != "" {
+				t.Errorf("environmentURLHints(%q) = %q, want no hints", tt.appsURL, got)
+			}
+			if tt.want != "" && !strings.Contains(got, tt.want) {
+				t.Errorf("environmentURLHints(%q) = %q, want it to contain %q", tt.appsURL, got, tt.want)
+			}
+		})
+	}
+}
