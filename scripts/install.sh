@@ -17,6 +17,11 @@
 #   (default)            Latest stable release
 #   DTWIZ_CHANNEL=main   Latest snapshot from the main branch
 #   DTWIZ_TAG=<tag>      Specific snapshot/pre-release tag
+#
+# Self-monitoring:
+#   When DT_ENVIRONMENT is set, the script sends a self-monitoring event to that
+#   Dynatrace environment when it starts and when it completes, fails, or is
+#   cancelled. DT_PLATFORM_TOKEN is used for authorization when set.
 
 REPO="dynatrace-oss/dtwiz"
 
@@ -33,6 +38,102 @@ if [ "$CHANNEL" = "main" ]; then
     TAG="snapshot-main"
 fi
 
+# ── Self-monitoring ────────────────────────────────────────────────────────────
+# Execution id correlating the events of one run: 3 random hex chars.
+DTWIZ_SM_EXEC_ID="$(od -An -N2 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n' | cut -c1-3)"
+[ -n "$DTWIZ_SM_EXEC_ID" ] || DTWIZ_SM_EXEC_ID="000"
+
+DTWIZ_SM_OS="$(uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_.-')"
+case "$DTWIZ_SM_OS" in
+    darwin) DTWIZ_SM_OS_SHORT="mac" ;;
+    linux)  DTWIZ_SM_OS_SHORT="lin" ;;
+    *)      DTWIZ_SM_OS_SHORT="$(printf '%s' "$DTWIZ_SM_OS" | cut -c1-3)" ;;
+esac
+
+if [ "$CHANNEL" = "main" ]; then
+    DTWIZ_SM_CHANNEL="main"
+elif [ -n "$TAG" ]; then
+    DTWIZ_SM_CHANNEL="tag"
+else
+    DTWIZ_SM_CHANNEL="stable"
+fi
+# The tag is only used in the JSON body; drop characters that would break it.
+DTWIZ_SM_TAG="$(printf '%s' "$TAG" | tr -d '"\\' | tr -d '[:cntrl:]')"
+
+# Resolved dtwiz version without the leading "v"; empty until resolved.
+DTWIZ_SM_VERSION=""
+
+# dtwiz_send_event <step> [reason]
+# Sends a self-monitoring event to DT_ENVIRONMENT. Silent, bounded to 3 seconds,
+# and a no-op when DT_ENVIRONMENT is not set. Never affects the install.
+dtwiz_send_event() {
+    [ -n "${DT_ENVIRONMENT:-}" ] || return 0
+
+    _dtwiz_sm_step="$1"
+    _dtwiz_sm_reason="${2:-}"
+    case "$_dtwiz_sm_step" in
+        inv) _dtwiz_sm_step_name="invoked" ;;
+        com) _dtwiz_sm_step_name="completed" ;;
+        fai) _dtwiz_sm_step_name="failed" ;;
+        can) _dtwiz_sm_step_name="cancelled" ;;
+        *)   _dtwiz_sm_step_name="$_dtwiz_sm_step" ;;
+    esac
+
+    # Same normalization as the binary: classic URL, no trailing slash.
+    _dtwiz_sm_url="$(printf '%s' "$DT_ENVIRONMENT" | sed 's|\.apps\.|.|; s|/*$||')/api/v2/events/ingest"
+
+    _dtwiz_sm_ua="dtwiz/install;s=sh;st=${_dtwiz_sm_step}"
+    [ -n "$DTWIZ_SM_VERSION" ] && _dtwiz_sm_ua="${_dtwiz_sm_ua};v=${DTWIZ_SM_VERSION}"
+    [ -n "$_dtwiz_sm_reason" ] && _dtwiz_sm_ua="${_dtwiz_sm_ua};er=${_dtwiz_sm_reason}"
+
+    _dtwiz_sm_props="\"executionId\":\"${DTWIZ_SM_EXEC_ID}\",\"script\":\"sh\",\"step\":\"${_dtwiz_sm_step_name}\",\"os\":\"${DTWIZ_SM_OS}\",\"channel\":\"${DTWIZ_SM_CHANNEL}\""
+    [ -n "$DTWIZ_SM_TAG" ] && _dtwiz_sm_props="${_dtwiz_sm_props},\"tag\":\"${DTWIZ_SM_TAG}\""
+    [ -n "$DTWIZ_SM_VERSION" ] && _dtwiz_sm_props="${_dtwiz_sm_props},\"version\":\"${DTWIZ_SM_VERSION}\""
+    [ -n "$_dtwiz_sm_reason" ] && _dtwiz_sm_props="${_dtwiz_sm_props},\"error\":\"${_dtwiz_sm_reason}\""
+    _dtwiz_sm_body="{\"eventType\":\"CUSTOM_INFO\",\"title\":\"dtwiz install script\",\"properties\":{${_dtwiz_sm_props}}}"
+
+    if command -v curl >/dev/null 2>&1; then
+        # The Authorization header is read from stdin so the token never shows up
+        # in the process list. Without a token the event is still sent: the
+        # environment's edge records the headers even when ingest rejects it.
+        if [ -n "${DT_PLATFORM_TOKEN:-}" ]; then
+            printf 'Authorization: Bearer %s\n' "$DT_PLATFORM_TOKEN"
+        fi | curl -s -o /dev/null --connect-timeout 2 --max-time 3 \
+            -X POST "$_dtwiz_sm_url" \
+            -H @- \
+            -H "Content-Type: application/json" \
+            -H "User-Agent: ${_dtwiz_sm_ua}" \
+            -H "Tab-Id: ${DTWIZ_SM_EXEC_ID};o=${DTWIZ_SM_OS_SHORT}" \
+            -H "dtwiz-monitoring: dtwiz-start" \
+            --data "$_dtwiz_sm_body" >/dev/null 2>&1 || true
+    elif command -v wget >/dev/null 2>&1; then
+        # Fallback so a missing curl can still be reported. wget can only take
+        # headers on the command line, so the token is deliberately not sent.
+        wget -q -O /dev/null --timeout=3 --tries=1 \
+            --user-agent="$_dtwiz_sm_ua" \
+            --header="Content-Type: application/json" \
+            --header="Tab-Id: ${DTWIZ_SM_EXEC_ID};o=${DTWIZ_SM_OS_SHORT}" \
+            --header="dtwiz-monitoring: dtwiz-start" \
+            --post-data="$_dtwiz_sm_body" \
+            "$_dtwiz_sm_url" >/dev/null 2>&1 || true
+    fi
+    return 0
+}
+
+# dtwiz_fail <reason> <message line>...
+# Prints the message to stderr, reports the failure, and exits.
+dtwiz_fail() {
+    _dtwiz_fail_reason="$1"
+    shift
+    for _dtwiz_fail_line in "$@"; do
+        echo "$_dtwiz_fail_line" >&2
+    done
+    dtwiz_send_event fai "$_dtwiz_fail_reason"
+    exit 1
+}
+
+dtwiz_send_event inv
+
 # ── Parse known flags ──────────────────────────────────────────────────────────
 INSTALL_DIR=""
 
@@ -41,8 +142,7 @@ while [ $# -gt 0 ]; do
         --install-dir)
             INSTALL_DIR="$2"; shift 2 ;;
         *)
-            echo "Unknown argument: $1" >&2
-            exit 1 ;;
+            dtwiz_fail unknown_argument "Unknown argument: $1" ;;
     esac
 done
 
@@ -52,9 +152,9 @@ case "$OS_RAW" in
     Darwin) OS="darwin" ;;
     Linux)  OS="linux"  ;;
     *)
-        echo "Unsupported OS: $OS_RAW" >&2
-        echo "Use install.ps1 on Windows." >&2
-        exit 1 ;;
+        dtwiz_fail unsupported_os \
+            "Unsupported OS: $OS_RAW" \
+            "Use install.ps1 on Windows." ;;
 esac
 
 # ── Detect architecture ───────────────────────────────────────────────────────
@@ -63,16 +163,14 @@ case "$ARCH_RAW" in
     x86_64)         ARCH="amd64" ;;
     arm64|aarch64)  ARCH="arm64" ;;
     *)
-        echo "Unsupported architecture: $ARCH_RAW" >&2
-        exit 1 ;;
+        dtwiz_fail unsupported_arch "Unsupported architecture: $ARCH_RAW" ;;
 esac
 
 echo "Detected platform: ${OS}/${ARCH}"
 
 # ── Resolve release version ────────────────────────────────────────────────────
 if ! command -v curl >/dev/null 2>&1; then
-    echo "Error: curl is required but not found." >&2
-    exit 1
+    dtwiz_fail curl_missing "Error: curl is required but not found."
 fi
 
 if [ -n "$TAG" ]; then
@@ -87,25 +185,30 @@ if [ -n "$TAG" ]; then
         "https://github.com/${REPO}/releases/download/${RELEASE_TAG}/version.txt")"
     if [ -z "$VERSION" ]; then
         if [ "$TAG" = "snapshot-main" ]; then
-            echo "Error: could not find the main snapshot release." >&2
-            echo "The 'snapshot-main' release may not have been published yet." >&2
+            dtwiz_fail version_not_found \
+                "Error: could not find the main snapshot release." \
+                "The 'snapshot-main' release may not have been published yet."
         else
-            echo "Error: could not find a snapshot release for tag '${TAG}'." >&2
-            echo "Make sure the tag exists and its release has been published." >&2
+            dtwiz_fail version_not_found \
+                "Error: could not find a snapshot release for tag '${TAG}'." \
+                "Make sure the tag exists and its release has been published."
         fi
-        exit 1
     fi
 else
     # Follow the /releases/latest redirect to extract the tag from the final URL.
+    # curl prints the original URL when the request fails, so check its exit
+    # status and that the result looks like a version tag.
     RELEASE_TAG="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
-        "https://github.com/${REPO}/releases/latest" \
-        | sed 's|.*/||')"
+        "https://github.com/${REPO}/releases/latest")" || RELEASE_TAG=""
+    RELEASE_TAG="${RELEASE_TAG##*/}"
+    case "$RELEASE_TAG" in
+        v[0-9]*) ;;
+        *) dtwiz_fail version_not_found "Error: could not determine the latest dtwiz version." ;;
+    esac
     VERSION="$RELEASE_TAG"
-    if [ -z "$VERSION" ]; then
-        echo "Error: could not determine the latest dtwiz version." >&2
-        exit 1
-    fi
 fi
+
+DTWIZ_SM_VERSION="${VERSION#v}"
 
 # ── Determine install directory ────────────────────────────────────────────────
 if [ -z "$INSTALL_DIR" ]; then
@@ -133,6 +236,7 @@ read -r REPLY </dev/tty
 case "$REPLY" in
     [Nn]|[Nn][Oo])
         echo "Installation cancelled."
+        dtwiz_send_event can
         exit 0 ;;
 esac
 
@@ -146,29 +250,34 @@ trap 'rm -rf "$WORK_DIR"' EXIT INT TERM
 
 curl -fsSL \
     "https://github.com/${REPO}/releases/download/${RELEASE_TAG}/${ARCHIVE}" \
-    -o "${WORK_DIR}/${ARCHIVE}"
+    -o "${WORK_DIR}/${ARCHIVE}" \
+    || dtwiz_fail download_failed "Error: failed to download ${ARCHIVE}."
 
-tar -xzf "${WORK_DIR}/${ARCHIVE}" -C "$WORK_DIR"
+tar -xzf "${WORK_DIR}/${ARCHIVE}" -C "$WORK_DIR" \
+    || dtwiz_fail extract_failed "Error: failed to extract ${ARCHIVE}."
 
 if [ ! -f "${WORK_DIR}/dtwiz" ]; then
-    echo "Error: dtwiz binary not found after extraction." >&2
-    exit 1
+    dtwiz_fail binary_missing "Error: dtwiz binary not found after extraction."
 fi
 
 chmod +x "${WORK_DIR}/dtwiz"
-mkdir -p "$INSTALL_DIR"
+mkdir -p "$INSTALL_DIR" \
+    || dtwiz_fail move_failed "Error: could not create ${INSTALL_DIR}."
 
 # ── Install binary ─────────────────────────────────────────────────────────────
 DEST="${INSTALL_DIR}/dtwiz"
 if [ -w "$INSTALL_DIR" ]; then
-    mv "${WORK_DIR}/dtwiz" "$DEST"
+    mv "${WORK_DIR}/dtwiz" "$DEST" \
+        || dtwiz_fail move_failed "Error: could not move dtwiz to ${DEST}."
 else
     echo "Installing to ${INSTALL_DIR} requires elevated privileges..."
-    sudo mv "${WORK_DIR}/dtwiz" "$DEST"
+    sudo mv "${WORK_DIR}/dtwiz" "$DEST" \
+        || dtwiz_fail move_failed "Error: could not move dtwiz to ${DEST}."
 fi
 
 echo ""
 echo "dtwiz ${VERSION} installed to ${DEST}"
+dtwiz_send_event com
 
 # ── Add to PATH in shell profile if needed ─────────────────────────────────────
 case ":${PATH}:" in
