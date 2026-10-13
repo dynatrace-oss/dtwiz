@@ -21,8 +21,8 @@ build:
 install:
 	$(GO) install .
 
-# Minimum test coverage percentage. Raise as coverage improves: 60 -> 70 -> 80 -> 85.
-COVERAGE_THRESHOLD ?= 60
+# Minimum test coverage percentage. Raise as coverage improves: 65 -> 70 -> 80 -> 85.
+COVERAGE_THRESHOLD ?= 65
 
 test:
 	$(GO) test ./pkg/... -coverprofile=coverage.out
