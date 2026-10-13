@@ -155,14 +155,14 @@ func checkAccessToken(envURL, token string) error {
 
 	c, err := newCredentialClient(classicURL, token)
 	if err != nil {
-		return fmt.Errorf("✗ Access token: %v", err)
+		return fmt.Errorf("access token: %v", err)
 	}
 	resp, err := c.HTTP().R().
 		SetHeader("Content-Type", "application/json").
 		SetBody(map[string]string{"token": token}).
 		Post("/api/v2/apiTokens/lookup")
 	if err != nil {
-		return fmt.Errorf("✗ Access token: environment not reachable (%s): %w",
+		return fmt.Errorf("access token: environment not reachable (%s): %w",
 			classicURL, &installer.NetworkError{Reason: "environment_not_reachable", URL: classicURL})
 	}
 
@@ -171,12 +171,12 @@ func checkAccessToken(envURL, token string) error {
 	case apiErr == nil:
 		return nil
 	case errors.Is(apiErr, httpclient.ErrUnauthorized):
-		return fmt.Errorf("✗ Access token: authentication failed: %w",
+		return fmt.Errorf("access token: authentication failed: %w",
 			&installer.AuthError{Reason: "authentication_failed"})
 	case errors.Is(apiErr, httpclient.ErrForbidden):
-		return fmt.Errorf("✗ Access token: insufficient permissions")
+		return fmt.Errorf("access token: insufficient permissions")
 	default:
-		return fmt.Errorf("✗ Access token: unexpected response %d from %s", resp.StatusCode(), lookupURL)
+		return fmt.Errorf("access token: unexpected response %d from %s", resp.StatusCode(), lookupURL)
 	}
 }
 
@@ -187,7 +187,7 @@ func checkPlatformToken(envURL, token string) error {
 
 	c, err := newCredentialClient(appsURL, token)
 	if err != nil {
-		return fmt.Errorf("✗ Platform token: %v", err)
+		return fmt.Errorf("platform token: %v", err)
 	}
 	resp, err := c.HTTP().R().
 		SetHeader("Content-Type", "application/json").
@@ -198,7 +198,7 @@ func checkPlatformToken(envURL, token string) error {
 		}).
 		Post("/platform/storage/query/v1/query:execute")
 	if err != nil {
-		return fmt.Errorf("✗ Platform token: environment not reachable (%s): %w%s",
+		return fmt.Errorf("platform token: environment not reachable (%s): %w%s",
 			appsURL, &installer.NetworkError{Reason: "environment_not_reachable", URL: appsURL}, environmentURLHints(appsURL))
 	}
 
@@ -207,13 +207,13 @@ func checkPlatformToken(envURL, token string) error {
 	case apiErr == nil:
 		return nil
 	case errors.Is(apiErr, httpclient.ErrUnauthorized):
-		return fmt.Errorf("✗ Platform token: authentication failed: %w",
+		return fmt.Errorf("platform token: authentication failed: %w",
 			&installer.AuthError{Reason: "authentication_failed"})
 	case errors.Is(apiErr, httpclient.ErrForbidden):
-		return fmt.Errorf("✗ Platform token: insufficient permissions: %w",
+		return fmt.Errorf("platform token: insufficient permissions: %w",
 			&installer.AuthError{Reason: "invalid_token"})
 	default:
-		return fmt.Errorf("✗ Platform token: unexpected response %d from %s: %w%s",
+		return fmt.Errorf("platform token: unexpected response %d from %s: %w%s",
 			resp.StatusCode(), queryURL, &installer.NetworkError{Reason: "environment_not_reachable", URL: appsURL}, environmentURLHints(appsURL))
 	}
 }

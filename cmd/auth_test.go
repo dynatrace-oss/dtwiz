@@ -29,8 +29,8 @@ func TestCheckPlatformToken(t *testing.T) {
 		wantContain string
 	}{
 		{"200 ok", http.StatusOK, false, ""},
-		{"401 unauthorized", http.StatusUnauthorized, true, "✗ Platform token: authentication failed"},
-		{"403 forbidden", http.StatusForbidden, true, "✗ Platform token: insufficient permissions"},
+		{"401 unauthorized", http.StatusUnauthorized, true, "Platform token: authentication failed"},
+		{"403 forbidden", http.StatusForbidden, true, "Platform token: insufficient permissions"},
 		{"500 server error", http.StatusInternalServerError, true, "unexpected response 500"},
 	}
 	for _, tt := range tests {
@@ -70,8 +70,8 @@ func TestCheckAccessToken(t *testing.T) {
 		wantContain string
 	}{
 		{"200 ok", http.StatusOK, false, ""},
-		{"401 unauthorized", http.StatusUnauthorized, true, "✗ Access token: authentication failed"},
-		{"403 forbidden", http.StatusForbidden, true, "✗ Access token: insufficient permissions"},
+		{"401 unauthorized", http.StatusUnauthorized, true, "Access token: authentication failed"},
+		{"403 forbidden", http.StatusForbidden, true, "Access token: insufficient permissions"},
 		{"500 server error", http.StatusInternalServerError, true, "unexpected response 500"},
 	}
 	for _, tt := range tests {

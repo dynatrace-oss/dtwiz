@@ -3,6 +3,8 @@ package cmd
 import (
 	"bytes"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -106,6 +108,30 @@ func TestPrintCredentialStatus_TokenSetEnvURLVerifyFails(t *testing.T) {
 
 	want := "✗ authentication failed"
 	if !strings.Contains(got, want) {
+		t.Errorf("expected output to contain %q, got %q", want, got)
+	}
+}
+
+func TestPrintCredentialStatus_SingleErrorMarker(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	got := captureOutput(t, func() {
+		printCredentialStatus("Platform Token", srv.URL, CredentialToken{
+			value:         "dt0s16.bad-token",
+			cliName:       "platform-token",
+			envName:       "DT_PLATFORM_TOKEN",
+			tokenVerifyFn: checkPlatformToken,
+			getUrlFn:      installer.AppsURL,
+		})
+	})
+
+	if n := strings.Count(got, "✗"); n != 1 {
+		t.Errorf("expected exactly one ✗ marker, got %d in %q", n, got)
+	}
+	if want := "✗ Platform token: authentication failed"; !strings.Contains(got, want) {
 		t.Errorf("expected output to contain %q, got %q", want, got)
 	}
 }
