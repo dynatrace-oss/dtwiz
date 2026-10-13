@@ -5,18 +5,23 @@ include .e2e.env
 export
 endif
 
-BINARY := dtwiz
+BINARY := bin/dtwiz
 GO     := go
 VERSION ?= dev
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+DATE ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 MD_LINT_CLI_IMAGE := "ghcr.io/igorshubovych/markdownlint-cli:v0.31.1"
 CONTAINER_RUNTIME := $(shell command -v podman 2>/dev/null || command -v docker 2>/dev/null)
 
+LDFLAGS = -ldflags "-X github.com/dynatrace-oss/dtwiz/pkg/version.Version=$(VERSION) -X github.com/dynatrace-oss/dtwiz/pkg/version.Commit=$(COMMIT) -X github.com/dynatrace-oss/dtwiz/pkg/version.Date=$(DATE) -s -w"
+
 build:
-	$(GO) build -ldflags "-X github.com/dynatrace-oss/dtwiz/pkg/version.Version=$(VERSION)" -o $(BINARY) .
+	$(GO) build ${LDFLAGS} -o $(BINARY) .
 
 install:
 	$(GO) install .
 
+# Minimum test coverage percentage. Raise as coverage improves: 60 -> 70 -> 80 -> 85.
 COVERAGE_THRESHOLD ?= 60
 
 test:

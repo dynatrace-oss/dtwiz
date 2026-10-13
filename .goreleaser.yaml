@@ -19,7 +19,11 @@ builds:
       - amd64
       - arm64
     ldflags:
-      - -s -w -X github.com/dynatrace-oss/dtwiz/pkg/version.Version={{.Version}} -X github.com/dynatrace-oss/dtwiz/pkg/version.SnapshotTag={{.Env.GORELEASER_SNAPSHOT_TAG}}
+      - -s -w
+      - -X github.com/dynatrace-oss/dtwiz/pkg/version.Version={{.Version}}
+      - -X github.com/dynatrace-oss/dtwiz/pkg/version.SnapshotTag={{.Env.GORELEASER_SNAPSHOT_TAG}}
+      - -X github.com/dynatrace-oss/dtwiz/pkg/version.Commit={{.ShortCommit}}
+      - -X github.com/dynatrace-oss/dtwiz/pkg/version.Date={{.Date}}
 
 archives:
   - formats:
