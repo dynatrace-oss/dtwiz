@@ -148,7 +148,7 @@ The system SHALL set the appropriate `kubeletPath` in the rendered DynaKube spec
 
 ### Requirement: Templates block belongs only in DynaKube #2 (agents), not DynaKube #1 (monitoring)
 
-DynaKube #1 (monitoring) SHALL contain only `activeGate` with the `kubernetes-monitoring` capability and the optional KSPM block. All extension and image templates (EEC, OTel collector, log module), `telemetryIngest`, `logMonitoring: {}`, and `extensions` SHALL belong exclusively in DynaKube #2 (agents). When KSPM is enabled, only `kspmNodeConfigurationCollector` SHALL appear under `templates` in DynaKube #1.
+DynaKube #1 (monitoring) SHALL contain only `activeGate` with the `kubernetes-monitoring` capability and the optional KSPM block. All extension and image templates (EEC, OTel collector, log module), `telemetryIngest`, and `logMonitoring: {}` SHALL belong exclusively in DynaKube #2 (agents). When KSPM is enabled, only `kspmNodeConfigurationCollector` SHALL appear under `templates` in DynaKube #1.
 
 #### Scenario: DynaKube #1 templates limited to kspmNodeConfigurationCollector
 
@@ -166,7 +166,7 @@ DynaKube #1 (monitoring) SHALL contain only `activeGate` with the `kubernetes-mo
 
 - **GIVEN** `InstallKubernetes()` is called for any distro
 - **WHEN** the manifest is rendered
-- **THEN** DynaKube #2 `templates` contains EEC, OTel collector, and log module image refs; `telemetryIngest`, `logMonitoring: {}`, and `extensions.prometheus: {}` are also present in DynaKube #2
+- **THEN** DynaKube #2 `templates` contains EEC, OTel collector, and log module image refs; `telemetryIngest` and `logMonitoring: {}` are also present in DynaKube #2
 
 ### Requirement: Helm CSI driver disabled on GKE Autopilot
 
