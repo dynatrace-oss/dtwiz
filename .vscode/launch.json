@@ -2,151 +2,27 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "dtwiz analyze",
+      "name": "dtwiz (pick command, subcommand, flags)",
       "type": "go",
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}",
-      "args": ["analyze", "--debug"],
+      "args": "${input:command} ${input:subcommand} ${input:flags}",
       "envFile": "${workspaceFolder}/.env",
-      "env": {},
       "console": "integratedTerminal"
     },
     {
-      "name": "dtwiz recommend",
+      "name": "dtwiz (free-form args)",
       "type": "go",
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}",
-      "args": ["recommend", "--debug"],
+      "args": "${input:args}",
       "envFile": "${workspaceFolder}/.env",
-      "env": {},
       "console": "integratedTerminal"
     },
     {
-      "name": "dtwiz setup",
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}",
-      "args": ["setup"],
-      "envFile": "${workspaceFolder}/.env",
-      "env": {},
-      "console": "integratedTerminal"
-    },
-    {
-      "name": "dtwiz status",
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}",
-      "args": ["status", "--debug"],
-      "envFile": "${workspaceFolder}/.env",
-      "env": {},
-      "console": "integratedTerminal"
-    },
-    {
-      "name": "dtwiz install otel (experimental)",
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}",
-      "args": ["install", "otel", "--experimental"],
-      "envFile": "${workspaceFolder}/.env",
-      "env": {},
-      "console": "integratedTerminal"
-    },
-    {
-      "name": "dtwiz install otel (dry-run)",
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}",
-      "args": ["install", "otel", "--dry-run"],
-      "envFile": "${workspaceFolder}/.env",
-      "env": {},
-      "console": "integratedTerminal"
-    },
-    {
-      "name": "dtwiz update otel (experimental)",
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}",
-      "args": ["update", "otel", "--experimental"],
-      "envFile": "${workspaceFolder}/.env",
-      "env": {},
-      "console": "integratedTerminal"
-    },
-    {
-      "name": "dtwiz install kubernetes (dry-run)",
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}",
-      "args": ["install", "kubernetes", "--dry-run"],
-      "envFile": "${workspaceFolder}/.env",
-      "env": {},
-      "console": "integratedTerminal"
-    },
-    {
-      "name": "dtwiz install aws-lambda (dry-run)",
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}",
-      "args": ["install", "aws-lambda", "--dry-run"],
-      "envFile": "${workspaceFolder}/.env",
-      "env": {},
-      "console": "integratedTerminal"
-    },
-    {
-      "name": "dtwiz uninstall otel (experimental)",
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}",
-      "args": ["uninstall", "otel", "--experimental"],
-      "envFile": "${workspaceFolder}/.env",
-      "env": {},
-      "console": "integratedTerminal"
-    },
-    {
-      "name": "dtwiz watch",
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}",
-      "args": ["watch"],
-      "envFile": "${workspaceFolder}/.env",
-      "env": {},
-      "console": "integratedTerminal"
-    },
-    {
-      "name": "dtwiz version",
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}",
-      "args": ["version"],
-      "envFile": "${workspaceFolder}/.env",
-      "env": {},
-      "console": "integratedTerminal"
-    },
-    {
-      "name": "dtwiz (custom args)",
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}",
-      "cwd": "${input:dtwizCwd}",
-      "args": ["${input:dtwizSubcommand}"],
-      "envFile": "${workspaceFolder}/.env",
-      "env": {},
-      "console": "integratedTerminal"
-    },
-    {
-      "name": "attach to process",
+      "name": "dtwiz (attach to process)",
       "type": "go",
       "request": "attach",
       "mode": "local",
@@ -155,15 +31,38 @@
   ],
   "inputs": [
     {
-      "id": "dtwizCwd",
-      "type": "promptString",
-      "description": "Working directory for dtwiz (used for relative paths at runtime)",
-      "default": "${workspaceFolder}"
+      "id": "command",
+      "type": "pickString",
+      "description": "dtwiz command",
+      "default": "setup",
+      "options": [
+        "setup",
+        "analyze",
+        "recommend",
+        "status",
+        "watch",
+        "version",
+        "install",
+        "update",
+        "uninstall"
+      ]
     },
     {
-      "id": "dtwizSubcommand",
+      "id": "subcommand",
       "type": "promptString",
-      "description": "Subcommand for dtwiz (for example: analyze, setup, status, watch)",
+      "description": "Subcommand/method, e.g. otel, kubernetes (empty for setup, analyze, recommend, status, watch, version)",
+      "default": ""
+    },
+    {
+      "id": "flags",
+      "type": "promptString",
+      "description": "Flags/args, e.g. --dry-run --experimental --from 1h (may be empty)",
+      "default": ""
+    },
+    {
+      "id": "args",
+      "type": "promptString",
+      "description": "Full dtwiz arguments, e.g. install otel --dry-run --experimental",
       "default": "setup"
     }
   ]
