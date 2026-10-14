@@ -3,9 +3,23 @@ package cmd
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/dynatrace-oss/dtctl/sdk/httpclient"
+	"github.com/spf13/cobra"
 )
+
+// TestMain disables credential-probe retries so 5xx and unreachable-host cases fail fast.
+func TestMain(m *testing.M) {
+	credentialClientOpts = []httpclient.Option{
+		httpclient.WithTimeout(5 * time.Second),
+		httpclient.WithRetry(0, 0, 0),
+	}
+	os.Exit(m.Run())
+}
 
 func TestCheckPlatformToken(t *testing.T) {
 	tests := []struct {
@@ -15,8 +29,8 @@ func TestCheckPlatformToken(t *testing.T) {
 		wantContain string
 	}{
 		{"200 ok", http.StatusOK, false, ""},
-		{"401 unauthorized", http.StatusUnauthorized, true, "✗ Platform token: authentication failed"},
-		{"403 forbidden", http.StatusForbidden, true, "✗ Platform token: insufficient permissions"},
+		{"401 unauthorized", http.StatusUnauthorized, true, "Platform token: authentication failed"},
+		{"403 forbidden", http.StatusForbidden, true, "Platform token: insufficient permissions"},
 		{"500 server error", http.StatusInternalServerError, true, "unexpected response 500"},
 	}
 	for _, tt := range tests {
@@ -34,10 +48,6 @@ func TestCheckPlatformToken(t *testing.T) {
 				w.WriteHeader(tt.statusCode)
 			}))
 			defer srv.Close()
-
-			orig := credentialHTTPClient
-			credentialHTTPClient = srv.Client()
-			defer func() { credentialHTTPClient = orig }()
 
 			err := checkPlatformToken(srv.URL, "dt0s16.testtoken")
 			if (err != nil) != tt.wantErr {
@@ -60,8 +70,8 @@ func TestCheckAccessToken(t *testing.T) {
 		wantContain string
 	}{
 		{"200 ok", http.StatusOK, false, ""},
-		{"401 unauthorized", http.StatusUnauthorized, true, "✗ Access token: authentication failed"},
-		{"403 forbidden", http.StatusForbidden, true, "✗ Access token: insufficient permissions"},
+		{"401 unauthorized", http.StatusUnauthorized, true, "Access token: authentication failed"},
+		{"403 forbidden", http.StatusForbidden, true, "Access token: insufficient permissions"},
 		{"500 server error", http.StatusInternalServerError, true, "unexpected response 500"},
 	}
 	for _, tt := range tests {
@@ -79,10 +89,6 @@ func TestCheckAccessToken(t *testing.T) {
 				w.WriteHeader(tt.statusCode)
 			}))
 			defer srv.Close()
-
-			orig := credentialHTTPClient
-			credentialHTTPClient = srv.Client()
-			defer func() { credentialHTTPClient = orig }()
 
 			err := checkAccessToken(srv.URL, "dt0c01.testtoken")
 			if (err != nil) != tt.wantErr {
@@ -116,10 +122,6 @@ func TestCheckClassicAccess(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			orig := credentialHTTPClient
-			credentialHTTPClient = srv.Client()
-			defer func() { credentialHTTPClient = orig }()
-
 			err := checkPlatformTokenClassicAccess(srv.URL, "dt0s16.testtoken")
 			if (err != nil) != tt.wantErr {
 				t.Errorf("checkPlatformTokenClassicAccess() error = %v, wantErr %v", err, tt.wantErr)
@@ -129,10 +131,6 @@ func TestCheckClassicAccess(t *testing.T) {
 }
 
 func TestCheckClassicAccess_NetworkFailure(t *testing.T) {
-	orig := credentialHTTPClient
-	credentialHTTPClient = &http.Client{}
-	defer func() { credentialHTTPClient = orig }()
-
 	// Point at a closed server so the TCP dial fails immediately.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
 	srv.Close()
@@ -273,10 +271,6 @@ func TestValidateCredentials(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			orig := credentialHTTPClient
-			credentialHTTPClient = srv.Client()
-			defer func() { credentialHTTPClient = orig }()
-
 			classicTok, err := validateCredentials(srv.URL, tt.accessTok, platformTok)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("validateCredentials() error = %v, wantErr %v", err, tt.wantErr)
@@ -285,5 +279,104 @@ func TestValidateCredentials(t *testing.T) {
 				t.Errorf("validateCredentials() classicTok = %q, want %q", classicTok, tt.wantClassicTok)
 			}
 		})
+	}
+}
+
+func TestEnvironmentHint_NormalizesScheme(t *testing.T) {
+	tests := []struct {
+		name   string
+		flag   string
+		envVar string
+		want   string
+	}{
+		{"bare host from flag", "abc12345.apps.dynatrace.com", "", "https://abc12345.apps.dynatrace.com"},
+		{"bare host from env var", "", "abc12345.live.dynatrace.com", "https://abc12345.live.dynatrace.com"},
+		{"https kept", "https://abc12345.apps.dynatrace.com", "", "https://abc12345.apps.dynatrace.com"},
+		{"http kept", "http://localhost:8080", "", "http://localhost:8080"},
+		{"unset stays empty", "", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orig := environmentFlag
+			environmentFlag = tt.flag
+			defer func() { environmentFlag = orig }()
+			t.Setenv("DT_ENVIRONMENT", tt.envVar)
+
+			if got := environmentHint(); got != tt.want {
+				t.Errorf("environmentHint() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCheckPlatformToken_ManagedURLHint(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	err := checkPlatformToken(srv.URL+"/e/abc12345", "dt0s16.testtoken")
+	if err == nil {
+		t.Fatal("expected error for Managed URL, got nil")
+	}
+	if !strings.Contains(err.Error(), "Dynatrace Managed or ActiveGate URL") {
+		t.Errorf("error = %q, want it to contain the Managed URL hint", err.Error())
+	}
+}
+
+func TestEnvironmentURLHints(t *testing.T) {
+	tests := []struct {
+		name    string
+		appsURL string
+		want    string
+	}{
+		{"platform URL has no hints", "https://abc12345.apps.dynatrace.com", ""},
+		{"labs platform URL has no hints", "https://abc12345.sprint.apps.dynatracelabs.com", ""},
+		{"managed URL gets a hint", "https://managed.example.com/e/abc12345", "Possible wrong environment URL"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := environmentURLHints(tt.appsURL)
+			if tt.want == "" && got != "" {
+				t.Errorf("environmentURLHints(%q) = %q, want no hints", tt.appsURL, got)
+			}
+			if tt.want != "" && !strings.Contains(got, tt.want) {
+				t.Errorf("environmentURLHints(%q) = %q, want it to contain %q", tt.appsURL, got, tt.want)
+			}
+		})
+	}
+}
+
+// assertRunEValidatesPlatformToken runs cmd against a server that rejects the
+// platform token and checks that RunE probed the DQL endpoint and failed.
+func assertRunEValidatesPlatformToken(t *testing.T, cmd *cobra.Command) {
+	t.Helper()
+	origEnvironmentFlag := environmentFlag
+	origPlatformTokenFlag := platformTokenFlag
+	t.Cleanup(func() {
+		environmentFlag = origEnvironmentFlag
+		platformTokenFlag = origPlatformTokenFlag
+	})
+
+	validationCalled := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/platform/storage/query/v1/query:execute" {
+			t.Errorf("unexpected request path: %s", r.URL.Path)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		validationCalled = true
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	environmentFlag = srv.URL
+	platformTokenFlag = "dt0s16.platform"
+
+	if err := cmd.RunE(cmd, nil); err == nil {
+		t.Fatal("expected platform token validation error, got nil")
+	}
+	if !validationCalled {
+		t.Fatalf("expected %q to validate the platform token", cmd.CommandPath())
 	}
 }

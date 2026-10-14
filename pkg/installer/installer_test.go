@@ -33,31 +33,6 @@ func TestMaskSecret(t *testing.T) {
 	}
 }
 
-func TestAuthHeader(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		token string
-		want  string
-	}{
-		{"dt0c01.abc123.secret", "Api-Token dt0c01.abc123.secret"},
-		{"dt0s16.abc123.secret", "Bearer dt0s16.abc123.secret"},
-		{"some-oauth-token", "Bearer some-oauth-token"},
-		{"", "Bearer "},
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.token, func(t *testing.T) {
-			t.Parallel()
-
-			got := AuthHeader(tt.token)
-			if got != tt.want {
-				t.Errorf("AuthHeader(%q) = %q, want %q", tt.token, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestAPIURL(t *testing.T) {
 	t.Parallel()
 

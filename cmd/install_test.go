@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 )
 
@@ -69,12 +71,10 @@ func TestInstallDockerCmd_RunE_BlockedWithoutExperimental(t *testing.T) {
 }
 
 func TestInstallAzureCmd_RunE_ValidatesPlatformToken(t *testing.T) {
-	origCredentialHTTPClient := credentialHTTPClient
 	origEnvironmentFlag := environmentFlag
 	origPlatformTokenFlag := platformTokenFlag
 	origAccessTokenFlag := accessTokenFlag
 	t.Cleanup(func() {
-		credentialHTTPClient = origCredentialHTTPClient
 		environmentFlag = origEnvironmentFlag
 		platformTokenFlag = origPlatformTokenFlag
 		accessTokenFlag = origAccessTokenFlag
@@ -93,7 +93,6 @@ func TestInstallAzureCmd_RunE_ValidatesPlatformToken(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	credentialHTTPClient = srv.Client()
 	environmentFlag = srv.URL
 	platformTokenFlag = "dt0s16.platform"
 	accessTokenFlag = "dt0c01.access"
@@ -104,5 +103,40 @@ func TestInstallAzureCmd_RunE_ValidatesPlatformToken(t *testing.T) {
 	}
 	if !validationCalled {
 		t.Fatal("expected Azure install command to validate the platform token")
+	}
+}
+
+func TestInstallCloudCmds_RunE_ValidatePlatformToken(t *testing.T) {
+	for _, c := range []*cobra.Command{installAWSCmd, installGCPCmd} {
+		t.Run(c.Use, func(t *testing.T) { assertRunEValidatesPlatformToken(t, c) })
+	}
+}
+
+// TestInstallCmd_CancelledSubcommands verifies each install subcommand that
+// carries a ErrInstallCancelled guard is actually registered.
+//
+// Note: these tests verify command registration (structural wiring), not that
+// the guard is present in RunE. Testing the real RunE paths requires injectable
+// installer dependencies; that is tracked as a separate refactor.
+func TestInstallCmd_CancelledSubcommands(t *testing.T) {
+	guarded := []string{
+		"kubernetes",
+		"otel",
+		"otel-collector",
+		"otel-python",
+		"otel-node",
+		"otel-java",
+		"aws",
+		"aws-lambda",
+		"demo",
+	}
+	registered := map[string]bool{}
+	for _, c := range installCmd.Commands() {
+		registered[c.Use] = true
+	}
+	for _, name := range guarded {
+		if !registered[name] {
+			t.Errorf("expected install subcommand %q to be registered", name)
+		}
 	}
 }

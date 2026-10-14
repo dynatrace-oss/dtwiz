@@ -1,29 +1,40 @@
 package cmd
 
 import (
-	"bytes"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
+	"github.com/dynatrace-oss/dtctl/sdk/httpclient"
+	"github.com/dynatrace-oss/dtctl/sdk/urls"
+
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
-	"github.com/dynatrace-oss/dtwiz/pkg/installer/azure"
-	"github.com/dynatrace-oss/dtwiz/pkg/installer/gcp"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 // environmentHint returns the Dynatrace environment URL from the --environment
-// flag or the DT_ENVIRONMENT env var (flag takes precedence).
+// flag or the DT_ENVIRONMENT env var (flag takes precedence). A bare host such as
+// "abc12345.apps.dynatrace.com" gets an "https://" scheme so API calls do not fail
+// with "unsupported protocol scheme".
 func environmentHint() string {
 	if environmentFlag != "" {
-		return environmentFlag
+		return urls.Normalize(environmentFlag)
 	}
-	return os.Getenv("DT_ENVIRONMENT")
+	return urls.Normalize(os.Getenv("DT_ENVIRONMENT"))
+}
+
+// environmentURLHints returns troubleshooting lines for an environment URL that
+// cannot work (e.g. a Managed /e/<id> URL), formatted for appending to an error.
+// It inspects the derived Platform URL, not the raw input: dtwiz converts
+// .live/bare/dev/sprint domains itself, so flagging those would be misleading.
+func environmentURLHints(appsURL string) string {
+	var b strings.Builder
+	for _, s := range urls.Suggestions(appsURL) {
+		b.WriteString("\n  " + s)
+	}
+	return b.String()
 }
 
 // accessToken returns the Dynatrace API access token from the --access-token
@@ -80,24 +91,35 @@ func getDtEnvironment() (envURL, accessTok, platformTok string, err error) {
 	return envURL, accessTok, platformTok, nil
 }
 
-var credentialHTTPClient = &http.Client{Timeout: 5 * time.Second}
+// credentialClientOpts configures the one-shot credential probes: a short timeout so an
+// unreachable environment fails fast, and a brief retry to ride out a transient 429/5xx.
+// Tests override it to disable retries.
+var credentialClientOpts = []httpclient.Option{
+	httpclient.WithTimeout(5 * time.Second),
+	httpclient.WithRetry(2, 500*time.Millisecond, 2*time.Second),
+}
+
+// newCredentialClient returns an SDK client for a credential probe against baseURL.
+// The auth scheme (Bearer vs Api-Token) is derived from the token prefix.
+func newCredentialClient(baseURL, token string) (*httpclient.Client, error) {
+	opts := append([]httpclient.Option{httpclient.WithToken(token)}, credentialClientOpts...)
+	return httpclient.New(baseURL, opts...)
+}
 
 // checkPlatformTokenClassicAccess probes the Classic API to determine whether token can
 // authenticate. Returns nil if any non-401/403 response is received.
 func checkPlatformTokenClassicAccess(envURL, token string) error {
 	classicURL := strings.TrimRight(installer.APIURL(envURL), "/")
-	req, err := http.NewRequest(http.MethodGet, classicURL+"/api/v2/settings/schemas", nil)
+	c, err := newCredentialClient(classicURL, token)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", installer.AuthHeader(token))
-	resp, err := credentialHTTPClient.Do(req)
+	resp, err := c.HTTP().R().Get("/api/v2/settings/schemas")
 	if err != nil {
 		return fmt.Errorf("classic API not reachable (%s)", classicURL)
 	}
-	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, resp.Body)
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+	apiErr := httpclient.CheckResponse(resp)
+	if errors.Is(apiErr, httpclient.ErrUnauthorized) || errors.Is(apiErr, httpclient.ErrForbidden) {
 		return fmt.Errorf("authentication failed")
 	}
 	return nil
@@ -131,65 +153,31 @@ func checkAccessToken(envURL, token string) error {
 	classicURL := strings.TrimRight(installer.APIURL(envURL), "/")
 	lookupURL := classicURL + "/api/v2/apiTokens/lookup"
 
-	payload, _ := json.Marshal(map[string]string{"token": token})
-	req, err := http.NewRequest(http.MethodPost, lookupURL, bytes.NewReader(payload))
+	c, err := newCredentialClient(classicURL, token)
 	if err != nil {
-		return fmt.Errorf("✗ Access token: %v", err)
+		return fmt.Errorf("access token: %v", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", installer.AuthHeader(token))
-
-	resp, err := credentialHTTPClient.Do(req)
+	resp, err := c.HTTP().R().
+		SetHeader("Content-Type", "application/json").
+		SetBody(map[string]string{"token": token}).
+		Post("/api/v2/apiTokens/lookup")
 	if err != nil {
-		return fmt.Errorf("✗ Access token: environment not reachable (%s): %w",
+		return fmt.Errorf("access token: environment not reachable (%s): %w",
 			classicURL, &installer.NetworkError{Reason: "environment_not_reachable", URL: classicURL})
 	}
-	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, resp.Body)
 
-	if resp.StatusCode == 401 {
-		return fmt.Errorf("✗ Access token: authentication failed: %w",
+	apiErr := httpclient.CheckResponse(resp)
+	switch {
+	case apiErr == nil:
+		return nil
+	case errors.Is(apiErr, httpclient.ErrUnauthorized):
+		return fmt.Errorf("access token: authentication failed: %w",
 			&installer.AuthError{Reason: "authentication_failed"})
+	case errors.Is(apiErr, httpclient.ErrForbidden):
+		return fmt.Errorf("access token: insufficient permissions")
+	default:
+		return fmt.Errorf("access token: unexpected response %d from %s", resp.StatusCode(), lookupURL)
 	}
-	if resp.StatusCode == 403 {
-		return fmt.Errorf("✗ Access token: insufficient permissions")
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("✗ Access token: unexpected response %d from %s", resp.StatusCode, lookupURL)
-	}
-	return nil
-}
-
-// analyzeSystem runs AnalyzeSystem and enriches the result with cloud connection
-// status. All cmd callers should use this instead of calling AnalyzeSystem directly.
-func analyzeSystem() (*analyzer.SystemInfo, error) {
-	info, err := analyzer.AnalyzeSystem()
-	if err != nil {
-		return nil, err
-	}
-	if envURL, _, platformTok, credErr := getDtEnvironment(); credErr == nil {
-		var checks []func() error
-		if info.Azure != nil && info.Azure.Available {
-			checks = append(checks, func() error {
-				exists, err := azure.ConnectionExists(envURL, platformTok)
-				info.AzureConfigured = exists
-				return err
-			})
-		}
-		if info.GCP != nil && info.GCP.Available {
-			checks = append(checks, func() error {
-				exists, err := gcp.ConnectionExists(envURL, platformTok)
-				info.GCPConfigured = exists
-				return err
-			})
-		}
-		if len(checks) > 0 {
-			if err := installer.RunConcurrently(checks...); err != nil {
-				logger.Debug("connection existence check failed, assuming not configured", "err", err)
-			}
-		}
-	}
-	return info, nil
 }
 
 // checkPlatformToken validates the platform token via a minimal DQL query.
@@ -197,37 +185,35 @@ func checkPlatformToken(envURL, token string) error {
 	appsURL := strings.TrimRight(installer.AppsURL(envURL), "/")
 	queryURL := appsURL + "/platform/storage/query/v1/query:execute"
 
-	payload, _ := json.Marshal(map[string]interface{}{
-		"query":                      "fetch dt.system.events | limit 1",
-		"requestTimeoutMilliseconds": 4000,
-		"maxResultRecords":           1,
-	})
-	req, err := http.NewRequest(http.MethodPost, queryURL, bytes.NewReader(payload))
+	c, err := newCredentialClient(appsURL, token)
 	if err != nil {
-		return fmt.Errorf("✗ Platform token: %v", err)
+		return fmt.Errorf("platform token: %v", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	resp, err := credentialHTTPClient.Do(req)
+	resp, err := c.HTTP().R().
+		SetHeader("Content-Type", "application/json").
+		SetBody(map[string]interface{}{
+			"query":                      "fetch dt.system.events | limit 1",
+			"requestTimeoutMilliseconds": 4000,
+			"maxResultRecords":           1,
+		}).
+		Post("/platform/storage/query/v1/query:execute")
 	if err != nil {
-		return fmt.Errorf("✗ Platform token: environment not reachable (%s): %w",
-			appsURL, &installer.NetworkError{Reason: "environment_not_reachable", URL: appsURL})
+		return fmt.Errorf("platform token: environment not reachable (%s): %w%s",
+			appsURL, &installer.NetworkError{Reason: "environment_not_reachable", URL: appsURL}, environmentURLHints(appsURL))
 	}
-	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, resp.Body)
 
-	if resp.StatusCode == 401 {
-		return fmt.Errorf("✗ Platform token: authentication failed: %w",
+	apiErr := httpclient.CheckResponse(resp)
+	switch {
+	case apiErr == nil:
+		return nil
+	case errors.Is(apiErr, httpclient.ErrUnauthorized):
+		return fmt.Errorf("platform token: authentication failed: %w",
 			&installer.AuthError{Reason: "authentication_failed"})
-	}
-	if resp.StatusCode == 403 {
-		return fmt.Errorf("✗ Platform token: insufficient permissions: %w",
+	case errors.Is(apiErr, httpclient.ErrForbidden):
+		return fmt.Errorf("platform token: insufficient permissions: %w",
 			&installer.AuthError{Reason: "invalid_token"})
+	default:
+		return fmt.Errorf("platform token: unexpected response %d from %s: %w%s",
+			resp.StatusCode(), queryURL, &installer.NetworkError{Reason: "environment_not_reachable", URL: appsURL}, environmentURLHints(appsURL))
 	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("✗ Platform token: unexpected response %d from %s: %w",
-			resp.StatusCode, queryURL, &installer.NetworkError{Reason: "environment_not_reachable", URL: appsURL})
-	}
-	return nil
 }

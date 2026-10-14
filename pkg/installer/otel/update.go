@@ -14,6 +14,8 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
+
+	"github.com/dynatrace-oss/dtctl/sdk/auth"
 )
 
 // ErrUpToDate is returned when the collector config is already current and no
@@ -233,7 +235,7 @@ func buildDTExporterNode(apiURL, token string) *yaml.Node {
 				Tag:  "!!map",
 				Content: []*yaml.Node{
 					{Kind: yaml.ScalarNode, Tag: "!!str", Value: "Authorization"},
-					{Kind: yaml.ScalarNode, Tag: "!!str", Value: installer.AuthHeader(token), Style: yaml.DoubleQuotedStyle},
+					{Kind: yaml.ScalarNode, Tag: "!!str", Value: auth.AuthHeader(token), Style: yaml.DoubleQuotedStyle},
 				},
 			},
 		},

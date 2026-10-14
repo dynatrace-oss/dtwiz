@@ -337,7 +337,7 @@ var installAWSCmd = &cobra.Command{
 			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
-		if _, err := validateCredentials(envURL, "", platformTok); err != nil {
+		if err := checkPlatformToken(envURL, platformTok); err != nil {
 			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
@@ -397,7 +397,7 @@ var installAzureCmd = &cobra.Command{
 			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
-		if _, err := validateCredentials(envURL, "", platformTok); err != nil {
+		if err := checkPlatformToken(envURL, platformTok); err != nil {
 			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
@@ -423,6 +423,10 @@ var installGCPCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		envURL, _, platformTok, err := getDtEnvironment()
 		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
+			return err
+		}
+		if err := checkPlatformToken(envURL, platformTok); err != nil {
 			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}

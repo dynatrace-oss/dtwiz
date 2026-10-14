@@ -13,7 +13,9 @@ var versionCmd = &cobra.Command{
 	Short: "Print the dtwiz version",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("dtwiz %s\n", version.Version)
+		fmt.Printf("dtwiz version: %s\n", version.Version)
+		fmt.Printf("commit: %s\n", version.Commit)
+		fmt.Printf("built: %s\n", version.Date)
 		fireCompletedEvent(cmd, nil)
 	},
 }
