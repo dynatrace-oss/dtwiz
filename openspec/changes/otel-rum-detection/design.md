@@ -101,7 +101,7 @@ Detection is gated behind `featureflags.Experimental` in `InstallOtelCollectorWi
 
 Preview output when auto-inject is possible:
 
-```
+```text
   N) Real User Monitoring [experimental]
      Mode:  auto-inject
      File:  /path/to/public/index.html
@@ -109,7 +109,7 @@ Preview output when auto-inject is possible:
 
 Preview output when manual setup is required:
 
-```
+```text
   N) Real User Monitoring [experimental]
      Mode:  manual (Next.js)
 ```
