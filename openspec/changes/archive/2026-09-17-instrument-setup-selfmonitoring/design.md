@@ -9,7 +9,7 @@ The `setup` command is a multi-step interactive wizard: it runs analysis, displa
 **Current event vocabulary:**
 
 | Field | Existing values |
-|---|---|
+| --- | --- |
 | `StepID` | `"inv"` (invoked), `"com"` (completed) |
 | `SubID` | method shortcodes from `normSubMap` |
 | `Err` | (unused in practice so far) |

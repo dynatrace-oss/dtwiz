@@ -50,7 +50,7 @@ make test # run unit tests
 Please use the following branch naming conventions. They allow us to understand the intent behind your changes.
 
 | Branch prefix | Use for |
-|---|---|
+| --- | --- |
 | `feature/<name>` | New functionality |
 | `bugfix/<name>` | Bug fixes |
 | `hotfix/<name>` | Urgent fixes that need to go out immediately |
@@ -68,7 +68,7 @@ git config --local include.path ../.github/gitconfig-shared-aliases
 When you start working on a new feature, a bugfix or a chore, you should create your own branch with a descriptive name for the changes you're about to make.
 
 | Command | Creates branch |
-|---|---|
+| --- | --- |
 | `git feature <name>` | `feature/<name>` |
 | `git bugfix <name>` | `bugfix/<name>` |
 | `git hotfix <name>` | `hotfix/<name>` |
@@ -102,7 +102,7 @@ All commits in this repository follow the [Conventional Commits](https://www.con
 Format: `<type>(<scope>): <subject>`
 
 | Type | Use for |
-|---|---|
+| --- | --- |
 | `feat` | New functionality |
 | `fix` | Bug fixes |
 | `docs` | Documentation-only changes |
@@ -178,7 +178,7 @@ git open-pr # run the command and click the recommended link to a new Github PR
 PR templates live in [`.github/PULL_REQUEST_TEMPLATE/`](../../.github/PULL_REQUEST_TEMPLATE/):
 
 | Template | Used for |
-|---|---|
+| --- | --- |
 | `feature.md` | `feature/*` branches |
 | `bugfix.md` | `bugfix/*`, `fix/*`, `hotfix/*` branches |
 | `chore.md` | `chore/*`, `docs/*`, `refactor/*`, and similar maintenance branches |
@@ -206,7 +206,7 @@ When a PR is approved and ready to merge, it should be **squash merged** into `m
 The following checks run on every PR and must all pass before merging.
 
 | Workflow | Trigger | What it does |
-|---|---|---|
+| --- | --- | --- |
 | **Build** | PR, manual | Compiles the binary with `make build` |
 | **Tests** | Push to `main`, PR, manual | Runs `make test-coverage` on Ubuntu, macOS, and Windows; enforces a minimum coverage threshold; uploads a coverage report as a build artifact |
 | **Go Lint** | PR, manual | Runs `golangci-lint` with the project's `.golangci.yml` configuration |

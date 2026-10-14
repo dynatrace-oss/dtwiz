@@ -8,11 +8,11 @@ Root's `PersistentPreRun` already fires `fireInvokedEvent(cmd)` for all commands
 
 **Current event vocabulary:**
 
-| Field   | Existing values                                              |
-|---------|--------------------------------------------------------------|
+| Field    | Existing values                                                                                   |
+| -------- | ------------------------------------------------------------------------------------------------- |
 | `StepID` | `"inv"` (invoked), `"com"` (completed), `"ana"` (analyze), `"rec"` (recommend), `"ist"` (install) |
-| `SubID`  | method shortcodes from `normSubMap`                         |
-| `Err`    | `"err"` on failure, empty on success                        |
+| `SubID`  | method shortcodes from `normSubMap`                                                               |
+| `Err`    | `"err"` on failure, empty on success                                                              |
 
 The existing `StepCompleted = "com"` constant covers this use case. No new constants are needed.
 

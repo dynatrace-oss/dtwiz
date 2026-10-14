@@ -95,7 +95,7 @@ code — there's nothing in the install flow to call it from yet.
 ## Key Paths
 
 | Path | Role |
-|---|---|
+| --- | --- |
 | `pkg/installer/otel/rum/tag.go` | `rumClient` interface, `sdkRumClient`, `newSDKRumClient`, `fetchJavaScriptTag` |
 | `pkg/installer/otel/rum/tag_test.go` | Table-driven tests with `httptest.Server` |
 

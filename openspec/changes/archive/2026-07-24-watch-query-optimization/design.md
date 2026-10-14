@@ -36,7 +36,7 @@ A `watchQueryState` struct with two `watchPhase` fields (`logs`, `requests`) is 
 ### Probe queries
 
 | Section | Probe query |
-|---|---|
+| --- | --- |
 | Logs | `fetch logs, from:X \| limit 1` |
 | Requests | `fetch spans, from:X \| filter request.is_root_span == true \| limit 1` |
 

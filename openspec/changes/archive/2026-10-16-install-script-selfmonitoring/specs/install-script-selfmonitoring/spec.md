@@ -172,20 +172,20 @@ The reported version SHALL be the version of the release archive being installed
 
 Every failure SHALL be reported with exactly one of these reasons:
 
-| Reason              | Cause                                                                         |
-| ------------------- | ----------------------------------------------------------------------------- |
-| `unknown_argument`  | an unrecognized command-line argument (bash only)                             |
-| `unsupported_os`    | an operating system the script does not support                               |
-| `unsupported_arch`  | an architecture the script does not support                                   |
-| `curl_missing`      | curl is not available (bash only)                                             |
+| Reason               | Cause                                                                                                |
+| -------------------- | ---------------------------------------------------------------------------------------------------- |
+| `unknown_argument`   | an unrecognized command-line argument (bash only)                                                    |
+| `unsupported_os`     | an operating system the script does not support                                                      |
+| `unsupported_arch`   | an architecture the script does not support                                                          |
+| `curl_missing`       | curl is not available (bash only)                                                                    |
 | `github_unreachable` | GitHub gives no answer while the release is looked up (DNS, connect, timeout, TLS, or proxy failure) |
-| `release_not_found` | GitHub answers, but the requested tag or the latest release is not available for install |
-| `install_dir_failed` | the default install directory cannot be determined (PowerShell only)         |
-| `prompt_failed`     | the confirmation prompt cannot be shown, e.g. a non-interactive session (PowerShell only) |
-| `download_failed`   | the release archive cannot be downloaded                                      |
-| `extract_failed`    | the release archive cannot be extracted                                       |
-| `binary_missing`    | the archive does not contain the dtwiz binary                                 |
-| `move_failed`       | the install directory cannot be created or the binary cannot be moved into it |
+| `release_not_found`  | GitHub answers, but the requested tag or the latest release is not available for install             |
+| `install_dir_failed` | the default install directory cannot be determined (PowerShell only)                                 |
+| `prompt_failed`      | the confirmation prompt cannot be shown, e.g. a non-interactive session (PowerShell only)            |
+| `download_failed`    | the release archive cannot be downloaded                                                             |
+| `extract_failed`     | the release archive cannot be extracted                                                              |
+| `binary_missing`     | the archive does not contain the dtwiz binary                                                        |
+| `move_failed`        | the install directory cannot be created or the binary cannot be moved into it                        |
 
 #### Scenario: Elevated move fails
 

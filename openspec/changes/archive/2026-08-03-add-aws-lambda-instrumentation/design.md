@@ -74,7 +74,7 @@ The `DT_CONNECTION_AUTH_TOKEN` is the user's access token (reused as-is).
 Each Lambda function's `Runtime` field (e.g., `nodejs18.x`, `python3.11`, `java17`) is mapped to the DT API's `techtype` parameter:
 
 | AWS Runtime prefix | DT techtype |
-|---------------------|-------------|
+| --------------------- | ------------- |
 | `nodejs` | `nodejs` |
 | `python` | `python` |
 | `java` | `java` |

@@ -73,7 +73,7 @@ type InstallOptions struct {
 All new flags are added to the `installOneAgentCmd` Cobra command definition (not the parent `installCmd`, which already owns `--dry-run`):
 
 | Flag | Type | Default |
-|---|---|---|
+| --- | --- | --- |
 | `--monitoring-mode` | string | `"fullstack"` |
 | `--no-verify-signature` | bool | `false` |
 | `--skip-connectivity-check` | bool | `false` |

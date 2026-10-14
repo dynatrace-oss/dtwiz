@@ -49,7 +49,7 @@ Type definitions: `Environment`, `AgentConfig`, `InstallOptions`
 New flags SHALL be defined on `installOneAgentCmd` (not on the parent `installCmd`):
 
 | Flag | Type | Default | Purpose | Task |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `--monitoring-mode` | string | `"fullstack"` | Passed through as `--set-monitoring-mode`; value is not validated — the caller is responsible for passing a value that OneAgent accepts | 2 |
 | `--no-verify-signature` | bool | `false` | Skip Linux signature verification | 5 |
 | `--skip-connectivity-check` | bool | `false` | Skip connectivity probe | 9 |

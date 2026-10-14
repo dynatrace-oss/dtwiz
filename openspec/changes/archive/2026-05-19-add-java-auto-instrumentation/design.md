@@ -70,7 +70,7 @@ A running process is **not required** — it is only used as supplemental inform
 The installer inspects the project directory for runnable artifacts in priority order:
 
 | Priority | Source | Example |
-|---|---|---|
+| --- | --- | --- |
 | 1 | Fat JAR in `target/` (Maven) | `target/myapp-1.0-SNAPSHOT.jar` (with `Main-Class` in manifest) |
 | 2 | Fat JAR in `build/libs/` (Gradle) | `build/libs/myapp-all.jar` |
 | 3 | Build-tool wrapper (Spring Boot only for Maven) | `./mvnw spring-boot:run` or `./gradlew bootRun` / `./gradlew run` |
@@ -198,7 +198,7 @@ On Windows, Maven and Gradle ship with `.cmd` / `.bat` wrapper scripts (`mvnw.cm
 The installer uses a `findWrapper(projectPath, unixName, windowsName string) string` helper to locate the correct wrapper file for the current OS. Wrapper commands in `detectJavaEntrypoints` and `attemptSingleModuleBuild` are constructed differently per platform:
 
 | Platform | Display command | `exec.Command` call |
-|---|---|---|
+| --- | --- | --- |
 | Unix | `./mvnw spring-boot:run` | `exec.Command("./mvnw", "spring-boot:run")` |
 | Windows | `mvnw.cmd spring-boot:run` | `exec.Command("cmd", "/c", "mvnw.cmd", "spring-boot:run")` |
 
@@ -211,7 +211,7 @@ The installer uses a `findWrapper(projectPath, unixName, windowsName string) str
 ### 15. File layout
 
 | File | Responsibility |
-|---|---|
+| --- | --- |
 | `otel_java.go` | `InstallOtelJava`, `DetectJavaPlan`, `JavaInstrumentationPlan`, plan/execute flow, JAR download, env var generation, `updateOtelCollectorIfPresent`, `buildInstrumentedCmd` |
 | `otel_java_multimodule.go` (new) | Multi-module detection (`detectMultiModule`, `isMavenMultiModule`, `parseMavenModules`, `parseGradleSubprojects`), `buildMultiModulePlan`, `executeMultiModule` |
 | `otel_java_process.go` (new) | `parseJavaVersion`, `validateJavaPrerequisites`, Java entrypoint detection (`detectJavaEntrypoints`, `isExecutableJar`, `promptEntrypointSelection`, `findWrapper`), `detectJavaListeningPort`, `isBuildToolJVM`, `isUnderDir`, process enrichment via `jps` (`enrichProcessesWithJPS`) |
@@ -230,7 +230,7 @@ The installer uses a `findWrapper(projectPath, unixName, windowsName string) str
 Key log points:
 
 | Location | Message pattern |
-|---|---|
+| --- | --- |
 | Directory not found | `"<dir> not found, skipping JAR scan" dir=<path>` |
 | JAR accepted | `"executable JAR found" jar=<path>` |
 | JAR rejected (no `Main-Class`) | `"skipping JAR — no Main-Class in MANIFEST.MF" jar=<path>` |

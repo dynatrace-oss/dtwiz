@@ -97,7 +97,7 @@ Integration tests live in `test/e2e/` and carry the `//go:build integration` bui
 **Required environment variables:**
 
 | Variable | Description |
-|---|---|
+| --- | --- |
 | `TEST_DT_ENVIRONMENT` | Your Dynatrace environment URL |
 | `TEST_DT_ACCESS_TOKEN` | Classic API token (`dt0c01.*`) |
 | `TEST_DT_PLATFORM_TOKEN` | Platform token (`dt0s16.*`) |
@@ -130,7 +130,7 @@ func TestMyInstaller(t *testing.T) {
 **Tests with extra infrastructure prerequisites:** some lifecycle tests need more than a Dynatrace tenant and skip (or fail with an actionable message) when their prerequisite isn't met:
 
 | Test | Extra prerequisite | Behavior when missing |
-|---|---|---|
+| --- | --- | --- |
 | `TestKubernetesLifecycle` | `kubectl` + `helm` on PATH, and a cluster reachable via the current kubeconfig context (point it at a disposable cluster, e.g. kind/minikube — the test does not provision one) | Skips |
 | `TestAzureLifecycle` | `az` CLI logged in (`az login`) to a subscription where the signed-in account can create App Registrations and role assignments at subscription scope | Skips if `az` isn't installed; fails with instructions if installed but not logged in |
 
@@ -141,7 +141,7 @@ These tests create and tear down real cluster/cloud resources, so point them at 
 The following test helpers are defined in `pkg/installer/testhelpers_test.go` and `pkg/installer/otel_test.go`. Use them instead of reimplementing the same patterns.
 
 | Helper | Use when |
-|---|---|
+| --- | --- |
 | `setTestWorkingDir(t, dir)` | Code under test uses `os.Getwd()` as a scan root (project detection functions) |
 | `setTestStdin(t, input)` | Code under test prompts the user for input |
 | `captureStdout(t, fn)` | Asserting on printed output |

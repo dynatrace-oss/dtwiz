@@ -74,7 +74,7 @@ Shared code in `pkg/installer/oneagent/` calls `CheckPrivilege()` without a runt
 Windows-specific log lines follow the same keys as their Linux counterparts:
 
 | Stage | Level | Message | Keys |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | PowerShell lookup | Debug | `"powershell lookup"` | `path`, `found` |
 | Authenticode check | Debug | `"windows authenticode check"` | `status`, `path` |
 | Verify success | Verbose | `"installer signature verified"` | — |

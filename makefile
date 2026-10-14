@@ -36,7 +36,7 @@ SEQ_ENV    := $(if $(filter true,$(SEQUENTIAL)),TEST_SEQUENTIAL=1)
 TEST_DEBUG ?= $(DEBUG)
 export TEST_DEBUG
 
-MD_LINT_CLI_IMAGE := ghcr.io/igorshubovych/markdownlint-cli:v0.31.1
+MD_LINT_CLI_IMAGE := ghcr.io/igorshubovych/markdownlint-cli:v0.49.1
 CONTAINER_RUNTIME := $(shell command -v podman 2>/dev/null || command -v docker 2>/dev/null)
 MD_LINT            = $(CONTAINER_RUNTIME) run --rm -v $(CURDIR):/workdir $(MD_LINT_CLI_IMAGE) "**/*.md"
 

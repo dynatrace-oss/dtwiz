@@ -35,6 +35,6 @@ Alternatives considered:
 ## Risks / Trade-offs
 
 | Risk | Mitigation |
-|---|---|
+| --- | --- |
 | User runs `dtwiz` from a subdirectory (e.g. `my-project/src/`) and their project root is no longer auto-detected | Documented behaviour; the tip message already suggests running from the project root |
 | Previously installed `.otel/` dirs in parent directories are not cleaned up by uninstall | Acceptable: those dirs were created by an older version; the user can remove them manually. Install no longer creates them there. |
