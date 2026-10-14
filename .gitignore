@@ -15,7 +15,7 @@ __debug_bin*
 
 # Output of the go coverage tool
 *.out
-coverage.out
+build/
 
 # Dependency directories
 vendor/
