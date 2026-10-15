@@ -90,19 +90,23 @@ if ($Tag) {
         exit 1
     }
 } else {
-    # Follow the /releases/latest redirect to extract the tag from the final URL.
-    $Response = Invoke-WebRequest `
-        -Uri "https://github.com/$Repo/releases/latest" `
-        -MaximumRedirection 0 `
-        -ErrorAction SilentlyContinue `
-        -UseBasicParsing
-    $RedirectUrl = $Response.Headers.Location
+    # Resolve the tag behind /releases/latest by letting Invoke-WebRequest follow
+    # the redirect normally, then reading the final resolved URL back off the
+    # response. We deliberately don't disable redirects and inspect the Location
+    # header instead: the shape of a non-success response (and whether
+    # -ErrorAction can suppress the resulting error) differs between Windows
+    # PowerShell 5.1 and PowerShell 7+, so relying on it is fragile.
+    try {
+        $Response = Invoke-WebRequest `
+            -Uri "https://github.com/$Repo/releases/latest" `
+            -UseBasicParsing
+    } catch {
+        Write-Error "Could not determine the latest dtwiz version: $($_.Exception.Message)"
+        exit 1
+    }
+    $RedirectUrl = $Response.BaseResponse.ResponseUri.AbsoluteUri
     if (-not $RedirectUrl) {
-        # Some PS versions follow the redirect automatically
-        $RedirectUrl = $Response.BaseResponse.ResponseUri.AbsoluteUri
-        if (-not $RedirectUrl) {
-            $RedirectUrl = $Response.BaseResponse.RequestMessage.RequestUri.AbsoluteUri
-        }
+        $RedirectUrl = $Response.BaseResponse.RequestMessage.RequestUri.AbsoluteUri
     }
     $ReleaseTag = ($RedirectUrl -split '/')[-1]
     $Version = $ReleaseTag
