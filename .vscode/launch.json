@@ -8,6 +8,7 @@
       "mode": "auto",
       "program": "${workspaceFolder}",
       "cwd": "${input:cwd}",
+      "output": "${workspaceFolder}/.debug/__debug_bin",
       "args": "${input:command} ${input:subcommand} ${input:flags}",
       "envFile": "${workspaceFolder}/.env",
       "console": "integratedTerminal"
@@ -19,6 +20,7 @@
       "mode": "auto",
       "program": "${workspaceFolder}",
       "cwd": "${input:cwd}",
+      "output": "${workspaceFolder}/.debug/__debug_bin",
       "args": "${input:args}",
       "envFile": "${workspaceFolder}/.env",
       "console": "integratedTerminal"

@@ -12,6 +12,7 @@ releases/
 # Test binary
 *.test
 __debug_bin*
+/.debug/
 
 # Output of the go coverage tool
 *.out
