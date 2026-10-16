@@ -143,7 +143,7 @@ The `main` channel is rebuilt automatically on every push to `main` and is inten
 | `dtwiz install otel-java` | Instrument a Java project with OpenTelemetry |
 | `dtwiz install otel-node` | Instrument a Node.js project with OpenTelemetry |
 | `dtwiz install otel-python` | Instrument a Python project with OpenTelemetry |
-| `dtwiz install demo` | Download the "schnitzel" demo app and instrument it end-to-end *(experimental; enable with --experimental or DTWIZ_EXPERIMENTAL=true)* |
+| `dtwiz install demo` | Download the "schnitzel" demo app and instrument it end-to-end |
 | `dtwiz install aws` | Set up Dynatrace AWS CloudFormation integration |
 | `dtwiz install aws-lambda` | Install Dynatrace Lambda Layer on all functions |
 | `dtwiz install azure` | Set up Dynatrace Azure Monitor integration |
