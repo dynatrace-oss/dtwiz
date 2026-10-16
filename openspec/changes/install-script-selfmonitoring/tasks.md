@@ -12,19 +12,12 @@
 
 ## 2. install.sh: failure reasons and missing checks
 
-- [x] 2.1 Replace each existing `exit 1` with `fail`: `unknown_argument`, `unsupported_os`, `unsupported_arch`, `curl_missing`, `version_not_found` (tag path), `binary_missing`
-- [x] 2.2 Stable version resolution: fail with `version_not_found` when curl fails or the resolved tag does not match `v[0-9]*` (today it silently becomes `latest`)
+- [x] 2.1 Replace each existing `exit 1` with `fail`: `unknown_argument`, `unsupported_os`, `unsupported_arch`, `curl_missing`, `release_not_found` (tag path), `binary_missing`
+- [x] 2.2 Stable version resolution: fail with `release_not_found` when the resolved tag does not match `v[0-9]*` (today it silently becomes `latest`)
 - [x] 2.3 Set the event version to `${VERSION#v}` once resolved, so later events carry `v=`
 - [x] 2.4 Check the archive download (`download_failed`), `tar` extraction (`extract_failed`), `mkdir -p` and `mv`/`sudo mv` (`move_failed`)
-<<<<<<< HEAD
-- [ ] 2.5 Run `sh -n scripts/install.sh` and `shellcheck scripts/install.sh`; fix new findings
-||||||| parent of f04bf58 (fixup! feat: implement 'install-script-selfmonitoring' change)
-- [ ] 2.5 Run `sh -n scripts/install.sh` and `shellcheck scripts/install.sh`; fix new findings
-- [x] 2.6 Release lookup in both paths: fail with `github_unreachable` when curl's `%{http_code}` is `000` or 3xx, otherwise `release_not_found`; do not rely on curl's exit status (22 or 56 for HTTP errors)
-=======
 - [x] 2.5 Run `sh -n scripts/install.sh` and `shellcheck scripts/install.sh`; fix new findings
 - [x] 2.6 Release lookup in both paths: fail with `github_unreachable` when curl's `%{http_code}` is `000` or 3xx, otherwise `release_not_found`; do not rely on curl's exit status (22 or 56 for HTTP errors)
->>>>>>> f04bf58 (fixup! feat: implement 'install-script-selfmonitoring' change)
 
 ## 3. install.ps1: event sending
 
@@ -37,12 +30,13 @@
 ## 4. install.ps1: failure reasons
 
 - [x] 4.1 Add OS check: on Linux or macOS fail with `unsupported_os` and "Use install.sh on Linux and macOS", before `$env:LOCALAPPDATA` is used
-- [x] 4.2 Introduce `$FailReason`, set before each stage: `unsupported_arch`, `version_not_found` (both tag and stable paths), `download_failed`, `extract_failed`, `binary_missing`, `move_failed`
+- [x] 4.2 Introduce `$FailReason`, set before each stage: `unsupported_arch`, `release_not_found` (both tag and stable paths), `download_failed`, `extract_failed`, `binary_missing`, `move_failed`
 - [x] 4.3 Wrap the body after `inv` in a single `try/catch` that sends `fai` with `$FailReason` and rethrows, so the user-facing error is unchanged and exactly one event is sent; keep the existing `finally` cleanup
 - [x] 4.4 Set the event version to `$VersionNum` once resolved
 - [x] 4.5 Run PSScriptAnalyzer on `scripts/install.ps1` if available; fix new findings
 - [x] 4.6 Set `install_dir_failed` while resolving the default install directory (throw when `LOCALAPPDATA` is unset) and `prompt_failed` around `Read-Host`, so no failure is reported without a reason
 - [x] 4.7 Add a `finally` to the outer `try` that sends `can` with `interrupted` when no outcome was sent (Ctrl+C)
+- [x] 4.8 Add `Assert-GitHubAnswered` and call it in both release-lookup `catch` blocks: no `$_.Exception.Response` switches the reason to `github_unreachable`
 
 ## 5. Documentation
 
@@ -57,8 +51,8 @@ Capture events with a local listener (e.g. a small HTTP server printing request 
 - [x] 6.2 Successful stable install: `inv` then `com` with `v=` without leading `v`, `channel=stable`, no `tag` (both scripts)
 - [x] 6.3 `DTWIZ_CHANNEL=main` and `DTWIZ_TAG=snapshot-<branch>`: body `channel`/`tag` correct, `v=<x.y.z>-next` (both scripts)
 - [x] 6.4 Decline the prompt: `inv` then `can`, no `er=` (both scripts)
-- [x] 6.5 `DTWIZ_TAG=does-not-exist`: `fai` with `version_not_found`, no `v=` (both scripts)
-- [x] 6.6 Stable resolution without network to GitHub: `version_not_found`, no download attempted (`install.sh`)
+- [x] 6.5 `DTWIZ_TAG=does-not-exist`: `fai` with `release_not_found`, no `v=` (both scripts)
+- [x] 6.6 GitHub unreachable via a dead proxy (`HTTPS_PROXY=http://127.0.0.1:9`), stable and tag path: `github_unreachable`, no download attempted (`install.sh`)
 - [x] 6.7 `--bogus` argument: `inv` then `fai` with `unknown_argument` (`install.sh`)
 - [x] 6.8 Read-only install dir requiring sudo, password refused: `move_failed`, no `com` (`install.sh`)
 - [x] 6.9 pwsh on macOS or Linux: `unsupported_os`, `o=mac`/`o=lin` (`install.ps1`)
@@ -70,3 +64,4 @@ Capture events with a local listener (e.g. a small HTTP server printing request 
 - [x] 6.15 `powershell -NonInteractive`: `fai` with `prompt_failed` (`install.ps1`)
 - [x] 6.16 `LOCALAPPDATA` unset, no `-InstallDir`: `fai` with `install_dir_failed` (`install.ps1`)
 - [x] 6.17 Pipeline stopped mid-run (Ctrl+C): `can` with `er=interrupted` (`install.ps1`)
+- [x] 6.18 GitHub unreachable (pwsh 7: `HTTPS_PROXY=http://127.0.0.1:9`; Windows PowerShell 5.1: unplug network or block github.com), stable and tag path: `github_unreachable` (`install.ps1`)

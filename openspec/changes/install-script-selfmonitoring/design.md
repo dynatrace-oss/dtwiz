@@ -43,11 +43,27 @@ Steps reuse `inv`/`com`/`fai`/`can` and their body names so existing queries on 
 Budget check (64 chars):
 
 ```text
-dtwiz/install;s=ps1;st=fai;er=version_not_found                47   no version yet
+dtwiz/install;s=ps1;st=fai;er=github_unreachable               48   no version yet
 dtwiz/install;s=ps1;st=fai;v=0.12.3-next;er=download_failed    59   worst case
 ```
 
-The longest reasons (`version_not_found`, `unsupported_arch`, `unknown_argument`) can only happen before resolution, so they never share the header with `v=`.
+The longest reasons (`github_unreachable`, `install_dir_failed`, `release_not_found`, `unsupported_arch`, `unknown_argument`) can only happen before resolution, so they never share the header with `v=`.
+
+### Release lookup: `github_unreachable` vs `release_not_found`
+
+The release lookup is the script's first request to GitHub, so a single reason for "no version" would mix up two different problems: a bad or missing release, and no connection to GitHub at all. A spike of the merged reason could not be told apart. The lookup therefore reports:
+
+- `github_unreachable` when no final answer arrived (DNS, connect, timeout, TLS, proxy).
+- `release_not_found` when GitHub answered, but the requested tag, its `version.txt`, or the latest-release redirect did not yield a version. The name describes what the user asked for, a release, rather than the version string the script needs internally; a stable tag such as `v0.8.0` contains a version string and still fails, because it has no `version.txt`.
+
+How "answered" is detected:
+
+- sh: the HTTP status from `curl -w '%{http_code}'`. 2xx/4xx/5xx count as answered, `000` (no response) and 3xx (redirect not followed through) as unreachable. curl's exit status is not usable: an HTTP error exits with 22 or 56 depending on the curl version and protocol (observed: 56 for a 404 over HTTP/2).
+- ps1: `$_.Exception.Response` in the `catch`. Windows PowerShell 5.1 (`WebException`) and PowerShell 7 (`HttpResponseException`) attach the response only when one was received.
+
+5xx and rate-limit answers count as `release_not_found`. They are rare for release downloads and keeping them apart would need a third reason.
+
+`download_failed` is not split the same way: losing the connection exactly between the lookup and the download is rare.
 
 ### Version: resolved archive version in the header, requested source in the body
 
@@ -88,7 +104,7 @@ sh:
 ps1:
 
 - `Send-InstallEvent` uses `Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 -UserAgent ... -Headers ...` inside `try { } catch { }`, result discarded. Works on 5.1 and 7.x. Errors are suppressed with an explicit `-ErrorAction Stop` inside the `try` so the global `Stop` preference does not leak them.
-- Failure handling uses a `$FailReason` variable set before each stage (`version_not_found` during resolution, `install_dir_failed` while resolving the default install directory, `prompt_failed` around `Read-Host`, `download_failed` around the download, `extract_failed` around `Expand-Archive`, `move_failed` around `New-Item`/`Move-Item`). Explicit checks (`unsupported_arch`, `binary_missing`, missing `LOCALAPPDATA`) set it and `throw`. A single `catch` around the body after `inv` sends `fai` with `$FailReason` and rethrows, so the user sees the same error as today and exactly one event is sent.
+- Failure handling uses a `$FailReason` variable set before each stage (`release_not_found` during resolution, switched to `github_unreachable` by `Assert-GitHubAnswered` when a request got no answer, `install_dir_failed` while resolving the default install directory, `prompt_failed` around `Read-Host`, `download_failed` around the download, `extract_failed` around `Expand-Archive`, `move_failed` around `New-Item`/`Move-Item`). Explicit checks (`unsupported_arch`, `binary_missing`, missing `LOCALAPPDATA`) set it and `throw`. A single `catch` around the body after `inv` sends `fai` with `$FailReason` and rethrows, so the user sees the same error as today and exactly one event is sent.
 - Cancellation sends `can` before the existing `exit 0`.
 - Ctrl+C stops the script without running `catch` blocks, but `finally` blocks still run. A `finally` on the outer `try` sends `can` with the reason `interrupted` when no outcome was sent yet. Killing the process (closing the window) runs nothing, so such runs still leave only `inv`.
 
@@ -105,7 +121,7 @@ sh: directly after `REPO=`, before channel handling and argument parsing (channe
 - sh download: `curl -fsSL ... -o ... || fail download_failed "..."`.
 - sh extract: `tar -xzf ... || fail extract_failed "..."`.
 - sh move: `mkdir -p` and `mv`/`sudo mv` each `|| fail move_failed "..."`.
-- sh stable resolution: require curl to succeed and the tag to match `v[0-9]*`; otherwise `fail version_not_found`.
+- sh stable resolution: fail with `github_unreachable` when GitHub gave no answer, and with `release_not_found` when the resolved tag does not match `v[0-9]*`.
 - ps1 stable resolution: require the tag to match `^v[0-9]`. The fallback chain can end on the original `.../releases/latest` request URL, which would otherwise yield the version `latest`.
 - ps1 non-Windows: after OS detection, `unsupported_os` with "Use install.sh on Linux and macOS." This runs before `$env:LOCALAPPDATA` is used.
 

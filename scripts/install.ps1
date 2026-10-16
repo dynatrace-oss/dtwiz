@@ -128,6 +128,18 @@ function Send-InstallEvent {
     }
 }
 
+# Fails with github_unreachable when a GitHub request got no answer at all (DNS,
+# connect, timeout, TLS, proxy). An HTTP error status means GitHub answered;
+# the caller then reports release_not_found. Both Windows PowerShell 5.1 and
+# PowerShell 7 attach the response to the exception only when one was received.
+function Assert-GitHubAnswered {
+    param($ErrorRecord)
+    if (-not $ErrorRecord.Exception.Response) {
+        $script:FailReason = "github_unreachable"
+        throw "Could not reach github.com: $($ErrorRecord.Exception.Message) Check your network connection and proxy settings."
+    }
+}
+
 Send-InstallEvent "inv"
 
 try {
@@ -162,7 +174,7 @@ try {
     Write-Host "Detected platform: windows/$Arch"
 
     # -- Resolve release version ------------------------------------------------
-    $FailReason = "version_not_found"
+    $FailReason = "release_not_found"
     if ($Tag) {
         # Use the provided release tag directly
         $ReleaseTag = $Tag
@@ -181,7 +193,8 @@ try {
             $Version = (Get-Content $VersionFile -Raw).Trim()
             Remove-Item $VersionFile -ErrorAction SilentlyContinue
         } catch {
-            # Missing release: handled by the empty-version check below.
+            Assert-GitHubAnswered $_
+            # GitHub answered with an error status: handled by the empty-version check below.
         }
         if (-not $Version) {
             if ($Tag -eq "snapshot-main") {
@@ -201,7 +214,8 @@ try {
                 -Uri "https://github.com/$Repo/releases/latest" `
                 -UseBasicParsing
         } catch {
-            throw "Could not determine the latest dtwiz version: $($_.Exception.Message)"
+            Assert-GitHubAnswered $_
+            throw "Could not determine the latest dtwiz release: $($_.Exception.Message)"
         }
         $RedirectUrl = $Response.BaseResponse.ResponseUri.AbsoluteUri
         if (-not $RedirectUrl) {
@@ -212,7 +226,7 @@ try {
         # A failed lookup can leave the original ".../releases/latest" URL behind,
         # so require something that looks like a version tag.
         if ($Version -notmatch '^v[0-9]') {
-            throw "Could not determine the latest dtwiz version."
+            throw "Could not determine the latest dtwiz release."
         }
     }
 

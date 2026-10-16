@@ -178,7 +178,8 @@ Every failure SHALL be reported with exactly one of these reasons:
 | `unsupported_os`    | an operating system the script does not support                               |
 | `unsupported_arch`  | an architecture the script does not support                                   |
 | `curl_missing`      | curl is not available (bash only)                                             |
-| `version_not_found` | the requested or latest version cannot be determined                          |
+| `github_unreachable` | GitHub gives no answer while the release is looked up (DNS, connect, timeout, TLS, or proxy failure) |
+| `release_not_found` | GitHub answers, but the requested tag or the latest release is not available for install |
 | `install_dir_failed` | the default install directory cannot be determined (PowerShell only)         |
 | `prompt_failed`     | the confirmation prompt cannot be shown, e.g. a non-interactive session (PowerShell only) |
 | `download_failed`   | the release archive cannot be downloaded                                      |
@@ -198,11 +199,23 @@ Every failure SHALL be reported with exactly one of these reasons:
 - **WHEN** the release archive download fails
 - **THEN** the script reports `download_failed`, not `extract_failed` or `binary_missing`
 
-#### Scenario: Stable version lookup fails
+#### Scenario: Requested tag does not exist
+
+- **GIVEN** the user requested a release tag that GitHub does not have
+- **WHEN** the script looks up the release
+- **THEN** the script reports `release_not_found` and does not attempt a download
+
+#### Scenario: Latest release cannot be determined
 
 - **GIVEN** no release tag was requested
-- **WHEN** the latest release cannot be determined (no network, or the answer is not a version tag)
-- **THEN** the script reports `version_not_found` and does not attempt a download
+- **WHEN** GitHub answers, but the answer does not lead to a version tag
+- **THEN** the script reports `release_not_found` and does not attempt a download
+
+#### Scenario: GitHub is unreachable
+
+- **GIVEN** GitHub cannot be reached, for example because the network or a proxy is down
+- **WHEN** the script looks up the release, with or without a requested tag
+- **THEN** the script reports `github_unreachable`, not `release_not_found`, and does not attempt a download
 
 #### Scenario: PowerShell outside Windows
 

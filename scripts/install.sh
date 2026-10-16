@@ -132,6 +132,22 @@ dtwiz_fail() {
     exit 1
 }
 
+# dtwiz_check_github_reachable <HTTP status reported by curl>
+# Fails with github_unreachable when GitHub gave no final answer: curl reports
+# 000 when no response arrived (DNS, connect, timeout, TLS, proxy) and a 3xx
+# when a redirect could not be followed. A 2xx, 4xx, or 5xx means GitHub
+# answered; callers report a missing release as release_not_found. curl's exit
+# status cannot make this distinction: an HTTP error exits with 22 or 56
+# depending on the curl version and protocol.
+dtwiz_check_github_reachable() {
+    case "$1" in
+        [245][0-9][0-9]) ;;
+        *) dtwiz_fail github_unreachable \
+            "Error: could not reach github.com." \
+            "Check your network connection and proxy settings." ;;
+    esac
+}
+
 dtwiz_send_event inv
 
 # ── Parse known flags ──────────────────────────────────────────────────────────
@@ -181,29 +197,36 @@ if [ -n "$TAG" ]; then
     else
         echo "Installing preview snapshot for tag: ${TAG}"
     fi
-    VERSION="$(curl -fsSL \
+    # The HTTP status is appended as the last line; -f keeps an error page out
+    # of the body, so a missing release leaves only the status.
+    RESPONSE="$(curl -fsSL -w '\n%{http_code}' \
         "https://github.com/${REPO}/releases/download/${RELEASE_TAG}/version.txt")"
+    HTTP_CODE="$(printf '%s\n' "$RESPONSE" | tail -n 1)"
+    VERSION="$(printf '%s\n' "$RESPONSE" | sed '$d')"
     if [ -z "$VERSION" ]; then
+        dtwiz_check_github_reachable "$HTTP_CODE"
         if [ "$TAG" = "snapshot-main" ]; then
-            dtwiz_fail version_not_found \
+            dtwiz_fail release_not_found \
                 "Error: could not find the main snapshot release." \
                 "The 'snapshot-main' release may not have been published yet."
         else
-            dtwiz_fail version_not_found \
+            dtwiz_fail release_not_found \
                 "Error: could not find a snapshot release for tag '${TAG}'." \
                 "Make sure the tag exists and its release has been published."
         fi
     fi
 else
     # Follow the /releases/latest redirect to extract the tag from the final URL.
-    # curl prints the original URL when the request fails, so check its exit
+    # curl prints the original URL when the request fails, so check the HTTP
     # status and that the result looks like a version tag.
-    RELEASE_TAG="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
-        "https://github.com/${REPO}/releases/latest")" || RELEASE_TAG=""
+    RESPONSE="$(curl -fsSL -o /dev/null -w '%{http_code} %{url_effective}' \
+        "https://github.com/${REPO}/releases/latest")"
+    dtwiz_check_github_reachable "${RESPONSE%% *}"
+    RELEASE_TAG="${RESPONSE#* }"
     RELEASE_TAG="${RELEASE_TAG##*/}"
     case "$RELEASE_TAG" in
         v[0-9]*) ;;
-        *) dtwiz_fail version_not_found "Error: could not determine the latest dtwiz version." ;;
+        *) dtwiz_fail release_not_found "Error: could not determine the latest dtwiz release." ;;
     esac
     VERSION="$RELEASE_TAG"
 fi
