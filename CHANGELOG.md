@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Self-monitoring for the install scripts: when `DT_ENVIRONMENT` is set, `install.sh` and `install.ps1` send a `dtwiz install script` event when they start and when the install completes, fails, or is cancelled. Failed events carry a reason (e.g. `download_failed`, `move_failed`), and events carry the resolved version once known plus the requested channel and tag.
+
+### Fixed
+
+- `install.sh` no longer reports success when moving the binary into place fails (e.g. a refused `sudo` password), reports a failed download as such instead of as a missing binary, and stops with an error when the latest version cannot be determined instead of trying to download version `latest`.
+- `install.ps1` stops with a clear message pointing to `install.sh` when run in PowerShell on Linux or macOS, and no longer accepts a failed latest-version lookup as version `latest`.
+
 ## [1.12.0] - 2026-10-14
 
 ### Added

@@ -110,11 +110,11 @@ make install
 
 ### Install channels
 
-| Channel | Linux / macOS | Windows (PowerShell) |
-|---------|---------------|----------------------|
-| Latest stable release *(default)* | `source <(curl -sSL .../install.sh)` | `irm .../install.ps1 \| iex` |
-| Latest `main` branch snapshot | `DTWIZ_CHANNEL=main source <(curl -sSL .../install.sh)` | `$env:DTWIZ_CHANNEL="main"; irm .../install.ps1 \| iex` |
-| Specific PR/branch snapshot | `DTWIZ_TAG=snapshot-<branch> source <(curl -sSL .../install.sh)` | `$env:DTWIZ_TAG="snapshot-<branch>"; irm .../install.ps1 \| iex` |
+| Channel                           | Linux / macOS                                                    | Windows (PowerShell)                                             |
+| --------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Latest stable release _(default)_ | `source <(curl -sSL .../install.sh)`                             | `irm .../install.ps1 \| iex`                                     |
+| Latest `main` branch snapshot     | `DTWIZ_CHANNEL=main source <(curl -sSL .../install.sh)`          | `$env:DTWIZ_CHANNEL="main"; irm .../install.ps1 \| iex`          |
+| Specific PR/branch snapshot       | `DTWIZ_TAG=snapshot-<branch> source <(curl -sSL .../install.sh)` | `$env:DTWIZ_TAG="snapshot-<branch>"; irm .../install.ps1 \| iex` |
 
 The `main` channel is rebuilt automatically on every push to `main` and is intended for testing unreleased changes. It is not recommended for production use.
 
@@ -137,7 +137,7 @@ The `main` channel is rebuilt automatically on every push to `main` and is inten
 | `dtwiz recommend` | Generate ranked ingestion recommendations |
 | `dtwiz install oneagent` | Install Dynatrace OneAgent on this host |
 | `dtwiz install kubernetes` | Deploy Dynatrace Operator on Kubernetes |
-| `dtwiz install docker` | Install Dynatrace OneAgent for Docker *(experimental; enable with --experimental or DTWIZ_EXPERIMENTAL=true)* |
+| `dtwiz install docker` | Install Dynatrace OneAgent for Docker _(experimental; enable with --experimental or DTWIZ_EXPERIMENTAL=true)_ |
 | `dtwiz install otel` | Install/configure OTel Collector and instrument your application |
 | `dtwiz install otel-collector` | Install the Dynatrace OpenTelemetry Collector only |
 | `dtwiz install otel-java` | Instrument a Java project with OpenTelemetry |
@@ -198,17 +198,40 @@ fetch events
 
 Key fields:
 
-| Field | Values | Description |
-|-------|--------|-------------|
-| `event.name` | `dtwiz status`, `dtwiz install otel`, … | Command that was run |
-| `step` | `invoked`, `install`, `completed`, `failed`, `cancelled` | Execution stage |
-| `command` | `install`, `setup`, `watch`, … | Top-level command |
-| `subcommand` | `otel`, `kubernetes`, `oneagent`, … | Subcommand, when applicable |
-| `error` | `auth_error`, `dependency_missing`, `user_cancelled`, … | Error category on failures |
-| `version` | `1.9.0` | dtwiz version that ran |
-| `os` | `darwin`, `linux`, `windows` | Operating system |
+| Field        | Values                                                   | Description                 |
+| ------------ | -------------------------------------------------------- | --------------------------- |
+| `event.name` | `dtwiz status`, `dtwiz install otel`, …                  | Command that was run        |
+| `step`       | `invoked`, `install`, `completed`, `failed`, `cancelled` | Execution stage             |
+| `command`    | `install`, `setup`, `watch`, …                           | Top-level command           |
+| `subcommand` | `otel`, `kubernetes`, `oneagent`, …                      | Subcommand, when applicable |
+| `error`      | `auth_error`, `dependency_missing`, `user_cancelled`, …  | Error category on failures  |
+| `version`    | `1.9.0`                                                  | dtwiz version that ran      |
+| `os`         | `darwin`, `linux`, `windows`                             | Operating system            |
 
 Events are sent to the Events v2 API and count against your environment's event ingest quota.
+
+### Install script events
+
+When `DT_ENVIRONMENT` is set, the install scripts (`install.sh` and `install.ps1`) also send events: one when they start, and one when the install completes, fails, or is cancelled. Their `event.name` is `dtwiz install script`:
+
+```sql
+fetch events
+| filter event.type == "CUSTOM_INFO" and event.name == "dtwiz install script"
+| fields timestamp, executionId, script, step, error, version, channel, tag, os
+| sort timestamp desc
+| limit 100
+```
+
+| Field         | Values                                                                                                                                                              | Description                                  |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `executionId` | `3ab`                                                                                                                                                               | Correlates the events of one script run      |
+| `script`      | `sh`, `ps1`                                                                                                                                                         | Install script that ran                      |
+| `step`        | `invoked`, `completed`, `failed`, `cancelled`                                                                                                                       | Execution stage                              |
+| `error`       | `unknown_argument`, `unsupported_os`, `unsupported_arch`, `curl_missing`, `github_unreachable`, `release_not_found`, `install_dir_failed`, `prompt_failed`, `download_failed`, `extract_failed`, `binary_missing`, `move_failed`, `interrupted` | Failure reason; `interrupted` on a cancelled run stopped with Ctrl+C |
+| `version`     | `1.9.0`, `1.9.1-next`                                                                                                                                               | dtwiz version being installed, once resolved |
+| `channel`     | `stable`, `main`, `tag`                                                                                                                                             | Requested release source                     |
+| `tag`         | `snapshot-main`, `snapshot-<branch>`                                                                                                                                | Requested release tag, when set              |
+| `os`          | `darwin`, `linux`, `windows`                                                                                                                                        | Operating system                             |
 
 ## Demo
 
