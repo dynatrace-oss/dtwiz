@@ -21,7 +21,7 @@ dtwiz uninstall <method>     # oneagent | kubernetes | otel | aws | aws-lambda |
 
 All install/update/uninstall commands support `--dry-run` and `--yes`/`-y` (skip confirmation prompts). Destructive commands show a preview and prompt for confirmation.
 
-**Hidden/experimental methods** (require `--experimental` or `DTWIZ_EXPERIMENTAL=true`): `install docker`, `install demo`, `update otel`.
+**Hidden/experimental methods** (require `--experimental` or `DTWIZ_EXPERIMENTAL=true`): `install docker`, `update otel`.
 
 **Post-install watch:** After a successful (non-dry-run) install, most commands automatically call `WatchIngest()` to poll until new data appears.
 
