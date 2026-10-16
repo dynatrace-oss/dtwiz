@@ -2,7 +2,7 @@
 
 ## Context
 
-The OTel installer (`pkg/installer/otel/`) handles instrumentation of server-side runtimes. RUM onboarding (PRODUCT-18188) extends this flow to also set up frontend monitoring. Detection is the first of three phases: detect, create frontend entity and fetch JS tag, inject/print. This change covers detection only.
+The OTel installer (`pkg/installer/otel/`) handles instrumentation of server-side runtimes. RUM onboarding extends this flow to also set up frontend monitoring. Detection is the first of three phases: detect, create frontend entity and fetch JS tag, inject/print. This change covers detection only.
 
 The detector runs synchronously during `dtwiz install otel`, before any Dynatrace API calls or file writes. Its output drives whether the preview shows "will auto-inject into N file(s)" or "will print tag for manual addition".
 
