@@ -39,7 +39,7 @@
 ## 5a. Manual Target Detection
 
 - [x] 5a.1 Add `ManualTarget string` to `DetectionResult`.
-- [x] 5a.2 Create `layout.go` with `findManualTarget(dir, framework)`: for Next.js, return the first existing file among `app/layout`, `src/app/layout`, `pages/_document`, `src/pages/_document`, each tried with extensions `.tsx`, `.jsx`, `.ts`, `.js`; return `""` for other frameworks or when none exists.
+- [x] 5a.2 Create `layout.go` with `findManualTarget(dir, framework)`: for Next.js, return the first existing file among `app/layout`, `src/app/layout`, `pages/_document`, `src/pages/_document`, each tried with extensions `.tsx`, `.jsx`, `.ts`, `.js`; for Nuxt, return the first existing `nuxt.config` file with extension `.ts`, `.js`, `.mjs` or `.mts`; return `""` for other frameworks or when none exists.
 - [x] 5a.3 Populate `ManualTarget` in `Detect` when a framework is detected.
 
 ## 6. Tests
@@ -63,7 +63,7 @@
   - Deeply nested `src/main/resources/templates/index.html` → `ModeAuto`, that file in `InjectableFiles`.
   - `.html` under a hidden directory (`.cache/index.html`) → `ModeManual`, reason "no writable HTML files found".
   - `.html` in a sibling directory and in the parent of the scan root → ignored; only files under the scan root are returned.
-  - Manual target (`layout_test.go`): each of `.js`, `.jsx`, `.ts`, `.tsx` in `app/layout`; `src/app/layout`; `pages/_document`; `src/pages/_document`; App Router wins over Pages Router; no layout file → empty target; Nuxt → empty target; `Detect` on Next.js returns the layout as `ManualTarget`.
+  - Manual target (`layout_test.go`): each of `.js`, `.jsx`, `.ts`, `.tsx` in `app/layout`; `src/app/layout`; `pages/_document`; `src/pages/_document`; App Router wins over Pages Router; no layout file → empty target; Nuxt config in each of `.ts`, `.js`, `.mjs`, `.mts`; Nuxt ignores Next.js layout paths; Nuxt without a config file → empty target; `Detect` on Next.js returns the layout as `ManualTarget`.
   - Mixed: framework detected alongside `.html` files → `ModeManual` (framework takes precedence).
 - [x] 6.3 Run `go test ./pkg/installer/otel/rum/...` and confirm all cases pass.
 - [x] 6.4 Run `make lint` to confirm no golangci-lint issues in the new package.

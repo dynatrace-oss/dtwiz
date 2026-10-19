@@ -7,6 +7,9 @@ import (
 
 var layoutExtensions = []string{".tsx", ".jsx", ".ts", ".js"}
 
+// nuxtConfigExtensions lists the Nuxt config extensions in priority order.
+var nuxtConfigExtensions = []string{".ts", ".js", ".mjs", ".mts"}
+
 // nextLayoutCandidates lists the root layout locations of a Next.js project in
 // priority order: App Router layouts first, then Pages Router documents.
 var nextLayoutCandidates = []string{
@@ -19,11 +22,18 @@ var nextLayoutCandidates = []string{
 // findManualTarget returns the file where the user should add the RUM tag for
 // a detected framework, or "" when it cannot be determined.
 func findManualTarget(dir, framework string) string {
-	if framework != "Next.js" {
-		return ""
+	switch framework {
+	case "Next.js":
+		return firstExistingFile(dir, nextLayoutCandidates, layoutExtensions)
+	case "Nuxt":
+		return firstExistingFile(dir, []string{"nuxt.config"}, nuxtConfigExtensions)
 	}
-	for _, base := range nextLayoutCandidates {
-		for _, ext := range layoutExtensions {
+	return ""
+}
+
+func firstExistingFile(dir string, bases, exts []string) string {
+	for _, base := range bases {
+		for _, ext := range exts {
 			p := filepath.Join(dir, base+ext)
 			if info, err := os.Stat(p); err == nil && !info.IsDir() {
 				return p

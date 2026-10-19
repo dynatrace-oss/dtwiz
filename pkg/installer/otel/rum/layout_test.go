@@ -21,7 +21,12 @@ func TestFindManualTarget(t *testing.T) {
 		{"src pages router document", "Next.js", []string{"src/pages/_document.tsx"}, "src/pages/_document.tsx"},
 		{"app router wins over pages", "Next.js", []string{"pages/_document.js", "app/layout.js"}, "app/layout.js"},
 		{"no layout file", "Next.js", []string{"README.md"}, ""},
-		{"nuxt has no target", "Nuxt", []string{"app/layout.js"}, ""},
+		{"nuxt config ts", "Nuxt", []string{"nuxt.config.ts"}, "nuxt.config.ts"},
+		{"nuxt config js", "Nuxt", []string{"nuxt.config.js"}, "nuxt.config.js"},
+		{"nuxt config mts", "Nuxt", []string{"nuxt.config.mts"}, "nuxt.config.mts"},
+		{"nuxt config mjs", "Nuxt", []string{"nuxt.config.mjs"}, "nuxt.config.mjs"},
+		{"nuxt ignores next layouts", "Nuxt", []string{"app/layout.js"}, ""},
+		{"nuxt dependency only, no config", "Nuxt", []string{"app.vue"}, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -30,6 +30,15 @@ The system SHALL scan the project directory selected during `dtwiz install otel`
 - **THEN** the system returns manual injection mode
 - **AND** the result does not identify a file to add the tag to
 
+#### Scenario: Nuxt project with a config file
+
+- **GIVEN** the project is a Nuxt project
+- **AND** a `nuxt.config` file exists with extension `.ts`, `.js`, `.mjs` or `.mts`
+- **WHEN** the RUM detection scan runs
+- **THEN** the system returns manual injection mode
+- **AND** the result identifies the Nuxt config file as the place to add the tag
+- **AND** HTML files elsewhere in the project (e.g. a sibling `public/index.html`) are not injectable
+
 #### Scenario: Malformed package.json
 
 - **GIVEN** the project directory contains a `package.json` that cannot be parsed as valid JSON

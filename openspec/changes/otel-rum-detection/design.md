@@ -120,7 +120,7 @@ Preview output when manual setup is required:
 
 The `Add:` line appears only when a target file was identified.
 
-For Next.js, the target is the first existing root layout file, checked in this order: `app/layout`, `src/app/layout`, `pages/_document`, `src/pages/_document`, each with extensions `.tsx`, `.jsx`, `.ts`, `.js`. App Router layouts win over Pages Router documents. Nuxt has no equivalent single file, so no target is reported for it.
+For Next.js, the target is the first existing root layout file, checked in this order: `app/layout`, `src/app/layout`, `pages/_document`, `src/pages/_document`, each with extensions `.tsx`, `.jsx`, `.ts`, `.js`. App Router layouts win over Pages Router documents. For Nuxt, the target is the first existing `nuxt.config` file (`.ts`, `.js`, `.mjs`, `.mts`), where the tag goes under `app.head.script`. Nuxt projects detected only through the `package.json` dependency, with no config file, report no target.
 
 The detected framework name stays in `DetectionResult.ManualReason` for debug logging but is not shown to the user.
 
