@@ -9,21 +9,37 @@ before:
     - tar -czf dtwiz-examples.tar.gz examples/
 
 builds:
-  - env:
+  - id: dtwiz
+    env: &build-env
       - CGO_ENABLED=0
     goos:
       - linux
       - darwin
-      - windows
-    goarch:
+    goarch: &build-goarch
       - amd64
       - arm64
-    ldflags:
+    ldflags: &build-ldflags
       - -s -w
       - -X github.com/dynatrace-oss/dtwiz/pkg/version.Version={{.Version}}
       - -X github.com/dynatrace-oss/dtwiz/pkg/version.SnapshotTag={{.Env.GORELEASER_SNAPSHOT_TAG}}
       - -X github.com/dynatrace-oss/dtwiz/pkg/version.Commit={{.ShortCommit}}
       - -X github.com/dynatrace-oss/dtwiz/pkg/version.Date={{.Date}}
+
+  # Separate build so the release workflow can compile only the exes to sign.
+  - id: dtwiz-windows
+    binary: dtwiz
+    env: *build-env
+    goos:
+      - windows
+    goarch: *build-goarch
+    ldflags: *build-ldflags
+    hooks:
+      post:
+        # Release only: swap in the signed exe; fails if it is missing.
+        # No-op when SIGNED_WINDOWS_DIR is unset (local, snapshot, fork builds).
+        - cmd: >-
+            sh -c 'if [ -n "{{ index .Env "SIGNED_WINDOWS_DIR" }}" ]; then
+            cp "{{ index .Env "SIGNED_WINDOWS_DIR" }}/{{ .Arch }}/dtwiz.exe" "{{ .Path }}"; fi'
 
 archives:
   - formats:
