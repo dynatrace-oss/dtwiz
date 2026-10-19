@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-10-19
+
 ### Added
 
 - Self-monitoring for the install scripts: when `DT_ENVIRONMENT` is set, `install.sh` and `install.ps1` send a `dtwiz install script` event when they start and when the install completes, fails, or is cancelled. Failed events carry a reason (e.g. `download_failed`, `move_failed`), and events carry the resolved version once known plus the requested channel and tag.
@@ -15,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `install.sh` no longer reports success when moving the binary into place fails (e.g. a refused `sudo` password), reports a failed download as such instead of as a missing binary, and stops with an error when the latest version cannot be determined instead of trying to download version `latest`.
 - `install.ps1` stops with a clear message pointing to `install.sh` when run in PowerShell on Linux or macOS, and no longer accepts a failed latest-version lookup as version `latest`.
+- `install.ps1`: resolving the latest release now works the same in Windows PowerShell 5.1 and PowerShell 7+. The script follows GitHub's `/releases/latest` redirect and reads the final URL, instead of disabling redirects and reading the `Location` header, which behaves differently between the two versions.
+
+### Changed
+
+- Internal: `dtctl/sdk` bumped from 0.42.0 to 0.43.0 and `golang.org/x/term` from 0.46.0 to 0.47.0.
 
 ## [1.12.0] - 2026-10-14
 
@@ -647,7 +654,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.12.0...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.13.0...HEAD
+[1.13.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.9.0...v1.10.0
