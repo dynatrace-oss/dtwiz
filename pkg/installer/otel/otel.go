@@ -701,6 +701,9 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 			}
 		} else {
 			fmt.Printf("     Mode:  manual (auto-injection not possible)\n")
+			if rumResult.ManualTarget != "" {
+				fmt.Printf("     Add:   tag to %s\n", rumResult.ManualTarget)
+			}
 		}
 	}
 

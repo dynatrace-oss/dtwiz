@@ -36,6 +36,12 @@
 - [x] 5.5 If no files remain, return `ModeManual` with reason `"no writable HTML files found"`.
 - [x] 5.6 Return `ModeAuto` with `InjectableFiles` sorted (`sort.Strings`) and an empty `ManualReason`.
 
+## 5a. Manual Target Detection
+
+- [x] 5a.1 Add `ManualTarget string` to `DetectionResult`.
+- [x] 5a.2 Create `layout.go` with `findManualTarget(dir, framework)`: for Next.js, return the first existing file among `app/layout`, `src/app/layout`, `pages/_document`, `src/pages/_document`, each tried with extensions `.tsx`, `.jsx`, `.ts`, `.js`; return `""` for other frameworks or when none exists.
+- [x] 5a.3 Populate `ManualTarget` in `Detect` when a framework is detected.
+
 ## 6. Tests
 
 - [x] 6.1 Create `pkg/installer/otel/rum/detect_test.go` with a table-driven test for `Detect` using `t.TempDir()` to build temp directory trees.
@@ -57,6 +63,7 @@
   - Deeply nested `src/main/resources/templates/index.html` → `ModeAuto`, that file in `InjectableFiles`.
   - `.html` under a hidden directory (`.cache/index.html`) → `ModeManual`, reason "no writable HTML files found".
   - `.html` in a sibling directory and in the parent of the scan root → ignored; only files under the scan root are returned.
+  - Manual target (`layout_test.go`): each of `.js`, `.jsx`, `.ts`, `.tsx` in `app/layout`; `src/app/layout`; `pages/_document`; `src/pages/_document`; App Router wins over Pages Router; no layout file → empty target; Nuxt → empty target; `Detect` on Next.js returns the layout as `ManualTarget`.
   - Mixed: framework detected alongside `.html` files → `ModeManual` (framework takes precedence).
 - [x] 6.3 Run `go test ./pkg/installer/otel/rum/...` and confirm all cases pass.
 - [x] 6.4 Run `make lint` to confirm no golangci-lint issues in the new package.
@@ -66,5 +73,5 @@
 - [x] 7.1 Export `IsNextJSProject` and `IsNuxtProject` from `pkg/installer/otel/nodejs_project.go`; update internal callers in `nodejs_project.go` and `nodejs_project_test.go`.
 - [x] 7.2 Import `pkg/installer/otel/rum` in `pkg/installer/otel/otel.go`.
 - [x] 7.3 In `InstallOtelCollectorWithProject`, after project detection and before the preview display: check `featureflags.IsEnabled(featureflags.Experimental)`; if true, call `rum.Detect` on the selected project directory (falling back to `projectPath`, then `os.Getwd()`, when no project was selected) and store the result; log errors at debug level without aborting.
-- [x] 7.4 In the preview display block, if the `rumResult` is non-nil, print a numbered "Real User Monitoring [experimental]" section showing `Mode: auto-inject` with the injectable file paths, or `Mode: manual (auto-injection not possible)` without naming the detected framework.
+- [x] 7.4 In the preview display block, if the `rumResult` is non-nil, print a numbered "Real User Monitoring [experimental]" section showing `Mode: auto-inject` with the injectable file paths, or `Mode: manual (auto-injection not possible)` without naming the detected framework, followed by an `Add:` line with the target file when `ManualTarget` is set.
 - [x] 7.5 Run `go test ./pkg/installer/otel/...` and confirm all packages pass.

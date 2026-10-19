@@ -24,6 +24,7 @@ type DetectionResult struct {
 	Mode            InjectionMode
 	InjectableFiles []string // absolute paths; non-empty when Mode == ModeAuto
 	ManualReason    string   // human-readable; non-empty when Mode == ModeManual
+	ManualTarget    string   // absolute path of the file to add the tag to, when known
 }
 
 var excludedDirs = map[string]bool{
@@ -94,7 +95,7 @@ func isWritable(path string) bool {
 // Detect scans dir to determine RUM injection mode.
 func Detect(dir string) (DetectionResult, error) {
 	if name, found := detectFramework(dir); found {
-		return DetectionResult{Mode: ModeManual, ManualReason: name}, nil
+		return DetectionResult{Mode: ModeManual, ManualReason: name, ManualTarget: findManualTarget(dir, name)}, nil
 	}
 
 	htmlFiles, err := walkHTML(dir)

@@ -13,6 +13,23 @@ The system SHALL scan the project directory selected during `dtwiz install otel`
 - **THEN** the system returns manual injection mode (because frameworks manage their build output and prevent direct HTML file modification)
 - **AND** the reason identifies the detected framework by name
 
+#### Scenario: Next.js project with a root layout file
+
+- **GIVEN** the project is a Next.js project
+- **AND** a root layout file exists as `app/layout`, `src/app/layout`, `pages/_document` or `src/pages/_document` with extension `.tsx`, `.jsx`, `.ts` or `.js`
+- **WHEN** the RUM detection scan runs
+- **THEN** the system returns manual injection mode
+- **AND** the result identifies that layout file as the place to add the tag
+- **AND** App Router layouts take priority over Pages Router documents when both exist
+
+#### Scenario: Next.js project without a recognizable layout file
+
+- **GIVEN** the project is a Next.js project
+- **AND** none of the standard root layout files exist
+- **WHEN** the RUM detection scan runs
+- **THEN** the system returns manual injection mode
+- **AND** the result does not identify a file to add the tag to
+
 #### Scenario: Malformed package.json
 
 - **GIVEN** the project directory contains a `package.json` that cannot be parsed as valid JSON
@@ -65,6 +82,7 @@ The system SHALL scan the project directory selected during `dtwiz install otel`
 - **WHEN** the install preview is shown
 - **THEN** the preview states that auto-injection is not possible
 - **AND** it does not name the detected framework or other reason
+- **AND** it shows the file to add the tag to when one was identified
 
 #### Scenario: HTML files exist inside hidden directories
 
