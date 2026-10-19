@@ -17,6 +17,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/environment"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/rum"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -572,6 +573,9 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 	}
 	fmt.Println()
 
+	// TEMPORARY: mocked FRONTEND ID to verify JS tag retrieval until entity resolution lands.
+	printMockedRumTag(envURL, platformToken)
+
 	runtimes := detectAvailableRuntimes()
 
 	cp, err := prepareCollectorPlan(envURL, token)
@@ -707,4 +711,19 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 	}
 
 	return manualLang, nil
+}
+
+// TEMPORARY: remove lines 717-729 after testing.
+// mockedFrontendID stands in for a resolved Smartscape FRONTEND entity ID.
+const mockedFrontendID = "FRONTEND-DDC29B4C6FAB8AFA"
+
+// printMockedRumTag fetches and prints the RUM JavaScript tag for the mocked
+// FRONTEND ID. Failures are reported but never abort the install.
+func printMockedRumTag(envURL, platformToken string) {
+	tag, err := rum.FetchJavaScriptTag(context.Background(), envURL, platformToken, mockedFrontendID)
+	if err != nil {
+		fmt.Printf("  RUM JavaScript tag fetch failed: %v\n", err)
+		return
+	}
+	fmt.Printf("  RUM JavaScript tag for %s:\n%s\n\n", mockedFrontendID, tag)
 }
