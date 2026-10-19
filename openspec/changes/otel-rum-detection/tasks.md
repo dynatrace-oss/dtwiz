@@ -19,7 +19,8 @@
 
 - [x] 3.1 Implement `walkHTML(dir string) ([]string, error)` using `fs.WalkDir` (via `os.DirFS`) to collect `.html` files.
 - [x] 3.2 Skip excluded directories (`node_modules`, `.git`, `.next`, `.nuxt`, `.svelte-kit`, `dist`, `build`, `out`, `.output`, `__pycache__`, `.venv`, `venv`) by returning `fs.SkipDir` from the walk function.
-- [x] 3.3 Apply case-insensitive `.html` matching only when `runtime.GOOS == "windows"`; use exact match otherwise.
+- [x] 3.3 Skip hidden directories (names starting with `.`). The scan is unbounded in depth but never leaves the scan root.
+- [x] 3.4 Apply case-insensitive `.html` matching only when `runtime.GOOS == "windows"`; use exact match otherwise.
 
 ## 4. Write Permission Probe
 
@@ -53,6 +54,9 @@
   - `index.html` present alongside other `.html` files → `ModeAuto`, only `index.html` in `InjectableFiles`.
   - Angular-style: `index.html` + many `*.component.html` files → `ModeAuto`, only `index.html` returned.
   - No `index.html`, multiple `.html` files → `ModeAuto`, all files sorted in `InjectableFiles`.
+  - Deeply nested `src/main/resources/templates/index.html` → `ModeAuto`, that file in `InjectableFiles`.
+  - `.html` under a hidden directory (`.cache/index.html`) → `ModeManual`, reason "no writable HTML files found".
+  - `.html` in a sibling directory and in the parent of the scan root → ignored; only files under the scan root are returned.
   - Mixed: framework detected alongside `.html` files → `ModeManual` (framework takes precedence).
 - [x] 6.3 Run `go test ./pkg/installer/otel/rum/...` and confirm all cases pass.
 - [x] 6.4 Run `make lint` to confirm no golangci-lint issues in the new package.
@@ -61,6 +65,6 @@
 
 - [x] 7.1 Export `IsNextJSProject` and `IsNuxtProject` from `pkg/installer/otel/nodejs_project.go`; update internal callers in `nodejs_project.go` and `nodejs_project_test.go`.
 - [x] 7.2 Import `pkg/installer/otel/rum` in `pkg/installer/otel/otel.go`.
-- [x] 7.3 In `InstallOtelCollectorWithProject`, after project detection and before the preview display: check `featureflags.IsEnabled(featureflags.Experimental)`; if true, call `rum.Detect` on `projectPath` (or `os.Getwd()` if empty) and store the result; log errors at debug level without aborting.
-- [x] 7.4 In the preview display block, if the `rumResult` is non-nil, print a numbered "Real User Monitoring [experimental]" section showing `Mode: auto-inject` with the injectable file paths, or `Mode: manual (<reason>)`.
+- [x] 7.3 In `InstallOtelCollectorWithProject`, after project detection and before the preview display: check `featureflags.IsEnabled(featureflags.Experimental)`; if true, call `rum.Detect` on the selected project directory (falling back to `projectPath`, then `os.Getwd()`, when no project was selected) and store the result; log errors at debug level without aborting.
+- [x] 7.4 In the preview display block, if the `rumResult` is non-nil, print a numbered "Real User Monitoring [experimental]" section showing `Mode: auto-inject` with the injectable file paths, or `Mode: manual (auto-injection not possible)` without naming the detected framework.
 - [x] 7.5 Run `go test ./pkg/installer/otel/...` and confirm all packages pass.

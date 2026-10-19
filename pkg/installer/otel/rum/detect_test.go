@@ -95,6 +95,22 @@ func TestDetect(t *testing.T) {
 			wantFiles: []string{"index.html"},
 		},
 		{
+			name: "Spring-style: deeply nested templates/index.html",
+			setup: func(t *testing.T, dir string) {
+				writeFile(t, dir, "src/main/resources/templates/index.html", "")
+			},
+			wantMode:  ModeAuto,
+			wantFiles: []string{"src/main/resources/templates/index.html"},
+		},
+		{
+			name: "HTML under hidden directories is ignored",
+			setup: func(t *testing.T, dir string) {
+				writeFile(t, dir, ".cache/index.html", "")
+			},
+			wantMode:   ModeManual,
+			wantReason: "no writable HTML files found",
+		},
+		{
 			name: "HTML under node_modules/ excluded",
 			setup: func(t *testing.T, dir string) {
 				writeFile(t, dir, "node_modules/pkg/index.html", "")
@@ -193,5 +209,22 @@ func TestDetect(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestDetect_IgnoresFilesOutsideScanRoot(t *testing.T) {
+	parent := t.TempDir()
+	project := filepath.Join(parent, "project")
+	writeFile(t, parent, "project/public/index.html", "")
+	writeFile(t, parent, "sibling/index.html", "")
+	writeFile(t, parent, "index.html", "")
+
+	got, err := Detect(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{filepath.Join(project, "public", "index.html")}
+	if got.Mode != ModeAuto || len(got.InjectableFiles) != 1 || got.InjectableFiles[0] != want[0] {
+		t.Fatalf("got %+v, want only %v", got, want)
 	}
 }

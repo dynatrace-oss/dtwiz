@@ -58,7 +58,11 @@ func walkHTML(dir string) ([]string, error) {
 			return nil
 		}
 		if d.IsDir() {
-			if excludedDirs[d.Name()] {
+			if path == "." {
+				return nil
+			}
+			name := d.Name()
+			if excludedDirs[name] || strings.HasPrefix(name, ".") {
 				return fs.SkipDir
 			}
 			return nil

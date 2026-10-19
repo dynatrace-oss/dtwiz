@@ -11,7 +11,7 @@ The detector runs synchronously during `dtwiz install otel`, before any Dynatrac
 **Goals:**
 
 - Classify a project directory as auto-injectable or requiring manual setup.
-- Enumerate candidate `.html` files for injection (those in the project root, not inside build output dirs).
+- Enumerate candidate `.html` files for injection (anywhere under the project directory, not inside build output or hidden dirs).
 - Detect frameworks and build tools that prevent direct HTML modification.
 - Probe write permission for each candidate file in a cross-platform-safe way.
 - Produce a single result struct that downstream steps consume without re-scanning.
@@ -76,6 +76,8 @@ Walk the project directory with `fs.WalkDir`. For each entry:
   - `.next`, `.nuxt`, `.svelte-kit`
   - `dist`, `build`, `out`, `.output`
   - `__pycache__`, `.venv`, `venv`
+  - any hidden directory (name starting with `.`)
+- The walk is unbounded in depth (Spring-style layouts put `index.html` at `src/main/resources/templates/`) but never leaves the scan root, which is the selected project directory.
 - Collect files with a `.html` extension (case-insensitive on Windows; case-sensitive on Unix — use `strings.EqualFold` only if `runtime.GOOS == "windows"`).
 
 ### Step 3 — Write permission probe
@@ -95,7 +97,7 @@ From the writable `.html` files collected in step 3:
 
 Detection is gated behind `featureflags.Experimental` in `InstallOtelCollectorWithProject`. When the flag is active:
 
-1. `rum.Detect` is called on `projectPath` (if provided via `--project`) or `os.Getwd()`.
+1. `rum.Detect` is called on the directory of the project selected earlier in the flow. If no project was selected (e.g. a manually chosen language), it falls back to `projectPath` (from `--project`), then `os.Getwd()`.
 2. The result is stored and displayed as a numbered preview section after the runtime auto-instrumentation block.
 3. No injection happens; the section is informational only.
 
@@ -111,8 +113,10 @@ Preview output when manual setup is required:
 
 ```text
   N) Real User Monitoring [experimental]
-     Mode:  manual (Next.js)
+     Mode:  manual (auto-injection not possible)
 ```
+
+The detected framework name stays in `DetectionResult.ManualReason` for debug logging but is not shown to the user.
 
 Failures during detection are logged at debug level and do not abort the install.
 
@@ -133,4 +137,4 @@ Failures during detection are logged at debug level and do not abort the install
 - False negatives: a project may use a framework not in the detection list. The user receives auto-injection when it would fail. Mitigation: the detection list is the primary extension point; it can grow without changing the algorithm.
 - False positives: a project may have a config filename collision (e.g., a non-Vite `vite.config.js`). This is accepted — the cost of a false positive (user gets a manual instruction) is lower than the cost of injecting into a framework-managed file.
 - Write permission probe opens each file briefly. This is negligible for the expected number of HTML files in a project root.
-- Detection uses CWD when no `--project` path is given. For monorepos, this may scan a wider tree than intended. The follow-on injection change should refine the scan root.
+- Detection uses CWD only when no project was selected and no `--project` path is given. In that case the scan root may be much wider than a single project.

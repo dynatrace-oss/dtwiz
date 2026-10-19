@@ -640,7 +640,10 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 
 	var rumResult *rum.DetectionResult
 	if featureflags.IsEnabled(featureflags.Experimental) {
-		rumDir := projectPath
+		rumDir := planProj.Path
+		if rumDir == "" {
+			rumDir = projectPath
+		}
 		if rumDir == "" {
 			rumDir, _ = os.Getwd()
 		}
@@ -697,7 +700,7 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 				fmt.Printf("     File:  %s\n", f)
 			}
 		} else {
-			fmt.Printf("     Mode:  manual (%s)\n", rumResult.ManualReason)
+			fmt.Printf("     Mode:  manual (auto-injection not possible)\n")
 		}
 	}
 

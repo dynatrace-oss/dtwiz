@@ -4,7 +4,7 @@
 
 ### Requirement: Scan project directory for RUM injection eligibility
 
-The system SHALL scan the current project directory when `dtwiz install otel` runs and determine whether Real User Monitoring can be set up via automatic HTML injection or requires manual tag placement.
+The system SHALL scan the project directory selected during `dtwiz install otel` (falling back to `--project` or the current directory when no project was selected) and determine whether Real User Monitoring can be set up via automatic HTML injection or requires manual tag placement.
 
 #### Scenario: Framework config file detected
 
@@ -44,6 +44,34 @@ The system SHALL scan the current project directory when `dtwiz install otel` ru
 - **WHEN** the RUM detection scan runs
 - **THEN** the system excludes those files from the injectable file list (because they are build output, not source files)
 - **AND** returns manual injection mode with reason indicating no writable HTML files were found
+
+#### Scenario: Deeply nested index.html
+
+- **GIVEN** the project directory contains `index.html` only at a deeply nested path (e.g. `src/main/resources/templates/index.html`)
+- **AND** no framework config file is present
+- **WHEN** the RUM detection scan runs
+- **THEN** the system returns auto injection mode
+- **AND** the result includes that `index.html` path
+
+#### Scenario: HTML files outside the selected project directory
+
+- **GIVEN** `.html` files exist in directories outside the selected project directory
+- **WHEN** the RUM detection scan runs
+- **THEN** those files are never scanned or listed (because only the selected project directory belongs to the application being onboarded)
+
+#### Scenario: Manual injection preview does not name a framework
+
+- **GIVEN** RUM detection returns manual injection mode
+- **WHEN** the install preview is shown
+- **THEN** the preview states that auto-injection is not possible
+- **AND** it does not name the detected framework or other reason
+
+#### Scenario: HTML files exist inside hidden directories
+
+- **GIVEN** the project directory contains `.html` files only inside hidden directories (names starting with `.`)
+- **WHEN** the RUM detection scan runs
+- **THEN** those files are excluded from the injectable file list (because hidden directories hold tool caches and configuration, not application source)
+- **AND** the system returns manual injection mode with reason indicating no writable HTML files were found
 
 #### Scenario: HTML files exist inside node_modules or .git
 
