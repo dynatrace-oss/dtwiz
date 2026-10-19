@@ -16,11 +16,14 @@
 
 - [ ] 3.1 Add unexported request/response types: `frontendRequest` (`displayName`, `frontendName`, `type`, `enableRum`) and `frontendResponse` (`id`, `frontendName`, `displayName`, `type`) with JSON tags
 - [ ] 3.2 Implement unexported `createFrontend(ctx context.Context, platform *client.PlatformClient, projectDir string) (frontendResponse, error)`: builds the request, POST to `/platform/rum/v1/frontends`, decodes 201 response, returns error with API message on non-201
+- [ ] 3.3 Add a dedicated conflict error type (e.g. `ConflictError{FrontendName, AppsURL}`) returned by `createFrontend` when the API answers HTTP 400 with an `error.message` containing "unique" (case-insensitive), parsed from `{"error":{"code","message"}}`; its message names the `frontendName`, links to `installer.AppsURL(envURL) + "/ui/apps/dynatrace.experience.vitals/frontends/"`, and gives both recovery options (copy the ID into `.dtwiz/config.yaml`, or delete the frontend per the Dynatrace docs and re-run); other non-201 statuses keep the generic error
+- [ ] 3.4 On HTTP 401 or 403, return an error that names the `rum:frontends:write` scope as the likely fix (phrased as a starting point, not a certain diagnosis) and includes the API response; leave the config untouched
+- [ ] 3.5 Write unit tests for `createFrontend` in `frontend_test.go` covering: 401 and 403 return the scope hint containing `rum:frontends:write` and the response body, the observed 400 body returns the conflict error (checkable with `errors.As`) containing the name and URL, a 400 with an unrelated message stays generic, a 400 with an unparseable body stays generic
 
 ## 4. `EnsureFrontend` Function (`pkg/installer/otel/internal/rum/frontend.go`)
 
 - [ ] 4.1 Implement `EnsureFrontendApplication(ctx context.Context, platform *client.PlatformClient, envURL, projectDir string) (string, error)`: load project config, return stored ID if present for `envURL`, otherwise call `createFrontend`, save returned ID to config, return ID
-- [ ] 4.2 Write unit tests for `EnsureFrontendApplication` in `pkg/installer/otel/internal/rum/frontend_test.go` covering: existing ID returned without API call, missing ID triggers API call and ID is saved, API error leaves config unchanged
+- [ ] 4.2 Write unit tests for `EnsureFrontendApplication` in `pkg/installer/otel/internal/rum/frontend_test.go` covering: existing ID returned without API call, missing ID triggers API call and ID is saved, API error leaves config unchanged, conflict error leaves config unchanged
 
 ## 5. Validation
 

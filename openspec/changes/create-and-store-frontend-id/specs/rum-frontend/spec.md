@@ -24,6 +24,59 @@ The system SHALL provide an idempotent operation that guarantees a `WEB_AGENTLES
 - **WHEN** the system attempts to create a frontend application and the Dynatrace API returns an error
 - **THEN** the system returns an error and does not modify the project config
 
+### Requirement: Name conflict on creation is reported with recovery guidance
+
+When creating a frontend application fails because a frontend with the same name already exists on the tenant, the system SHALL report this as a distinct, actionable error instead of a generic failure. The error SHALL state the name of the conflicting frontend, point the user directly to the list of frontends on the tenant, and describe the two ways to resolve it: reuse the existing frontend by copying its ID into the project config, or delete the existing frontend and run again. The system SHALL NOT try to find or adopt the existing frontend on its own, and SHALL NOT modify the project config.
+
+This situation arises when an earlier run created the frontend but could not save its ID, or when the project config was deleted.
+
+#### Scenario: Frontend with the same name already exists
+
+- **GIVEN** a project config with no frontend application ID for the current environment URL, and a frontend with the generated name already on the tenant
+- **WHEN** the system tries to create the frontend application and the tenant rejects it because the name is not unique
+- **THEN** the system returns an error that names the frontend, links to the tenant's frontend list, and explains both recovery options
+- **AND** the project config is not modified
+
+#### Scenario: Other creation failures are not reported as name conflicts
+
+- **GIVEN** a project config with no frontend application ID for the current environment URL
+- **WHEN** the tenant rejects the creation for any reason other than a name conflict
+- **THEN** the system returns a generic creation error that includes the tenant's response
+
+### Requirement: Missing permission is reported with the required scope
+
+When the tenant rejects frontend creation because the credentials are not authenticated or not permitted, the system SHALL return an error that names the platform token scope needed to create frontends and tells the user to add it to their token. The message SHALL present this as the most likely cause, not a certain diagnosis, because the tenant's response cannot distinguish a missing scope from a policy that restricts it. The project config SHALL NOT be modified.
+
+#### Scenario: Token lacks permission to create frontends
+
+- **GIVEN** a project config with no frontend application ID for the current environment URL
+- **WHEN** the tenant rejects the creation as unauthenticated or forbidden
+- **THEN** the system returns an error that names the required scope, suggests adding it to the platform token, and includes the tenant's response
+- **AND** the project config is not modified
+
+### Requirement: Frontend provisioning failure is non-fatal and reported
+
+Because RUM is an additional feature, a failure to provision the frontend application SHALL NOT cause the surrounding install to fail. The system SHALL surface every provisioning failure, including API errors, name conflicts and project config read or write errors, as an error to its caller. When provisioning fails, the install SHALL:
+
+- warn the user with the error,
+- skip all remaining RUM setup steps,
+- report the RUM feature as failed in the install self-monitoring data,
+- continue with the rest of the install.
+
+The RUM feature SHALL be reported as succeeded only after the entire RUM setup has completed, not merely after the frontend application exists.
+
+#### Scenario: Frontend creation fails during install
+
+- **GIVEN** an install that includes RUM setup
+- **WHEN** provisioning the frontend application fails
+- **THEN** the user is warned, no further RUM steps run, the RUM feature is reported as failed, and the rest of the install completes normally
+
+#### Scenario: Frontend exists but a later RUM step fails
+
+- **GIVEN** the frontend application was provisioned successfully
+- **WHEN** a later RUM step fails
+- **THEN** the RUM feature is reported as failed, not succeeded
+
 ### Requirement: Frontend name derived automatically from project directory
 
 The system SHALL generate the frontend's unique name deterministically from the project directory path without requiring user input. The name SHALL be prefixed with `dtwiz-` to indicate its origin, and SHALL include a disambiguating suffix derived from the absolute project path to prevent collisions between projects that share a directory name.

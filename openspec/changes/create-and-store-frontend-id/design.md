@@ -41,6 +41,20 @@ The environment URL is the value the user already provides via `DT_ENVIRONMENT` 
 
 **Alternative considered:** keying by tenant ID (first DNS label). More compact, but requires an extra extraction step and is less readable.
 
+### Decision: API reference and required token scopes
+
+The frontend creation call follows the Dynatrace Platform RUM API reference: [POST /platform/rum/v1/frontends](https://docs.dynatrace.com/docs/dynatrace-api/platform-api/platform-rum-v1/frontends-post). Checked against that page: path and method match; `displayName`, `enableRum` and `type` are required; `type` accepts `CORDOVA`, `MOBILE`, `WEB_AGENTLESS` and `WEB_AUTO_INJECTED` (we send `WEB_AGENTLESS`); `frontendName` is listed as optional, must be unique across web and mobile, and cannot be changed later (we always send it, so the name is deterministic); the 201 body returns `id`, `displayName`, `frontendName` and `type`. The page documents 400, 4XX and 5XX with a common error envelope (`error.code`, `error.message`, optional `error.constraintViolations`) but does not list 401, 403 or 409 separately.
+
+Required platform token scopes: `rum:frontends:write` for this call, and `rum:manual-insertion-tags:read` for retrieving the JS snippet in the follow-on step. Both are already listed in the README's token-scope table. On a 401 or 403 the error names `rum:frontends:write` as the likely fix, phrased as a starting point rather than a certain diagnosis, following the precedent of the OpenPipeline error enrichment (a missing scope and a restrictive policy look the same in the response).
+
+### Decision: Request shape verified against a tenant
+
+A manual `POST /platform/rum/v1/frontends` with the body `{displayName, frontendName, type: "WEB_AGENTLESS", enableRum: true}` and a Bearer platform token was accepted with HTTP 201 and returned an `id`. Posting the same `frontendName` again returned HTTP 400 with `{"error":{"code":400,"message":"The frontend name must be unique across the environment."}}`. The request body, the endpoint path and the duplicate behavior used in this design are based on that check.
+
+### Decision: RUM failure is a warning, not an install failure
+
+RUM is an additional feature on top of the OTel install. If provisioning the frontend fails for any reason, the caller warns, skips the remaining RUM steps, records `installer.FeatureRUM` as failed (so the `ist` self-monitoring event carries `install.rum=failed` and `0` in the RUM position of `f=`), and lets the rest of the install continue. `EnsureFrontendApplication` itself only returns the error; the warn, skip and record behavior is the caller's job and is implemented in the follow-on wiring change. `FeatureRUM` is recorded as succeeded only after the whole RUM setup finishes, because the last recorded value for a feature wins.
+
 ### Decision: `frontendName` generated as `dtwiz-{sanitized-dir}-{sha256[:8] of abs path}`
 
 `frontendName` is immutable on the tenant and must be globally unique across web and mobile frontends. Generating it deterministically from the absolute project path ensures:
@@ -81,8 +95,10 @@ The project directory is accepted as an explicit parameter rather than inferred 
 
 **Risk: The config file may be accidentally committed with a staging environment's frontend ID.** The file is not secret (IDs are not credentials), and the per-environment keying means a staging ID in the file does not break production. We intentionally do not touch `.gitignore` — committing the file is valid and even useful for team-shared projects. Accepted.
 
-**Risk: `frontendName` is immutable on the tenant.** If the project directory is renamed or moved, the stored config entry becomes stale (the frontend still exists on the tenant but is no longer found in the new path's config). The user must delete the old config entry or re-create. Accepted as a known limitation for now; the ID is still valid and can be manually reused by editing the config.
+**Risk: Orphaned frontends and name conflicts.** The frontend is created on the tenant before the ID is saved locally, and `frontendName` is deterministic per absolute path. If `Save` fails after a successful POST, or the project config file is deleted, the next run POSTs the same `frontendName`, which the tenant rejects as a duplicate (verified: HTTP 400 with `The frontend name must be unique across the environment.`). A moved or renamed project directory gets a different path hash, so it creates a new frontend and orphans the old one instead of failing.
+
+We have no verified list or get-by-name API for frontends, so we do not attempt automatic recovery. Instead, that rejection is turned into a dedicated error that names the `frontendName`, links straight to the tenant's frontends list (`{apps-url}/ui/apps/dynatrace.experience.vitals/frontends/` appended to `installer.AppsURL(envURL)`), and offers two ways out from there: copy the existing frontend's ID into `.dtwiz/config.yaml` under the current environment URL, or [delete the frontend](https://docs.dynatrace.com/docs/observe/digital-experience/rum/web-frontends/additional-configuration/delete-frontend-web) and re-run. The `frontendName` is printed so the user can find the entry in the list. Accepted: recovery is manual, but the failure is clear and non-destructive. Because the API uses plain 400 for this, detection matches status 400 plus a message containing "unique" (case-insensitive). This is brittle against message rewording; the fallback is the generic error, which still includes the API's message, so a rewording degrades the guidance but never hides the failure. If a lookup API is confirmed later, adopting the existing ID on conflict can replace this.
 
 ## Open Questions
 
-None — all decisions resolved in the explore session.
+None.
