@@ -80,8 +80,11 @@ function Send-InstallEvent {
     try {
         $StepNames = @{ inv = "invoked"; com = "completed"; fai = "failed"; can = "cancelled" }
 
-        # Same normalization as the binary: classic URL, no trailing slash.
-        $Url = ($env:DT_ENVIRONMENT -replace '\.apps\.', '.').TrimEnd('/') + "/api/v2/events/ingest"
+        # Same normalization as the binary's APIURL(): classic URL, no trailing
+        # slash. Production apps URLs map to .live., dev/sprint only drop .apps.
+        $Url = ($env:DT_ENVIRONMENT `
+            -replace '\.apps\.dynatrace\.com', '.live.dynatrace.com' `
+            -replace '\.apps\.dynatracelabs\.com', '.dynatracelabs.com').TrimEnd('/') + "/api/v2/events/ingest"
 
         $UserAgent = "dtwiz/install;s=ps1;st=$Step"
         if ($SmVersion) { $UserAgent += ";v=$SmVersion" }

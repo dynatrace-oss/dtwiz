@@ -79,8 +79,13 @@ dtwiz_send_event() {
         *)   _dtwiz_sm_step_name="$_dtwiz_sm_step" ;;
     esac
 
-    # Same normalization as the binary: classic URL, no trailing slash.
-    _dtwiz_sm_url="$(printf '%s' "$DT_ENVIRONMENT" | sed 's|\.apps\.|.|; s|/*$||')/api/v2/events/ingest"
+    # Same normalization as the binary's APIURL(): classic URL, no trailing
+    # slash. Production apps URLs map to .live., dev/sprint only drop .apps.
+    _dtwiz_sm_base="$(printf '%s' "$DT_ENVIRONMENT" | sed \
+        -e 's|\.apps\.dynatrace\.com|.live.dynatrace.com|' \
+        -e 's|\.apps\.dynatracelabs\.com|.dynatracelabs.com|' \
+        -e 's|/*$||')"
+    _dtwiz_sm_url="${_dtwiz_sm_base}/api/v2/events/ingest"
 
     _dtwiz_sm_ua="dtwiz/install;s=sh;st=${_dtwiz_sm_step}"
     [ -n "$DTWIZ_SM_VERSION" ] && _dtwiz_sm_ua="${_dtwiz_sm_ua};v=${DTWIZ_SM_VERSION}"
