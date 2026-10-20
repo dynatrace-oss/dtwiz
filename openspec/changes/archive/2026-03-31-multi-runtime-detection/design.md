@@ -58,7 +58,7 @@ Common logic extracted into `otel_common.go` to eliminate duplication across run
 Each file exports a single detection entry point matching the Python pattern:
 
 | File | Function | Guard |
-|------|----------|-------|
+| ------ | ---------- | ------- |
 | `otel_java.go` | `DetectJavaPlan(apiURL, token string) *JavaInstrumentationPlan` | `exec.LookPath("java")` |
 | `otel_nodejs.go` | `DetectNodePlan(apiURL, token string) *NodeInstrumentationPlan` | `exec.LookPath("node")` |
 | `otel_go.go` | `DetectGoPlan(apiURL, token string) *GoInstrumentationPlan` | `exec.LookPath("go")` |

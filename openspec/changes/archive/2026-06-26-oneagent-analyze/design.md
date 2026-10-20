@@ -126,7 +126,7 @@ Pre-flights run as four discrete steps before any network work. Any failure shor
 2. `validateEnvironment(env)` encodes the supported platform set and returns targeted, actionable errors. Supported combinations (`linux`/`windows` × `x86`/`arm`) return nil. OS is checked before arch so the most actionable message surfaces first:
 
    | Condition | Error |
-   |---|---|
+   | --- | --- |
    | `env.OS == "darwin"` | `"OneAgent direct install is not supported on macOS; use Docker or Linux"` (existing message, preserved) |
    | `env.OS == "other"` | `"OneAgent direct install is not supported on <runtime.GOOS>; use Linux or Windows"` |
    | `env.Arch == "other"` | `"OneAgent direct install is not supported on <runtime.GOARCH> architecture; use an x86 or ARM host"` |
@@ -282,7 +282,7 @@ Logging is layered:
 **Per-stage log lines** (canonical messages; exact wording may evolve, but the structured keys are part of the spec):
 
 | Stage | Level | Message | Keys |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Env detection | Debug | `"detected environment"` | `os`, `arch` |
 | Preflight: existing install | Debug | `"preflight: oneagent detection"` | `is_update` |
 | Preflight: sudo available | Debug | `"preflight: sudo available"` | — |
@@ -331,7 +331,7 @@ CheckAllEndpoints(endpoints []Endpoint, perEndpointTimeout time.Duration) Connec
 All new flags live on `installOneAgentCmd` (not on `installCmd`, which already owns `--dry-run`):
 
 | Flag | Type | Default | Purpose |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `--monitoring-mode` | string | `"fullstack"` | Passed through as `--set-monitoring-mode` |
 | `--no-verify-signature` | bool | `false` | Skip Linux signature verification |
 | `--skip-connectivity-check` | bool | `false` | Skip Task 9 probe |

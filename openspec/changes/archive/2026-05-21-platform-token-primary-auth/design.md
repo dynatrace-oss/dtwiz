@@ -7,7 +7,7 @@ Dynatrace is migrating from access tokens (`dt0c01.*`) to platform tokens (`dt0s
 The two token families:
 
 | Token | Prefix | Auth header | APIs |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Platform token | `dt0s16.*` | `Bearer` | Platform API (DQL/Grail), ingest endpoints |
 | Access token | `dt0c01.*` | `Api-Token` | Classic API (being phased out) |
 

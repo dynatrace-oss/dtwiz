@@ -103,7 +103,7 @@ Would work, but bootstrap also installs non-framework instrumentations (asyncio,
 `otel_python.go` grew to over 1,100 lines across four distinct concerns. It has since been split into focused files following the same pattern used when `otel_process.go` was extracted.
 
 | File | Responsibility |
-|---|---|
+| --- | --- |
 | `otel_python.go` | Env var generation, plan prompting, `DetectPythonPlan`, `Execute`, `InstallOtelPython`, DQL service polling |
 | `otel_python_venv.go` | `detectPython`, `validatePythonPrerequisites`, `resolveVenvBinary`, `detectProjectVenvDir`, `detectProjectPip`, `isVenvHealthy`, `removeStaleVirtualenv` |
 | `otel_python_project.go` | `PythonProcess`, `PythonProject`, `detectPythonProjects`, `detectPythonProcesses`, `matchProcessesToProjects`, `stopProcesses`, `detectPythonEntrypoints`, `serviceNameFromEntrypoint`, `parseEntrypointFromPyproject`, `getProcessCWD` |

@@ -52,7 +52,7 @@ The `IncludeJournald` field continues to gate both the `journald` receiver defin
 ## Affected Files
 
 | File | Change |
-|---|---|
+| --- | --- |
 | `pkg/installer/otel/otel.tmpl` | Replace `logs` + `logs/host` blocks with single conditional `logs` pipeline |
 | `pkg/installer/otel/collector_test.go` | Update assertions from `logs/host` to check `logs` pipeline processors and receivers |
 

@@ -40,7 +40,7 @@ dtwiz recommend --json
 ## CLI Commands
 
 | Command | Description |
-|---------|-------------|
+| --------- | ------------- |
 | `dtwiz setup` | Interactive: analyze → recommend → pick → install |
 | `dtwiz analyze [--json]` | Detect platform, containers, K8s, agents, cloud, services |
 | `dtwiz recommend [--json]` | Ranked ingestion recommendations based on analysis |
@@ -55,7 +55,7 @@ All `install`, `update`, and `uninstall` commands support `--dry-run`.
 ## Install Methods
 
 | Method | Command | What it does |
-|--------|---------|-------------|
+| -------- | --------- | ------------- |
 | **OneAgent** | `dtwiz install oneagent` | Full-stack host monitoring |
 | **Kubernetes** | `dtwiz install kubernetes` | Deploy Dynatrace Operator (cloudNativeFullStack) |
 | **Docker** | `dtwiz install docker` | OneAgent for Docker containers |
@@ -73,17 +73,17 @@ All `install`, `update`, and `uninstall` commands support `--dry-run`.
 
 Two URL families — using the wrong one causes 404s or auth errors:
 
-| Family | Pattern | Auth header | Use for |
-|--------|---------|-------------|---------|
-| **Classic** | `<env-id>.<domain>/api/...` | `Api-Token dt0c01.*` | `/api/v1`, `/api/v2`, OneAgent download, OTel ingest |
-| **Platform** | `<env-id>.apps.<domain>/platform/...` | `Bearer <token>` | DQL/Grail queries, Platform APIs |
+| Family       | Pattern                               | Auth header          | Use for                                              |
+| ------------ | ------------------------------------- | -------------------- | ---------------------------------------------------- |
+| **Classic**  | `<env-id>.<domain>/api/...`           | `Api-Token dt0c01.*` | `/api/v1`, `/api/v2`, OneAgent download, OTel ingest |
+| **Platform** | `<env-id>.apps.<domain>/platform/...` | `Bearer <token>`     | DQL/Grail queries, Platform APIs                     |
 
 ### Token Types
 
-| Prefix | Type | Auth header |
-|--------|------|-------------|
-| `dt0c01.*` | API token | `Api-Token <token>` |
-| `dt0s16.*` | Platform token | `Bearer <token>` |
+| Prefix     | Type           | Auth header         |
+| ---------- | -------------- | ------------------- |
+| `dt0c01.*` | API token      | `Api-Token <token>` |
+| `dt0s16.*` | Platform token | `Bearer <token>`    |
 
 ### Dry Run
 

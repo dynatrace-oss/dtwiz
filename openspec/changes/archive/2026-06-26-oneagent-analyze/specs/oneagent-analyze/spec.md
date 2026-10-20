@@ -554,7 +554,7 @@ The `<friendly-error>` term is produced by `friendlyDialError` (not the raw Go e
 `InstallOneAgentV2` SHALL translate raw `net.DialTimeout` error strings to short human-readable phrases via a `friendlyDialError` helper before displaying them to the user. The mapping:
 
 | Raw error contains | Displayed as |
-|---|---|
+| --- | --- |
 | `"i/o timeout"`, `"timed out"`, `"deadline exceeded"` | `"timed out"` |
 | `"connection refused"` | `"connection refused"` |
 | `"no route to host"` | `"no route to host"` |

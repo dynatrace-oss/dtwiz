@@ -98,7 +98,7 @@ The underlying installer invocation is identical whether installing fresh or upd
 ### 7. Logging
 
 | Stage | Level | Message | Keys |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Download start | Debug | `"downloading installer"` | `url`, `os`, `arch` |
 | Download done | Verbose | `"installer downloaded"` | `path`, `size_bytes` |
 | openssl lookup | Debug | `"openssl lookup"` | `path`, `found` |

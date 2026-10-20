@@ -22,8 +22,8 @@
 
 Each test case SHALL inject its port into the fixture app via a per-language env var before the installer launches the app. The env var SHALL be restored after the subtest completes.
 
-| Language | Env var              | Default port |
-|----------|----------------------|--------------|
+| Language | Env var               | Default port |
+| -------- | --------------------- | ------------ |
 | Python   | `TEST_FLASK_APP_PORT` | 18080        |
 | Node.js  | `TEST_NODE_APP_PORT`  | 18082        |
 | Java     | `TEST_JAVA_APP_PORT`  | 18081        |

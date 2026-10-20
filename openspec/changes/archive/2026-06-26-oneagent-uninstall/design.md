@@ -48,7 +48,7 @@ On decline, `UninstallOneAgentV2` returns `installer.ErrInstallCancelled` (match
 ### 7. Logging
 
 | Stage | Level | Message | Keys |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Uninstall entry | Debug | `"starting oneagent uninstall"` | `dry_run` |
 | Agent detected | Debug | `"existing OneAgent detected"` | — |
 | Script check | Debug | `"checking uninstall script"` | `path` |

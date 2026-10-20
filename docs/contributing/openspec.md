@@ -16,7 +16,7 @@ OpenSpec artifacts live under `openspec/` and are managed through skills availab
 ## When to Use OpenSpec
 
 | Required | Not required |
-|---|---|
+| --- | --- |
 | New CLI commands | Typo or documentation-only fixes |
 | New packages | Minor bug fixes |
 | Significant behavior changes | Trivial chores |
@@ -27,7 +27,7 @@ When in doubt, open a GitHub Issue first and ask.
 ## Workflow
 
 | Step | Skill | What it does | Output |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | 1 | `/opsx:explore` | Think through the problem, gather context | No files |
 | 2 | `/opsx:propose` | Generate proposal, design, and task list | `openspec/changes/<name>/` with `proposal.md`, `design.md`, `tasks.md`, and `specs/` |
 | 3 | `/opsx:apply` | Implement the tasks | Feature code and tests; `tasks.md` updated with progress |

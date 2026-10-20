@@ -9,7 +9,7 @@ What the extension does **not** provision is the OpenPipeline **dynamic routes**
 **Per-signal schema reference.** The three signals and the exact schema IDs and matcher constants involved, wherever `<signal>` is used as a placeholder elsewhere in this document:
 
 | Signal | Pipeline schema | Routing schema | Matcher constant |
-|--------|------------------|-----------------|-------------------|
+| -------- | ------------------ | ----------------- | ------------------- |
 | metrics | `builtin:openpipeline.metrics.pipelines` | `builtin:openpipeline.metrics.routing` | `grailMatcherMetrics` |
 | logs | `builtin:openpipeline.logs.pipelines` | `builtin:openpipeline.logs.routing` | `grailMatcherLogs` |
 | spans | `builtin:openpipeline.spans.pipelines` | `builtin:openpipeline.spans.routing` | `grailMatcherSpans` |
@@ -156,10 +156,10 @@ The route plan is built during the install preview phase (before the existing "P
 
 Every OpenPipeline call in this change (pipeline list, routing list, routing update, routing create) uses the same platform token as every other settings-object write in dtwiz. The two scopes that normally cover these operations are:
 
-| Operation | Scope that normally covers it |
-|-----------|-------------------------------|
-| List/read pipelines or routing objects (`checkPipeline`, `getRoutingEntries`) | `settings:objects:read` |
-| Create/update the routing object (`putRoutingEntries`, `createRoutingObject`) | `settings:objects:write` |
+| Operation                                                                     | Scope that normally covers it |
+| ----------------------------------------------------------------------------- | ----------------------------- |
+| List/read pipelines or routing objects (`checkPipeline`, `getRoutingEntries`) | `settings:objects:read`       |
+| Create/update the routing object (`putRoutingEntries`, `createRoutingObject`) | `settings:objects:write`      |
 
 **Important limitation dtwiz cannot resolve from the response alone:** Dynatrace IAM policies can grant `settings:objects:read`/`write` restricted to a specific list of schema IDs. A token can genuinely hold the scope and still be denied here if its policy's schema list doesn't include `builtin:openpipeline.<signal>.pipelines`/`.routing`. The 403 body is identical in both cases (missing scope entirely, vs. scope present but schema-restricted), so dtwiz **cannot** distinguish "you don't have this scope" from "you have this scope but not for this schema"; asserting either as the cause would sometimes be a wrong diagnosis.
 

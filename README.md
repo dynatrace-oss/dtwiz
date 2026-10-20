@@ -61,9 +61,9 @@ dtwiz setup
 
 Set the following environment variables before running `dtwiz`:
 
-| Variable | Description |
-|----------|-------------|
-| `DT_ENVIRONMENT` | Your Dynatrace environment URL (e.g. `https://<your-tenant-domain>`) |
+| Variable            | Description                                                                                                |
+| ------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `DT_ENVIRONMENT`    | Your Dynatrace environment URL (e.g. `https://<your-tenant-domain>`)                                       |
 | `DT_PLATFORM_TOKEN` | Platform token (`dt0s16.*`) — primary credential; used for Platform/DQL and (by default) Classic API calls |
 
 For legacy environments where the platform token lacks Classic API access, opt into a Classic API token (`dt0c01.*`) by passing `--access-token` explicitly. It is intentionally **not** read from `DT_ACCESS_TOKEN` — so a leftover env var can never silently change which token authenticates Classic API calls.
@@ -75,7 +75,7 @@ For legacy environments where the platform token lacks Classic API access, opt i
 If you create the token manually, grant the following scopes. This list is a practical baseline covering the ingestion methods `dtwiz` supports; depending on which methods you install, you may not need all of them, and future features may require additional scopes.
 
 | Group | Scopes |
-|-------|--------|
+| ------- | -------- |
 | **Data acquisition** | `data-acquisition:events:ingest`, `data-acquisition:logs:ingest`, `data-acquisition:metrics:ingest` |
 | **Extensions** | `extensions:configurations:read`, `extensions:configurations:write`, `extensions:definitions:read`, `extensions:definitions:write` |
 | **Fleet management** | `fleet-management:activegate.connection-info:read`, `fleet-management:activegate.tokens:create`, `fleet-management:activegates:download`, `fleet-management:activegates:read`, `fleet-management:activegates:write`, `fleet-management:cluster-id:read`, `fleet-management:container-images:read`, `fleet-management:oneagent.connection-info:read`, `fleet-management:oneagent.tokens:read`, `fleet-management:oneagents:download`, `fleet-management:public-addresses:read` |
@@ -131,7 +131,7 @@ The `main` channel is rebuilt automatically on every push to `main` and is inten
 ## Available commands
 
 | Command | Description |
-|---------|-------------|
+| --------- | ------------- |
 | `dtwiz setup` | Interactive analyze → recommend → install workflow |
 | `dtwiz analyze` | Detect platform, containers, K8s, existing agents, cloud, and services |
 | `dtwiz recommend` | Generate ranked ingestion recommendations |
@@ -222,16 +222,16 @@ fetch events
 | limit 100
 ```
 
-| Field         | Values                                                                                                                                                              | Description                                  |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| `executionId` | `3ab`                                                                                                                                                               | Correlates the events of one script run      |
-| `script`      | `sh`, `ps1`                                                                                                                                                         | Install script that ran                      |
-| `step`        | `invoked`, `completed`, `failed`, `cancelled`                                                                                                                       | Execution stage                              |
+| Field         | Values                                                                                                                                                                                                                                          | Description                                                          |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `executionId` | `3ab`                                                                                                                                                                                                                                           | Correlates the events of one script run                              |
+| `script`      | `sh`, `ps1`                                                                                                                                                                                                                                     | Install script that ran                                              |
+| `step`        | `invoked`, `completed`, `failed`, `cancelled`                                                                                                                                                                                                   | Execution stage                                                      |
 | `error`       | `unknown_argument`, `unsupported_os`, `unsupported_arch`, `curl_missing`, `github_unreachable`, `release_not_found`, `install_dir_failed`, `prompt_failed`, `download_failed`, `extract_failed`, `binary_missing`, `move_failed`, `interrupted` | Failure reason; `interrupted` on a cancelled run stopped with Ctrl+C |
-| `version`     | `1.9.0`, `1.9.1-next`                                                                                                                                               | dtwiz version being installed, once resolved |
-| `channel`     | `stable`, `main`, `tag`                                                                                                                                             | Requested release source                     |
-| `tag`         | `snapshot-main`, `snapshot-<branch>`                                                                                                                                | Requested release tag, when set              |
-| `os`          | `darwin`, `linux`, `windows`                                                                                                                                        | Operating system                             |
+| `version`     | `1.9.0`, `1.9.1-next`                                                                                                                                                                                                                           | dtwiz version being installed, once resolved                         |
+| `channel`     | `stable`, `main`, `tag`                                                                                                                                                                                                                         | Requested release source                                             |
+| `tag`         | `snapshot-main`, `snapshot-<branch>`                                                                                                                                                                                                            | Requested release tag, when set                                      |
+| `os`          | `darwin`, `linux`, `windows`                                                                                                                                                                                                                    | Operating system                                                     |
 
 ## Demo
 

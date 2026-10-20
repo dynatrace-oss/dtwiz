@@ -56,7 +56,7 @@ Detect frameworks that the OTel installer already recognizes, ensuring consisten
 Check for the following frameworks in order (first match wins):
 
 | Framework | Detection method |
-|---|---|
+| --- | --- |
 | Next.js | Config files: `next.config.js`, `next.config.mjs`, `next.config.ts`; or dependency: `"next"` in `package.json` |
 | Nuxt | Config files: `nuxt.config.js`, `nuxt.config.mjs`, `nuxt.config.ts`; or dependency: `"nuxt"` in `package.json` |
 

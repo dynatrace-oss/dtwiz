@@ -19,11 +19,11 @@ produces no results.
 
 ## Tenant phases
 
-| Phase | Behavior |
-|-------|----------|
+| Phase                 | Behavior                                                                                                      |
+| --------------------- | ------------------------------------------------------------------------------------------------------------- |
 | **Phase 2, disabled** | Setting exists, `enableMintV2Ingest = false`. dtwiz prompts to enable it after the main install confirmation. |
-| **Phase 2, enabled**  | Setting exists, `enableMintV2Ingest = true`. dtwiz silently skips. |
-| **Phase 3**           | Setting schema removed (GET returns 404). dtwiz silently skips. |
+| **Phase 2, enabled**  | Setting exists, `enableMintV2Ingest = true`. dtwiz silently skips.                                            |
+| **Phase 3**           | Setting schema removed (GET returns 404). dtwiz silently skips.                                               |
 
 ## What Changes
 

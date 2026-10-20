@@ -51,7 +51,7 @@ The typed error types (`AuthError`, `ConfigError`, `DependencyMissingError`, etc
 The taxonomy categories, their additional attributes, and the conditions under which each applies:
 
 | `error.type` | Additional attributes | When |
-|---|---|---|
+| --- | --- | --- |
 | `user_cancelled` | — | User declined Y/N prompt or typed `0` at recommendation menu |
 | `auth_error` | `auth.failure_reason`: `invalid_token`, `environment_not_reachable`, or `authentication_failed` | Authentication failed, invalid or missing token, environment unreachable |
 | `config_error` | `config.missing_fields`: array of missing field names (`DT_ENVIRONMENT`, `DT_PLATFORM_TOKEN`, `project_path`) | Missing environment URL, missing platform token, or project path not found before install could start |
@@ -67,7 +67,7 @@ Classification priority (first match wins): `user_cancelled` → `auth_error` �
 The `User-Agent` is capped at 64 characters by the HAProxy capture limit, and that budget has to absorb fields added later. The longest taxonomy value, `platform_unsupported`, spends 20 of those characters on its own. Each value therefore gets a 3-character code in the header:
 
 | Body `error` | `er=` |
-|---|---|
+| --- | --- |
 | `user_cancelled` | `ucl` |
 | `auth_error` | `aut` |
 | `config_error` | `cfg` |

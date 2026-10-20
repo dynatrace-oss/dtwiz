@@ -16,9 +16,9 @@ produced a `tenantPrereqs` struct to carry all prereq state as a named group.
 The `builtin:opentelemetry-metrics` schema is not present on all tenant types:
 
 | Phase | API behavior | dtwiz response |
-|-------|-------------|----------------|
+| ------- | ------------- | ---------------- |
 | Phase 2, `enableMintV2Ingest = false` | GET returns one object, field is false | Prompt user to enable after main confirm |
-| Phase 2, `enableMintV2Ingest = true`  | GET returns one object, field is true  | Silent skip — nothing to do |
+| Phase 2, `enableMintV2Ingest = true` | GET returns one object, field is true | Silent skip — nothing to do |
 | Phase 3 | GET returns HTTP 404 | Silent skip — setting removed from tenant |
 
 ## Goals / Non-Goals
@@ -80,7 +80,7 @@ Internal identifiers use `otlpMetricDimensions*`. UI-facing strings use the prod
 ## Key Paths
 
 | Path | Role |
-|---|---|
+| --- | --- |
 | `pkg/installer/otel/otel_metric_dimensions.go` | Client interface, plan struct, build/apply/print functions |
 | `pkg/installer/otel/otel_metric_dimensions_test.go` | Table-driven tests with httptest.Server |
 | `pkg/installer/otel/otel.go` | `tenantPrereqs` struct, updated `buildTenantPrerequisitePreview`, `applyOTLPMetricDimensions` call |

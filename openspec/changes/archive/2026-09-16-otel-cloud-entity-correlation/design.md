@@ -5,7 +5,7 @@
 The `meta-opentelemetry-host` extension creates `OTEL_HOST runs_on <cloud entity>` in Smartscape when one of these attributes is present on host metrics:
 
 | Cloud | Attribute | Format |
-|---|---|---|
+| --- | --- | --- |
 | AWS | `aws.arn` | `arn:aws:ec2:<region>:<account>:instance/<id>` |
 | Azure | `azure.resource.id` | `/subscriptions/.../providers/microsoft.compute/virtualmachines/<name>` (lowercase) |
 | GCP | `gcp.resource.name` | `//compute.googleapis.com/projects/<project>/zones/<zone>/instances/<name>` |
@@ -23,7 +23,7 @@ The OTel `resourcedetectionprocessor` enriches resource attributes via cloud-spe
 All three probes run in parallel with a 150 ms timeout. First 200 response wins — written to a buffered channel sized to `len(probes)`; `<-resultCh` returns the first write. Channel closes via `wg.Wait()` when all goroutines finish, unblocking the receive with `""` on non-cloud hosts.
 
 | Cloud | Method | Endpoint |
-|---|---|---|
+| --- | --- | --- |
 | AWS | PUT | `http://169.254.169.254/latest/api/token` + `X-aws-ec2-metadata-token-ttl-seconds: 21600` |
 | Azure | GET | `http://169.254.169.254/metadata/instance?api-version=2021-02-01` + `Metadata: true` |
 | GCP | GET | `http://metadata.google.internal/computeMetadata/v1/` + `Metadata-Flavor: Google` |
