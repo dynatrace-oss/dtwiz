@@ -26,7 +26,7 @@ The detector runs synchronously during `dtwiz install otel`, before any Dynatrac
 
 ## Package Location
 
-`pkg/installer/otel/rum/` — new sub-package of the OTel method folder. Per the folder-per-method rule, RUM logic is OTel-specific and must not land in the shared `pkg/installer/` root.
+`pkg/installer/otel/internal/rum/` — new sub-package of the OTel method folder. Per the folder-per-method rule, RUM logic is OTel-specific and must not land in the shared `pkg/installer/` root.
 
 ## Result Struct
 
@@ -52,7 +52,7 @@ Consumers (the OTel installer preview step) inspect `Mode` to branch the UX; the
 
 ### Step 1 — Framework detection
 
-Detect frameworks that the OTel installer already recognizes, ensuring consistency between backend instrumentation and RUM setup. The detection logic mirrors `pkg/installer/otel/nodejs_project.go` but is implemented directly in `rum/detect.go` to avoid an import cycle (see Decisions).
+Detect frameworks that the OTel installer already recognizes, ensuring consistency between backend instrumentation and RUM setup. The detection reuses `markers.IsNextJSProject` and `markers.IsNuxtProject` from `pkg/installer/otel/markers`, the same functions the Node.js project detection uses (see Decisions).
 
 Check for the following frameworks in order (first match wins):
 
@@ -128,8 +128,7 @@ Failures during detection are logged at debug level and do not abort the install
 
 ## Decisions
 
-- **Self-contained framework detection.** The `rum` package implements `isNextJSProject`, `isNuxtProject`, and `hasDependency` directly, mirroring the logic in `pkg/installer/otel/nodejs_project.go`. Importing that package would create a circular dependency (`otel` → `rum` → `otel`). The functions are small enough that the duplication cost is lower than the architectural cost of introducing an intermediate shared package.
-- **`IsNextJSProject` and `IsNuxtProject` exported from `otel`.** Even though `rum` does not import them, these are exported so other packages (e.g., future CLI commands) can reuse them without going through the `rum` package.
+- **Shared framework detection in `markers`.** `IsNextJSProject`, `IsNuxtProject`, and `HasDependency` live in `pkg/installer/otel/markers`, which both `otel` and `rum` import. Placing them in a leaf package avoids the import cycle (`otel` → `rum` → `otel`) without duplicating the logic, so backend instrumentation and RUM setup always agree on what counts as Next.js or Nuxt.
 - **Detect framework before walking for HTML.** Framework detection is O(1) stat calls; HTML scanning is O(N) on the directory tree. Stopping early avoids unnecessary I/O in the common case where a framework is present.
 - **`fs.WalkDir` over `filepath.Walk`.** `fs.WalkDir` passes `fs.DirEntry` which avoids an extra `os.Stat` syscall per entry. Both are cross-platform.
 - **No `os.Stat` mode-bit checks for writability.** `os.Stat` returns Unix-style mode bits that are not meaningful on Windows (all files appear writable). `os.OpenFile` with `O_WRONLY` is portable.

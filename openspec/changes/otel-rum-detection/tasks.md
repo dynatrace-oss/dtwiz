@@ -2,16 +2,16 @@
 
 ## 1. Package Scaffold
 
-- [x] 1.1 Create `pkg/installer/otel/rum/` directory and `detect.go` file with the `rum` package declaration.
+- [x] 1.1 Create `pkg/installer/otel/internal/rum/` directory and `detect.go` file with the `rum` package declaration.
 - [x] 1.2 Define `InjectionMode` string type and `ModeAuto` / `ModeManual` constants.
 - [x] 1.3 Define `DetectionResult` struct with `Mode InjectionMode`, `InjectableFiles []string`, and `ManualReason string`.
 
 ## 2. Framework Detection
 
-- [x] 2.1 Implement `isNextJSProject`, `isNuxtProject`, and `hasDependency` directly in `detect.go`, mirroring the logic in `pkg/installer/otel/nodejs_project.go`. Importing from the parent `otel` package is not possible — `otel.go` imports `rum`, and a back-import would create a circular dependency.
+- [x] 2.1 Reuse `markers.IsNextJSProject`, `markers.IsNuxtProject`, and `markers.HasDependency` from `pkg/installer/otel/markers` in `detect.go`; do not re-implement them.
 - [x] 2.2 Implement `detectFramework(dir string) (name string, found bool)` in `detect.go` that:
-  - Returns `"Next.js"` if `isNextJSProject(dir)` is true
-  - Returns `"Nuxt"` if `isNuxtProject(dir)` is true
+  - Returns `"Next.js"` if `markers.IsNextJSProject(dir)` is true
+  - Returns `"Nuxt"` if `markers.IsNuxtProject(dir)` is true
   - Returns `""` and `false` if none are found
 - [x] 2.3 Expose `detectFramework` for use by the main `Detect` entry point.
 
@@ -44,7 +44,7 @@
 
 ## 6. Tests
 
-- [x] 6.1 Create `pkg/installer/otel/rum/detect_test.go` with a table-driven test for `Detect` using `t.TempDir()` to build temp directory trees.
+- [x] 6.1 Create `pkg/installer/otel/internal/rum/detect_test.go` with a table-driven test for `Detect` using `t.TempDir()` to build temp directory trees.
 - [x] 6.2 Test cases:
   - Static HTML project: one `.html` in root → `ModeAuto`, one injectable file.
   - Next.js via config: `next.config.js` present → `ModeManual`, reason "Next.js".
@@ -65,13 +65,14 @@
   - `.html` in a sibling directory and in the parent of the scan root → ignored; only files under the scan root are returned.
   - Manual target (`layout_test.go`): each of `.js`, `.jsx`, `.ts`, `.tsx` in `app/layout`; `src/app/layout`; `pages/_document`; `src/pages/_document`; App Router wins over Pages Router; no layout file → empty target; Nuxt config in each of `.ts`, `.js`, `.mjs`, `.mts`; Nuxt ignores Next.js layout paths; Nuxt without a config file → empty target; `Detect` on Next.js returns the layout as `ManualTarget`.
   - Mixed: framework detected alongside `.html` files → `ModeManual` (framework takes precedence).
-- [x] 6.3 Run `go test ./pkg/installer/otel/rum/...` and confirm all cases pass.
+- [x] 6.3 Run `go test ./pkg/installer/otel/internal/rum/...` and confirm all cases pass.
 - [x] 6.4 Run `make lint` to confirm no golangci-lint issues in the new package.
 
 ## 7. OTel Installer Integration
 
-- [x] 7.1 Export `IsNextJSProject` and `IsNuxtProject` from `pkg/installer/otel/nodejs_project.go`; update internal callers in `nodejs_project.go` and `nodejs_project_test.go`.
-- [x] 7.2 Import `pkg/installer/otel/rum` in `pkg/installer/otel/otel.go`.
+- [x] 7.1 Move `IsNextJSProject`, `IsNuxtProject`, and `HasDependency` into `pkg/installer/otel/markers/js_markers.go` and update the caller in `nodejs_project.go`.
+- [x] 7.1a Move the `IsNextJSProject` tests from `nodejs_project_test.go` into `markers/js_markers_test.go`, next to the code under test, and add tests for `IsNuxtProject` (config files incl. `.mts`, dependency, negative case) and `HasDependency` (dependencies, devDependencies, absent, malformed JSON, missing file).
+- [x] 7.2 Import `pkg/installer/otel/internal/rum` in `pkg/installer/otel/otel.go`.
 - [x] 7.3 In `InstallOtelCollectorWithProject`, after project detection and before the preview display: check `featureflags.IsEnabled(featureflags.Experimental)`; if true, call `rum.Detect` on the selected project directory (falling back to `projectPath`, then `os.Getwd()`, when no project was selected) and store the result; log errors at debug level without aborting.
 - [x] 7.4 In the preview display block, if the `rumResult` is non-nil, print a numbered "Real User Monitoring [experimental]" section showing `Mode: auto-inject` with the injectable file paths, or `Mode: manual (auto-injection not possible)` without naming the detected framework, followed by an `Add:` line with the target file when `ManualTarget` is set.
 - [x] 7.5 Run `go test ./pkg/installer/otel/...` and confirm all packages pass.

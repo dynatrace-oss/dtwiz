@@ -17,7 +17,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/environment"
-	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/rum"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/internal/rum"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 

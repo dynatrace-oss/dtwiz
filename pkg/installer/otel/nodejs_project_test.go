@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/markers"
 	"github.com/dynatrace-oss/dtwiz/test/helpers"
 )
 
@@ -50,55 +49,6 @@ func TestDetectNodeProjects_ExcludesNodeModules(t *testing.T) {
 		if filepath.Base(filepath.Dir(p.Path)) == "node_modules" {
 			t.Errorf("node_modules project should be excluded, found: %s", p.Path)
 		}
-	}
-}
-
-// --- Task 1.1a: IsNextJSProject tests ---
-
-func TestIsNextJSProject_ConfigFile(t *testing.T) {
-	for _, configFile := range []string{"next.config.js", "next.config.ts", "next.config.mjs"} {
-		t.Run(configFile, func(t *testing.T) {
-			dir := t.TempDir()
-			if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name":"app"}`), 0644); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(filepath.Join(dir, configFile), []byte(""), 0644); err != nil {
-				t.Fatal(err)
-			}
-			if !markers.IsNextJSProject(dir) {
-				t.Errorf("expected IsNextJSProject=true for %s", configFile)
-			}
-		})
-	}
-}
-
-func TestIsNextJSProject_PackageDep(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"dependencies":{"next":"14.0.0"}}`), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if !markers.IsNextJSProject(dir) {
-		t.Error("expected IsNextJSProject=true for next in dependencies")
-	}
-}
-
-func TestIsNextJSProject_DevDep(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"devDependencies":{"next":"14.0.0"}}`), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if !markers.IsNextJSProject(dir) {
-		t.Error("expected IsNextJSProject=true for next in devDependencies")
-	}
-}
-
-func TestIsNextJSProject_NotNextJS(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"dependencies":{"express":"4.0.0"}}`), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if markers.IsNextJSProject(dir) {
-		t.Error("expected IsNextJSProject=false for non-Next.js project")
 	}
 }
 

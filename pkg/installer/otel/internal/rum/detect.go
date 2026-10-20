@@ -42,7 +42,9 @@ var excludedDirs = map[string]bool{
 	"venv":         true,
 }
 
-func detectFramework(dir string) (string, bool) {
+// detectFramework reports the name of a JavaScript framework that renders its
+// own HTML (Next.js, Nuxt), which rules out injecting into static HTML files.
+func detectFramework(dir string) (name string, found bool) {
 	if markers.IsNextJSProject(dir) {
 		return "Next.js", true
 	}
@@ -52,9 +54,11 @@ func detectFramework(dir string) (string, bool) {
 	return "", false
 }
 
-func walkHTML(dir string) ([]string, error) {
-	var files []string
-	err := fs.WalkDir(os.DirFS(dir), ".", func(path string, d fs.DirEntry, err error) error {
+// walkHTML returns the absolute paths of all .html files under dir, skipping
+// build output, dependency, and hidden directories. It never leaves dir and
+// ignores unreadable entries.
+func walkHTML(dir string) (files []string, err error) {
+	err = fs.WalkDir(os.DirFS(dir), ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
