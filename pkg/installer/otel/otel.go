@@ -606,8 +606,7 @@ func printPrivilegeNote() {
 	switch runtime.GOOS {
 	case "linux":
 		if !isElevatedFn() {
-			display.PrintAlignedStatusLines(display.ColorWarning, "Note", "not root: host metrics and logs are limited")
-			display.Detail("full host metrics and logs require elevated privileges (root or systemd-journal group)")
+			display.PrintAlignedStatusLines(display.ColorWarning, "Note", "not root: for full host metrics and logs, run as root or join the systemd-journal group")
 			display.Detail("process.disk.io is dropped without privileged access; system.processes.created is Linux-only")
 		}
 	case "windows":
