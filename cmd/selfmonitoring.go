@@ -213,23 +213,24 @@ func fireSetupMenuEvent(cmd *cobra.Command, recs []recommender.Recommendation) {
 	}
 }
 
-func fireSetupInstallEvent(cmd *cobra.Command, sub string, err error) {
-	if errors.Is(err, installer.ErrInstallCancelled) || errors.Is(err, otel.ErrUpToDate) {
+// fireInstallReportEvent fires the StepInstall event, which reports what the install did:
+// the feature outcomes and the install work time. It carries no error; how the run ended
+// is reported by the terminal event. It fires only when install work started, so nothing
+// is sent for a dry-run, a declined confirmation, an up-to-date config, or a failure
+// before the confirmation. A non-empty sub replaces the subcommand, for setup, where the
+// method is not the cobra subcommand. Pre-install failures must not call it.
+func fireInstallReportEvent(cmd *cobra.Command, sub string, err error) {
+	if errors.Is(err, otel.ErrUpToDate) {
 		return
 	}
 	p := buildEventParams(cmd, selfmonitoring.StepInstall)
-	p.Sub = sub
-	if err != nil {
-		errType, attrs := selfmonitoring.ClassifyError(err)
-		p.Err = string(errType)
-		if len(attrs) > 0 {
-			p.ExtraProps = make(map[string]string, len(attrs))
-			for k, v := range attrs {
-				p.ExtraProps[k] = v
-			}
-		}
+	if sub != "" {
+		p.Sub = sub
 	}
 	applyInstallOutcomes(&p, err)
+	if p.Install == nil {
+		return
+	}
 	fireSelfMonitoringEvent(p)
 }
 
@@ -250,23 +251,21 @@ func applyInstallOutcomes(p *selfmonitoring.EventParams, err error) {
 	}
 }
 
-// fireInstallEvent fires the StepInstall event for a direct dtwiz install <method>
-// invocation, including cancellations (error = user_cancelled). The install work time
-// and feature outcomes are included when install work started.
-func fireInstallEvent(cmd *cobra.Command, err error) {
-	p := buildEventParams(cmd, selfmonitoring.StepInstall)
-	if err != nil {
-		errType, attrs := selfmonitoring.ClassifyError(err)
-		p.Err = string(errType)
-		if len(attrs) > 0 {
-			p.ExtraProps = make(map[string]string, len(attrs))
-			for k, v := range attrs {
-				p.ExtraProps[k] = v
-			}
-		}
+// fireInstallEvents fires the events that close a direct dtwiz install <method> run once
+// the installer returned: the StepInstall report when install work started, then exactly
+// one terminal event. That is StepCompleted on success (including dry-run),
+// StepCancelled when the user declined, and StepFailed with the classified error
+// otherwise. Pre-install failures fire their own StepFailed and must not call it.
+func fireInstallEvents(cmd *cobra.Command, err error) {
+	fireInstallReportEvent(cmd, "", err)
+	switch {
+	case err == nil:
+		fireSelfMonitoringEvent(buildEventParams(cmd, selfmonitoring.StepCompleted))
+	case errors.Is(err, installer.ErrInstallCancelled):
+		fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), err)
+	default:
+		fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 	}
-	applyInstallOutcomes(&p, err)
-	fireSelfMonitoringEvent(p)
 }
 
 func resolveMode() selfmonitoring.Mode {

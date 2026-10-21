@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Self-monitoring: the `ist` event now only reports what the install did (feature outcomes and install time). It no longer carries `error` or error attributes, and it is only sent when install work started, so dry-runs, declined confirmations, and failures before the confirmation send no `ist`. The install error is reported on the `failed` or `cancelled` event of the same run, for both `dtwiz install <method>` and `dtwiz setup`.
+- Self-monitoring: `dtwiz install <method>` now ends every run that reaches the installer with exactly one `completed`, `failed`, or `cancelled` event, like `setup`, `update`, and `uninstall`.
+
 ## [1.13.0] - 2026-10-19
 
 ### Added
