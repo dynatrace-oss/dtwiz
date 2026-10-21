@@ -140,8 +140,7 @@ func installAWSWithClient(envURL, token string, dryRun bool, startTime string, d
 	sep := strings.Repeat("─", 60)
 
 	fmt.Println()
-	display.ColorMessage.Println("  Dynatrace AWS CloudFormation Integration")
-	fmt.Println()
+	display.Header("dtwiz · AWS")
 
 	if envURL == "" {
 		return fmt.Errorf("Dynatrace environment URL is required (--environment or DT_ENVIRONMENT)") //nolint:staticcheck // ST1005: keep brand capitalization
@@ -154,13 +153,19 @@ func installAWSWithClient(envURL, token string, dryRun bool, startTime string, d
 		return fmt.Errorf("AWS CLI not found — install it from https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html")
 	}
 
-	fmt.Printf("\n  Fetching AWS account info...\n")
-	accountID, region, err := installer.GetAWSCallerInfo()
-	if err != nil {
-		return fmt.Errorf("fetching AWS caller info: %w", err)
+	var accountID, region string
+	if err := display.RunStep("Fetched AWS account info", func(s *display.Step) error {
+		var err error
+		accountID, region, err = installer.GetAWSCallerInfo()
+		if err != nil {
+			return fmt.Errorf("fetching AWS caller info: %w", err)
+		}
+		s.Detail("account %s · %s", accountID, region)
+		return nil
+	}); err != nil {
+		return err
 	}
-	fmt.Printf("  AWS account: %s  region: %s\n", accountID, region)
-	fmt.Printf("  Template: %s\n", awsTemplateURL)
+	display.Detail("template: %s", awsTemplateURL)
 
 	// Monitoring config ID is resolved after confirmation; show placeholder in preview.
 	cfg := awsStackConfig{
@@ -180,55 +185,79 @@ func installAWSWithClient(envURL, token string, dryRun bool, startTime string, d
 	deployArgs := buildDeployArgs(cfg, "<temp-file>")
 
 	fmt.Println()
-	fmt.Printf("  %s\n", sep)
-	display.ColorMessage.Println("  Command to be executed:")
-	fmt.Printf("  %s\n", sep)
-	fmt.Printf("    aws %s\n", formatDeployCmd(maskTokenArgs(deployArgs, cfg.SettingsToken, cfg.IngestToken)))
-	fmt.Printf("  %s\n\n", sep)
+	display.PrintAlignedStatusLines(display.ColorDefault,
+		"Account", accountID,
+		"Region", region,
+		"Stack", cfg.StackName,
+		"Deploys", "CloudFormation stack + Dynatrace monitoring configuration",
+	)
+	if logger.Enabled() || dryRun {
+		fmt.Println()
+		fmt.Printf("  %s\n", sep)
+		display.ColorMessage.Println("  Command to be executed:")
+		fmt.Printf("  %s\n", sep)
+		fmt.Printf("    aws %s\n", formatDeployCmd(maskTokenArgs(deployArgs, cfg.SettingsToken, cfg.IngestToken)))
+		fmt.Printf("  %s\n", sep)
+	}
+	fmt.Println()
 
 	if proceed, err := installer.ShouldProceed(dryRun, "Installation"); !proceed {
 		return err
 	}
 	fmt.Println()
 
-	freshlyInstalled, err := dtc.installExtension()
-	if err != nil {
-		return fmt.Errorf("installing extension %s: %w", extensionName, err)
-	}
-	if freshlyInstalled {
-		logger.Debug("extension freshly installed (async), waiting for it to become active")
-		fmt.Println("  Extension freshly installed — waiting for it to become active...")
-		if waitErr := installer.WaitForExtensionActive(dtc.isExtensionActive, time.Sleep); waitErr != nil {
-			logger.Debug("extension did not become active in time, proceeding anyway", "error", waitErr)
-		} else {
-			display.ColorOK.Println("  ✓ Extension is active")
+	if err := display.RunStep("Installed Dynatrace AWS extension", func(s *display.Step) error {
+		freshlyInstalled, err := dtc.installExtension()
+		if err != nil {
+			return fmt.Errorf("installing extension %s: %w", extensionName, err)
 		}
+		if freshlyInstalled {
+			logger.Debug("extension freshly installed (async), waiting for it to become active")
+			s.Detail("waiting for it to become active")
+			if waitErr := installer.WaitForExtensionActive(dtc.isExtensionActive, time.Sleep); waitErr != nil {
+				logger.Debug("extension did not become active in time, proceeding anyway", "error", waitErr)
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
-	monitoringConfigID, err := dtc.findExistingMonitoringConfig(accountID)
-	if err != nil {
-		return fmt.Errorf("looking up monitoring configuration: %w", err)
-	}
-	if monitoringConfigID != "" {
-		fmt.Printf("  Monitoring config: found existing %s\n", monitoringConfigID)
-	} else {
+	var monitoringConfigID string
+	if err := display.RunStep("Prepared monitoring configuration", func(s *display.Step) error {
+		var err error
+		monitoringConfigID, err = dtc.findExistingMonitoringConfig(accountID)
+		if err != nil {
+			return fmt.Errorf("looking up monitoring configuration: %w", err)
+		}
+		if monitoringConfigID != "" {
+			s.Detail("existing")
+			display.Detail("monitoring config: found existing %s", monitoringConfigID)
+			return nil
+		}
 		extVersion, vErr := dtc.latestExtensionVersion()
 		if vErr != nil {
 			return fmt.Errorf("resolving installed extension version: %w", vErr)
 		}
-		fmt.Printf("  Creating Dynatrace monitoring configuration (extension %s)...\n", extVersion)
 		monitoringConfigID, err = dtc.createMonitoringConfig(accountID, region, extVersion)
 		if err != nil {
 			return fmt.Errorf("creating monitoring configuration: %w", err)
 		}
-		fmt.Printf("  Monitoring config: created %s\n", monitoringConfigID)
+		s.Detail("created")
+		display.Detail("monitoring config: created %s (extension %s)", monitoringConfigID, extVersion)
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	cfg.MonitoringConfigID = monitoringConfigID
 
-	fmt.Printf("  Downloading CloudFormation template...\n")
-	tmplFile, err := downloadAWSTemplate()
-	if err != nil {
+	var tmplFile string
+	if err := display.RunStep("Downloaded CloudFormation template", func(*display.Step) error {
+		var err error
+		tmplFile, err = downloadAWSTemplate()
+		return err
+	}); err != nil {
 		return err
 	}
 	defer os.Remove(tmplFile)

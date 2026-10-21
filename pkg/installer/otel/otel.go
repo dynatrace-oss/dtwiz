@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fatih/color"
+
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
@@ -122,13 +124,9 @@ func buildExtensionActivationPreview(envURL, platformToken string) (installer.Ex
 	return ec.GetStatus(otelHostMonitoringExtension)
 }
 
-// printExtensionActivationPreview prints a one-line summary of what the
-// extension activation step will do, as part of the install preview.
-func printExtensionActivationPreview(status installer.ExtensionStatus) {
-	display.ColorMessage.Println("  OpenTelemetry Host Monitoring extension")
-	display.PrintSectionDivider()
-	var msg string
-	colorFn := display.ColorDefault
+// extensionPreviewMessage describes what the extension activation step will do.
+func extensionPreviewMessage(status installer.ExtensionStatus) (msg string, colorFn *color.Color) {
+	colorFn = display.ColorDefault
 	switch status {
 	case installer.ExtensionInstalledActive, installer.ExtensionInstalledInactive:
 		// The Dynatrace API's per-version "active" flag isn't a reliable signal for this
@@ -142,7 +140,38 @@ func printExtensionActivationPreview(status installer.ExtensionStatus) {
 		msg = "will be installed and activated"
 		colorFn = display.ColorOK
 	}
+	return msg, colorFn
+}
+
+// printExtensionActivationPreview prints the detailed extension preview block
+// shown with -v/--debug.
+func printExtensionActivationPreview(status installer.ExtensionStatus) {
+	display.ColorMessage.Println("  OpenTelemetry Host Monitoring extension")
+	display.PrintSectionDivider()
+	msg, colorFn := extensionPreviewMessage(status)
 	display.PrintStatusLine("Extension", msg, colorFn)
+}
+
+// tenantRow is one line of the compact tenant-setup preview.
+type tenantRow struct {
+	label string
+	msg   string
+	color *color.Color
+}
+
+// printTenantRows prints the compact tenant-setup preview with aligned values.
+func printTenantRows(rows []tenantRow) {
+	if len(rows) == 0 {
+		return
+	}
+	fmt.Println()
+	width := 0
+	for _, r := range rows {
+		width = max(width, len(r.label)+1)
+	}
+	for _, r := range rows {
+		display.PrintAlignedStatusLine(r.label, r.msg, width, r.color)
+	}
 }
 
 // deactivateHostMonitoringExtension removes the OTel Host Monitoring extension version from
@@ -193,29 +222,48 @@ func buildTenantPrerequisitePreview(envURL, platformToken string) tenantPrereqs 
 		logger.Debug("platform token not provided, skipping extension and route previews")
 		return tenantPrereqs{}
 	}
+	detailed := logger.Enabled()
+	var rows []tenantRow
 	if status, err := buildExtensionActivationPreviewFn(envURL, platformToken); err != nil {
-		fmt.Println()
-		display.PrintWarning("OTel Host Monitoring extension", err)
-	} else {
+		if detailed {
+			fmt.Println()
+			display.PrintWarning("OTel Host Monitoring extension", err)
+		} else {
+			rows = append(rows, tenantRow{"Host monitoring", fmt.Sprintf("⚠ %v", err), display.ColorWarning})
+		}
+	} else if detailed {
 		fmt.Println()
 		printExtensionActivationPreview(status)
+	} else {
+		msg, colorFn := extensionPreviewMessage(status)
+		rows = append(rows, tenantRow{"Host monitoring", msg, colorFn})
 	}
 	c, plans, err := buildGrailRoutePlansFn(envURL, platformToken)
 	if err != nil {
-		fmt.Println()
-		display.PrintWarning("OpenPipeline routes", err)
-	} else {
+		if detailed {
+			fmt.Println()
+			display.PrintWarning("OpenPipeline routes", err)
+		} else {
+			rows = append(rows, tenantRow{"OpenPipeline", fmt.Sprintf("⚠ %v", err), display.ColorWarning})
+		}
+	} else if detailed {
 		fmt.Println()
 		printGrailPlan(plans)
+	} else {
+		msg, colorFn := grailPlanSummary(plans)
+		rows = append(rows, tenantRow{"OpenPipeline", msg, colorFn})
 	}
 	otlpC, otlpPlan, err := buildOTLPMetricDimensionsPlanFn(envURL, platformToken)
 	if err != nil {
 		logger.Debug("could not fetch Advanced OTLP metric dimensions setting", "err", err)
 	} else if otlpPlan != nil && otlpPlan.enabled {
 		otlpPlan = nil // already enabled — nothing to do
-	} else {
+	} else if detailed {
 		printOTLPMetricDimensionsPlan(otlpPlan)
+	} else if otlpPlan != nil {
+		rows = append(rows, tenantRow{"OTLP dimensions", "will be enabled", display.ColorOK})
 	}
+	printTenantRows(rows)
 	return tenantPrereqs{
 		grailC:               c,
 		grailPlans:           plans,
@@ -373,12 +421,12 @@ func detectAllProjects(runtimes []runtimeInfo, roots []string) []detectedProject
 		if !available {
 			if stubOnly {
 				if isWindowsStorePythonStub(binPath) {
-					fmt.Printf("  Skipping %s instrumentation — '%s' is a Windows Store stub, not a real interpreter.\n  Install Python 3 from https://python.org or disable it in Settings → Apps → Advanced app settings → App execution aliases.\n", rt.name, rt.binName)
+					display.Detail("skipping %s instrumentation — '%s' is a Windows Store stub, not a real interpreter; install Python 3 from https://python.org or disable it in Settings → Apps → Advanced app settings → App execution aliases", rt.name, rt.binName)
 				} else {
-					fmt.Printf("  Skipping %s instrumentation — '%s' found on PATH but not usable.\n", rt.name, rt.binName)
+					display.Detail("skipping %s instrumentation — '%s' found on PATH but not usable", rt.name, rt.binName)
 				}
 			} else {
-				fmt.Printf("  Skipping %s instrumentation — '%s' not found on PATH.\n", rt.name, rt.binName)
+				display.Detail("skipping %s instrumentation — '%s' not found on PATH", rt.name, rt.binName)
 			}
 			continue
 		}
@@ -542,6 +590,37 @@ func InstallOtelCollector(envURL, token, platformToken string, dryRun bool) (str
 	return InstallOtelCollectorWithProject(envURL, token, platformToken, "", dryRun)
 }
 
+// applyTenantPrerequisites activates the host monitoring extension, configures
+// the OpenPipeline routes and enables Advanced OTLP metric dimensions.
+func applyTenantPrerequisites(envURL, platformToken string, prereqs tenantPrereqs) {
+	if platformToken != "" {
+		activateHostMonitoringExtensionFn(envURL, platformToken)
+	}
+	applyAndValidateGrailRoutes(prereqs.grailC, prereqs.grailPlans)
+	applyOTLPMetricDimensions(context.Background(), prereqs.otlpDimensionsClient, prereqs.otlpDimensionsPlan)
+}
+
+// printPrivilegeNote prints a one-line note when the current privileges limit
+// host metrics; the per-metric detail is shown with -v.
+func printPrivilegeNote() {
+	switch runtime.GOOS {
+	case "linux":
+		if !isElevatedFn() {
+			display.PrintAlignedStatusLines(display.ColorWarning, "Note", "not root: host metrics and logs are limited")
+			display.Detail("full host metrics and logs require elevated privileges (root or systemd-journal group)")
+			display.Detail("process.disk.io is dropped without privileged access; system.processes.created is Linux-only")
+		}
+	case "windows":
+		if !isElevatedFn() {
+			display.PrintAlignedStatusLines(display.ColorWarning, "Note", "not Administrator: some process metrics are skipped")
+			display.Detail("some per-process metrics require Administrator or Debug privilege")
+			display.Detail("without it, metrics for services and other users' processes are skipped")
+		}
+	case "darwin":
+		logger.Debug("system.processes.created and process.disk.io are unavailable on macOS regardless of privilege level")
+	}
+}
+
 // InstallOtelCollectorWithProject installs the OTel Collector, optionally with
 // auto-instrumentation for a pre-selected project path.
 // Returns the URL slug of the manually-selected language when the user chose one.
@@ -553,25 +632,8 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 	}
 
 	fmt.Println()
-	display.ColorMessage.Println("  Dynatrace OpenTelemetry Installation")
-	fmt.Println()
-
-	fmt.Println("  This will enable OpenTelemetry service and host monitoring.")
-	switch runtime.GOOS {
-	case "linux":
-		if !isElevatedFn() {
-			fmt.Println("  Note: full host metrics and logs require elevated privileges (root or systemd-journal group).")
-			fmt.Println("        process.disk.io is dropped without privileged access; system.processes.created is Linux-only.")
-		}
-	case "windows":
-		if !isElevatedFn() {
-			fmt.Println("  Note: some per-process metrics require Administrator or Debug privilege;")
-			fmt.Println("        without it, metrics for services and other users' processes are skipped.")
-		}
-	case "darwin":
-		logger.Debug("system.processes.created and process.disk.io are unavailable on macOS regardless of privilege level")
-	}
-	fmt.Println()
+	display.Header("dtwiz · OpenTelemetry")
+	printPrivilegeNote()
 
 	runtimes := detectAvailableRuntimes()
 
@@ -660,51 +722,33 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 
 	fmt.Println()
 
-	if plan != nil {
-		display.ColorMessage.Println("  This will install the OTel Collector and auto-instrument your application.")
-	}
-	fmt.Println()
+	cp.printSummary()
 
-	display.ColorMessage.Println("  1) OTel Collector")
-	fmt.Printf("     Directory: %s\n", cp.installDir)
-	fmt.Printf("     Binary:    %s\n", cp.binaryPath)
-	if len(cp.runningPIDs) > 0 {
-		for _, rc := range cp.runningPIDs {
-			if rc.path != "" {
-				fmt.Printf("     Running:  Existing OTel Collector PID %d at %s (will be stopped)\n", rc.pid, rc.path)
-			} else {
-				fmt.Printf("     Running:  Existing OTel Collector PID %d (will be stopped)\n", rc.pid)
-			}
+	if plan != nil {
+		if logger.Enabled() || dryRun {
+			display.PrintlnColored(display.ColorMessage, "%s auto-instrumentation", plan.Runtime())
+			plan.PrintPlanSteps()
+		} else {
+			display.PrintAlignedStatusLines(display.ColorDefault, "Instrument", fmt.Sprintf("%s · %s", plan.Runtime(), planProj.Path))
 		}
-	}
-
-	sep := strings.Repeat("─", 60)
-	cp.printConfigPreview(sep)
-
-	if plan != nil {
-		fmt.Println()
-		display.ColorMessage.Printf("  2) %s auto-instrumentation\n", plan.Runtime())
-		plan.PrintPlanSteps()
 	}
 
 	if rumResult != nil {
-		sectionNum := 2
-		if plan != nil {
-			sectionNum = 3
-		}
-		fmt.Println()
-		display.ColorMessage.Printf("  %d) Real User Monitoring [experimental]\n", sectionNum)
+		mode := "manual (auto-injection not possible)"
 		if rumResult.Mode == rum.ModeAuto {
-			fmt.Printf("     Mode:  auto-inject\n")
-			for _, f := range rumResult.InjectableFiles {
-				fmt.Printf("     File:  %s\n", f)
-			}
-		} else {
-			fmt.Printf("     Mode:  manual (auto-injection not possible)\n")
-			if rumResult.ManualTarget != "" {
-				fmt.Printf("     Add:   tag to %s\n", rumResult.ManualTarget)
-			}
+			mode = "auto-inject"
 		}
+		display.PrintAlignedStatusLines(display.ColorDefault, "RUM [exp.]", mode)
+		for _, f := range rumResult.InjectableFiles {
+			display.Detail("file: %s", f)
+		}
+		if rumResult.Mode != rum.ModeAuto && rumResult.ManualTarget != "" {
+			display.Detail("add tag to %s", rumResult.ManualTarget)
+		}
+	}
+
+	if dryRun || logger.Enabled() {
+		cp.printConfigPreview(strings.Repeat("─", 60))
 	}
 
 	prereqs := buildTenantPrerequisitePreview(envURL, platformToken)
@@ -716,7 +760,7 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		return "", nil
 	}
 
-	ok, err := installer.ConfirmProceed("  Proceed with installation?")
+	ok, err := installer.ConfirmProceed("  Apply?")
 	if err != nil {
 		return "", fmt.Errorf("reading confirmation: %w", err)
 	}
@@ -726,11 +770,7 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 	}
 	fmt.Println()
 
-	if platformToken != "" {
-		activateHostMonitoringExtensionFn(envURL, platformToken)
-	}
-	applyAndValidateGrailRoutes(prereqs.grailC, prereqs.grailPlans)
-	applyOTLPMetricDimensions(context.Background(), prereqs.otlpDimensionsClient, prereqs.otlpDimensionsPlan)
+	applyTenantPrerequisites(envURL, platformToken, prereqs)
 
 	if err := executeCollectorPlanFn(cp, envURL, platformToken, plan != nil); err != nil {
 		return "", err
@@ -742,7 +782,8 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		// config, updating cp.httpPort. The original plan baked in the pre-stop
 		// port, so without this the app would be configured with the wrong endpoint.
 		plan = createRuntimePlanFn(planProj, cp.httpPort, token, envURL, platformToken)
-		fmt.Printf("\n  ── %s auto-instrumentation ──\n\n", plan.Runtime())
+		fmt.Println()
+		display.PrintlnColored(display.ColorMessage, "%s auto-instrumentation", plan.Runtime())
 		if err := plan.Execute(); err != nil {
 			return "", err
 		}

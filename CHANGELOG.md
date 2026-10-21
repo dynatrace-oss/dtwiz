@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Leaner install output: each step of `install oneagent`, `kubernetes`, `otel-collector`, `aws`, `azure` and `gcp` is one line with a spinner that turns into `✓` or `✗`. Commands, URLs, paths, manifests and generated config now appear with `-v` (and in `--dry-run`); a failed step shows the last lines of its error without a flag. The pre-confirmation prompt now reads `Apply?`.
+
 ## [1.13.0] - 2026-10-19
 
 ### Added

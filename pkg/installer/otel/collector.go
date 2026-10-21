@@ -194,7 +194,6 @@ func downloadOtelCollector(destDir string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
-	fmt.Printf("  Resolving latest Dynatrace OTel Collector release...\n")
 	version, err := otelLatestReleaseVersion(ctx)
 	if err != nil {
 		return "", fmt.Errorf("resolving latest release version: %w", err)
@@ -207,8 +206,7 @@ func downloadOtelCollector(destDir string) (string, error) {
 
 	downloadURL := otelReleaseURL(version, assetName)
 	logger.Debug("downloading OTel Collector", "version", version, "asset", assetName, "url", downloadURL)
-	fmt.Printf("  Downloading Dynatrace OTel Collector %s from GitHub...\n", version)
-	fmt.Printf("  URL: %s\n", downloadURL)
+	display.Detail("downloading Dynatrace OTel Collector %s: %s", version, downloadURL)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
 	if err != nil {
@@ -276,7 +274,7 @@ func downloadOtelCollector(destDir string) (string, error) {
 // macOSPrepBinary removes quarantine/extended attributes and applies an ad-hoc
 // code signature so macOS allows the binary to execute.
 func macOSPrepBinary(binaryPath string) error {
-	fmt.Println("  Preparing binary for macOS (removing quarantine, applying ad-hoc signature)...")
+	display.Detail("preparing binary for macOS (removing quarantine, applying ad-hoc signature)")
 
 	if out, err := exec.Command("xattr", "-cr", binaryPath).CombinedOutput(); err != nil {
 		return fmt.Errorf("xattr -cr failed: %w\n%s", err, strings.TrimSpace(string(out)))
@@ -285,10 +283,9 @@ func macOSPrepBinary(binaryPath string) error {
 	if _, err := exec.LookPath("codesign"); err == nil {
 		if out, err := exec.Command("codesign", "--force", "--deep", "--sign", "-", binaryPath).CombinedOutput(); err != nil {
 			// Non-fatal: log the warning but continue — the binary may still work.
-			fmt.Printf("  Warning: ad-hoc codesign failed (may still work): %v\n%s\n",
-				err, strings.TrimSpace(string(out)))
+			display.StepWarn("Ad-hoc codesign failed (binary may still work)", strings.TrimSpace(string(out)))
 		} else {
-			fmt.Println("  Ad-hoc signature applied.")
+			display.Detail("ad-hoc signature applied")
 		}
 	}
 	return nil
@@ -523,7 +520,6 @@ func waitForLogInDynatrace(envURL, token, searchTerm string, timeout time.Durati
 			}
 			return fmt.Errorf("timed out waiting for log to appear in Dynatrace")
 		}
-		fmt.Print(".")
 		time.Sleep(5 * time.Second)
 	}
 }
@@ -604,6 +600,10 @@ func waitForOtelCollectorReady(httpPort int, timeout time.Duration, crashed <-ch
 	}
 }
 
+// verifiedLogsURL holds the Logs deep link of the last successful verification,
+// so the caller can print it after the verification step has collapsed.
+var verifiedLogsURL string
+
 // verifyOtelInstall sends a verification log through the running collector,
 // waits for it to arrive in Dynatrace via DQL query, then prints the UI link.
 //
@@ -612,6 +612,7 @@ func waitForOtelCollectorReady(httpPort int, timeout time.Duration, crashed <-ch
 // DQL endpoint always requires Bearer auth. If neither token is set,
 // verification is skipped with a manual-check link.
 func verifyOtelInstall(envURL, platformToken, apiToken string, httpPort int) error {
+	verifiedLogsURL = ""
 	// Prefer platform token; fall back to API token.
 	dqlToken := platformToken
 	if dqlToken == "" {
@@ -628,28 +629,22 @@ func verifyOtelInstall(envURL, platformToken, apiToken string, httpPort int) err
 		hostname, runtime.GOOS, runtime.GOARCH, uniqueID,
 	)
 
-	fmt.Printf("  Sending verification log to collector...\n")
+	display.Detail("sending verification log to collector")
 	if err := sendOtelVerificationLog(httpPort, body); err != nil {
 		return fmt.Errorf("sending verification log: %w", err)
 	}
+	logsURL := buildOtelLogsUIURL(envURL, uniqueID)
 	if dqlToken == "" {
-		fmt.Println("  Skipping DQL log verification (no token available).")
-		fmt.Println()
-		logsURL := buildOtelLogsUIURL(envURL, uniqueID)
-		fmt.Println("  Check manually:", termLink("Open in Dynatrace Logs", logsURL))
+		display.StepWarn("Skipped log verification (no token available)", termLink("Open in Dynatrace Logs", logsURL))
 		return nil
 	}
 
-	fmt.Printf("  Log sent. Waiting for it to appear in Dynatrace")
-
+	display.Detail("log sent, waiting for it to appear in Dynatrace")
 	if err := waitForLogInDynatraceFn(envURL, dqlToken, uniqueID, 2*time.Minute); err != nil {
 		return err
 	}
 
-	fmt.Println(" ✓")
-	fmt.Println()
-	logsURL := buildOtelLogsUIURL(envURL, uniqueID)
-	fmt.Println("  🎉 View in", termLink("Dynatrace Logs", logsURL))
+	verifiedLogsURL = logsURL
 	return nil
 }
 
@@ -894,8 +889,7 @@ func startOtelCollector(binaryPath, configPath string) (<-chan error, error) {
 	}
 
 	pid := cmd.Process.Pid
-	fmt.Printf("  %s started (PID %d).\n", filepath.Base(binaryPath), pid)
-	fmt.Printf("  Collector log: %s\n", logPath)
+	display.Detail("%s started (PID %d), log: %s", filepath.Base(binaryPath), pid, logPath)
 
 	// Monitor the process; send its exit status on the channel.
 	crashed := make(chan error, 1)
@@ -912,10 +906,9 @@ func startOtelCollector(binaryPath, configPath string) (<-chan error, error) {
 		}
 		return nil, fmt.Errorf("OTel Collector exited immediately with no error (check %s for details)", logPath)
 	case <-time.After(3 * time.Second):
-		fmt.Printf("  %s is running in the background (PID %d). Detaching...\n", filepath.Base(binaryPath), pid)
+		display.Detail("%s is running in the background (PID %d)", filepath.Base(binaryPath), pid)
 	}
 
-	fmt.Println("  OpenTelemetry Collector running.")
 	return crashed, nil
 }
 
@@ -962,6 +955,23 @@ func prepareCollectorPlan(envURL, token string) (*collectorPlan, error) {
 	}, nil
 }
 
+// printSummary prints the compact pre-confirmation overview of the collector
+// install. Paths and the generated config appear with -v.
+func (cp *collectorPlan) printSummary() {
+	rows := []string{"Collector", "host metrics + logs → Dynatrace"}
+	for _, rc := range cp.runningPIDs {
+		rows = append(rows, "Replaces", fmt.Sprintf("existing collector PID %d (will be stopped)", rc.pid))
+	}
+	display.PrintAlignedStatusLines(display.ColorDefault, rows...)
+	display.Detail("directory: %s", cp.installDir)
+	display.Detail("binary: %s", cp.binaryPath)
+	for _, rc := range cp.runningPIDs {
+		if rc.path != "" {
+			display.Detail("existing collector PID %d at %s", rc.pid, rc.path)
+		}
+	}
+}
+
 func (cp *collectorPlan) printDryRun() {
 	sep := strings.Repeat("─", 60)
 
@@ -985,19 +995,22 @@ func (cp *collectorPlan) execute(envURL, platformToken string, skipVerification 
 	}
 
 	if procs := cp.runningPIDs; len(procs) > 0 {
-		fmt.Printf("  Stopping existing collector (PIDs: %s)...\n", formatPIDs(procs))
-		for _, rc := range procs {
-			proc, err := os.FindProcess(rc.pid)
-			if err != nil {
-				fmt.Printf("  Warning: could not find process %d: %v\n", rc.pid, err)
-				continue
+		_ = display.RunStep("Stopped existing collector", func(s *display.Step) error {
+			s.Detail("PID %s", formatPIDs(procs))
+			for _, rc := range procs {
+				proc, err := os.FindProcess(rc.pid)
+				if err != nil {
+					display.StepWarn(fmt.Sprintf("Could not find process %d", rc.pid), err.Error())
+					continue
+				}
+				if err := installer.KillAndWaitProcess(proc); err != nil {
+					display.StepWarn(fmt.Sprintf("Could not kill process %d", rc.pid), err.Error())
+					continue
+				}
+				display.Detail("stopped collector (PID %d)", rc.pid)
 			}
-			if err := installer.KillAndWaitProcess(proc); err != nil {
-				fmt.Printf("  Warning: could not kill process %d: %v\n", rc.pid, err)
-				continue
-			}
-			fmt.Printf("  Stopped collector (PID %d).\n", rc.pid)
-		}
+			return nil
+		})
 		// The old collector's ports are now free. Regenerate the config so
 		// findFreePort picks the preferred ports (4317/4318) instead of the
 		// higher ones it selected at plan time while the old process still held them.
@@ -1012,7 +1025,12 @@ func (cp *collectorPlan) execute(envURL, platformToken string, skipVerification 
 	}
 
 	// Download after the old process is stopped so the binary file is not locked on Windows.
-	binaryPath, err := downloadOtelCollectorFn(cp.installDir)
+	var binaryPath string
+	err := display.RunStep("Downloaded collector", func(*display.Step) error {
+		var derr error
+		binaryPath, derr = downloadOtelCollectorFn(cp.installDir)
+		return derr
+	})
 	if err != nil {
 		return err
 	}
@@ -1022,26 +1040,34 @@ func (cp *collectorPlan) execute(envURL, platformToken string, skipVerification 
 		return fmt.Errorf("writing OTel Collector config: %w", err)
 	}
 	installer.RecordFeature(installer.FeatureOtelConfig, true)
-	fmt.Printf("  Config written to: %s\n", cp.configPath)
+	display.StepDone("Wrote config", "")
+	display.Detail("config: %s", cp.configPath)
 
-	crashed, err := startOtelCollector(binaryPath, cp.configPath)
+	err = display.RunStep("Started collector", func(*display.Step) error {
+		crashed, serr := startOtelCollector(binaryPath, cp.configPath)
+		if serr != nil {
+			return serr
+		}
+		if werr := waitForOtelCollectorReady(cp.httpPort, 30*time.Second, crashed); werr != nil {
+			return fmt.Errorf("collector port did not open: %w", werr)
+		}
+		return nil
+	})
 	if err != nil {
 		return err
 	}
-
-	fmt.Println()
-	fmt.Printf("  Waiting for collector to be ready...")
-	if err := waitForOtelCollectorReady(cp.httpPort, 30*time.Second, crashed); err != nil {
-		return fmt.Errorf("collector port did not open: %w", err)
-	}
-	fmt.Println(" ✓")
 	if skipVerification {
-		fmt.Println("  Collector started — skipping verification (app instrumentation will follow).")
+		display.Detail("skipping verification (app instrumentation will follow)")
 		return nil
 	}
-	if err := verifyOtelInstall(envURL, platformToken, cp.collectorToken, cp.httpPort); err != nil {
-		fmt.Printf("\n  Warning: log verification failed: %v\n", err)
-		fmt.Println("  The collector may still be working — check the Dynatrace UI.")
+	if err := display.RunStep("Verified ingest", func(*display.Step) error {
+		return verifyOtelInstall(envURL, platformToken, cp.collectorToken, cp.httpPort)
+	}); err != nil {
+		display.Println("The collector may still be working — check the Dynatrace UI.")
+		return nil
+	}
+	if verifiedLogsURL != "" {
+		display.Println("View in %s", termLink("Dynatrace Logs", verifiedLogsURL))
 	}
 
 	return nil
@@ -1055,7 +1081,8 @@ var executeCollectorPlanFn = func(cp *collectorPlan, envURL, platformToken strin
 // runtime instrumentation.
 func InstallOtelCollectorOnly(envURL, token, platformToken string, dryRun bool) error {
 	fmt.Println()
-	display.ColorMessage.Println("  Dynatrace OpenTelemetry Installation")
+	display.Header("dtwiz · OpenTelemetry Collector")
+	printPrivilegeNote()
 	fmt.Println()
 
 	cp, err := prepareCollectorPlan(envURL, token)
@@ -1068,26 +1095,15 @@ func InstallOtelCollectorOnly(envURL, token, platformToken string, dryRun bool) 
 		return nil
 	}
 
-	sep := strings.Repeat("─", 60)
-
-	fmt.Printf("  Directory: %s\n", cp.installDir)
-	fmt.Printf("  Binary:    %s\n", cp.binaryPath)
-	if len(cp.runningPIDs) > 0 {
-		for _, rc := range cp.runningPIDs {
-			if rc.path != "" {
-				fmt.Printf("  Running:  Existing OTel Collector PID %d at %s (will be stopped)\n", rc.pid, rc.path)
-			} else {
-				fmt.Printf("  Running:  Existing OTel Collector PID %d (will be stopped)\n", rc.pid)
-			}
-		}
+	cp.printSummary()
+	if logger.Enabled() {
+		cp.printConfigPreview(strings.Repeat("─", 60))
 	}
-
-	cp.printConfigPreview(sep)
 
 	prereqs := buildTenantPrerequisitePreview(envURL, platformToken)
 
 	fmt.Println()
-	ok, err := installer.ConfirmProceed("  Proceed with installation?")
+	ok, err := installer.ConfirmProceed("  Apply?")
 	if err != nil {
 		return fmt.Errorf("reading confirmation: %w", err)
 	}
@@ -1097,11 +1113,7 @@ func InstallOtelCollectorOnly(envURL, token, platformToken string, dryRun bool) 
 	}
 	fmt.Println()
 
-	if platformToken != "" {
-		activateHostMonitoringExtensionFn(envURL, platformToken)
-	}
-	applyAndValidateGrailRoutes(prereqs.grailC, prereqs.grailPlans)
-	applyOTLPMetricDimensions(context.Background(), prereqs.otlpDimensionsClient, prereqs.otlpDimensionsPlan)
+	applyTenantPrerequisites(envURL, platformToken, prereqs)
 
 	if err := executeCollectorPlanFn(cp, envURL, platformToken, false /* skipVerification */); err != nil {
 		return err

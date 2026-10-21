@@ -351,6 +351,10 @@ func grailApplyMessage(action grailAction) (string, *color.Color) {
 }
 
 func printGrailApplyResults(plans []grailSignalPlan, errs []error) {
+	if !logger.Enabled() {
+		printGrailApplySummary(plans, errs)
+		return
+	}
 	fmt.Printf("\n  ── OpenPipeline dynamic routes ──\n\n")
 	for i, p := range plans {
 		msg, colorFn := grailApplyMessage(p.action)
@@ -361,6 +365,21 @@ func printGrailApplyResults(plans []grailSignalPlan, errs []error) {
 		display.PrintStatusLine(p.signal.displayName, msg, colorFn)
 	}
 	fmt.Println()
+}
+
+// printGrailApplySummary prints one line when every route applied cleanly, and
+// one warning per route that did not.
+func printGrailApplySummary(plans []grailSignalPlan, errs []error) {
+	failed := false
+	for i, p := range plans {
+		if i < len(errs) && errs[i] != nil {
+			failed = true
+			display.StepWarn(fmt.Sprintf("OpenPipeline %s route", p.signal.displayName), errs[i].Error())
+		}
+	}
+	if !failed {
+		display.StepDone("OpenPipeline routes configured", "")
+	}
 }
 
 func grailRouteValidations(plans []grailSignalPlan, errs []error) []grailRouteValidation {
@@ -472,6 +491,26 @@ func grailPreviewMessage(action grailAction) (string, *color.Color) {
 		return "pending — extension not active yet", display.ColorMuted
 	}
 	return "", display.ColorDefault
+}
+
+// grailPlanSummary condenses the per-signal route plan into one preview line.
+func grailPlanSummary(plans []grailSignalPlan) (string, *color.Color) {
+	var configure, pending int
+	for _, p := range plans {
+		switch p.action {
+		case grailActionCreate, grailActionReEnable:
+			configure++
+		case grailActionSkip:
+			pending++
+		}
+	}
+	switch {
+	case configure > 0:
+		return fmt.Sprintf("%d of %d routes will be configured", configure, len(plans)), display.ColorOK
+	case pending > 0:
+		return "pending — extension not active yet", display.ColorMuted
+	}
+	return "already configured", display.ColorMuted
 }
 
 func printGrailPlan(plans []grailSignalPlan) {

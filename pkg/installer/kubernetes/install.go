@@ -14,6 +14,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 //go:embed dynakube.tmpl
@@ -159,19 +160,14 @@ func queryPodStatuses() ([]podStatus, error) {
 
 // waitForPods polls until every pod in the dynatrace namespace is ready and at
 // least one pod whose name contains "activegate" exists and is ready.
-// Progress is printed on a single line that refreshes every 5 seconds.
-func waitForPods(timeout time.Duration) error {
+// Progress is reported through s (may be nil), which refreshes every 5 seconds.
+func waitForPods(timeout time.Duration, s *display.Step) error {
 	start := time.Now()
 	deadline := start.Add(timeout)
-
-	clearLine := "\r" + strings.Repeat(" ", 60) + "\r"
-
-	fmt.Print("  0/0 pods ready  activegate: …  [0:00]")
 
 	for {
 		pods, err := queryPodStatuses()
 		if err != nil {
-			fmt.Print(clearLine)
 			return fmt.Errorf("querying pod statuses: %w", err)
 		}
 
@@ -188,27 +184,21 @@ func waitForPods(timeout time.Duration) error {
 			}
 		}
 
-		agGlyph := "…"
-		if hasActiveGate {
-			agGlyph = "✓"
+		if s != nil {
+			agGlyph := "…"
+			if hasActiveGate {
+				agGlyph = "✓"
+			}
+			s.Detail("%d/%d ready  activegate: %s", readyCount, total, agGlyph)
 		}
 
-		now := time.Now()
-		elapsed := now.Sub(start)
-		fmt.Printf("\r  %d/%d pods ready  activegate: %s  [%s]",
-			readyCount, total, agGlyph, display.FormatElapsed(elapsed),
-		)
-
 		if total > 0 && readyCount == total && hasActiveGate {
-			fmt.Print(clearLine)
-			display.Println("All Dynatrace pods ready.")
 			return nil
 		}
 
-		if now.After(deadline) {
-			fmt.Print(clearLine)
+		if now := time.Now(); now.After(deadline) {
 			return fmt.Errorf("timed out after %s: %d/%d pods ready, activegate ready: %v",
-				elapsed.Round(time.Second), readyCount, total, hasActiveGate)
+				now.Sub(start).Round(time.Second), readyCount, total, hasActiveGate)
 		}
 
 		time.Sleep(5 * time.Second)
@@ -283,16 +273,17 @@ func ensureHelmOperator(disableCSI bool) error {
 		}
 	}
 	helmMajor, helmArgs := helmInstallArgs(disableCSI)
+	label := "Deployed Dynatrace Operator"
 	if isOperatorInstalled() {
-		display.Println("Dynatrace Operator already installed — upgrading (helm v%d)...", helmMajor)
-	} else {
-		display.Println("Installing Dynatrace Operator via Helm (helm v%d)...", helmMajor)
+		label = "Upgraded Dynatrace Operator"
 	}
-	if err := installer.RunCommandQuiet("helm", helmArgs...); err != nil {
-		return fmt.Errorf("Helm operator install failed: %w", err) //nolint:staticcheck // ST1005: keep brand capitalization
-	}
-	display.Println("Helm chart deployed.")
-	return nil
+	display.Detail("helm v%d: helm %s", helmMajor, strings.Join(helmArgs, " "))
+	return display.RunStep(label, func(*display.Step) error {
+		if err := installer.RunCommandQuiet("helm", helmArgs...); err != nil {
+			return fmt.Errorf("Helm operator install failed: %w", err) //nolint:staticcheck // ST1005: keep brand capitalization
+		}
+		return nil
+	})
 }
 
 // handleK8sDryRun prints what the Kubernetes installation would do without executing anything.
@@ -311,34 +302,36 @@ func handleK8sDryRun(apiURL, clusterName, distroDisplay, helmArgsStr string) {
 	)
 }
 
-// printK8sPreview prints the full installation preview: cluster metadata,
-// the rendered DynaKube manifest, and the Helm command to be executed.
+// printK8sPreview prints the installation preview: cluster metadata and a
+// one-line summary of what will be deployed. The rendered DynaKube manifest and
+// the exact commands are shown with -v/--debug.
 func printK8sPreview(clusterName, distroDisplay, apiURL, manifest, helmCmd string) {
 	fmt.Println()
-	display.PrintlnColored(display.ColorMessage, "Dynatrace Kubernetes Integration")
-	display.PrintSectionDivider()
-	fmt.Println()
+	display.Header("dtwiz · Kubernetes")
 	display.PrintAlignedStatusLines(display.ColorDefault,
-		"Cluster name", clusterName,
+		"Cluster", clusterName,
 		"Distribution", distroDisplay,
-		"API URL", apiURL,
+		"Deploys", "Dynatrace Operator (helm) + DynaKube",
 	)
-	fmt.Println()
-	display.PrintSectionDivider()
-	display.PrintlnColored(display.ColorMessage, "dynakube.yaml manifest to be applied:")
-	display.PrintSectionDivider()
-	for _, line := range strings.Split(strings.TrimRight(manifest, "\n"), "\n") {
-		fmt.Printf("    %s\n", line)
+	if logger.Enabled() {
+		display.PrintAlignedStatusLines(display.ColorDefault, "API URL", apiURL)
+		fmt.Println()
+		display.PrintSectionDivider()
+		display.PrintlnColored(display.ColorMessage, "dynakube.yaml manifest to be applied:")
+		display.PrintSectionDivider()
+		for _, line := range strings.Split(strings.TrimRight(manifest, "\n"), "\n") {
+			fmt.Printf("    %s\n", line)
+		}
+		fmt.Println()
+		display.PrintSectionDivider()
+		display.PrintlnColored(display.ColorMessage, "Commands to be executed:")
+		display.PrintSectionDivider()
+		display.PrintStepsColored(display.ColorMessage, "",
+			helmCmd,
+			"kubectl apply -f dynakube.yaml  # manifest shown above",
+		)
+		display.PrintSectionDivider()
 	}
-	fmt.Println()
-	display.PrintSectionDivider()
-	display.PrintlnColored(display.ColorMessage, "Commands to be executed:")
-	display.PrintSectionDivider()
-	display.PrintStepsColored(display.ColorMessage, "",
-		helmCmd,
-		"kubectl apply -f dynakube.yaml  # manifest shown above",
-	)
-	display.PrintSectionDivider()
 	fmt.Println()
 }
 
@@ -374,7 +367,7 @@ func InstallKubernetes(envURL, token, clusterName, distro string, dryRun bool) e
 
 	printK8sPreview(clusterName, distro, apiURL, manifest, helmCmd)
 
-	ok, err := installer.ConfirmProceed("  Proceed with installation?")
+	ok, err := installer.ConfirmProceed("  Apply?")
 	if err != nil {
 		return fmt.Errorf("reading confirmation: %w", err)
 	}
@@ -388,15 +381,16 @@ func InstallKubernetes(envURL, token, clusterName, distro string, dryRun bool) e
 		return err
 	}
 
-	display.Println("Applying DynaKube manifests (Secret + DynaKube CRs)...")
-	if err := applyDynakube(manifest); err != nil {
-		return fmt.Errorf("applying DynaKube manifests: %w", err)
-	}
-
-	if err := waitForPods(10 * time.Minute); err != nil {
+	if err := display.RunStep("Applied DynaKube", func(*display.Step) error {
+		if err := applyDynakube(manifest); err != nil {
+			return fmt.Errorf("applying DynaKube manifests: %w", err)
+		}
+		return nil
+	}); err != nil {
 		return err
 	}
 
-	display.Println("Dynatrace Operator installed successfully.")
-	return nil
+	return display.RunStep("Dynatrace pods ready", func(s *display.Step) error {
+		return waitForPods(10*time.Minute, s)
+	})
 }
