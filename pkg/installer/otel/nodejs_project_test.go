@@ -52,55 +52,6 @@ func TestDetectNodeProjects_ExcludesNodeModules(t *testing.T) {
 	}
 }
 
-// --- Task 1.1a: isNextJSProject tests ---
-
-func TestIsNextJSProject_ConfigFile(t *testing.T) {
-	for _, configFile := range []string{"next.config.js", "next.config.ts", "next.config.mjs"} {
-		t.Run(configFile, func(t *testing.T) {
-			dir := t.TempDir()
-			if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name":"app"}`), 0644); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(filepath.Join(dir, configFile), []byte(""), 0644); err != nil {
-				t.Fatal(err)
-			}
-			if !isNextJSProject(dir) {
-				t.Errorf("expected isNextJSProject=true for %s", configFile)
-			}
-		})
-	}
-}
-
-func TestIsNextJSProject_PackageDep(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"dependencies":{"next":"14.0.0"}}`), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if !isNextJSProject(dir) {
-		t.Error("expected isNextJSProject=true for next in dependencies")
-	}
-}
-
-func TestIsNextJSProject_DevDep(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"devDependencies":{"next":"14.0.0"}}`), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if !isNextJSProject(dir) {
-		t.Error("expected isNextJSProject=true for next in devDependencies")
-	}
-}
-
-func TestIsNextJSProject_NotNextJS(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"dependencies":{"express":"4.0.0"}}`), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if isNextJSProject(dir) {
-		t.Error("expected isNextJSProject=false for non-Next.js project")
-	}
-}
-
 // --- Task 1.1b: detectNodeFramework tests ---
 
 func TestDetectNodeFramework_NuxtConfigFile(t *testing.T) {

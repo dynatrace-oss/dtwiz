@@ -2,31 +2,31 @@
 
 ## Context
 
-The OTel installer (`pkg/installer/otel/`) handles instrumentation of server-side runtimes. RUM onboarding extends this flow to also set up frontend monitoring. Detection is the first of three phases: detect, create frontend entity and fetch JS tag, inject/print. This change covers detection only.
+The OTel installer (`pkg/installer/otel/`) handles instrumentation of server-side runtimes. RUM onboarding extends this flow to also set up frontend monitoring. Detection is the first of three phases: detect, create frontend entity and fetch JS tag, inject/print. This change covers detection and its preview integration.
 
-The detector runs synchronously during `dtwiz install otel`, before any Dynatrace API calls or file writes. Its output drives whether the preview shows "will auto-inject into N file(s)" or "will print tag for manual addition".
+The detector runs synchronously during `dtwiz install otel`, before any Dynatrace API calls or file writes. Its output drives whether the preview shows "will auto-inject into N file(s)" or "will print tag for manual addition". The preview section is gated behind `--experimental` / `DTWIZ_EXPERIMENTAL` until the full injection flow is complete.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
 - Classify a project directory as auto-injectable or requiring manual setup.
-- Enumerate candidate `.html` files for injection (those in the project root, not inside build output dirs).
+- Enumerate candidate `.html` files for injection (anywhere under the project directory, not inside build output or hidden dirs).
 - Detect frameworks and build tools that prevent direct HTML modification.
 - Probe write permission for each candidate file in a cross-platform-safe way.
 - Produce a single result struct that downstream steps consume without re-scanning.
+- Show a RUM preview section in `dtwiz install otel` when `--experimental` is active.
 
 **Non-Goals:**
 
 - Inject the JavaScript tag (follow-on change).
 - Create the Dynatrace frontend entity or fetch the JS tag (follow-on change).
-- Display anything to the user (follow-on change).
 - Detect mobile or non-web runtimes.
 - Detect frameworks beyond those that OTel already instruments. Future framework support is a future change.
 
 ## Package Location
 
-`pkg/installer/otel/rum/` — new sub-package of the OTel method folder. Per the folder-per-method rule, RUM logic is OTel-specific and must not land in the shared `pkg/installer/` root.
+`pkg/installer/otel/internal/rum/` — new sub-package of the OTel method folder. Per the folder-per-method rule, RUM logic is OTel-specific and must not land in the shared `pkg/installer/` root.
 
 ## Result Struct
 
@@ -39,9 +39,10 @@ const (
 )
 
 type DetectionResult struct {
-    Mode           InjectionMode
+    Mode            InjectionMode
     InjectableFiles []string // absolute paths; populated when Mode == ModeAuto
-    ManualReason   string   // human-readable; populated when Mode == ModeManual
+    ManualReason    string   // human-readable; populated when Mode == ModeManual
+    ManualTarget    string   // absolute path of the file to add the tag to, when known
 }
 ```
 
@@ -51,7 +52,7 @@ Consumers (the OTel installer preview step) inspect `Mode` to branch the UX; the
 
 ### Step 1 — Framework detection
 
-Detect frameworks that the OTel installer already recognizes, ensuring consistency between backend instrumentation and RUM setup. Use the existing functions from `pkg/installer/otel/nodejs_project.go` when possible; otherwise follow the same pattern.
+Detect frameworks that the OTel installer already recognizes, ensuring consistency between backend instrumentation and RUM setup. The detection reuses `markers.IsNextJSProject` and `markers.IsNuxtProject` from `pkg/installer/otel/markers`, the same functions the Node.js project detection uses (see Decisions).
 
 Check for the following frameworks in order (first match wins):
 
@@ -64,7 +65,7 @@ For each framework, check config files first. If no config file is found, read a
 
 When a framework is detected, set `Mode = ModeManual` and populate `ManualReason` with the framework name.
 
-**Rationale:** Only detect frameworks that have no injectable HTML source file. Next.js and Nuxt render pages from JSX/Vue components. There is no `index.html` to inject into. Projects like Create React App or Angular that do have a source `index.html` are handled correctly by the `index.html` preference rule in step 4. Reuse the existing detection logic from `nodejs_project.go`.
+**Rationale:** Only detect frameworks that have no injectable HTML source file. Next.js and Nuxt render pages from JSX/Vue components. There is no `index.html` to inject into. Projects like Create React App or Angular that do have a source `index.html` are handled correctly by the `index.html` preference rule in step 4.
 
 ### Step 2 — HTML file scan
 
@@ -76,6 +77,8 @@ Walk the project directory with `fs.WalkDir`. For each entry:
   - `.next`, `.nuxt`, `.svelte-kit`
   - `dist`, `build`, `out`, `.output`
   - `__pycache__`, `.venv`, `venv`
+  - any hidden directory (name starting with `.`)
+- The walk is unbounded in depth (Spring-style layouts put `index.html` at `src/main/resources/templates/`) but never leaves the scan root, which is the selected project directory.
 - Collect files with a `.html` extension (case-insensitive on Windows; case-sensitive on Unix — use `strings.EqualFold` only if `runtime.GOOS == "windows"`).
 
 ### Step 3 — Write permission probe
@@ -91,18 +94,52 @@ From the writable `.html` files collected in step 3:
 - If no files remain: `Mode = ModeManual`, `ManualReason = "no writable HTML files found"`.
 - Otherwise: `Mode = ModeAuto`, `InjectableFiles` = sorted list of the selected paths.
 
+## OTel Installer Integration
+
+Detection is gated behind `featureflags.Experimental` in `InstallOtelCollectorWithProject`. When the flag is active:
+
+1. `rum.Detect` is called on the directory of the project selected earlier in the flow. If no project was selected (e.g. a manually chosen language), it falls back to `projectPath` (from `--project`), then `os.Getwd()`.
+2. The result is stored and displayed as a numbered preview section after the runtime auto-instrumentation block.
+3. No injection happens; the section is informational only.
+
+Preview output when auto-inject is possible:
+
+```text
+  N) Real User Monitoring [experimental]
+     Mode:  auto-inject
+     File:  /path/to/public/index.html
+```
+
+Preview output when manual setup is required:
+
+```text
+  N) Real User Monitoring [experimental]
+     Mode:  manual (auto-injection not possible)
+     Add:   tag to /path/to/app/layout.js
+```
+
+The `Add:` line appears only when a target file was identified.
+
+For Next.js, the target is the first existing root layout file, checked in this order: `app/layout`, `src/app/layout`, `pages/_document`, `src/pages/_document`, each with extensions `.tsx`, `.jsx`, `.ts`, `.js`. App Router layouts win over Pages Router documents. For Nuxt, the target is the first existing `nuxt.config` file (`.ts`, `.js`, `.mjs`, `.mts`), where the tag goes under `app.head.script`. Nuxt projects detected only through the `package.json` dependency, with no config file, report no target.
+
+The detected framework name stays in `DetectionResult.ManualReason` for debug logging but is not shown to the user.
+
+Failures during detection are logged at debug level and do not abort the install.
+
 ## Decisions
 
-- **Reuse existing OTel detection functions.** Import `isNextJSProject`, `isNuxtProject`, and `hasDependency` from `pkg/installer/otel/nodejs_project.go` to maintain consistency and avoid code duplication. RUM detection and OTel instrumentation use the same framework classification.
+- **Shared framework detection in `markers`.** `IsNextJSProject`, `IsNuxtProject`, and `HasDependency` live in `pkg/installer/otel/markers`, which both `otel` and `rum` import. Placing them in a leaf package avoids the import cycle (`otel` → `rum` → `otel`) without duplicating the logic, so backend instrumentation and RUM setup always agree on what counts as Next.js or Nuxt.
 - **Detect framework before walking for HTML.** Framework detection is O(1) stat calls; HTML scanning is O(N) on the directory tree. Stopping early avoids unnecessary I/O in the common case where a framework is present.
 - **`fs.WalkDir` over `filepath.Walk`.** `fs.WalkDir` passes `fs.DirEntry` which avoids an extra `os.Stat` syscall per entry. Both are cross-platform.
 - **No `os.Stat` mode-bit checks for writability.** `os.Stat` returns Unix-style mode bits that are not meaningful on Windows (all files appear writable). `os.OpenFile` with `O_WRONLY` is portable.
 - **Case-insensitive `.html` only on Windows.** Unix filesystems are case-sensitive; treating `.HTML` as `.html` on Unix would be incorrect for most projects.
 - **Prefer `index.html` over other `.html` files.** Frameworks like Angular have many `.html` component templates alongside `src/index.html`. Targeting only `index.html` when present avoids injecting into partial templates, which would corrupt them. For projects with no `index.html` (multi-page static sites), all writable `.html` files are candidates.
 - **Sorted `InjectableFiles`.** Deterministic ordering simplifies tests and makes the preview stable across runs.
+- **Experimental gate for the preview.** The full RUM flow (entity creation, tag fetch, injection) is not implemented yet. Showing the detection result only under `--experimental` signals to users that this is in-progress and prevents the section from appearing in production installs until the feature is complete.
 
 ## Risks / Trade-offs
 
 - False negatives: a project may use a framework not in the detection list. The user receives auto-injection when it would fail. Mitigation: the detection list is the primary extension point; it can grow without changing the algorithm.
 - False positives: a project may have a config filename collision (e.g., a non-Vite `vite.config.js`). This is accepted — the cost of a false positive (user gets a manual instruction) is lower than the cost of injecting into a framework-managed file.
 - Write permission probe opens each file briefly. This is negligible for the expected number of HTML files in a project root.
+- Detection uses CWD only when no project was selected and no `--project` path is given. In that case the scan root may be much wider than a single project.

@@ -1,10 +1,14 @@
 # Spec: RUM Detection
 
-## NEW Requirements
+## Purpose
+
+Define how dtwiz scans a project directory to decide whether Real User Monitoring can be set up through automatic HTML injection or needs manual tag placement.
+
+## Requirements
 
 ### Requirement: Scan project directory for RUM injection eligibility
 
-The system SHALL scan the current project directory when `dtwiz install otel` runs and determine whether Real User Monitoring can be set up via automatic HTML injection or requires manual tag placement.
+The system SHALL scan the project directory selected during `dtwiz install otel` (falling back to `--project` or the current directory when no project was selected) and determine whether Real User Monitoring can be set up via automatic HTML injection or requires manual tag placement.
 
 #### Scenario: Framework config file detected
 
@@ -12,6 +16,32 @@ The system SHALL scan the current project directory when `dtwiz install otel` ru
 - **WHEN** the RUM detection scan runs
 - **THEN** the system returns manual injection mode (because frameworks manage their build output and prevent direct HTML file modification)
 - **AND** the reason identifies the detected framework by name
+
+#### Scenario: Next.js project with a root layout file
+
+- **GIVEN** the project is a Next.js project
+- **AND** a root layout file exists as `app/layout`, `src/app/layout`, `pages/_document` or `src/pages/_document` with extension `.tsx`, `.jsx`, `.ts` or `.js`
+- **WHEN** the RUM detection scan runs
+- **THEN** the system returns manual injection mode
+- **AND** the result identifies that layout file as the place to add the tag
+- **AND** App Router layouts take priority over Pages Router documents when both exist
+
+#### Scenario: Next.js project without a recognizable layout file
+
+- **GIVEN** the project is a Next.js project
+- **AND** none of the standard root layout files exist
+- **WHEN** the RUM detection scan runs
+- **THEN** the system returns manual injection mode
+- **AND** the result does not identify a file to add the tag to
+
+#### Scenario: Nuxt project with a config file
+
+- **GIVEN** the project is a Nuxt project
+- **AND** a `nuxt.config` file exists with extension `.ts`, `.js`, `.mjs` or `.mts`
+- **WHEN** the RUM detection scan runs
+- **THEN** the system returns manual injection mode
+- **AND** the result identifies the Nuxt config file as the place to add the tag
+- **AND** HTML files elsewhere in the project (e.g. a sibling `public/index.html`) are not injectable
 
 #### Scenario: Malformed package.json
 
@@ -44,6 +74,35 @@ The system SHALL scan the current project directory when `dtwiz install otel` ru
 - **WHEN** the RUM detection scan runs
 - **THEN** the system excludes those files from the injectable file list (because they are build output, not source files)
 - **AND** returns manual injection mode with reason indicating no writable HTML files were found
+
+#### Scenario: Deeply nested index.html
+
+- **GIVEN** the project directory contains `index.html` only at a deeply nested path (e.g. `src/main/resources/templates/index.html`)
+- **AND** no framework config file is present
+- **WHEN** the RUM detection scan runs
+- **THEN** the system returns auto injection mode
+- **AND** the result includes that `index.html` path
+
+#### Scenario: HTML files outside the selected project directory
+
+- **GIVEN** `.html` files exist in directories outside the selected project directory
+- **WHEN** the RUM detection scan runs
+- **THEN** those files are never scanned or listed (because only the selected project directory belongs to the application being onboarded)
+
+#### Scenario: Manual injection preview does not name a framework
+
+- **GIVEN** RUM detection returns manual injection mode
+- **WHEN** the install preview is shown
+- **THEN** the preview states that auto-injection is not possible
+- **AND** it does not name the detected framework or other reason
+- **AND** it shows the file to add the tag to when one was identified
+
+#### Scenario: HTML files exist inside hidden directories
+
+- **GIVEN** the project directory contains `.html` files only inside hidden directories (names starting with `.`)
+- **WHEN** the RUM detection scan runs
+- **THEN** those files are excluded from the injectable file list (because hidden directories hold tool caches and configuration, not application source)
+- **AND** the system returns manual injection mode with reason indicating no writable HTML files were found
 
 #### Scenario: HTML files exist inside node_modules or .git
 
