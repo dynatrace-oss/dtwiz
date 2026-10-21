@@ -782,7 +782,7 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		// port, so without this the app would be configured with the wrong endpoint.
 		plan = createRuntimePlanFn(planProj, cp.httpPort, token, envURL, platformToken)
 		fmt.Println()
-		display.PrintlnColored(display.ColorMessage, "%s auto-instrumentation", plan.Runtime())
+		display.Detail("%s auto-instrumentation", plan.Runtime())
 		if err := plan.Execute(); err != nil {
 			return "", err
 		}

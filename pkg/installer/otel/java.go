@@ -98,7 +98,7 @@ func downloadJavaAgent() (string, error) {
 		return "", fmt.Errorf("writing agent file: %w", err)
 	}
 
-	display.PrintStatusLine("download", "OpenTelemetry Java agent... done.", display.ColorOK)
+	display.Detail("OpenTelemetry Java agent: %s", destPath)
 	return destPath, nil
 }
 
