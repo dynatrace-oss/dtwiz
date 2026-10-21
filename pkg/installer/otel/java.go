@@ -234,9 +234,10 @@ func buildJavaInstrumentationPlan(proj detectedProject, collectorEndpoint, token
 func (p *JavaInstrumentationPlan) Execute() error {
 	if len(p.SubModules) > 0 {
 		if len(p.Project.RunningProcessIDs) > 0 {
-			fmt.Print("  Stopping running processes... ")
-			stopProcesses(p.Project.RunningProcessIDs)
-			fmt.Println("done.")
+			_ = display.RunStep("Stopped running processes", func(*display.Step) error {
+				stopProcesses(p.Project.RunningProcessIDs)
+				return nil
+			})
 		}
 		if err := p.executeMultiModule(); err != nil {
 			logger.Debug("multi-module execution failed", "error", err)
@@ -245,10 +246,16 @@ func (p *JavaInstrumentationPlan) Execute() error {
 		return nil
 	}
 
-	agentPath, err := downloadJavaAgent()
-	if err != nil {
-		display.PrintStatusLine("error", fmt.Sprintf("failed to download agent: %v", err), display.ColorError)
-		return fmt.Errorf("downloading Java agent: %w", err)
+	var agentPath string
+	if err := display.RunStep("Downloaded OpenTelemetry Java agent", func(*display.Step) error {
+		var err error
+		agentPath, err = downloadJavaAgent()
+		if err != nil {
+			return fmt.Errorf("downloading Java agent: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	if len(p.Project.RunningProcessIDs) > 0 {
@@ -264,8 +271,7 @@ func (p *JavaInstrumentationPlan) Execute() error {
 		entrypoints := detectJavaEntrypoints(p.Project.Path)
 		if len(entrypoints) == 0 {
 			logger.Debug("no entrypoints found at execute time", "project", p.Project.Path)
-			display.PrintStatusLine("error", noEntrypointMessage(p.Project.Path), display.ColorError)
-			return fmt.Errorf("no runnable entrypoint detected in %s", p.Project.Path)
+			return fmt.Errorf("no runnable entrypoint detected in %s: %s", p.Project.Path, noEntrypointMessage(p.Project.Path))
 		}
 		ep = promptEntrypointSelection(entrypoints)
 		if ep == nil {
@@ -279,7 +285,6 @@ func (p *JavaInstrumentationPlan) Execute() error {
 	logPath := filepath.Join(p.Project.Path, svcName+".log")
 	logFile, err := os.Create(logPath)
 	if err != nil {
-		display.PrintStatusLine("error", fmt.Sprintf("failed to create log file: %v", err), display.ColorError)
 		return fmt.Errorf("creating log file: %w", err)
 	}
 
@@ -288,7 +293,6 @@ func (p *JavaInstrumentationPlan) Execute() error {
 
 	proc, err := StartManagedProcess(svcName, svcName+".log", "", cmd, logFile)
 	if err != nil {
-		display.PrintStatusLine("error", fmt.Sprintf("failed to start process: %v", err), display.ColorError)
 		return fmt.Errorf("starting process: %w", err)
 	}
 	proc.portDetector = func(pid int) string { return detectJavaListeningPort(pid, p.Project.Path) }

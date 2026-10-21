@@ -9,10 +9,10 @@
 - Add `display.RunStep` (spinner while a step runs, collapsing to `✓ label  detail` or `✗ label` plus the error tail), `display.StepDone`, `display.StepWarn` and `display.Detail` (lines shown only with `-v`/`--debug`).
 - Print step lines without animation when stdout is not a terminal or `-v`/`--debug` is active.
 - Mark errors already shown under a failed step so the root command does not print them a second time; cobra's own error printing is silenced in favour of one handler.
-- Convert the OneAgent, OTel Collector (including the tenant-setup preview), Kubernetes, AWS, Azure and GCP install flows to steps, with a compact pre-confirmation summary.
+- Convert the OneAgent, OTel Collector (including the tenant-setup preview and the Python, Node.js and Java runtime executors), Kubernetes, AWS (including Lambda instrumentation), Azure and GCP install flows to steps, with a compact pre-confirmation summary.
 - Move commands, URLs, paths, manifests and config dumps to `-v`; `--dry-run` keeps the full plan; `--debug` keeps diagnostics.
 - The confirmation prompt for the converted flows reads `Apply?`.
-- Not in scope (follow-up): the OTel runtime executors (Python, Node.js, Java, Go) and AWS Lambda instrumentation output.
+- Not in scope: uninstall commands and the manual Go SDK guidance, which is instructional text.
 
 ## Capabilities
 

@@ -656,8 +656,7 @@ func updateFunctionConfig(functionName string, envVars map[string]string, layers
 // the preview (used when called from install aws).
 func InstallAWSLambda(envURL, token string, dryRun, confirm bool) error {
 	fmt.Println()
-	display.ColorMessage.Println("  Dynatrace AWS Lambda Instrumentation")
-	fmt.Println()
+	display.Header("dtwiz · AWS Lambda")
 
 	// ── Validate ─────────────────────────────────────────────────────────────
 
@@ -692,27 +691,40 @@ func InstallAWSLambda(envURL, token string, dryRun, confirm bool) error {
 
 	// ── Get region ───────────────────────────────────────────────────────────
 
-	fmt.Printf("  Fetching AWS region...\n")
-	region, err := getLambdaRegion()
-	if err != nil {
-		return fmt.Errorf("getting AWS region: %w", err)
+	var region string
+	if err := display.RunStep("Fetched AWS region", func(s *display.Step) error {
+		var err error
+		region, err = getLambdaRegion()
+		if err != nil {
+			return fmt.Errorf("getting AWS region: %w", err)
+		}
+		s.Detail("%s", region)
+		return nil
+	}); err != nil {
+		return err
 	}
-	fmt.Printf("  Region: %s\n", region)
 
 	// ── Get DT connection info ───────────────────────────────────────────────
 
-	fmt.Printf("  Fetching Dynatrace connection info...\n")
-	connInfo, err := getDTConnectionInfo(envURL, token)
-	if err != nil {
+	var connInfo *dtConnectionInfo
+	if err := display.RunStep("Fetched Dynatrace connection info", func(*display.Step) error {
+		var err error
+		connInfo, err = getDTConnectionInfo(envURL, token)
+		return err
+	}); err != nil {
 		return err
 	}
-	fmt.Printf("  Tenant: %s\n", connInfo.TenantUUID)
+	display.Detail("tenant: %s", connInfo.TenantUUID)
 
 	// ── List Lambda functions ────────────────────────────────────────────────
 
-	fmt.Printf("  Listing Lambda functions...\n")
-	functions, err := listLambdaFunctions()
-	if err != nil {
+	var functions []lambdaFunction
+	if err := display.RunStep("Listed Lambda functions", func(s *display.Step) error {
+		var err error
+		functions, err = listLambdaFunctions()
+		s.Detail("%d found", len(functions))
+		return err
+	}); err != nil {
 		return err
 	}
 
@@ -774,32 +786,27 @@ func InstallAWSLambda(envURL, token string, dryRun, confirm bool) error {
 
 	// ── Instrument ───────────────────────────────────────────────────────────
 
-	succeeded := 0
-	failed := 0
-
-	for i, fn := range functions {
-		if actions[i] == "skip" {
-			continue
+	succeeded, failed := 0, 0
+	_ = display.RunStep("Instrumented Lambda functions", func(s *display.Step) error {
+		for i, fn := range functions {
+			if actions[i] == "skip" {
+				continue
+			}
+			s.Detail("%d/%d  %s", succeeded+failed+1, actionable, fn.Name)
+			if err := instrumentFunction(fn, layerARNs[i], connInfo); err != nil {
+				display.StepWarn(fmt.Sprintf("Could not %s %s", actions[i], fn.Name), err.Error())
+				failed++
+				continue
+			}
+			succeeded++
 		}
-
-		fmt.Printf("  %s %s...", actions[i], fn.Name)
-		if err := instrumentFunction(fn, layerARNs[i], connInfo); err != nil {
-			fmt.Printf(" failed: %s\n", err)
-			failed++
-			continue
+		if failed > 0 {
+			s.Detail("%d succeeded, %d failed", succeeded, failed)
+		} else {
+			s.Detail("%d functions", succeeded)
 		}
-		fmt.Printf(" done\n")
-		succeeded++
-	}
-
-	// ── Summary ──────────────────────────────────────────────────────────────
-
-	fmt.Println()
-	if failed > 0 {
-		fmt.Printf("  %d succeeded, %d failed\n", succeeded, failed)
-	} else {
-		fmt.Printf("  %d functions instrumented successfully\n", succeeded)
-	}
+		return nil
+	})
 
 	return nil
 }

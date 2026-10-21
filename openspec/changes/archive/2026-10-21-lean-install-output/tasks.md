@@ -11,7 +11,8 @@
 - [x] 2.1 OneAgent: steps for connectivity, download, signature and install; prime sudo.
 - [x] 2.2 OTel Collector: steps, compact summary, compact tenant-setup preview and apply summary.
 - [x] 2.3 Kubernetes: steps and compact preview.
-- [x] 2.4 AWS, Azure and GCP: steps and compact preview.
+- [x] 2.4 AWS (including Lambda), Azure and GCP: steps and compact preview.
+- [x] 2.5 OTel runtime executors (Python, Node.js, Java): steps instead of inline status lines.
 
 ## 3. Tests and docs
 

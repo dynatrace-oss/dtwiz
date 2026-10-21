@@ -148,45 +148,42 @@ func (p *PythonInstrumentationPlan) Execute() error {
 	}
 
 	if len(proj.RunningProcessIDs) > 0 {
-		fmt.Print("  Stopping running processes... ")
-		stopProcesses(proj.RunningProcessIDs)
-		fmt.Println("done.")
+		_ = display.RunStep("Stopped running processes", func(*display.Step) error {
+			stopProcesses(proj.RunningProcessIDs)
+			return nil
+		})
 	}
 
 	if p.NeedsVenv {
+		// removeStaleVirtualenv may prompt, so it runs outside the spinner.
 		if venvDir := detectProjectVenvDir(proj.Path); venvDir != "" {
 			removed, err := removeStaleVirtualenv(venvDir)
 			if err != nil {
-				fmt.Println("failed.")
-				fmt.Printf("    %v\n", err)
 				return fmt.Errorf("removing stale virtualenv: %w", err)
 			}
 			if !removed {
-				fmt.Println("  Cancelled: Python auto-instrumentation needs a working virtualenv to install packages and start OTLP ingest reliably.")
+				display.StepWarn("Cancelled", "Python auto-instrumentation needs a working virtualenv to install packages and start OTLP ingest reliably")
 				return fmt.Errorf("virtualenv removal cancelled")
 			}
 		}
-		fmt.Print("  Creating virtualenv... ")
-		pythonPath, err := DetectPython()
-		if err != nil {
-			fmt.Println("failed.")
-			fmt.Printf("    %v\n", err)
+		if err := display.RunStep("Created virtualenv", func(*display.Step) error {
+			pythonPath, err := DetectPython()
+			if err != nil {
+				return err
+			}
+			venvDir := filepath.Join(proj.Path, ".venv")
+			logger.Debug("creating virtualenv", "python", pythonPath, "venv_dir", venvDir)
+			cmd := exec.Command(pythonPath, "-m", "venv", venvDir)
+			cmd.Dir = proj.Path
+			if out, err := cmd.CombinedOutput(); err != nil {
+				return fmt.Errorf("creating virtualenv: %w\n%s", err, strings.TrimSpace(string(out)))
+			}
+			return nil
+		}); err != nil {
 			return err
 		}
-		venvDir := filepath.Join(proj.Path, ".venv")
-		logger.Debug("creating virtualenv", "python", pythonPath, "venv_dir", venvDir)
-		cmd := exec.Command(pythonPath, "-m", "venv", venvDir)
-		cmd.Dir = proj.Path
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			fmt.Println("failed.")
-			os.Stdout.Write(out)
-			return fmt.Errorf("creating virtualenv: %w", err)
-		}
-		fmt.Println("done.")
 		venvPip = detectProjectPip(proj.Path)
 		if venvPip == nil {
-			fmt.Println("    Could not find pip in new virtualenv.")
 			return fmt.Errorf("pip not found in new virtualenv")
 		}
 		pythonBin = resolveVenvBinary(proj.Path, "python")
@@ -195,46 +192,51 @@ func (p *PythonInstrumentationPlan) Execute() error {
 		}
 	}
 
-	fmt.Print("  Installing project dependencies... ")
-	installed, err := installProjectDeps(venvPip, proj.Path)
-	if err != nil {
-		fmt.Println("failed.")
-		fmt.Printf("    %v\n", err)
-		return fmt.Errorf("installing project dependencies: %w", err)
-	}
-	if installed != "" {
-		fmt.Printf("done (%s).\n", installed)
-	} else {
-		fmt.Println("skipped (no requirements.txt, pyproject.toml, or setup.py found).")
+	if err := display.RunStep("Installed project dependencies", func(s *display.Step) error {
+		installed, err := installProjectDeps(venvPip, proj.Path)
+		if err != nil {
+			return fmt.Errorf("installing project dependencies: %w", err)
+		}
+		if installed != "" {
+			s.Detail("%s", installed)
+		} else {
+			s.Detail("none found")
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
-	fmt.Print("  Installing OTel packages... ")
-	if err := installPackages(venvPip, otelPythonPackages); err != nil {
-		fmt.Println("failed.")
-		fmt.Printf("    %v\n", err)
-		return fmt.Errorf("installing OTel packages: %w", err)
+	if err := display.RunStep("Installed OTel packages", func(*display.Step) error {
+		if err := installPackages(venvPip, otelPythonPackages); err != nil {
+			return fmt.Errorf("installing OTel packages: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
-	fmt.Println("done.")
 
-	fmt.Print("  Running opentelemetry-bootstrap... ")
 	venvPython := resolveVenvBinary(proj.Path, "python")
 	if venvPython == "python" {
 		venvPython = resolveVenvBinary(proj.Path, "python3")
 	}
-	if err := runOtelBootstrap(venvPython); err != nil {
-		fmt.Println("failed.")
-		fmt.Printf("    %v\n", err)
-		return fmt.Errorf("running opentelemetry-bootstrap: %w", err)
+	if err := display.RunStep("Ran opentelemetry-bootstrap", func(*display.Step) error {
+		if err := runOtelBootstrap(venvPython); err != nil {
+			return fmt.Errorf("running opentelemetry-bootstrap: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
-	fmt.Println("done.")
 
-	fmt.Print("  Verifying framework instrumentations... ")
-	if err := ensureFrameworkInstrumentations(venvPython, venvPip); err != nil {
-		fmt.Println("failed.")
-		fmt.Printf("    %v\n", err)
-		return fmt.Errorf("verifying framework instrumentations: %w", err)
+	if err := display.RunStep("Verified framework instrumentations", func(*display.Step) error {
+		if err := ensureFrameworkInstrumentations(venvPython, venvPip); err != nil {
+			return fmt.Errorf("verifying framework instrumentations: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
-	fmt.Println("done.")
 
 	otelInstrument := resolveVenvBinary(proj.Path, "opentelemetry-instrument")
 
@@ -252,7 +254,7 @@ func (p *PythonInstrumentationPlan) Execute() error {
 		logPath := filepath.Join(proj.Path, logName)
 		logFile, err := os.Create(logPath)
 		if err != nil {
-			fmt.Printf("    Failed to create log file %s: %v\n", logPath, err)
+			display.StepWarn(fmt.Sprintf("Could not create log file %s", logPath), err.Error())
 			continue
 		}
 
@@ -274,7 +276,7 @@ func (p *PythonInstrumentationPlan) Execute() error {
 
 		mp, err := StartManagedProcess(svcName, logName, ep, cmd, logFile)
 		if err != nil {
-			fmt.Printf("    Failed to start %s: %v\n", ep, err)
+			display.StepWarn(fmt.Sprintf("Could not start %s", ep), err.Error())
 			continue
 		}
 		procs = append(procs, mp)

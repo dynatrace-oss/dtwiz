@@ -15,7 +15,7 @@ Each installer prints through a mix of `display.*` helpers and raw `fmt` calls. 
 **Non-Goals:**
 
 - Changing what the installers do.
-- Converting the OTel runtime executors and AWS Lambda instrumentation (follow-up).
+- Output of the manual-instructions flows (Go SDK guidance) and the uninstall commands.
 
 ## Decisions
 
@@ -47,7 +47,3 @@ A spinner would overwrite a sudo password prompt, so the OneAgent install primes
 
 - Installer subprocess output (OneAgent installer) is captured unless `-v` is set; it appears in the error on failure.
 - Tests that asserted on commands and manifests in the default preview now enable verbosity.
-
-## Follow-up
-
-The OTel runtime executors (Python, Node.js, Java, Go) and the AWS Lambda instrumentation output still print inline status lines. They are converted in a separate change.
