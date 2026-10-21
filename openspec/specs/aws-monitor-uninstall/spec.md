@@ -66,9 +66,9 @@ skipped.
 
 ### Requirement: Confirmation preview before destructive steps
 
-The system SHALL print the numbered list of steps that will be performed — always
-including the CloudFormation stack deletion, and conditionally including the monitoring
-config deletion — and prompt for a single `Apply?` confirmation (default yes). On
+The system SHALL print a compact summary of what will be removed — always
+including the CloudFormation stack, and conditionally including the monitoring
+configuration — and prompt for a single `Apply?` confirmation (default yes). On
 `--dry-run` it prints the preview and exits without executing any step.
 
 #### Scenario: Dry-run stops before deletion
@@ -79,8 +79,8 @@ config deletion — and prompt for a single `Apply?` confirmation (default yes).
 
 ### Requirement: CloudFormation stack deletion with wait
 
-Step 1 SHALL delete the CloudFormation stack named `dynatrace-data-acquisition` in the
-current region and wait for full deletion before proceeding to step 2.
+The first step SHALL delete the CloudFormation stack named `dynatrace-data-acquisition` in the
+current region and wait for full deletion before proceeding to the next step. It SHALL be shown as one step line with the wait as its detail.
 
 #### Scenario: Stack deleted and waited
 
@@ -91,7 +91,7 @@ current region and wait for full deletion before proceeding to step 2.
 
 ### Requirement: Monitoring configuration deletion
 
-Step 2 SHALL delete the `da-aws` monitoring configuration identified in the preflight
+The second step SHALL delete the `da-aws` monitoring configuration identified in the preflight
 lookup, using the dtctl SDK. If no configuration was found the step is skipped.
 
 #### Scenario: Monitoring config deleted

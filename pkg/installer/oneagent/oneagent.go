@@ -67,7 +67,7 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 		return err
 	}
 	if !opts.Quiet {
-		display.Header(fmt.Sprintf("dtwiz · OneAgent on %s %s", env.OS, env.Arch))
+		display.InstallHeader(fmt.Sprintf("dtwiz · OneAgent on %s %s", env.OS, env.Arch))
 	}
 
 	cfg := ResolveAgentConfig(opts)

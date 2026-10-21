@@ -21,7 +21,7 @@ func TestAzureMaskToken(t *testing.T) {
 			TenantID:          "tenant-id-123",
 			SubscriptionID:    "sub-abc123",
 			Scope:             "/subscriptions/sub-abc123",
-		})
+		}, false)
 	})
 	if strings.Contains(preview, secret) {
 		t.Errorf("platform token must not appear in preview output; got:\n%s", preview)
@@ -42,7 +42,7 @@ func TestAzurePreviewHidesCommandsByDefault(t *testing.T) {
 			TenantID:          "tenant-id-123",
 			SubscriptionID:    "sub-abc123",
 			Scope:             "/subscriptions/sub-abc123",
-		})
+		}, false)
 	})
 	if strings.Contains(preview, "az ad") || strings.Contains(preview, "Commands to be executed") {
 		t.Errorf("commands should only be listed with -v; got:\n%s", preview)

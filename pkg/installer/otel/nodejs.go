@@ -441,7 +441,6 @@ func (p *NodeInstrumentationPlan) Execute() error {
 		return err
 	}
 
-	fmt.Println()
 	var procs []*ManagedProcess
 
 	switch p.Framework {
@@ -570,7 +569,7 @@ func InstallOtelNode(envURL, token, platformToken, serviceName, projectPath stri
 	}
 
 	fmt.Println()
-	display.Header("Dynatrace Node.js Auto-Instrumentation")
+	display.InstallHeader("dtwiz · Node.js")
 
 	var plan *NodeInstrumentationPlan
 	if projectPath != "" {
@@ -604,10 +603,15 @@ func InstallOtelNode(envURL, token, platformToken, serviceName, projectPath stri
 	}
 
 	fmt.Println()
-	display.ColorMessage.Println("  Steps:")
-	plan.PrintPlanSteps()
+	if logger.Enabled() {
+		display.PrintlnColored(display.ColorMessage, "Steps:")
+		plan.PrintPlanSteps()
+	} else {
+		display.PrintAlignedStatusLines(display.ColorDefault, "Instrument", fmt.Sprintf("%s · %s", plan.Runtime(), plan.Project.Path))
+	}
+	fmt.Println()
 
-	ok, err := installer.ConfirmProceed("  Proceed with installation?")
+	ok, err := installer.ConfirmProceed("  Apply?")
 	if err != nil {
 		return err
 	}

@@ -50,9 +50,9 @@ func azureBuildStepCommands(cfg azureConfig) ([]string, error) {
 	}, nil
 }
 
-func azurePrintPreview(cfg azureConfig) error {
+func azurePrintPreview(cfg azureConfig, showPlan bool) error {
 	fmt.Println()
-	display.Header("dtwiz · Azure")
+	display.InstallHeader("dtwiz · Azure")
 	display.PrintAlignedStatusLines(display.ColorDefault,
 		"Subscription", cfg.SubscriptionID,
 		"Connection", cfg.ConnectionName,
@@ -65,7 +65,7 @@ func azurePrintPreview(cfg azureConfig) error {
 	if err != nil {
 		return err
 	}
-	if logger.Enabled() {
+	if showPlan || logger.Enabled() {
 		fmt.Println()
 		display.PrintSectionDivider()
 		display.ColorMessage.Println("  Commands to be executed:")
@@ -130,15 +130,23 @@ func installAzureWithRunner(
 	sleeper func(time.Duration),
 	dtc dtclient,
 ) error {
-	subscriptionID, tenantID, err := azureAccountInfo(runner)
-	if err != nil {
+	var subscriptionID, tenantID string
+	if err := display.RunQuiet("Checking Azure account", func(*display.Step) error {
+		var err error
+		subscriptionID, tenantID, err = azureAccountInfo(runner)
+		return err
+	}); err != nil {
 		return err
 	}
 
 	name := integrationNameForEnv(envURL)
 
-	existing, err := dtc.findAllConnections(integrationPrefix)
-	if err != nil {
+	var existing []connRef
+	if err := display.RunQuiet("Checking existing Dynatrace connections", func(*display.Step) error {
+		var err error
+		existing, err = dtc.findAllConnections(integrationPrefix)
+		return err
+	}); err != nil {
 		return fmt.Errorf("checking existing connection: %w", err)
 	}
 	if len(existing) > 0 {
@@ -149,12 +157,16 @@ func installAzureWithRunner(
 		}
 		return fmt.Errorf("azure connection '%s' already exists but is incomplete or duplicated: run `dtwiz uninstall azure` then `dtwiz install azure` for a clean setup", name)
 	}
-	if err := requireSupportedAzVersion(); err != nil {
+	if err := display.RunQuiet("Checking az CLI version and permissions", func(*display.Step) error {
+		if err := requireSupportedAzVersion(); err != nil {
+			return err
+		}
+		// Only check RBAC when actually installing — role assignment creation requires it; update does not.
+		azureCheckRBAC(runner, "/subscriptions/"+subscriptionID)
+		return nil
+	}); err != nil {
 		return err
 	}
-
-	// Only check RBAC when actually installing — role assignment creation requires it; update does not.
-	azureCheckRBAC(runner, "/subscriptions/"+subscriptionID)
 
 	cfg := azureConfig{
 		ConnectionName:    name,
@@ -166,7 +178,7 @@ func installAzureWithRunner(
 		Scope:             "/subscriptions/" + subscriptionID,
 	}
 
-	if err := azurePrintPreview(cfg); err != nil {
+	if err := azurePrintPreview(cfg, dryRun); err != nil {
 		return err
 	}
 

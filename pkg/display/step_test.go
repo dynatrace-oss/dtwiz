@@ -129,3 +129,55 @@ func TestPrintInsideRunningStepClearsSpinnerLine(t *testing.T) {
 		t.Errorf("warning not printed on a cleared line:\n%q", buf.String())
 	}
 }
+
+func TestInstallHeaderSkippedWhenCallerPrintedOne(t *testing.T) {
+	t.Cleanup(func() { installHeaderShown = false })
+	installHeaderShown = false
+	if out := helpersCaptureColor(t, func() { InstallHeader("dtwiz · X") }); !strings.Contains(out, "dtwiz · X") {
+		t.Errorf("expected header when none was shown, got %q", out)
+	}
+	MarkInstallHeaderShown()
+	if out := helpersCaptureColor(t, func() { InstallHeader("dtwiz · X") }); out != "" {
+		t.Errorf("expected no second header, got %q", out)
+	}
+}
+
+func helpersCaptureColor(t *testing.T, fn func()) string {
+	t.Helper()
+	buf := &bytes.Buffer{}
+	old := color.Output
+	color.Output = buf
+	defer func() { color.Output = old }()
+	fn()
+	return buf.String()
+}
+
+func TestSpinnerStaysOnInVerboseMode(t *testing.T) {
+	buf := captureSteps(t, true)
+	logger.Init(false, 1)
+	_ = RunStep("Working", func(*Step) error {
+		time.Sleep(2 * spinnerInterval)
+		return nil
+	})
+	if !strings.Contains(buf.String(), "Working…") {
+		t.Errorf("expected a spinner line in verbose mode:\n%q", buf.String())
+	}
+}
+
+func TestRunQuietShowsSpinnerButNoResultLine(t *testing.T) {
+	buf := captureSteps(t, true)
+	if err := RunQuiet("Configuring", func(*Step) error {
+		time.Sleep(2 * spinnerInterval)
+		StepDone("Configured thing", "")
+		return nil
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "Configuring…") || !strings.Contains(out, "✓ Configured thing") {
+		t.Errorf("expected spinner and the helper's own result line:\n%q", out)
+	}
+	if strings.Contains(out, "✓ Configuring") {
+		t.Errorf("RunQuiet must not print its own result line:\n%q", out)
+	}
+}

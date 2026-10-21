@@ -511,10 +511,10 @@ func stopProcesses(pids []int) {
 			}
 		}
 		if err != nil {
-			fmt.Printf("    Warning: could not stop PID %d: %v\n", pid, err)
+			display.StepWarn(fmt.Sprintf("Could not stop PID %d", pid), err.Error())
 			continue
 		}
-		fmt.Printf("    Stopped PID %d\n", pid)
+		display.Detail("stopped PID %d", pid)
 	}
 }
 

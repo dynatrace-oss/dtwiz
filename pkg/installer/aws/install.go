@@ -140,7 +140,7 @@ func installAWSWithClient(envURL, token string, dryRun bool, startTime string, d
 	sep := strings.Repeat("─", 60)
 
 	fmt.Println()
-	display.Header("dtwiz · AWS")
+	display.InstallHeader("dtwiz · AWS")
 
 	if envURL == "" {
 		return fmt.Errorf("Dynatrace environment URL is required (--environment or DT_ENVIRONMENT)") //nolint:staticcheck // ST1005: keep brand capitalization

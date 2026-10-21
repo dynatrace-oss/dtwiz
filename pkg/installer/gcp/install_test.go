@@ -704,7 +704,7 @@ func TestGCPMaskToken(t *testing.T) {
 			ProjectID:          "my-project",
 			ServiceAccountName: "dtwiz-gcp-abc",
 			DTServiceAccount:   "dt-monitor@dynatrace-prod.iam.gserviceaccount.com",
-		})
+		}, false)
 	})
 	if strings.Contains(preview, secret) {
 		t.Errorf("platform token must not appear in preview output; got:\n%s", preview)

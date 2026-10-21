@@ -41,11 +41,39 @@ func stepWriter() io.Writer {
 	return os.Stdout
 }
 
-// stepAnimated reports whether the spinner may be drawn. It is false when the
-// output is not a terminal (CI, pipes) and in -v/--debug mode, where log lines
-// would tear the animated line.
-var stepAnimated = func() bool {
-	return isStdoutTTY() && !logger.Enabled()
+// stepAnimated reports whether the spinner may be drawn: only on a terminal
+// (not in CI or pipes). It stays on with -v/--debug so the current step is
+// always visible; log lines clear the spinner line first (see spinnerAwareLog).
+var stepAnimated = isStdoutTTY
+
+// spinnerAwareLog is the logger's output: it clears a live spinner line on the
+// terminal before each log write so log lines are not appended to it.
+type spinnerAwareLog struct{}
+
+func (spinnerAwareLog) Write(p []byte) (int, error) {
+	stepMu.Lock()
+	defer stepMu.Unlock()
+	if spinning && isTTY() {
+		fmt.Fprint(os.Stderr, "\r\033[2K")
+	}
+	return os.Stderr.Write(p)
+}
+
+func init() { logger.Output = spinnerAwareLog{} }
+
+// Stream is a writer for subprocess output shown during a step (-v). Like the
+// logger output it clears a live spinner line before each write.
+var Stream io.Writer = streamWriter{}
+
+type streamWriter struct{}
+
+func (streamWriter) Write(p []byte) (int, error) {
+	stepMu.Lock()
+	defer stepMu.Unlock()
+	if spinning {
+		fmt.Fprint(stepWriter(), "\r\033[2K")
+	}
+	return stepWriter().Write(p)
 }
 
 // Step is a handle to a running step. Detail updates the text shown after the
@@ -76,6 +104,18 @@ func (s *Step) currentDetail() string {
 // terminal it prints only the final line. fn must not print to stdout while
 // running; use Detail for live status.
 func RunStep(label string, fn func(s *Step) error) error {
+	return runStep(label, fn, true)
+}
+
+// RunQuiet shows a spinner with label (present tense, e.g. "Configuring tenant")
+// while fn runs, then removes it without a result line. Use it for work whose
+// own helpers print their result lines (StepDone/StepWarn), so a long silent
+// phase still shows progress. A failure is printed like a failed RunStep.
+func RunQuiet(label string, fn func(s *Step) error) error {
+	return runStep(label, fn, false)
+}
+
+func runStep(label string, fn func(s *Step) error, printSuccess bool) error {
 	s := &Step{label: label, start: time.Now()}
 	animated := stepAnimated()
 
@@ -107,7 +147,9 @@ func RunStep(label string, fn func(s *Step) error) error {
 		printStepFailure(label, err)
 		return &reportedError{err: err}
 	}
-	printStepDone(label, s.currentDetail())
+	if printSuccess {
+		printStepDone(label, s.currentDetail())
+	}
 	return nil
 }
 
@@ -153,6 +195,11 @@ func StepDone(label, detail string) {
 	printStepDone(label, detail)
 }
 
+// StepFail prints a failed step line without running anything.
+func StepFail(label, detail string) {
+	printStepLine(ColorError, "✗", label, detail)
+}
+
 // StepWarn prints a warning step line (the step finished but needs attention).
 func StepWarn(label, detail string) {
 	printStepLine(ColorWarning, "⚠", label, detail)
@@ -171,7 +218,7 @@ func printStepLine(mark *color.Color, symbol, label, detail string) {
 }
 
 func printStepFailure(label string, err error) {
-	lines := []string{fmt.Sprintf("  %s %s", ColorError.Sprint("✗"), label)}
+	lines := []string{fmt.Sprintf("  %s %s  %s", ColorError.Sprint("✗"), label, ColorError.Sprint("failed"))}
 	for _, line := range tailLines(err.Error(), errorTailLines) {
 		lines = append(lines, "    "+line)
 	}
@@ -206,6 +253,22 @@ func tailLines(s string, n int) []string {
 		lines = lines[len(lines)-n:]
 	}
 	return lines
+}
+
+// installHeaderShown is set once an outer command (dtwiz setup) has already
+// printed the "Installing: <method>" header, so installers do not add a second.
+var installHeaderShown bool
+
+// MarkInstallHeaderShown records that the caller printed its own install header.
+func MarkInstallHeaderShown() { installHeaderShown = true }
+
+// InstallHeader prints an installer's section header unless the calling
+// command already printed one for this install.
+func InstallHeader(title string) {
+	if installHeaderShown {
+		return
+	}
+	Header(title)
 }
 
 // Detail prints a dim, indented line that only appears with -v or --debug.

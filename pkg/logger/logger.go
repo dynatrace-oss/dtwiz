@@ -1,9 +1,20 @@
 package logger
 
 import (
+	"io"
 	"log/slog"
 	"os"
 )
+
+// Output receives the log lines. The display package replaces it so log lines
+// written while a step spinner is animating clear the spinner line first.
+var Output io.Writer = os.Stderr
+
+// liveWriter resolves Output at write time, so replacing it takes effect for
+// handlers that were already created by Init.
+type liveWriter struct{}
+
+func (liveWriter) Write(p []byte) (int, error) { return Output.Write(p) }
 
 var enabled bool
 var debugMode bool
@@ -26,7 +37,7 @@ func Init(debug bool, verbosity int) {
 	} else if verbosityLevel >= 1 {
 		level = slog.LevelInfo // Verbose only
 	}
-	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})
+	handler := slog.NewTextHandler(liveWriter{}, &slog.HandlerOptions{Level: level})
 	slog.SetDefault(slog.New(handler))
 }
 

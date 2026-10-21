@@ -62,16 +62,16 @@ func removeHostMonitoringGrailRoutes(envURL, platformToken string) {
 	c, err := newSDKGrailClient(envURL, platformToken)
 	if err != nil {
 		logger.Debug("failed to create Grail client for route removal", "error", err)
-		fmt.Println("  Warning: could not connect to Grail API; OpenPipeline routes were not removed.")
+		display.StepWarn("Could not connect to Grail API", "OpenPipeline routes were not removed")
 		return
 	}
 	removed, errs := removeGrailRoutesFn(context.Background(), c)
 	for i, err := range errs {
 		if err != nil {
 			logger.Debug("failed to remove Grail route", "signal", grailSignals[i].name, "error", err)
-			fmt.Printf("  Warning: could not remove OpenPipeline %s route; please remove it manually.\n", grailSignals[i].displayName)
+			display.StepWarn(fmt.Sprintf("Could not remove OpenPipeline %s route", grailSignals[i].displayName), "please remove it manually")
 		} else if removed[i] {
-			display.ColorOK.Printf("  ✓ OpenPipeline %s route removed\n", grailSignals[i].displayName)
+			display.StepDone(fmt.Sprintf("OpenPipeline %s route removed", grailSignals[i].displayName), "")
 		}
 	}
 }
@@ -86,28 +86,28 @@ func activateHostMonitoringExtension(envURL, platformToken string) {
 
 	if err != nil {
 		logger.Debug("failed to create extension client for host monitoring activation", "error", err)
-		fmt.Println("  Warning: could not connect to extensions API; host entity creation may not be available.")
+		display.StepWarn("Could not connect to extensions API", "host entity creation may not be available")
 		return
 	}
 	_, err = ec.EnsureInstalled(otelHostMonitoringExtension)
 	if err != nil {
 		logger.Debug("failed to ensure OTel host monitoring extension installed", "error", err)
-		fmt.Println("  Warning: could not install OTel Host Monitoring extension; host entity creation may not be available.")
+		display.StepWarn("Could not install OTel Host Monitoring extension", "host entity creation may not be available")
 		return
 	}
 	version, err := ec.LatestExtensionVersion(otelHostMonitoringExtension)
 	if err != nil {
 		logger.Debug("failed to get OTel host monitoring extension version", "error", err)
-		fmt.Println("  Warning: could not determine OTel Host Monitoring extension version; host entity creation may not be available.")
+		display.StepWarn("Could not determine OTel Host Monitoring extension version", "host entity creation may not be available")
 		return
 	}
 	if err := ec.ActivateExtension(otelHostMonitoringExtension, version); err != nil {
 		logger.Debug("failed to activate OTel host monitoring extension", "error", err)
-		fmt.Println("  Warning: could not activate OTel Host Monitoring extension; host entity creation may not be available.")
+		display.StepWarn("Could not activate OTel Host Monitoring extension", "host entity creation may not be available")
 		return
 	}
 	installer.RecordFeature(installer.FeatureHostMonitoring, true)
-	display.ColorOK.Println("  ✓ OTel Host Monitoring extension active")
+	display.StepDone("OTel Host Monitoring extension active", "")
 }
 
 // buildExtensionActivationPreviewFn is overridable in tests.
@@ -183,12 +183,12 @@ func deactivateHostMonitoringExtension(envURL, platformToken string) {
 	ec, err := newExtensionManagerFn(envURL, platformToken)
 	if err != nil {
 		logger.Debug("failed to create extension client for host monitoring deactivation", "error", err)
-		fmt.Println("  Warning: could not connect to extensions API; OTel Host Monitoring extension was not removed.")
+		display.StepWarn("Could not connect to extensions API", "OTel Host Monitoring extension was not removed")
 		return
 	}
 	if err := ec.DeactivateExtension(otelHostMonitoringExtension); err != nil {
 		logger.Debug("failed to deactivate OTel host monitoring extension environment configuration", "error", err)
-		fmt.Println("  Warning: could not deactivate OTel Host Monitoring extension; extension was not removed.")
+		display.StepWarn("Could not deactivate OTel Host Monitoring extension", "extension was not removed")
 		return
 	}
 	version, err := ec.LatestExtensionVersion(otelHostMonitoringExtension)
@@ -198,15 +198,15 @@ func deactivateHostMonitoringExtension(envURL, platformToken string) {
 			return
 		}
 		logger.Debug("failed to get OTel host monitoring extension version", "error", err)
-		fmt.Println("  Warning: could not determine OTel Host Monitoring extension version; extension was not removed.")
+		display.StepWarn("Could not determine OTel Host Monitoring extension version", "extension was not removed")
 		return
 	}
 	if err := ec.DeleteExtensionVersion(otelHostMonitoringExtension, version); err != nil {
 		logger.Debug("failed to delete OTel host monitoring extension version", "error", err)
-		fmt.Println("  Warning: could not remove OTel Host Monitoring extension; please remove it manually.")
+		display.StepWarn("Could not remove OTel Host Monitoring extension", "please remove it manually")
 		return
 	}
-	display.ColorOK.Println("  ✓ OTel Host Monitoring extension removed")
+	display.StepDone("OTel Host Monitoring extension removed", "")
 }
 
 type tenantPrereqs struct {
@@ -223,7 +223,7 @@ func buildTenantPrerequisitePreview(envURL, platformToken string) tenantPrereqs 
 		logger.Debug("platform token not provided, skipping extension and route previews")
 		return tenantPrereqs{}
 	}
-	detailed := logger.Enabled()
+	detailed := logger.Enabled() && !previewAlreadyShown
 	var rows []tenantRow
 	extensionWillInstall := false
 	if status, err := buildExtensionActivationPreviewFn(envURL, platformToken); err != nil {
@@ -266,7 +266,9 @@ func buildTenantPrerequisitePreview(envURL, platformToken string) tenantPrereqs 
 	} else if otlpPlan != nil {
 		rows = append(rows, tenantRow{"OTLP dimensions", "will be enabled", display.ColorOK})
 	}
-	printTenantRows(rows)
+	if !previewAlreadyShown {
+		printTenantRows(rows)
+	}
 	return tenantPrereqs{
 		grailC:               c,
 		grailPlans:           plans,
@@ -593,14 +595,34 @@ func InstallOtelCollector(envURL, token, platformToken string, dryRun bool) (str
 	return InstallOtelCollectorWithProject(envURL, token, platformToken, "", dryRun)
 }
 
+// previewAlreadyShown is set by flows (the demo) that print their own plan and
+// ask for confirmation before calling the collector install, so the install
+// does not show a second preview or prompt.
+var previewAlreadyShown bool
+
 // applyTenantPrerequisites activates the host monitoring extension, configures
 // the OpenPipeline routes and enables Advanced OTLP metric dimensions.
 func applyTenantPrerequisites(envURL, platformToken string, prereqs tenantPrereqs) {
+	// Each phase can take a while (extension install, pipeline propagation), so
+	// it shows a spinner; the helpers print their own result lines.
 	if platformToken != "" {
-		activateHostMonitoringExtensionFn(envURL, platformToken)
+		_ = display.RunQuiet("Activating OTel Host Monitoring extension", func(*display.Step) error {
+			activateHostMonitoringExtensionFn(envURL, platformToken)
+			return nil
+		})
 	}
-	applyAndValidateGrailRoutes(prereqs.grailC, prereqs.grailPlans)
-	applyOTLPMetricDimensions(context.Background(), prereqs.otlpDimensionsClient, prereqs.otlpDimensionsPlan)
+	if prereqs.grailC != nil {
+		_ = display.RunQuiet("Configuring OpenPipeline routes", func(*display.Step) error {
+			applyAndValidateGrailRoutes(prereqs.grailC, prereqs.grailPlans)
+			return nil
+		})
+	}
+	if prereqs.otlpDimensionsPlan != nil {
+		_ = display.RunQuiet("Enabling Advanced OTLP metric dimensions", func(*display.Step) error {
+			applyOTLPMetricDimensions(context.Background(), prereqs.otlpDimensionsClient, prereqs.otlpDimensionsPlan)
+			return nil
+		})
+	}
 }
 
 // printPrivilegeNote prints a one-line note when the current privileges limit
@@ -634,13 +656,17 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 	}
 
 	fmt.Println()
-	display.Header("dtwiz · OpenTelemetry")
+	display.InstallHeader("dtwiz · OpenTelemetry")
 	printPrivilegeNote()
 
 	runtimes := detectAvailableRuntimes()
 
-	cp, err := prepareCollectorPlan(envURL, token)
-	if err != nil {
+	var cp *collectorPlan
+	if err := display.RunQuiet("Preparing collector configuration", func(*display.Step) error {
+		var err error
+		cp, err = prepareCollectorPlan(envURL, token)
+		return err
+	}); err != nil {
 		return "", err
 	}
 
@@ -653,14 +679,17 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 			return "", fmt.Errorf("could not detect runtime from project path: %s", projectPath)
 		}
 		projects := []ScannedProject{{Path: projectPath}}
-		switch rt {
-		case "Java":
-			matchProcessesToProjects(projects, detectJavaProcesses())
-		case "Node.js":
-			matchProcessesToProjects(projects, detectNodeProcesses())
-		default:
-			matchProcessesToProjects(projects, detectPythonProcesses())
-		}
+		_ = display.RunQuiet("Detecting running processes", func(*display.Step) error {
+			switch rt {
+			case "Java":
+				matchProcessesToProjects(projects, detectJavaProcesses())
+			case "Node.js":
+				matchProcessesToProjects(projects, detectNodeProcesses())
+			default:
+				matchProcessesToProjects(projects, detectPythonProcesses())
+			}
+			return nil
+		})
 		proj := detectedProject{ScannedProject: projects[0], Runtime: rt}
 		plan = createRuntimePlanFn(proj, cp.httpPort, token, envURL, platformToken)
 		planProj = proj
@@ -670,7 +699,11 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 			return "", err
 		}
 		logger.Debug("scanning for projects", "roots", roots)
-		projects := detectAllProjects(runtimes, roots)
+		var projects []detectedProject
+		_ = display.RunQuiet("Scanning for projects", func(*display.Step) error {
+			projects = detectAllProjects(runtimes, roots)
+			return nil
+		})
 		if len(projects) > 0 {
 			display.ColorMessage.Println("  Detected projects:")
 		} else {
@@ -722,53 +755,58 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		}
 	}
 
-	fmt.Println()
+	// The demo flow already showed its own plan and asked for confirmation.
+	if !previewAlreadyShown {
+		fmt.Println()
 
-	cp.printSummary()
+		cp.printSummary()
 
-	if plan != nil {
-		if logger.Enabled() || dryRun {
-			display.PrintlnColored(display.ColorMessage, "%s auto-instrumentation", plan.Runtime())
-			plan.PrintPlanSteps()
-		} else {
-			display.PrintAlignedStatusLines(display.ColorDefault, "Instrument", fmt.Sprintf("%s · %s", plan.Runtime(), planProj.Path))
+		if plan != nil {
+			if logger.Enabled() || dryRun {
+				display.PrintlnColored(display.ColorMessage, "%s auto-instrumentation", plan.Runtime())
+				plan.PrintPlanSteps()
+			} else {
+				display.PrintAlignedStatusLines(display.ColorDefault, "Instrument", fmt.Sprintf("%s · %s", plan.Runtime(), planProj.Path))
+			}
 		}
-	}
 
-	if rumResult != nil {
-		mode := "manual (auto-injection not possible)"
-		if rumResult.Mode == rum.ModeAuto {
-			mode = "auto-inject"
+		if rumResult != nil {
+			mode := "manual (auto-injection not possible)"
+			if rumResult.Mode == rum.ModeAuto {
+				mode = "auto-inject"
+			}
+			display.PrintAlignedStatusLines(display.ColorDefault, "RUM [exp.]", mode)
+			for _, f := range rumResult.InjectableFiles {
+				display.Detail("file: %s", f)
+			}
+			if rumResult.Mode != rum.ModeAuto && rumResult.ManualTarget != "" {
+				display.Detail("add tag to %s", rumResult.ManualTarget)
+			}
 		}
-		display.PrintAlignedStatusLines(display.ColorDefault, "RUM [exp.]", mode)
-		for _, f := range rumResult.InjectableFiles {
-			display.Detail("file: %s", f)
-		}
-		if rumResult.Mode != rum.ModeAuto && rumResult.ManualTarget != "" {
-			display.Detail("add tag to %s", rumResult.ManualTarget)
-		}
-	}
 
-	if dryRun || logger.Enabled() {
-		cp.printConfigPreview(strings.Repeat("─", 60))
+		if dryRun || logger.Enabled() {
+			cp.printConfigPreview(strings.Repeat("─", 60))
+		}
 	}
 
 	prereqs := buildTenantPrerequisitePreview(envURL, platformToken)
 
-	fmt.Println()
-
 	if dryRun {
+		fmt.Println()
 		display.PrintStatusLine("dry-run", "no changes made", display.ColorMuted)
 		return "", nil
 	}
 
-	ok, err := installer.ConfirmProceed("  Apply?")
-	if err != nil {
-		return "", fmt.Errorf("reading confirmation: %w", err)
-	}
-	if !ok {
-		fmt.Println("  Installation cancelled.")
-		return "", installer.ErrInstallCancelled
+	if !previewAlreadyShown {
+		fmt.Println()
+		ok, err := installer.ConfirmProceed("  Apply?")
+		if err != nil {
+			return "", fmt.Errorf("reading confirmation: %w", err)
+		}
+		if !ok {
+			fmt.Println("  Installation cancelled.")
+			return "", installer.ErrInstallCancelled
+		}
 	}
 	fmt.Println()
 
@@ -784,7 +822,6 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 		// config, updating cp.httpPort. The original plan baked in the pre-stop
 		// port, so without this the app would be configured with the wrong endpoint.
 		plan = createRuntimePlanFn(planProj, cp.httpPort, token, envURL, platformToken)
-		fmt.Println()
 		display.Detail("%s auto-instrumentation", plan.Runtime())
 		if err := plan.Execute(); err != nil {
 			return "", err

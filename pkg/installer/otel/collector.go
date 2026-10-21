@@ -1081,12 +1081,16 @@ var executeCollectorPlanFn = func(cp *collectorPlan, envURL, platformToken strin
 // runtime instrumentation.
 func InstallOtelCollectorOnly(envURL, token, platformToken string, dryRun bool) error {
 	fmt.Println()
-	display.Header("dtwiz · OpenTelemetry Collector")
+	display.InstallHeader("dtwiz · OpenTelemetry Collector")
 	printPrivilegeNote()
 	fmt.Println()
 
-	cp, err := prepareCollectorPlan(envURL, token)
-	if err != nil {
+	var cp *collectorPlan
+	if err := display.RunQuiet("Preparing collector configuration", func(*display.Step) error {
+		var err error
+		cp, err = prepareCollectorPlan(envURL, token)
+		return err
+	}); err != nil {
 		return err
 	}
 

@@ -38,9 +38,9 @@ func gcpBuildStepCommands(cfg gcpConfig) []string {
 	}
 }
 
-func gcpPrintPreview(cfg gcpConfig) {
+func gcpPrintPreview(cfg gcpConfig, showPlan bool) {
 	fmt.Println()
-	display.Header("dtwiz · Google Cloud")
+	display.InstallHeader("dtwiz · Google Cloud")
 	display.PrintAlignedStatusLines(display.ColorDefault,
 		"Project", cfg.ProjectID,
 		"Service account", cfg.serviceAccountEmail(),
@@ -50,7 +50,7 @@ func gcpPrintPreview(cfg gcpConfig) {
 	display.Detail("environment: %s", cfg.EnvURL)
 	display.Detail("dynatrace principal: %s", cfg.DTServiceAccount)
 
-	if logger.Enabled() {
+	if showPlan || logger.Enabled() {
 		fmt.Println()
 		display.PrintSectionDivider()
 		display.ColorMessage.Println("  Commands to be executed:")
@@ -183,15 +183,23 @@ func installGCPWithRunner(
 	sleeper func(time.Duration),
 	dtc dtclient,
 ) error {
-	projectID, _, err := gcpAccountInfo(runner)
-	if err != nil {
+	var projectID string
+	if err := display.RunQuiet("Checking Google Cloud project", func(*display.Step) error {
+		var err error
+		projectID, _, err = gcpAccountInfo(runner)
+		return err
+	}); err != nil {
 		return err
 	}
 
 	name := integrationNameForEnv(envURL)
 
-	existing, err := dtc.findAllConnections(integrationPrefix)
-	if err != nil {
+	var existing []connRef
+	if err := display.RunQuiet("Checking existing Dynatrace connections", func(*display.Step) error {
+		var err error
+		existing, err = dtc.findAllConnections(integrationPrefix)
+		return err
+	}); err != nil {
 		return fmt.Errorf("checking existing connection: %w", err)
 	}
 	// Complete connection found: reconcile monitoring config in place; don't recreate the SA/bindings.
@@ -204,7 +212,12 @@ func installGCPWithRunner(
 		return err
 	}
 
-	dtPrincipal, err := dtc.dtServiceAccount()
+	var dtPrincipal string
+	err = display.RunQuiet("Resolving Dynatrace principal", func(*display.Step) error {
+		var derr error
+		dtPrincipal, derr = dtc.dtServiceAccount()
+		return derr
+	})
 	if err != nil {
 		if errors.Is(err, errNoPrincipal) {
 			fmt.Println("  GCP is currently in Preview. Please first subscribe to it on https://docs.dynatrace.com/docs/whats-new/preview-releases.")
@@ -224,7 +237,7 @@ func installGCPWithRunner(
 		ConnectionID:       resumeConnID,
 	}
 
-	gcpPrintPreview(cfg)
+	gcpPrintPreview(cfg, dryRun)
 
 	if proceed, err := installer.ShouldProceed(dryRun, "Installation"); !proceed {
 		return err

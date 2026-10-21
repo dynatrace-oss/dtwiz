@@ -351,20 +351,15 @@ func grailApplyMessage(action grailAction) (string, *color.Color) {
 }
 
 func printGrailApplyResults(plans []grailSignalPlan, errs []error) {
-	if !logger.Enabled() {
-		printGrailApplySummary(plans, errs)
-		return
-	}
-	fmt.Printf("\n  ── OpenPipeline dynamic routes ──\n\n")
+	printGrailApplySummary(plans, errs)
+	// Per-signal outcomes only with -v/--debug (display.Detail is spinner-safe).
 	for i, p := range plans {
-		msg, colorFn := grailApplyMessage(p.action)
+		msg, _ := grailApplyMessage(p.action)
 		if i < len(errs) && errs[i] != nil {
 			msg = fmt.Sprintf("warning — %v", errs[i])
-			colorFn = display.ColorWarning
 		}
-		display.PrintStatusLine(p.signal.displayName, msg, colorFn)
+		display.Detail("OpenPipeline %s: %s", p.signal.displayName, msg)
 	}
-	fmt.Println()
 }
 
 // printGrailApplySummary prints one line when every route applied cleanly, and

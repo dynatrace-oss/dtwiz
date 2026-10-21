@@ -1126,7 +1126,7 @@ func TestActivateHostMonitoringExtension_ActivationFails_WarnsAndContinues(t *te
 		activateHostMonitoringExtension("https://env.example.com", "dt0s16.test")
 	})
 
-	if !strings.Contains(out, "Warning: could not activate OTel Host Monitoring extension; host entity creation may not be available.") {
+	if !strings.Contains(out, "Could not activate OTel Host Monitoring extension") {
 		t.Errorf("expected activation failure warning in output, got: %s", out)
 	}
 }
@@ -1225,7 +1225,7 @@ func TestDeactivateHostMonitoringExtension_VersionNotFound_Warns(t *testing.T) {
 		deactivateHostMonitoringExtension("https://env.example.com", "dt0s16.test")
 	})
 
-	if !strings.Contains(out, "Warning: could not deactivate OTel Host Monitoring extension; extension was not removed.") {
+	if !strings.Contains(out, "Could not deactivate OTel Host Monitoring extension") {
 		t.Errorf("expected deactivation failure warning in output, got: %s", out)
 	}
 }
@@ -1239,7 +1239,7 @@ func TestDeactivateHostMonitoringExtension_DeleteFails_Warns(t *testing.T) {
 		deactivateHostMonitoringExtension("https://env.example.com", "dt0s16.test")
 	})
 
-	if !strings.Contains(out, "Warning: could not remove OTel Host Monitoring extension; please remove it manually.") {
+	if !strings.Contains(out, "Could not remove OTel Host Monitoring extension") {
 		t.Errorf("expected delete failure warning in output, got: %s", out)
 	}
 }
@@ -1499,7 +1499,7 @@ func TestPrintGrailPlanAndApplyResults(t *testing.T) {
 	logger.Init(false, 1)
 	applyOut := captureActivationOutput(t, func() { printGrailApplyResults(plans, []error{nil, fmt.Errorf("boom"), nil}) })
 	logger.Init(false, 0)
-	for _, want := range []string{"OpenPipeline dynamic routes", "Metrics", "route created", "Logs", "warning", "boom", "Spans", "skip"} {
+	for _, want := range []string{"OpenPipeline Metrics", "route created", "OpenPipeline Logs", "warning", "boom", "OpenPipeline Spans", "skip"} {
 		if !strings.Contains(applyOut, want) {
 			t.Fatalf("printGrailApplyResults() output missing %q:\n%s", want, applyOut)
 		}

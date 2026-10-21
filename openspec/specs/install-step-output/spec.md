@@ -23,11 +23,12 @@ Install flows SHALL present each unit of work as a single step line that collaps
 - **WHEN** a step completes
 - **THEN** only the final `✓` or `✗` line is printed, without spinner control sequences
 
-#### Scenario: Verbose mode disables the spinner
+#### Scenario: Verbose mode keeps the spinner
 
-- **GIVEN** `-v` or `--debug` is set
+- **GIVEN** `-v` or `--debug` is set and stdout is a terminal
 - **WHEN** a step runs
-- **THEN** no spinner is drawn, so log lines are not interleaved with an animated line
+- **THEN** the spinner is still shown so the current step is visible
+- **AND** log lines clear the spinner line before they are written
 
 ### Requirement: Wordy output requires verbose mode
 
@@ -65,3 +66,51 @@ Warnings and completed-step lines printed while a step is running SHALL clear th
 - **GIVEN** a step is running with a spinner
 - **WHEN** a warning line is printed
 - **THEN** the warning appears on its own line and the spinner continues underneath
+
+### Requirement: Uninstall and update commands use the same step style
+
+The `uninstall` and `update` commands SHALL present their work as steps, with a compact summary before the confirmation prompt, the same as install flows.
+
+#### Scenario: Kubernetes uninstall
+
+- **GIVEN** `dtwiz uninstall kubernetes` is run
+- **WHEN** the user confirms
+- **THEN** each of deleting the custom resources, waiting for pods, helm uninstall and deleting the namespace is shown as one step line
+- **AND** a failing step shows `✗ <label>  failed` with its error while the remaining steps still run
+
+### Requirement: Failed steps are marked as failed
+
+A failed step SHALL be printed as `✗ <label>  failed` followed by the error tail, because step labels are in past tense.
+
+#### Scenario: Step fails
+
+- **GIVEN** a step labelled "Uninstalled Dynatrace Operator" returns an error
+- **WHEN** the step line is printed
+- **THEN** it reads `✗ Uninstalled Dynatrace Operator  failed`
+
+### Requirement: The install header is printed once
+
+An installer SHALL NOT print its own section header when the calling command has already printed one for the same install.
+
+#### Scenario: Run through setup
+
+- **GIVEN** `dtwiz setup` printed "Installing: Kubernetes cluster"
+- **WHEN** the Kubernetes installer starts
+- **THEN** no second "dtwiz · Kubernetes" header is printed
+
+#### Scenario: Direct install command
+
+- **GIVEN** `dtwiz install kubernetes` is run directly
+- **WHEN** the installer starts
+- **THEN** it prints its own "dtwiz · Kubernetes" header
+
+### Requirement: Long-running phases show progress
+
+Any phase that can take noticeable time (tenant setup, lookups, scans, downloads, installs) SHALL show a spinner while it runs, including phases whose helpers print their own result lines.
+
+#### Scenario: Tenant setup before the collector install
+
+- **GIVEN** the extension is installed and OpenPipeline routes are configured before the collector is downloaded
+- **WHEN** these phases run
+- **THEN** a spinner with a present-tense label is shown while each runs
+- **AND** the result lines printed by the helpers appear above the spinner as they complete

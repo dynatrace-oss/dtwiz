@@ -240,7 +240,6 @@ func (p *PythonInstrumentationPlan) Execute() error {
 
 	otelInstrument := resolveVenvBinary(proj.Path, "opentelemetry-instrument")
 
-	fmt.Println()
 	var procs []*ManagedProcess
 	for _, ep := range p.Entrypoints {
 		svcName := serviceNameFromEntrypoint(proj.Path, ep)
@@ -328,11 +327,8 @@ func InstallOtelPython(envURL, token, platformToken, serviceName, projectPath st
 		return nil
 	}
 
-	sep := strings.Repeat("─", 60)
-
 	fmt.Println()
-	display.ColorMessage.Println("  Dynatrace Python Auto-Instrumentation")
-	fmt.Println("  " + sep)
+	display.InstallHeader("dtwiz · Python")
 
 	plan := detectPythonPlanWithConfirmedRuntime(projectPath, collectorEndpoint)
 	if plan == nil {
@@ -341,10 +337,15 @@ func InstallOtelPython(envURL, token, platformToken, serviceName, projectPath st
 	}
 
 	fmt.Println()
-	display.ColorMessage.Println("  Steps:")
-	plan.PrintPlanSteps()
+	if logger.Enabled() {
+		display.PrintlnColored(display.ColorMessage, "Steps:")
+		plan.PrintPlanSteps()
+	} else {
+		display.PrintAlignedStatusLines(display.ColorDefault, "Instrument", fmt.Sprintf("%s · %s", plan.Runtime(), plan.Project.Path))
+	}
+	fmt.Println()
 
-	ok, err := installer.ConfirmProceed("  Proceed with installation?")
+	ok, err := installer.ConfirmProceed("  Apply?")
 	if err != nil {
 		return err
 	}

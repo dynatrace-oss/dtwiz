@@ -15,17 +15,29 @@ Each installer prints through a mix of `display.*` helpers and raw `fmt` calls. 
 **Non-Goals:**
 
 - Changing what the installers do.
-- Output of the manual-instructions flows (Go SDK guidance) and the uninstall commands.
+- Output of the manual-instructions flows (Go SDK guidance, Windows self-uninstall instructions).
 
 ## Decisions
 
 ### Step helper in `pkg/display`
 
-`RunStep(label, fn)` draws a spinner on stdout when stdout is a TTY and logging is off. It collapses to `✓` or `✗` when `fn` returns. Otherwise only the final line is printed. `Step.Detail` updates the text next to the spinner (progress, "3/5 ready").
+`RunStep(label, fn)` draws a spinner on stdout when stdout is a TTY, also with `-v`/`--debug`. It collapses to `✓` or `✗` when `fn` returns. Otherwise only the final line is printed. `Step.Detail` updates the text next to the spinner (progress, "3/5 ready").
+
+### Failed steps say so
+
+Step labels are past tense ("Deployed Dynatrace Operator"), so a failure is printed as `✗ <label>  failed` to avoid reading as a success.
+
+### One header per install
+
+Installers print `dtwiz · <method>` through `display.InstallHeader`. `dtwiz setup` already prints "Installing: …" and marks it shown, so the header is not repeated there; a direct `dtwiz install <method>` still shows it.
 
 ### Verbose detail is not slog
 
-`display.Detail` prints dim, indented lines when `logger.Enabled()`. This keeps `-v` readable (commands, paths) and leaves `logger.*` for diagnostics. In `-v`/`--debug` mode the spinner is off so log lines do not tear it.
+`display.Detail` prints dim, indented lines when `logger.Enabled()`. This keeps `-v` readable (commands, paths) and leaves `logger.*` for diagnostics. Log lines written while a spinner is active clear the spinner line first (the logger writes through a display-provided writer), and subprocess output shown with `-v` goes through `display.Stream` for the same reason, so `-v` still shows the step in progress.
+
+### Silent phases get a spinner
+
+`RunQuiet(label, fn)` shows a spinner with a present-tense label and removes it without a result line, for phases whose helpers print `✓`/`⚠` lines themselves (tenant setup, project scans, lookups). Without it these phases showed nothing until they finished.
 
 ### Printing while a spinner runs
 

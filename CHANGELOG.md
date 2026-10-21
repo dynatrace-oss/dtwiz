@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Leaner install output: each step of `install oneagent`, `kubernetes`, `otel` (including the Python, Node.js and Java instrumentation), `aws` (including Lambda), `azure` and `gcp` is one line with a spinner that turns into `✓` or `✗`. Commands, URLs, paths, manifests and generated config now appear with `-v` (and in `--dry-run`); a failed step shows the last lines of its error without a flag. The pre-confirmation prompt now reads `Apply?`.
+- Leaner install output: each step of `install oneagent`, `kubernetes`, `otel` (including the Python, Node.js and Java instrumentation), `aws` (including Lambda), `azure` and `gcp` is one line with a spinner that turns into `✓` or `✗`. Commands, URLs, paths, manifests and generated config now appear with `-v` (and in `--dry-run`); a failed step shows the last lines of its error without a flag. The same step style now applies to the `uninstall` commands (kubernetes, aws, aws-lambda, azure, gcp, otel, oneagent, self), the azure/gcp/otel `update` commands, `install demo` and `install docker`. Phases that used to show nothing while they ran (tenant setup, lookups, project scans) now show a spinner. The pre-confirmation prompt now reads `Apply?`.
 
 ## [1.13.0] - 2026-10-19
 

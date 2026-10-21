@@ -268,7 +268,7 @@ func helmInstallArgs(disableCSI bool) (helmMajor int, args []string) {
 // so the correct args are always used.
 func ensureHelmOperator(disableCSI bool) error {
 	if !isHelmInstalled() {
-		if err := installHelm(); err != nil {
+		if err := display.RunStep("Installed Helm", func(*display.Step) error { return installHelm() }); err != nil {
 			return fmt.Errorf("helm installation failed: %w", err)
 		}
 	}
@@ -307,7 +307,7 @@ func handleK8sDryRun(apiURL, clusterName, distroDisplay, helmArgsStr string) {
 // the exact commands are shown with -v/--debug.
 func printK8sPreview(clusterName, distroDisplay, apiURL, manifest, helmCmd string) {
 	fmt.Println()
-	display.Header("dtwiz · Kubernetes")
+	display.InstallHeader("dtwiz · Kubernetes")
 	display.PrintAlignedStatusLines(display.ColorDefault,
 		"Cluster", clusterName,
 		"Distribution", distroDisplay,

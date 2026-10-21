@@ -29,63 +29,78 @@ func uninstallAWSWithClient(dryRun bool, dtc dtclient) error {
 	}
 
 	fmt.Println()
-	display.ColorMessage.Println("  Dynatrace AWS Uninstall")
-	fmt.Println()
+	display.Header("dtwiz · AWS uninstall")
 
-	fmt.Printf("  Fetching AWS account info...\n")
-	accountID, region, err := installer.GetAWSCallerInfo()
-	if err != nil {
-		return fmt.Errorf("fetching AWS caller info: %w", err)
+	var accountID, region string
+	if err := display.RunStep("Fetched AWS account info", func(s *display.Step) error {
+		var err error
+		accountID, region, err = installer.GetAWSCallerInfo()
+		if err != nil {
+			return fmt.Errorf("fetching AWS caller info: %w", err)
+		}
+		s.Detail("account %s · %s", accountID, region)
+		return nil
+	}); err != nil {
+		return err
 	}
-	fmt.Printf("  AWS account: %s  region: %s\n\n", accountID, region)
 
 	stackName := "dynatrace-data-acquisition"
 
-	fmt.Printf("  Looking up Dynatrace AWS monitoring configuration...\n")
-	monitoringConfigID, err := dtc.findExistingMonitoringConfig(accountID)
-	if err != nil {
-		return fmt.Errorf("looking up monitoring configuration: %w", err)
-	}
-	if monitoringConfigID != "" {
-		fmt.Printf("  Found monitoring config: %s\n", monitoringConfigID)
-	} else {
-		fmt.Printf("  No monitoring configuration found for account %s — will skip DT cleanup.\n", accountID)
+	var monitoringConfigID string
+	if err := display.RunStep("Looked up monitoring configuration", func(s *display.Step) error {
+		var err error
+		monitoringConfigID, err = dtc.findExistingMonitoringConfig(accountID)
+		if err != nil {
+			return fmt.Errorf("looking up monitoring configuration: %w", err)
+		}
+		if monitoringConfigID != "" {
+			s.Detail("found")
+			display.Detail("monitoring config: %s", monitoringConfigID)
+		} else {
+			s.Detail("none for this account, skipping Dynatrace cleanup")
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	fmt.Println()
-	fmt.Println("  This will perform the following steps:")
-	fmt.Printf("    1. Delete CloudFormation stack %q in region %q\n", stackName, region)
+	rows := []string{"Removes", fmt.Sprintf("CloudFormation stack %s (%s)", stackName, region)}
 	if monitoringConfigID != "" {
-		fmt.Printf("    2. Delete Dynatrace AWS monitoring config %s\n", monitoringConfigID)
+		rows = append(rows, "Removes", "Dynatrace AWS monitoring configuration")
 	}
+	display.PrintAlignedStatusLines(display.ColorDefault, rows...)
 	fmt.Println()
 
 	if proceed, err := installer.ShouldProceed(dryRun, "Uninstall"); !proceed {
 		return err
 	}
-	fmt.Println()
 
-	fmt.Printf("  Step 1: Deleting CloudFormation stack %q...\n", stackName)
-	if err := installer.RunCommand("aws", "cloudformation", "delete-stack",
-		"--stack-name", stackName, "--region", region); err != nil {
-		return fmt.Errorf("deleting CloudFormation stack: %w", err)
+	if err := display.RunStep("Deleted CloudFormation stack", func(s *display.Step) error {
+		s.Detail("waiting for deletion, this may take several minutes")
+		if err := installer.RunCommandQuiet("aws", "cloudformation", "delete-stack",
+			"--stack-name", stackName, "--region", region); err != nil {
+			return fmt.Errorf("deleting CloudFormation stack: %w", err)
+		}
+		if err := installer.RunCommandQuiet("aws", "cloudformation", "wait", "stack-delete-complete",
+			"--stack-name", stackName, "--region", region); err != nil {
+			return fmt.Errorf("waiting for stack deletion: %w", err)
+		}
+		s.Detail("")
+		return nil
+	}); err != nil {
+		return err
 	}
-	fmt.Printf("  Waiting for stack deletion to complete (this may take several minutes)...\n")
-	if err := installer.RunCommand("aws", "cloudformation", "wait", "stack-delete-complete",
-		"--stack-name", stackName, "--region", region); err != nil {
-		return fmt.Errorf("waiting for stack deletion: %w", err)
-	}
-	fmt.Printf("  Stack %q deleted.\n", stackName)
 
 	if monitoringConfigID != "" {
-		fmt.Printf("\n  Step 2: Deleting Dynatrace AWS monitoring configuration %s...\n", monitoringConfigID)
-		if err := dtc.deleteMonitoringConfig(monitoringConfigID); err != nil {
-			return fmt.Errorf("deleting monitoring config: %w", err)
+		if err := display.RunStep("Deleted monitoring configuration", func(*display.Step) error {
+			if err := dtc.deleteMonitoringConfig(monitoringConfigID); err != nil {
+				return fmt.Errorf("deleting monitoring config: %w", err)
+			}
+			return nil
+		}); err != nil {
+			return err
 		}
-		fmt.Printf("  Monitoring configuration %s deleted.\n", monitoringConfigID)
 	}
-
-	fmt.Println()
-	fmt.Println("  Dynatrace AWS uninstalled successfully.")
 	return nil
 }
