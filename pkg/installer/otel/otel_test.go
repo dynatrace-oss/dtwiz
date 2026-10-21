@@ -1529,14 +1529,16 @@ func TestGrailPlanSummary(t *testing.T) {
 		name  string
 		plans []grailSignalPlan
 		want  string
+		ext   bool
 	}{
-		{"to configure", []grailSignalPlan{{action: grailActionCreate}, {action: grailActionNoop}}, "1 of 2 routes will be configured"},
-		{"pending", []grailSignalPlan{{action: grailActionSkip}, {action: grailActionNoop}}, "pending — extension not active yet"},
-		{"done", []grailSignalPlan{{action: grailActionNoop}}, "already configured"},
+		{"to configure", []grailSignalPlan{{action: grailActionCreate}, {action: grailActionNoop}}, "1 of 2 routes will be configured", false},
+		{"pending", []grailSignalPlan{{action: grailActionSkip}, {action: grailActionNoop}}, "pending — extension not active yet", false},
+		{"pending but extension installs now", []grailSignalPlan{{action: grailActionSkip}}, "will be configured once the extension is active", true},
+		{"done", []grailSignalPlan{{action: grailActionNoop}}, "already configured", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got, _ := grailPlanSummary(tt.plans); got != tt.want {
+			if got, _ := grailPlanSummary(tt.plans, tt.ext); got != tt.want {
 				t.Errorf("grailPlanSummary() = %q, want %q", got, tt.want)
 			}
 		})

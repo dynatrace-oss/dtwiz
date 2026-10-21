@@ -494,7 +494,11 @@ func grailPreviewMessage(action grailAction) (string, *color.Color) {
 }
 
 // grailPlanSummary condenses the per-signal route plan into one preview line.
-func grailPlanSummary(plans []grailSignalPlan) (string, *color.Color) {
+// Colors follow the preview convention: green when this run will change
+// something, muted when there is nothing to do. extensionWillInstall is true
+// when the host monitoring extension is installed in this same run, in which
+// case routes that cannot be planned yet are configured right after it.
+func grailPlanSummary(plans []grailSignalPlan, extensionWillInstall bool) (string, *color.Color) {
 	var configure, pending int
 	for _, p := range plans {
 		switch p.action {
@@ -507,6 +511,8 @@ func grailPlanSummary(plans []grailSignalPlan) (string, *color.Color) {
 	switch {
 	case configure > 0:
 		return fmt.Sprintf("%d of %d routes will be configured", configure, len(plans)), display.ColorOK
+	case pending > 0 && extensionWillInstall:
+		return "will be configured once the extension is active", display.ColorOK
 	case pending > 0:
 		return "pending — extension not active yet", display.ColorMuted
 	}

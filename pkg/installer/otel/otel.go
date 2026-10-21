@@ -152,7 +152,8 @@ func printExtensionActivationPreview(status installer.ExtensionStatus) {
 	display.PrintStatusLine("Extension", msg, colorFn)
 }
 
-// tenantRow is one line of the compact tenant-setup preview.
+// tenantRow is one line of the compact tenant-setup preview. Colors: green =
+// this run will change something, muted = nothing to do, yellow = warning.
 type tenantRow struct {
 	label string
 	msg   string
@@ -224,6 +225,7 @@ func buildTenantPrerequisitePreview(envURL, platformToken string) tenantPrereqs 
 	}
 	detailed := logger.Enabled()
 	var rows []tenantRow
+	extensionWillInstall := false
 	if status, err := buildExtensionActivationPreviewFn(envURL, platformToken); err != nil {
 		if detailed {
 			fmt.Println()
@@ -236,6 +238,7 @@ func buildTenantPrerequisitePreview(envURL, platformToken string) tenantPrereqs 
 		printExtensionActivationPreview(status)
 	} else {
 		msg, colorFn := extensionPreviewMessage(status)
+		extensionWillInstall = status == installer.ExtensionNotInstalled
 		rows = append(rows, tenantRow{"Host monitoring", msg, colorFn})
 	}
 	c, plans, err := buildGrailRoutePlansFn(envURL, platformToken)
@@ -250,7 +253,7 @@ func buildTenantPrerequisitePreview(envURL, platformToken string) tenantPrereqs 
 		fmt.Println()
 		printGrailPlan(plans)
 	} else {
-		msg, colorFn := grailPlanSummary(plans)
+		msg, colorFn := grailPlanSummary(plans, extensionWillInstall)
 		rows = append(rows, tenantRow{"OpenPipeline", msg, colorFn})
 	}
 	otlpC, otlpPlan, err := buildOTLPMetricDimensionsPlanFn(envURL, platformToken)
