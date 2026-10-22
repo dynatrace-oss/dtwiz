@@ -180,10 +180,19 @@ func checkAccessToken(envURL, token string) error {
 	}
 }
 
-// checkPlatformToken validates the platform token via a minimal DQL query.
+// platformTokenProbePath is the Grail endpoint checkPlatformToken calls. query:verify parses a
+// DQL statement without running it, so it needs no storage:* scope: it proves the token
+// authenticates against the platform without making any Grail table read mandatory.
+// The previous probe, query:execute with `fetch dt.system.events`, required
+// storage:system:read for every command although no installer reads dt.system.events — a
+// least-privilege token carrying exactly the scopes an install needs was rejected as
+// "insufficient permissions".
+const platformTokenProbePath = "/platform/storage/query/v1/query:verify"
+
+// checkPlatformToken validates the platform token by verifying (not executing) a DQL statement.
 func checkPlatformToken(envURL, token string) error {
 	appsURL := strings.TrimRight(installer.AppsURL(envURL), "/")
-	queryURL := appsURL + "/platform/storage/query/v1/query:execute"
+	queryURL := appsURL + platformTokenProbePath
 
 	c, err := newCredentialClient(appsURL, token)
 	if err != nil {
@@ -192,11 +201,9 @@ func checkPlatformToken(envURL, token string) error {
 	resp, err := c.HTTP().R().
 		SetHeader("Content-Type", "application/json").
 		SetBody(map[string]interface{}{
-			"query":                      "fetch dt.system.events | limit 1",
-			"requestTimeoutMilliseconds": 4000,
-			"maxResultRecords":           1,
+			"query": "fetch logs | limit 1",
 		}).
-		Post("/platform/storage/query/v1/query:execute")
+		Post(platformTokenProbePath)
 	if err != nil {
 		return fmt.Errorf("platform token: environment not reachable (%s): %w%s",
 			appsURL, &installer.NetworkError{Reason: "environment_not_reachable", URL: appsURL}, environmentURLHints(appsURL))

@@ -55,7 +55,7 @@ func TestUpdateGcpCmd_RunE_ValidatesPlatformToken(t *testing.T) {
 	validationCalled := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		validationCalled = true
-		if r.URL.Path != "/platform/storage/query/v1/query:execute" {
+		if r.URL.Path != "/platform/storage/query/v1/query:verify" {
 			t.Errorf("unexpected request path: %s", r.URL.Path)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -95,7 +95,7 @@ func TestUpdateAzureCmd_RunE_ValidatesPlatformToken(t *testing.T) {
 	validationCalled := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		validationCalled = true
-		if r.URL.Path != "/platform/storage/query/v1/query:execute" {
+		if r.URL.Path != "/platform/storage/query/v1/query:verify" {
 			t.Errorf("unexpected request path: %s", r.URL.Path)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
