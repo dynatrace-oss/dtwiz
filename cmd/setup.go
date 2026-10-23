@@ -138,7 +138,7 @@ var setupCmd = &cobra.Command{
 			display.Header("Installing: Demo app (schnitzel)")
 			installer.ResetInstallTelemetry()
 			demoInstErr := otel.InstallDemo(envURL, classicTok, platformTok, setupDryRun)
-			fireSetupInstallEvent(cmd, "demo", demoInstErr)
+			fireInstallReportEvent(cmd, "demo", demoInstErr)
 			if demoInstErr != nil {
 				if errors.Is(demoInstErr, installer.ErrInstallCancelled) {
 					fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), demoInstErr)
@@ -234,7 +234,7 @@ var setupCmd = &cobra.Command{
 		default:
 			return fmt.Errorf("unsupported method: %s", selected.Method)
 		}
-		fireSetupInstallEvent(cmd, string(selected.Method), installErr)
+		fireInstallReportEvent(cmd, string(selected.Method), installErr)
 		if installErr != nil {
 			if errors.Is(installErr, installer.ErrInstallCancelled) || errors.Is(installErr, otel.ErrUpToDate) {
 				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), installErr)
