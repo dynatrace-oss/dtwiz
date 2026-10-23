@@ -195,17 +195,37 @@ func singleEvent(t *testing.T, captured *[]selfmonitoring.EventParams) selfmonit
 	return (*captured)[0]
 }
 
-func TestInstallEvent_CarriesRecordedOutcomesAndWorkTime(t *testing.T) {
+// steps returns the step IDs of the captured events in firing order.
+func steps(captured *[]selfmonitoring.EventParams) []string {
+	ids := make([]string, len(*captured))
+	for i, p := range *captured {
+		ids[i] = p.StepID
+	}
+	return ids
+}
+
+func assertSteps(t *testing.T, captured *[]selfmonitoring.EventParams, want ...string) {
+	t.Helper()
+	got := steps(captured)
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("steps = %v, want %v", got, want)
+	}
+}
+
+func TestInstallReportEvent_CarriesRecordedOutcomesAndWorkTime(t *testing.T) {
 	captured := captureInstallEvents(t)
 	installer.StartInstallTimer()
 	installer.RecordFeature(installer.FeatureOtelConfig, true)
 	installer.RecordFeature(installer.FeatureHostMonitoring, false)
 
-	fireInstallEvent(installOtelCollectorCmd, nil)
+	fireInstallReportEvent(installOtelCollectorCmd, "", nil)
 
 	p := singleEvent(t, captured)
 	if p.StepID != selfmonitoring.StepInstall || p.Cmd != "install" || p.Sub != "otel-collector" {
 		t.Errorf("step/cmd/sub = %q/%q/%q, want ist/install/otel-collector", p.StepID, p.Cmd, p.Sub)
+	}
+	if p.Err != "" || p.ExtraProps != nil {
+		t.Errorf("ist must carry no error, got err=%q props=%v", p.Err, p.ExtraProps)
 	}
 	if p.Install == nil {
 		t.Fatal("Install report must be attached when install work started")
@@ -227,59 +247,66 @@ func TestInstallEvent_CarriesRecordedOutcomesAndWorkTime(t *testing.T) {
 	}
 }
 
-func TestInstallEvent_NoReportWhenNoWorkStarted(t *testing.T) {
-	captured := captureInstallEvents(t)
-	// Dry-run: the installer returned without confirming or doing anything.
-	fireInstallEvent(installOtelCmd, nil)
-
-	if p := singleEvent(t, captured); p.Install != nil {
-		t.Errorf("Install = %+v, want nil for an install that did no work", p.Install)
-	}
-}
-
-func TestInstallEvent_CancelledOmitsReportEvenWhenTimerStarted(t *testing.T) {
-	captured := captureInstallEvents(t)
-	// OneAgent starts the timer in the cmd layer and can still be declined at its update prompt.
-	installer.StartInstallTimer()
-
-	fireInstallEvent(installOneAgentCmd, installer.ErrInstallCancelled)
-
-	p := singleEvent(t, captured)
-	if p.Err != "user_cancelled" {
-		t.Errorf("Err = %q, want user_cancelled", p.Err)
-	}
-	if p.Install != nil {
-		t.Errorf("Install = %+v, want nil for a cancelled install", p.Install)
-	}
-}
-
-func TestInstallEvent_FailureStillCarriesReport(t *testing.T) {
+func TestInstallReportEvent_FailureCarriesReportWithoutError(t *testing.T) {
 	captured := captureInstallEvents(t)
 	installer.StartInstallTimer()
 	installer.RecordFeature(installer.FeatureHostMonitoring, false)
 
-	fireInstallEvent(installOneAgentCmd, &installer.InstallFailedError{Step: "download"})
+	fireInstallReportEvent(installOtelNodeCmd, "", &installer.DependencyMissingError{Name: "npm"})
 
 	p := singleEvent(t, captured)
-	if p.Err == "" {
-		t.Error("Err must carry the classified error type")
+	if p.Err != "" || p.ExtraProps != nil {
+		t.Errorf("ist must carry no error, got err=%q props=%v", p.Err, p.ExtraProps)
 	}
 	if p.Install == nil || p.Install.Features[installer.FeatureHostMonitoring] != installer.OutcomeFailed {
 		t.Errorf("Install = %+v, want a report with host monitoring failed", p.Install)
 	}
-	if p.ExtraProps["install.step"] != "download" {
-		t.Errorf("error attributes must be kept next to the report, got %v", p.ExtraProps)
+}
+
+func TestInstallReportEvent_NothingWhenNoWorkStarted(t *testing.T) {
+	for name, err := range map[string]error{
+		"dry_run":               nil,
+		"failure_before_prompt": &installer.DependencyMissingError{Name: "npm"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			captured := captureInstallEvents(t)
+
+			fireInstallReportEvent(installOtelNodeCmd, "", err)
+
+			if len(*captured) != 0 {
+				t.Errorf("expected no ist event, got %d", len(*captured))
+			}
+		})
 	}
 }
 
-func TestSetupInstallEvent_CarriesSameReportAsDirectInstall(t *testing.T) {
+func TestInstallReportEvent_NothingOnCancelOrUpToDateEvenWhenTimerStarted(t *testing.T) {
+	for name, err := range map[string]error{
+		"cancelled":  installer.ErrInstallCancelled,
+		"up_to_date": otel.ErrUpToDate,
+	} {
+		t.Run(name, func(t *testing.T) {
+			captured := captureInstallEvents(t)
+			// OneAgent starts the timer in the cmd layer and can still be declined at its update prompt.
+			installer.StartInstallTimer()
+
+			fireInstallReportEvent(installOneAgentCmd, "", err)
+
+			if len(*captured) != 0 {
+				t.Errorf("expected no ist event, got %d", len(*captured))
+			}
+		})
+	}
+}
+
+func TestInstallReportEvent_SetupCarriesMethodAndSameReport(t *testing.T) {
 	captured := captureInstallEvents(t)
 	installer.StartInstallTimer()
 	installer.RecordFeature(installer.FeatureOtelConfig, true)
 	installer.RecordFeature(installer.FeatureHostMonitoring, true)
 
-	fireInstallEvent(installOtelCollectorCmd, nil)
-	fireSetupInstallEvent(setupCmd, "otel-collector", nil)
+	fireInstallReportEvent(installOtelCollectorCmd, "", nil)
+	fireInstallReportEvent(setupCmd, "otel-collector", nil)
 
 	if len(*captured) != 2 {
 		t.Fatalf("expected 2 events, got %d", len(*captured))
@@ -301,43 +328,67 @@ func TestSetupInstallEvent_CarriesSameReportAsDirectInstall(t *testing.T) {
 	}
 }
 
-func TestSetupInstallEvent_FailureCarriesReport(t *testing.T) {
+func TestInstallEvents_SuccessSendsReportThenCompleted(t *testing.T) {
 	captured := captureInstallEvents(t)
 	installer.StartInstallTimer()
-	installer.RecordFeature(installer.FeatureHostMonitoring, false)
 
-	fireSetupInstallEvent(setupCmd, "oneagent", &installer.InstallFailedError{Step: "download"})
+	fireInstallEvents(installOtelCollectorCmd, nil)
 
-	p := singleEvent(t, captured)
-	if p.Err == "" || p.Install == nil || p.ExtraProps["install.step"] != "download" {
-		t.Errorf("unexpected failure event: err=%q install=%v props=%v", p.Err, p.Install, p.ExtraProps)
+	assertSteps(t, captured, selfmonitoring.StepInstall, selfmonitoring.StepCompleted)
+	for _, p := range *captured {
+		if p.Cmd != "install" || p.Sub != "otel-collector" || p.Err != "" {
+			t.Errorf("%s event cmd/sub/err = %q/%q/%q, want install/otel-collector/no error", p.StepID, p.Cmd, p.Sub, p.Err)
+		}
 	}
 }
 
-func TestSetupInstallEvent_NoEventOnCancelOrUpToDate(t *testing.T) {
-	for name, err := range map[string]error{
-		"cancelled":  installer.ErrInstallCancelled,
-		"up_to_date": otel.ErrUpToDate,
-	} {
-		t.Run(name, func(t *testing.T) {
-			captured := captureInstallEvents(t)
-			installer.StartInstallTimer()
-
-			fireSetupInstallEvent(setupCmd, "otel-update", err)
-
-			if len(*captured) != 0 {
-				t.Errorf("expected no ist event, got %d", len(*captured))
-			}
-		})
-	}
-}
-
-func TestSetupInstallEvent_NoReportOnDryRun(t *testing.T) {
+func TestInstallEvents_DryRunSendsOnlyCompleted(t *testing.T) {
 	captured := captureInstallEvents(t)
 
-	fireSetupInstallEvent(setupCmd, "kubernetes", nil)
+	fireInstallEvents(installKubernetesCmd, nil)
 
-	if p := singleEvent(t, captured); p.Install != nil {
-		t.Errorf("Install = %+v, want nil for a dry-run", p.Install)
+	assertSteps(t, captured, selfmonitoring.StepCompleted)
+}
+
+func TestInstallEvents_CancelledSendsOnlyCancelled(t *testing.T) {
+	captured := captureInstallEvents(t)
+	installer.StartInstallTimer()
+
+	fireInstallEvents(installOtelCmd, installer.ErrInstallCancelled)
+
+	assertSteps(t, captured, selfmonitoring.StepCancelled)
+	if p := (*captured)[0]; p.Err != "user_cancelled" {
+		t.Errorf("Err = %q, want user_cancelled", p.Err)
+	}
+}
+
+func TestInstallEvents_FailureAfterWorkSendsReportThenFailed(t *testing.T) {
+	captured := captureInstallEvents(t)
+	installer.StartInstallTimer()
+	installer.RecordFeature(installer.FeatureHostMonitoring, true)
+
+	fireInstallEvents(installOtelNodeCmd, &installer.DependencyMissingError{Name: "npm"})
+
+	assertSteps(t, captured, selfmonitoring.StepInstall, selfmonitoring.StepFailed)
+	ist, fai := (*captured)[0], (*captured)[1]
+	if ist.Err != "" || ist.Install == nil {
+		t.Errorf("ist err=%q install=%v, want no error and a report", ist.Err, ist.Install)
+	}
+	if fai.Err != "dependency_missing" || fai.ExtraProps["dependency.name"] != "npm" {
+		t.Errorf("fai err=%q props=%v, want dependency_missing with dependency.name=npm", fai.Err, fai.ExtraProps)
+	}
+	if fai.Cmd != "install" || fai.Sub != "otel-node" {
+		t.Errorf("fai cmd/sub = %q/%q, want install/otel-node", fai.Cmd, fai.Sub)
+	}
+}
+
+func TestInstallEvents_FailureBeforeWorkSendsOnlyFailed(t *testing.T) {
+	captured := captureInstallEvents(t)
+
+	fireInstallEvents(installOneAgentCmd, errors.New("boom"))
+
+	assertSteps(t, captured, selfmonitoring.StepFailed)
+	if p := (*captured)[0]; p.Err != "install_failed" {
+		t.Errorf("Err = %q, want install_failed", p.Err)
 	}
 }
