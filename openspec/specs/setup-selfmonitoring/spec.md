@@ -66,9 +66,9 @@ After the user makes a valid selection from the recommendations menu, the system
 - **WHEN** the user enters `0` or an empty input to cancel
 - **THEN** no `rec` step event is fired
 
-### Requirement: Setup command fires an install event after the installer returns
+### Requirement: Setup command fires an install report event when install work started
 
-After the selected installer finishes (success or failure), the system SHALL fire an `ist` step event carrying the selected method and, if the installer failed, a classified error type. When the user requests uninstall help, no install event is fired since no installation occurs.
+After the selected installer returns, the system SHALL fire an `ist` step event carrying the selected method if and only if install work started. The `ist` event SHALL NOT carry an error type or error attributes; the install error is reported by setup's terminal event. When the user requests uninstall help, no install event is fired since no installation occurs.
 
 The `ist` event SHALL carry the install work time and the feature outcomes with the same meaning, form and presence rules as the `ist` event of `dtwiz install <method>`, including which features each install method tries (see the `install-selfmonitoring` spec).
 
@@ -76,21 +76,27 @@ Setup's update choices are not install methods, so their features are defined he
 
 #### Scenario: Install event fires on successful install
 
-- **GIVEN** a method has been selected
+- **GIVEN** a method has been selected and the user confirmed
 - **WHEN** the installer completes without error
 - **THEN** an `ist` event identifying the setup command and the selected method is fired with no error
 
-#### Scenario: Install event fires with error field on installer failure
+#### Scenario: Install event fires without error on installer failure
+
+- **GIVEN** a method has been selected and the user confirmed
+- **WHEN** the installer returns a non-cancellation error after install work started
+- **THEN** an `ist` event identifying the setup command and the selected method is fired with no error type, carrying the work time and the feature outcomes reached so far
+
+#### Scenario: No install event fires when the installer fails before work started
 
 - **GIVEN** a method has been selected
-- **WHEN** the installer returns a non-cancellation error
-- **THEN** an `ist` event identifying the setup command and the selected method is fired with the classified error type
+- **WHEN** the installer returns an error before the install confirmation
+- **THEN** no `ist` event is fired
 
 #### Scenario: No install event fires when user cancels at installer confirmation
 
 - **GIVEN** a method has been selected
 - **WHEN** the user declines the install confirmation prompt
-- **THEN** no `ist` event is fired (cancellation is signaled by the missing event)
+- **THEN** no `ist` event is fired
 
 #### Scenario: No install event fires when the OTel Collector config is already up to date
 
@@ -98,9 +104,15 @@ Setup's update choices are not install methods, so their features are defined he
 - **WHEN** the installer finds nothing to change and reports the configuration as up to date
 - **THEN** no `ist` event is fired
 
+#### Scenario: No install event fires on dry-run
+
+- **GIVEN** `dtwiz setup --dry-run` and a selected method
+- **WHEN** the installer's dry-run exits without executing anything
+- **THEN** no `ist` event is fired
+
 #### Scenario: Install event fires for demo path
 
-- **GIVEN** the user selected the demo option
+- **GIVEN** the user selected the demo option and confirmed
 - **WHEN** the demo installer completes
 - **THEN** an `ist` event identifying the setup command and the demo is fired
 
@@ -127,6 +139,52 @@ Setup's update choices are not install methods, so their features are defined he
 - **GIVEN** the user selected the OTel Collector update and the running collector is not a Dynatrace distribution
 - **WHEN** the Dynatrace exporter is merged into its config and the config is written
 - **THEN** the `ist` event reports OTel config as succeeded and Host Monitoring as not tried, because dtwiz does not try to enable host monitoring for that collector
+
+### Requirement: Setup ends an install with exactly one terminal event
+
+When the user selects a method, an update choice, or the demo, and the selected installer is reached, the system SHALL emit exactly one terminal event for the setup command when the installer returns, after the `ist` event if one is emitted:
+
+- `com` (completed) with no error when the installer succeeds, including dry-run;
+- `can` (cancelled) when the user declines the install confirmation, or when the OTel Collector update finds the configuration already up to date;
+- `fai` (failed) with the classified error type and its error attributes when the installer returns any other error.
+
+The terminal event is the only event of a setup run that reports the install error. When the post-install watch runs, the terminal event SHALL be sent before the watch session sends its first event, unless the installer runs the watch itself.
+
+#### Scenario: Successful setup install ends with com
+
+- **GIVEN** the user selected the OTel Collector install and confirmed
+- **WHEN** the installer completes successfully
+- **THEN** an `ist` event and a `com` event with no error are emitted for the setup command
+
+#### Scenario: Failed setup install reports the error on fai
+
+- **GIVEN** the user selected a method and confirmed
+- **WHEN** the installer fails after install work started
+- **THEN** an `ist` event without an error is emitted, and a `fai` event carrying the classified error type and its error attributes
+
+#### Scenario: Declined confirmation in setup ends with can
+
+- **GIVEN** the user selected a method
+- **WHEN** the user declines the install confirmation
+- **THEN** a `can` event with the user-cancelled error type is emitted, and no `ist` event
+
+#### Scenario: Up-to-date OTel Collector config ends with can
+
+- **GIVEN** the user selected the OTel Collector update
+- **WHEN** the installer finds nothing to change and reports the configuration as up to date
+- **THEN** a `can` event is emitted, and no `ist` event
+
+#### Scenario: Setup dry-run ends with com
+
+- **GIVEN** `dtwiz setup --dry-run` and a selected method
+- **WHEN** the installer's dry-run exits without executing anything
+- **THEN** a `com` event with no error is emitted, and no `ist` event
+
+#### Scenario: Demo path ends with a terminal event
+
+- **GIVEN** the user selected the demo option
+- **WHEN** the demo installer completes successfully
+- **THEN** an `ist` event identifying the setup command and the demo is emitted, and a `com` event for the setup command
 
 ### Requirement: Update-variant methods are normalized to distinct shortcodes
 
