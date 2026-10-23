@@ -6,14 +6,15 @@ Instrument each `dtwiz install <method>` subcommand with self-monitoring telemet
 
 ## Event flow per session
 
-For every `dtwiz install <method>` invocation (not via `dtwiz setup`), exactly two self-monitoring events are emitted in sequence:
+For every `dtwiz install <method>` invocation (not via `dtwiz setup`), the install command emits these self-monitoring events:
 
-1. `inv` (invoked): fired immediately when the subcommand's `RunE` begins, before any install logic. Ensures the invocation is recorded even if the process is killed mid-install.
-2. `ist` (install): fired when the installer returns, regardless of outcome. Carries the install work time, the feature outcomes, and a classified error type when applicable.
+1. `inv` (invoked): fired immediately when the command starts, before any install logic. Ensures the invocation is recorded even if the process is killed mid-install.
+2. `ist` (install): fired when the installer returns, only if install work started. Carries the install work time and the feature outcomes, never an error.
+3. Exactly one terminal event when the installer returns: `com` (completed) on success, including dry-run; `can` (cancelled) when the user declines the install confirmation; `fai` (failed) with the classified error type on any other error.
 
-A third event, `com` (completed), is fired asynchronously by the post-install WatchIngest session when signals are first detected or when the session times out. It is owned entirely by WatchIngest and is absent when the user exits before data arrives.
+Pre-install failures (credential lookup, token validation, client setup) emit a single `fai` and no `ist`: the installer was never reached.
 
-Pre-install failures (credential lookup, token validation, client setup) emit `fai` (failed) instead of `ist`: the installer was never reached.
+A post-install watch session emits its own `snp` and `com` events under the `watch` command, sharing the install run's execution identifier. The watch session's `com` is not the install command's terminal event.
 
 ## Requirements
 
@@ -26,82 +27,166 @@ When a `dtwiz install <method>` subcommand is invoked directly, the system SHALL
 - **WHEN** the user runs `dtwiz install <method>`
 - **THEN** an `inv` event is emitted immediately in `PersistentPreRun`, before credential resolution or install execution
 
-### Requirement: Install commands emit an ist event on completion, failure, or cancellation
+### Requirement: Install commands emit an ist event when install work started
 
-When a `dtwiz install <method>` subcommand is invoked directly (not via `dtwiz setup`), the system SHALL emit an `ist` step event when the installer returns: whether it succeeded, failed, or was cancelled by the user.
+When a `dtwiz install <method>` subcommand is invoked directly (not via `dtwiz setup`), the system SHALL emit an `ist` step event when the installer returns, if and only if install work started. The `ist` event SHALL identify the install command and the method, and SHALL carry the install work time and the feature outcomes.
 
-#### Scenario: Successful install emits ist with no error field
+The `ist` event SHALL NOT carry an error type or error attributes. How the run ended is reported by the terminal event.
 
-- **GIVEN** the user runs `dtwiz install <method>`
+Install work has not started for a dry-run, for a declined install confirmation, or for a failure before the install confirmation. In those cases no `ist` event SHALL be emitted.
+
+#### Scenario: Successful install emits ist
+
+- **GIVEN** the user runs `dtwiz install <method>` and confirms
 - **WHEN** the installer completes successfully
-- **THEN** an `ist` event identifying the install command and the method is emitted with no error
+- **THEN** an `ist` event identifying the install command and the method is emitted with the work time and feature outcomes and no error
 
-#### Scenario: Failed install emits ist with classified error type
+#### Scenario: Install failing after work started emits ist without error
 
-- **GIVEN** the user runs `dtwiz install <method>`
-- **WHEN** the installer returns a non-cancellation error
-- **THEN** an `ist` event is emitted carrying the classified error type from the error taxonomy
+- **GIVEN** the user runs `dtwiz install <method>` and confirms
+- **WHEN** the installer fails after install work started
+- **THEN** an `ist` event is emitted with the work time and the feature outcomes reached so far, and it carries no error type
 
-#### Scenario: Cancelled install emits ist with error type user_cancelled
+#### Scenario: Declined confirmation emits no ist
 
 - **GIVEN** the user runs `dtwiz install <method>`
 - **WHEN** the user declines the install confirmation prompt
-- **THEN** an `ist` event is emitted with the user-cancelled error type, and it carries neither an install work time nor feature outcomes, because no install work started
+- **THEN** no `ist` event is emitted
 
-#### Scenario: Dry-run emits ist with no duration
+#### Scenario: Dry-run emits no ist
 
 - **GIVEN** `--dry-run` is passed
 - **WHEN** the dry-run exits without executing anything
-- **THEN** an `ist` event is emitted with no error, and it carries neither an install work time nor feature outcomes
+- **THEN** no `ist` event is emitted
 
-#### Scenario: Pre-install failure emits fai instead of ist
+#### Scenario: Failure before the confirmation emits no ist
+
+- **GIVEN** the user runs `dtwiz install otel-node` on a host without npm
+- **WHEN** the installer fails its dependency check before showing the install confirmation
+- **THEN** no `ist` event is emitted
+
+#### Scenario: Pre-install failure emits no ist
 
 - **GIVEN** the user runs `dtwiz install <method>`
 - **WHEN** credential resolution or token validation fails before the installer is called
-- **THEN** a `fai` event is emitted with a classified error type, and no `ist` event is emitted
+- **THEN** no `ist` event is emitted
 
-### Requirement: Install commands wire up the com event from WatchIngest
+### Requirement: Install commands end with exactly one terminal event
 
-When a `dtwiz install <method>` subcommand runs a post-install WatchIngest session, the system SHALL fire a `com` step event when the first signal data is received OR when the session times out without data: using the same signal timing encoding as `dtwiz setup` and `dtwiz watch`.
+When a `dtwiz install <method>` subcommand is invoked directly (not via `dtwiz setup`) and the installer is reached, the system SHALL emit exactly one terminal event for the install command when the installer returns, after the `ist` event if one is emitted:
 
-When the user exits WatchIngest early (Enter key) before data arrives, no `com` event is emitted.
+- `com` (completed) with no error when the installer succeeds, including dry-run;
+- `can` (cancelled) with the user-cancelled error type when the user declines the install confirmation;
+- `fai` (failed) with the classified error type and its error attributes when the installer returns any other error.
 
-The `com` event is fired asynchronously by WatchIngest via `buildWatchEventCallback`. It is not fired by the install command handler itself.
+The terminal event SHALL identify the install command and the method.
 
-#### Scenario: com event fires on first data after install
+When a pre-install failure (credential resolution, token validation, client setup) occurs, the system SHALL emit a single `fai` event with the classified error type and SHALL NOT emit a second terminal event.
+
+Every direct install run that is not interrupted SHALL therefore produce exactly one of `com`, `fai`, or `can` for the install command, so that a run whose `inv` has no matching terminal event identifies a process that ended early.
+
+The `ist` and terminal events are sent independently; their arrival order in the tenant is not guaranteed. They carry no overlapping data and are related by the execution identifier.
+
+#### Scenario: Successful install ends with com
+
+- **GIVEN** the user runs `dtwiz install otel-collector` and confirms
+- **WHEN** the installer completes successfully
+- **THEN** an `ist` event and a `com` event with no error are emitted for the install command and method
+
+#### Scenario: Dry-run ends with com only
+
+- **GIVEN** the user runs `dtwiz install kubernetes --dry-run`
+- **WHEN** the dry-run exits without executing anything
+- **THEN** a `com` event with no error is emitted, and no `ist` event
+
+#### Scenario: Declined confirmation ends with can only
+
+- **GIVEN** the user runs `dtwiz install otel`
+- **WHEN** the user declines the install confirmation
+- **THEN** a `can` event with the user-cancelled error type is emitted, and no `ist` event
+
+#### Scenario: Failure after work started ends with ist and fai
+
+- **GIVEN** the user runs `dtwiz install otel-collector` and confirms
+- **WHEN** the Host Monitoring extension is activated and the collector download then fails
+- **THEN** an `ist` event reporting Host Monitoring as succeeded and OTel config as not tried is emitted, and a `fai` event carrying the classified error type
+
+#### Scenario: Failure before the confirmation ends with fai only
+
+- **GIVEN** the user runs `dtwiz install otel-node` on a host without npm
+- **WHEN** the installer returns a dependency-missing error before the install confirmation
+- **THEN** a `fai` event is emitted carrying the dependency-missing error type and the missing dependency name, and no `ist` event
+
+#### Scenario: Pre-install failure sends a single fai
+
+- **GIVEN** the user runs `dtwiz install oneagent` without a platform token
+- **WHEN** credential resolution fails before the installer is called
+- **THEN** exactly one `fai` event is emitted for the install command, and no `ist` event
+
+#### Scenario: Terminal event is sent before a watch run by the command
+
+- **GIVEN** the user runs `dtwiz install oneagent` and the install succeeds
+- **WHEN** the command starts the post-install watch session
+- **THEN** the install command's `com` event is sent before the watch session sends its first event
+
+#### Scenario: Terminal event is sent after a watch run by the installer
+
+- **GIVEN** the user runs `dtwiz install azure`, whose installer runs the post-install watch itself
+- **WHEN** the watch session ends and the installer returns successfully
+- **THEN** the watch session's events are sent under the `watch` command first, then the install command's `ist` and `com` events
+
+#### Scenario: Experimental methods end with a terminal event
+
+- **GIVEN** `DTWIZ_EXPERIMENTAL` is enabled
+- **WHEN** `dtwiz install docker` completes successfully
+- **THEN** an `ist` event and a `com` event are emitted for the install command and method
+
+### Requirement: Post-install watch events are reported under the watch command
+
+When a `dtwiz install <method>` subcommand runs a post-install watch session, the session SHALL emit its own events, using the same encoding as `dtwiz setup` and `dtwiz watch`: one `snp` event each time the set of signal types with data grows, and one `com` event when the session ends.
+
+These events SHALL be reported under the `watch` command, not the install command, and SHALL share the execution identifier of the install run. The watch session's `com` event SHALL NOT be treated as the install command's terminal event; the install command emits its own terminal event.
+
+#### Scenario: snp event fires on first data after install
 
 - **GIVEN** `dtwiz install <method>` ran successfully
-- **WHEN** the post-install WatchIngest session detects its first signal data
-- **THEN** a `com` event is emitted asynchronously with `t=<signals>` encoding time-to-first-data per signal, without interrupting the watch display
+- **WHEN** the post-install watch session detects its first signal data
+- **THEN** an `snp` event is emitted asynchronously under the `watch` command, carrying the time to first data per signal, without interrupting the watch display
 
-#### Scenario: com event fires on watch timeout with no data
+#### Scenario: Watch com event fires when the session ends
 
-- **GIVEN** the post-install WatchIngest session reaches 10 minutes with no signal data
-- **THEN** a `com` event is emitted with no `t=` field
+- **GIVEN** `dtwiz install <method>` ran successfully and started a post-install watch session
+- **WHEN** the session ends, because the user exits or the session times out
+- **THEN** a `com` event is emitted under the `watch` command, carrying no signal timings
 
-#### Scenario: no com event when user exits watch before data
+#### Scenario: Install and watch completion are distinguishable
 
-- **GIVEN** `dtwiz install <method>` ran successfully
-- **WHEN** the user presses Enter to exit WatchIngest before any signal data arrives
-- **THEN** no `com` event is emitted; only the `inv` and `ist` events are present for the session
+- **GIVEN** `dtwiz install <method>` ran successfully and its post-install watch session ended
+- **WHEN** the events of the run are queried by execution identifier
+- **THEN** there is one `com` event for the install command and one `com` event for the `watch` command
 
 ### Requirement: Install methods cover all production and experimental subcommands
 
-The following install subcommands SHALL be instrumented with `inv`, `ist`, and (when applicable) `com` events:
+The following install subcommands SHALL be instrumented with `inv`, `ist` (when install work started), a terminal event (`com`, `fai`, or `can`), and, when a post-install watch session runs, the watch session's events:
 
-- Production: `oneagent`, `kubernetes`, `otel`, `otel-collector`, `otel-python`, `otel-node`, `otel-java`, `aws`, `aws-lambda`, `azure`, `gcp`
-- Experimental (gated by `DTWIZ_EXPERIMENTAL`): `docker`, `demo`
+- Production: `oneagent`, `kubernetes`, `otel`, `otel-collector`, `otel-python`, `otel-node`, `otel-java`, `aws`, `aws-lambda`, `azure`, `gcp`, `demo`
+- Experimental (gated by `DTWIZ_EXPERIMENTAL`): `docker`
 
 #### Scenario: All production methods emit ist
 
-- **WHEN** any production install subcommand completes
+- **WHEN** any production install subcommand completes after install work started
 - **THEN** an `ist` event with the correct `ins` command and method subcommand shortcode is emitted
+
+#### Scenario: All production methods emit a terminal event
+
+- **WHEN** any production install subcommand returns from its installer
+- **THEN** exactly one terminal event with the correct `ins` command and method subcommand shortcode is emitted
 
 #### Scenario: Experimental methods emit ist when experimental flag is enabled
 
 - **GIVEN** `DTWIZ_EXPERIMENTAL` is enabled
-- **WHEN** `dtwiz install docker` or `dtwiz install demo` completes
-- **THEN** an `ist` event with command `ins` and the appropriate subcommand shortcode (`dock` or `demo`) is emitted
+- **WHEN** `dtwiz install docker` completes after install work started
+- **THEN** an `ist` event with command `ins` and subcommand shortcode `dock` is emitted
 
 ### Requirement: The ist event carries the install work time
 
@@ -122,7 +207,7 @@ For methods without an install confirmation, the work time SHALL start when the 
 
 The work time SHALL be carried both in the event body, with millisecond precision, and in the compact User-Agent form, in whole seconds with an upper bound.
 
-The work time SHALL be present whenever install work started, including when the installer then failed. It SHALL be absent when no install work started: dry-run, cancellation at the install confirmation, or failure before the confirmation.
+The work time SHALL be present on every `ist` event, including when the installer failed after install work started. Because no `ist` event is emitted when no install work started, there is no `ist` event without a work time.
 
 #### Scenario: Work time excludes think time at the install confirmation
 
@@ -164,7 +249,7 @@ The work time SHALL be present whenever install work started, including when the
 
 - **GIVEN** the user confirmed the install
 - **WHEN** the installer fails after 12 seconds of work
-- **THEN** the `ist` event carries the classified error type and a work time of about 12 seconds
+- **THEN** the `ist` event carries a work time of about 12 seconds and no error type, and the `fai` event carries the classified error type
 
 #### Scenario: Very long work time is bounded only in the User-Agent
 
@@ -192,7 +277,7 @@ The features are:
 
 RUM, Synthetic Monitoring and RDS extensions are reserved: they SHALL always be reported as not tried until an installer enables them.
 
-All features SHALL be reported together, whenever install work started. They SHALL be absent when no install work started: dry-run, cancellation at the install confirmation, or failure before the confirmation.
+All features SHALL be reported together on every `ist` event.
 
 Only the OTel collector methods (`otel`, `otel-collector`, `demo`) SHALL try the collector config. Those methods and the OneAgent-based ones (`oneagent`, `docker`) SHALL try Host Monitoring. Every other install method SHALL report all features as not tried.
 
@@ -206,7 +291,7 @@ Only the OTel collector methods (`otel`, `otel-collector`, `demo`) SHALL try the
 
 - **GIVEN** the user runs `dtwiz install otel`
 - **WHEN** the collector config is written but the Host Monitoring extension cannot be activated, and the install otherwise completes
-- **THEN** the `ist` event has no error, reports OTel config as succeeded and Host Monitoring as failed
+- **THEN** the `ist` event reports OTel config as succeeded and Host Monitoring as failed, and the terminal event is `com`
 
 #### Scenario: Host Monitoring extension already active
 
@@ -218,7 +303,7 @@ Only the OTel collector methods (`otel`, `otel-collector`, `demo`) SHALL try the
 
 - **GIVEN** the user runs `dtwiz install otel-collector` and confirms
 - **WHEN** the Host Monitoring extension is activated and the collector download then fails before the config is written
-- **THEN** the `ist` event carries the classified error type, reports Host Monitoring as succeeded, and reports OTel config as not tried
+- **THEN** the `ist` event reports Host Monitoring as succeeded and OTel config as not tried, and the `fai` event carries the classified error type
 
 #### Scenario: OneAgent install
 
@@ -230,7 +315,7 @@ Only the OTel collector methods (`otel`, `otel-collector`, `demo`) SHALL try the
 
 - **GIVEN** the user runs `dtwiz install oneagent`
 - **WHEN** the OneAgent installer command fails
-- **THEN** the `ist` event carries the classified error type and reports Host Monitoring as failed
+- **THEN** the `ist` event reports Host Monitoring as failed, and the `fai` event carries the classified error type
 
 #### Scenario: OneAgent connectivity check only
 
@@ -244,20 +329,20 @@ Only the OTel collector methods (`otel`, `otel-collector`, `demo`) SHALL try the
 - **WHEN** the Dynatrace Operator is deployed successfully
 - **THEN** the `ist` event reports every feature as not tried
 
+#### Scenario: Cancelled or dry-run install has no feature outcomes
+
+- **GIVEN** the user runs `dtwiz install otel` with `--dry-run`, or declines the install confirmation
+- **WHEN** the installer returns
+- **THEN** no `ist` event is emitted, so no feature outcomes are reported, neither in the User-Agent nor in the body
+
 #### Scenario: Language-specific OTel install
 
 - **GIVEN** the user runs `dtwiz install otel-python`
 - **WHEN** the install completes successfully
 - **THEN** the `ist` event reports every feature as not tried, because no collector config is written and no host monitoring is enabled
 
-#### Scenario: Cancelled or dry-run install has no feature outcomes
-
-- **GIVEN** the user runs `dtwiz install otel` with `--dry-run`, or declines the install confirmation
-- **WHEN** the `ist` event is assembled
-- **THEN** the event carries no feature outcomes, neither in the User-Agent nor in the body
-
 #### Scenario: User-Agent stays within the capture limit
 
-- **GIVEN** an `ist` event carrying the longest method identifier, an error type, the feature outcomes and a work time at the upper bound
+- **GIVEN** an `ist` event carrying the longest method identifier, the feature outcomes and a work time at the upper bound
 - **WHEN** the User-Agent is assembled for a release version
 - **THEN** the User-Agent fits within the capture limit
