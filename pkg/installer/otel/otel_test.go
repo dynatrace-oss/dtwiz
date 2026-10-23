@@ -17,6 +17,7 @@ import (
 
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -616,17 +617,18 @@ func TestCreateRuntimePlan(t *testing.T) {
 
 // ── Host-monitoring install-flow messaging tests ──────────────────────────────
 
-// TestInstallOtelCollector_ShowsHostMonitoringHeader verifies that the combined
-// header ("service and host monitoring") is printed by default.
+// TestInstallOtelCollector_ShowsHostMonitoringHeader verifies that the OTel
+// header is printed by default and mentions host monitoring in the summary.
 func TestInstallOtelCollector_ShowsHostMonitoringHeader(t *testing.T) {
 	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
 	t.Setenv("DTWIZ_EXPERIMENTAL", "")
 
 	output := captureInstallOutput(t, true /* elevated */)
 
-	const hostMonitoringHeader = "service and host monitoring"
-	if !strings.Contains(output, hostMonitoringHeader) {
-		t.Errorf("expected %q in output by default:\n%s", hostMonitoringHeader, output)
+	for _, want := range []string{"dtwiz · OpenTelemetry", "host metrics + logs"} {
+		if !strings.Contains(output, want) {
+			t.Errorf("expected %q in output by default:\n%s", want, output)
+		}
 	}
 }
 
@@ -1124,7 +1126,7 @@ func TestActivateHostMonitoringExtension_ActivationFails_WarnsAndContinues(t *te
 		activateHostMonitoringExtension("https://env.example.com", "dt0s16.test")
 	})
 
-	if !strings.Contains(out, "Warning: could not activate OTel Host Monitoring extension; host entity creation may not be available.") {
+	if !strings.Contains(out, "Could not activate OTel Host Monitoring extension") {
 		t.Errorf("expected activation failure warning in output, got: %s", out)
 	}
 }
@@ -1223,7 +1225,7 @@ func TestDeactivateHostMonitoringExtension_VersionNotFound_Warns(t *testing.T) {
 		deactivateHostMonitoringExtension("https://env.example.com", "dt0s16.test")
 	})
 
-	if !strings.Contains(out, "Warning: could not deactivate OTel Host Monitoring extension; extension was not removed.") {
+	if !strings.Contains(out, "Could not deactivate OTel Host Monitoring extension") {
 		t.Errorf("expected deactivation failure warning in output, got: %s", out)
 	}
 }
@@ -1237,7 +1239,7 @@ func TestDeactivateHostMonitoringExtension_DeleteFails_Warns(t *testing.T) {
 		deactivateHostMonitoringExtension("https://env.example.com", "dt0s16.test")
 	})
 
-	if !strings.Contains(out, "Warning: could not remove OTel Host Monitoring extension; please remove it manually.") {
+	if !strings.Contains(out, "Could not remove OTel Host Monitoring extension") {
 		t.Errorf("expected delete failure warning in output, got: %s", out)
 	}
 }
@@ -1493,11 +1495,53 @@ func TestPrintGrailPlanAndApplyResults(t *testing.T) {
 		}
 	}
 
+	t.Cleanup(func() { logger.Init(false, 0) })
+	logger.Init(false, 1)
 	applyOut := captureActivationOutput(t, func() { printGrailApplyResults(plans, []error{nil, fmt.Errorf("boom"), nil}) })
-	for _, want := range []string{"OpenPipeline dynamic routes", "Metrics", "route created", "Logs", "warning", "boom", "Spans", "skip"} {
+	logger.Init(false, 0)
+	for _, want := range []string{"OpenPipeline Metrics", "route created", "OpenPipeline Logs", "warning", "boom", "OpenPipeline Spans", "skip"} {
 		if !strings.Contains(applyOut, want) {
 			t.Fatalf("printGrailApplyResults() output missing %q:\n%s", want, applyOut)
 		}
+	}
+}
+
+func TestPrintGrailApplyResults_CompactByDefault(t *testing.T) {
+	plans := []grailSignalPlan{
+		{signal: grailSignals[0], action: grailActionCreate},
+		{signal: grailSignals[1], action: grailActionCreate},
+	}
+	logger.Init(false, 0)
+
+	ok := captureActivationOutput(t, func() { printGrailApplyResults(plans, []error{nil, nil}) })
+	if !strings.Contains(ok, "OpenPipeline routes configured") || strings.Contains(ok, "──") {
+		t.Errorf("expected one compact success line, got:\n%s", ok)
+	}
+
+	failed := captureActivationOutput(t, func() { printGrailApplyResults(plans, []error{nil, fmt.Errorf("boom")}) })
+	if !strings.Contains(failed, "boom") || strings.Contains(failed, "routes configured") {
+		t.Errorf("expected only a warning naming the failed route, got:\n%s", failed)
+	}
+}
+
+func TestGrailPlanSummary(t *testing.T) {
+	tests := []struct {
+		name  string
+		plans []grailSignalPlan
+		want  string
+		ext   bool
+	}{
+		{"to configure", []grailSignalPlan{{action: grailActionCreate}, {action: grailActionNoop}}, "1 of 2 routes will be configured", false},
+		{"pending", []grailSignalPlan{{action: grailActionSkip}, {action: grailActionNoop}}, "pending — extension not active yet", false},
+		{"pending but extension installs now", []grailSignalPlan{{action: grailActionSkip}}, "will be configured once the extension is active", true},
+		{"done", []grailSignalPlan{{action: grailActionNoop}}, "already configured", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got, _ := grailPlanSummary(tt.plans, tt.ext); got != tt.want {
+				t.Errorf("grailPlanSummary() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

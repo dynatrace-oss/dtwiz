@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 // gcloudArgs reports whether the gcloud args start with the given prefix tokens.
@@ -691,6 +692,9 @@ func TestGCPBuildStepCommands_RealValues(t *testing.T) {
 
 func TestGCPMaskToken(t *testing.T) {
 	const secret = "dt0s16.verysecrettoken.abc"
+	// Commands are only listed with -v, which is where masking matters.
+	logger.Init(false, 1)
+	t.Cleanup(func() { logger.Init(false, 0) })
 	preview := captureStdout(t, func() {
 		gcpPrintPreview(gcpConfig{
 			ConnectionName:     "dtwiz-gcp-abc",
@@ -700,7 +704,7 @@ func TestGCPMaskToken(t *testing.T) {
 			ProjectID:          "my-project",
 			ServiceAccountName: "dtwiz-gcp-abc",
 			DTServiceAccount:   "dt-monitor@dynatrace-prod.iam.gserviceaccount.com",
-		})
+		}, false)
 	})
 	if strings.Contains(preview, secret) {
 		t.Errorf("platform token must not appear in preview output; got:\n%s", preview)

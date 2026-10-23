@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 )
 
@@ -45,9 +46,8 @@ func installHelm() error {
 	if runtime.GOOS == "windows" {
 		return installHelmWindows()
 	}
-	fmt.Println("  Helm not found — installing via get.helm.sh...")
-	fmt.Println("  NOTE: This executes a script from https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3")
-	return installer.RunCommand("bash", "-c",
+	display.Detail("helm not found — installing via get.helm.sh (executes https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3)")
+	return installer.RunCommandQuiet("bash", "-c",
 		"curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash")
 }
 
@@ -62,8 +62,8 @@ func installHelmWindows() error {
 		return fmt.Errorf("helm is not installed and winget was not found on PATH%s: %w", manualInstructions, &installer.DependencyMissingError{Name: "winget"})
 	}
 
-	fmt.Println("  Helm not found — installing via winget...")
-	if err := installer.RunCommand("winget", "install", "--id", "Helm.Helm", "-e", "--source", "winget"); err != nil {
+	display.Detail("helm not found — installing via winget")
+	if err := installer.RunCommandQuiet("winget", "install", "--id", "Helm.Helm", "-e", "--source", "winget"); err != nil {
 		return fmt.Errorf("helm installation via winget failed: %w%s", err, manualInstructions)
 	}
 
@@ -71,7 +71,7 @@ func installHelmWindows() error {
 	// process's PATH (which was inherited at startup). Refresh it so that
 	// subsequent exec.LookPath("helm") calls can find the new binary.
 	if err := installer.RefreshWindowsPath(); err != nil {
-		fmt.Printf("  Warning: could not refresh PATH after Helm install: %v\n", err)
+		display.StepWarn("Could not refresh PATH after Helm install", err.Error())
 	}
 	return nil
 }

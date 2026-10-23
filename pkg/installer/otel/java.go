@@ -98,7 +98,7 @@ func downloadJavaAgent() (string, error) {
 		return "", fmt.Errorf("writing agent file: %w", err)
 	}
 
-	display.PrintStatusLine("download", "OpenTelemetry Java agent... done.", display.ColorOK)
+	display.Detail("OpenTelemetry Java agent: %s", destPath)
 	return destPath, nil
 }
 
@@ -234,9 +234,10 @@ func buildJavaInstrumentationPlan(proj detectedProject, collectorEndpoint, token
 func (p *JavaInstrumentationPlan) Execute() error {
 	if len(p.SubModules) > 0 {
 		if len(p.Project.RunningProcessIDs) > 0 {
-			fmt.Print("  Stopping running processes... ")
-			stopProcesses(p.Project.RunningProcessIDs)
-			fmt.Println("done.")
+			_ = display.RunStep("Stopped running processes", func(*display.Step) error {
+				stopProcesses(p.Project.RunningProcessIDs)
+				return nil
+			})
 		}
 		if err := p.executeMultiModule(); err != nil {
 			logger.Debug("multi-module execution failed", "error", err)
@@ -245,10 +246,16 @@ func (p *JavaInstrumentationPlan) Execute() error {
 		return nil
 	}
 
-	agentPath, err := downloadJavaAgent()
-	if err != nil {
-		display.PrintStatusLine("error", fmt.Sprintf("failed to download agent: %v", err), display.ColorError)
-		return fmt.Errorf("downloading Java agent: %w", err)
+	var agentPath string
+	if err := display.RunStep("Downloaded OpenTelemetry Java agent", func(*display.Step) error {
+		var err error
+		agentPath, err = downloadJavaAgent()
+		if err != nil {
+			return fmt.Errorf("downloading Java agent: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	if len(p.Project.RunningProcessIDs) > 0 {
@@ -264,8 +271,7 @@ func (p *JavaInstrumentationPlan) Execute() error {
 		entrypoints := detectJavaEntrypoints(p.Project.Path)
 		if len(entrypoints) == 0 {
 			logger.Debug("no entrypoints found at execute time", "project", p.Project.Path)
-			display.PrintStatusLine("error", noEntrypointMessage(p.Project.Path), display.ColorError)
-			return fmt.Errorf("no runnable entrypoint detected in %s", p.Project.Path)
+			return fmt.Errorf("no runnable entrypoint detected in %s: %s", p.Project.Path, noEntrypointMessage(p.Project.Path))
 		}
 		ep = promptEntrypointSelection(entrypoints)
 		if ep == nil {
@@ -279,7 +285,6 @@ func (p *JavaInstrumentationPlan) Execute() error {
 	logPath := filepath.Join(p.Project.Path, svcName+".log")
 	logFile, err := os.Create(logPath)
 	if err != nil {
-		display.PrintStatusLine("error", fmt.Sprintf("failed to create log file: %v", err), display.ColorError)
 		return fmt.Errorf("creating log file: %w", err)
 	}
 
@@ -288,7 +293,6 @@ func (p *JavaInstrumentationPlan) Execute() error {
 
 	proc, err := StartManagedProcess(svcName, svcName+".log", "", cmd, logFile)
 	if err != nil {
-		display.PrintStatusLine("error", fmt.Sprintf("failed to start process: %v", err), display.ColorError)
 		return fmt.Errorf("starting process: %w", err)
 	}
 	proc.portDetector = func(pid int) string { return detectJavaListeningPort(pid, p.Project.Path) }
@@ -356,15 +360,17 @@ func InstallOtelJava(envURL, token, serviceName, projectPath string, dryRun bool
 		plan := buildMultiModulePlan(mm, proj, collectorEndpoint, token, envURL)
 
 		fmt.Println()
-		display.Header("Java multi-module instrumentation plan")
-		fmt.Printf("  Project:       %s\n", proj.Path)
-		if plan.BuildCommand != "" {
-			fmt.Printf("  Build command: %s\n", plan.BuildCommand)
-		}
-		fmt.Println()
-		fmt.Println("  Modules:")
-		for _, sub := range plan.SubModules {
-			fmt.Printf("    [%s]  %s\n", sub.Name, sub.LaunchCommand)
+		display.InstallHeader("dtwiz · Java (multi-module)")
+		display.PrintAlignedStatusLines(display.ColorDefault,
+			"Instrument", fmt.Sprintf("Java · %s (%d modules)", proj.Path, len(plan.SubModules)))
+		if logger.Enabled() || dryRun {
+			if plan.BuildCommand != "" {
+				display.Println("Build command: %s", plan.BuildCommand)
+			}
+			fmt.Println("  Modules:")
+			for _, sub := range plan.SubModules {
+				fmt.Printf("    [%s]  %s\n", sub.Name, sub.LaunchCommand)
+			}
 		}
 		fmt.Println()
 
@@ -373,7 +379,7 @@ func InstallOtelJava(envURL, token, serviceName, projectPath string, dryRun bool
 			return nil
 		}
 
-		ok, err := installer.ConfirmProceed("  Proceed with multi-module instrumentation?")
+		ok, err := installer.ConfirmProceed("  Apply?")
 		if err != nil {
 			return fmt.Errorf("reading confirmation: %w", err)
 		}
@@ -426,15 +432,8 @@ func InstallOtelJava(envURL, token, serviceName, projectPath string, dryRun bool
 	launchDisplay := displayInstrumentedCmd(*ep, agentPath)
 
 	fmt.Println()
-	display.Header("Java instrumentation plan")
-	fmt.Printf("  Project:    %s\n", proj.Path)
-	fmt.Printf("  Launch:     %s\n", launchDisplay)
-	fmt.Printf("  Agent JAR:  %s\n", otelJavaAgentURL)
-	fmt.Println()
-	fmt.Println("  Environment variables:")
-	for _, line := range environment.FormatPrintableEnvVars(envVars) {
-		fmt.Printf("    %s\n", line)
-	}
+	display.InstallHeader("dtwiz · Java")
+	rows := []string{"Instrument", "Java · " + proj.Path}
 	var pidStr string
 	if len(proj.RunningProcessIDs) > 0 {
 		strs := make([]string, len(proj.RunningProcessIDs))
@@ -442,7 +441,17 @@ func InstallOtelJava(envURL, token, serviceName, projectPath string, dryRun bool
 			strs[i] = fmt.Sprintf("%d", pid)
 		}
 		pidStr = strings.Join(strs, ", ")
-		fmt.Printf("  PIDs to stop: %s\n", pidStr)
+		rows = append(rows, "Stops", "PID "+pidStr)
+	}
+	display.PrintAlignedStatusLines(display.ColorDefault, rows...)
+	if logger.Enabled() || dryRun {
+		display.Println("Launch:     %s", launchDisplay)
+		display.Println("Agent JAR:  %s", otelJavaAgentURL)
+		fmt.Println()
+		fmt.Println("  Environment variables:")
+		for _, line := range environment.FormatPrintableEnvVars(envVars) {
+			fmt.Printf("    %s\n", line)
+		}
 	}
 	fmt.Println()
 
@@ -452,11 +461,7 @@ func InstallOtelJava(envURL, token, serviceName, projectPath string, dryRun bool
 		return nil
 	}
 
-	confirmText := "  Proceed with installation?"
-	if pidStr != "" {
-		confirmText = fmt.Sprintf("  Stop PID(s) %s and proceed with installation?", pidStr)
-	}
-	ok, err := installer.ConfirmProceed(confirmText)
+	ok, err := installer.ConfirmProceed("  Apply?")
 	if err != nil {
 		return fmt.Errorf("reading confirmation: %w", err)
 	}

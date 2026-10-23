@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Leaner install output: each step of `install oneagent`, `kubernetes`, `otel` (including the Python, Node.js and Java instrumentation), `aws` (including Lambda), `azure` and `gcp` is one line with a spinner that turns into `✓` or `✗`. Commands, URLs, paths, manifests and generated config now appear with `-v` (and in `--dry-run`); a failed step shows the last lines of its error without a flag. The same step style now applies to the `uninstall` commands (kubernetes, aws, aws-lambda, azure, gcp, otel, oneagent, self), the azure/gcp/otel `update` commands, `install demo` and `install docker`. Phases that used to show nothing while they ran (tenant setup, lookups, project scans) now show a spinner. The pre-confirmation prompt now reads `Apply?`.
 - Self-monitoring: the `ist` event now only reports what the install did (feature outcomes and install time). It no longer carries `error` or error attributes, and it is only sent when install work started, so dry-runs, declined confirmations, and failures before the confirmation send no `ist`. The install error is reported on the `failed` or `cancelled` event of the same run, for both `dtwiz install <method>` and `dtwiz setup`.
 - Self-monitoring: `dtwiz install <method>` now ends every run that reaches the installer with exactly one `completed`, `failed`, or `cancelled` event, like `setup`, `update`, and `uninstall`.
 

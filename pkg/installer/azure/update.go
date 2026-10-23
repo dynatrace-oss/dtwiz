@@ -30,8 +30,12 @@ func updateAzureWithRunner(
 	sleeper func(time.Duration),
 	dtc dtclient,
 ) error {
-	subscriptionID, tenantID, err := azureAccountInfo(runner)
-	if err != nil {
+	var subscriptionID, tenantID string
+	if err := display.RunQuiet("Checking Azure account", func(*display.Step) error {
+		var err error
+		subscriptionID, tenantID, err = azureAccountInfo(runner)
+		return err
+	}); err != nil {
 		return err
 	}
 
@@ -39,7 +43,7 @@ func updateAzureWithRunner(
 
 	var monConfigIDs []string
 	var conns []connRef
-	if err := installer.RunConcurrently(
+	if err := installer.RunConcurrentlyWithSpinner("Looking up existing Azure integration",
 		func() (err error) { monConfigIDs, err = dtc.findAllMonitoringConfigs(integrationPrefix); return },
 		func() (err error) { conns, err = dtc.findAllConnections(integrationPrefix); return },
 	); err != nil {
@@ -62,33 +66,32 @@ func updateAzureWithRunner(
 		ClientID:          conn.clientID,
 	}
 
-	azureUpdatePrintPreview(cfg, monConfigIDs)
+	azureUpdatePrintPreview(cfg, monConfigIDs, dryRun)
 
 	if proceed, err := installer.ShouldProceed(dryRun, "Update"); !proceed {
 		return err
 	}
 
-	freshlyInstalled, err := dtc.installExtension()
-	if err != nil {
-		return fmt.Errorf("installing extension %s: %w", extensionName, err)
-	}
-	if freshlyInstalled {
-		logger.Debug("extension freshly installed (async), waiting for it to become active")
-		fmt.Println("  Extension freshly installed — waiting for it to become active...")
-		if waitErr := waitForExtensionActive(dtc, sleeper); waitErr != nil {
-			logger.Debug("extension did not become active in time, proceeding anyway", "error", waitErr)
-		} else {
-			display.ColorOK.Println("  ✓ Extension is active")
+	if err := display.RunStep("Installed Dynatrace extension", func(s *display.Step) error {
+		freshlyInstalled, err := dtc.installExtension()
+		if err != nil {
+			return fmt.Errorf("installing extension %s: %w", extensionName, err)
 		}
+		if freshlyInstalled {
+			logger.Debug("extension freshly installed (async), waiting for it to become active")
+			s.Detail("waiting for it to become active")
+			if waitErr := waitForExtensionActive(dtc, sleeper); waitErr != nil {
+				logger.Debug("extension did not become active in time, proceeding anyway", "error", waitErr)
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	if err := reconcileMonitoring(cfg, monConfigIDs, dtc); err != nil {
 		return err
 	}
-
-	fmt.Println()
-	display.ColorMessage.Println("  Azure Monitor integration updated!")
-	fmt.Println()
 
 	installer.MarkInstallDone()
 	installer.WatchIngestCloudFromTimeWithEvent(cfg.EnvURL, cfg.PlatformToken, startTime, installer.OnWatchSnapshot, installer.OnWatchComplete)
@@ -116,50 +119,53 @@ func selectUpdatableConnection(conns []connRef, name string) (connRef, error) {
 // reconcileMonitoring updates or creates the monitoring configuration. Each update is a single atomic call; failure leaves the prior config intact.
 func reconcileMonitoring(cfg azureConfig, monConfigIDs []string, dtc dtclient) error {
 	if len(monConfigIDs) == 0 {
-		fmt.Println("  Step 1/1: Create Azure monitoring configuration...")
-		if err := dtc.createMonitoring(cfg.ConfigurationName, cfg.ConnectionID, cfg.ClientID, cfg.SubscriptionID); err != nil {
-			return fmt.Errorf("create monitoring configuration: %w", err)
-		}
-		display.ColorOK.Println("  ✓ Monitoring configuration created")
-		return nil
+		return display.RunStep("Created monitoring configuration", func(*display.Step) error {
+			if err := dtc.createMonitoring(cfg.ConfigurationName, cfg.ConnectionID, cfg.ClientID, cfg.SubscriptionID); err != nil {
+				return fmt.Errorf("create monitoring configuration: %w", err)
+			}
+			return nil
+		})
 	}
 
-	total := len(monConfigIDs)
-	for i, id := range monConfigIDs {
-		fmt.Printf("  Step %d/%d: Update Azure monitoring configuration...\n", i+1, total)
+	for _, id := range monConfigIDs {
 		logger.Debug("reconciling monitoring config", "configID", id)
-		if err := dtc.updateMonitoring(id, cfg.ConfigurationName, cfg.ConnectionID, cfg.ClientID, cfg.SubscriptionID); err != nil {
-			return fmt.Errorf("update monitoring configuration %s: %w", id, err)
+		if err := display.RunStep("Updated monitoring configuration", func(*display.Step) error {
+			if err := dtc.updateMonitoring(id, cfg.ConfigurationName, cfg.ConnectionID, cfg.ClientID, cfg.SubscriptionID); err != nil {
+				return fmt.Errorf("update monitoring configuration %s: %w", id, err)
+			}
+			return nil
+		}); err != nil {
+			return err
 		}
-		display.ColorOK.Println("  ✓ Monitoring configuration updated")
 	}
 	return nil
 }
 
-func azureUpdatePrintPreview(cfg azureConfig, monConfigIDs []string) {
+func azureUpdatePrintPreview(cfg azureConfig, monConfigIDs []string, showPlan bool) {
 	fmt.Println()
-	display.ColorMessage.Println("  Dynatrace Azure Monitor Integration: Update")
-	fmt.Println()
-	fmt.Printf("  Environment:        %s\n", cfg.EnvURL)
-	fmt.Printf("  Tenant ID:          %s\n", cfg.TenantID)
-	fmt.Printf("  Subscription:       %s\n", cfg.SubscriptionID)
-	fmt.Printf("  Connection name:    %s (already exists, unchanged)\n", cfg.ConnectionName)
-	fmt.Printf("  Configuration name: %s\n", cfg.ConfigurationName)
-	fmt.Println()
-	display.ColorMessage.Println("  Authentication (connection, Service Principal, federated credential, role) is left unchanged.")
-	fmt.Println()
-	display.PrintSectionDivider()
-	display.ColorMessage.Println("  Steps to be executed:")
-	display.PrintSectionDivider()
+	display.Header("dtwiz · Azure update")
+	display.PrintAlignedStatusLines(display.ColorDefault,
+		"Subscription", cfg.SubscriptionID,
+		"Connection", cfg.ConnectionName+" (unchanged)",
+		"Updates", "Azure monitoring configuration "+cfg.ConfigurationName,
+	)
+	display.Detail("environment: %s", cfg.EnvURL)
+	display.Detail("tenant ID: %s", cfg.TenantID)
+	display.Detail("authentication (connection, Service Principal, federated credential, role) is left unchanged")
 
-	if len(monConfigIDs) == 0 {
-		fmt.Printf("  Step 1: DT Extensions API: create Azure monitoring configuration '%s'\n", cfg.ConfigurationName)
-	} else {
-		for i, id := range monConfigIDs {
-			fmt.Printf("  Step %d: DT Extensions API: update Azure monitoring configuration '%s' (id: %s)\n", i+1, cfg.ConfigurationName, id)
+	if showPlan || logger.Enabled() {
+		fmt.Println()
+		display.PrintSectionDivider()
+		display.ColorMessage.Println("  Steps to be executed:")
+		display.PrintSectionDivider()
+		if len(monConfigIDs) == 0 {
+			fmt.Printf("  Step 1: DT Extensions API: create Azure monitoring configuration '%s'\n", cfg.ConfigurationName)
+		} else {
+			for i, id := range monConfigIDs {
+				fmt.Printf("  Step %d: DT Extensions API: update Azure monitoring configuration '%s' (id: %s)\n", i+1, cfg.ConfigurationName, id)
+			}
 		}
+		display.PrintSectionDivider()
 	}
-
-	display.PrintSectionDivider()
 	fmt.Println()
 }

@@ -374,7 +374,7 @@ func TestPythonInstrumentationPlan_ExecuteFailsWithoutPythonForVenvCreation(t *t
 		_ = plan.Execute()
 	})
 
-	checks := []string{"Creating virtualenv... failed.", "Python 3 interpreter not found"}
+	checks := []string{"✗ Created virtualenv", "Python 3 interpreter not found"}
 	for _, check := range checks {
 		if !strings.Contains(output, check) {
 			t.Fatalf("expected output to contain %q, got:\n%s", check, output)

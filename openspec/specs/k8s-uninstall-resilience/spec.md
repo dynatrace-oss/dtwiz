@@ -8,7 +8,7 @@ Define the resilience behavior for `dtwiz uninstall kubernetes` so that all unin
 
 ### Requirement: All uninstall steps execute regardless of prior step failure
 
-The uninstall sequence SHALL run all 4 steps (delete CRs, wait for pods, helm uninstall, delete namespace) even when an earlier step fails. Step failures SHALL be printed inline as they occur. If one or more steps fail, the command SHALL exit with a non-zero status and a summary error message.
+The uninstall sequence SHALL run all 4 steps (delete CRs, wait for pods, helm uninstall, delete namespace) even when an earlier step fails. Each step SHALL be shown as one line (`✓ <label>`, or `✗ <label>  failed` with its error) as it completes. If one or more steps fail, the command SHALL exit with a non-zero status and a summary error message.
 
 #### Scenario: Helm uninstall fails but namespace is still deleted
 
@@ -32,14 +32,13 @@ The uninstall sequence SHALL run all 4 steps (delete CRs, wait for pods, helm un
 
 - **WHEN** all 4 steps complete without error
 - **THEN** the command exits with status 0
-- **THEN** output contains "uninstalled successfully"
+- **THEN** every step line is shown with `✓`, including `✓ Uninstalled Dynatrace Operator`
 
 #### Scenario: Multiple steps fail
 
 - **WHEN** more than one step fails
-- **THEN** each failure is printed inline as it occurs
+- **THEN** each failed step is shown as `✗ <label>  failed` with its error as it occurs
 - **THEN** the command exits with a single summary error
-- **THEN** output contains "Uninstall completed with errors"
 
 ### Requirement: Usage block suppressed on runtime errors
 
