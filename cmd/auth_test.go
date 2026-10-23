@@ -39,8 +39,8 @@ func TestCheckPlatformToken(t *testing.T) {
 				if r.Method != http.MethodPost {
 					t.Errorf("method = %s, want POST", r.Method)
 				}
-				if r.URL.Path != "/platform/storage/query/v1/query:execute" {
-					t.Errorf("path = %s, want /platform/storage/query/v1/query:execute", r.URL.Path)
+				if r.URL.Path != "/platform/storage/query/v1/query:verify" {
+					t.Errorf("path = %s, want /platform/storage/query/v1/query:verify", r.URL.Path)
 				}
 				if got := r.Header.Get("Authorization"); got != "Bearer dt0s16.testtoken" {
 					t.Errorf("Authorization = %q, want %q", got, "Bearer dt0s16.testtoken")
@@ -263,7 +263,7 @@ func TestValidateCredentials(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Path == "/platform/storage/query/v1/query:execute" {
+				if r.URL.Path == "/platform/storage/query/v1/query:verify" {
 					w.WriteHeader(tt.dqlStatus)
 				} else {
 					w.WriteHeader(tt.classicStatus)
@@ -360,7 +360,7 @@ func assertRunEValidatesPlatformToken(t *testing.T, cmd *cobra.Command) {
 
 	validationCalled := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/platform/storage/query/v1/query:execute" {
+		if r.URL.Path != "/platform/storage/query/v1/query:verify" {
 			t.Errorf("unexpected request path: %s", r.URL.Path)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -378,5 +378,28 @@ func assertRunEValidatesPlatformToken(t *testing.T, cmd *cobra.Command) {
 	}
 	if !validationCalled {
 		t.Fatalf("expected %q to validate the platform token", cmd.CommandPath())
+	}
+}
+
+// The token probe must only VERIFY a statement, never execute one: query:verify needs no
+// storage:* scope, so a token without storage:system:read (or any other table scope) passes
+// when it authenticates.
+func TestCheckPlatformToken_VerifiesWithoutExecuting(t *testing.T) {
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		if strings.HasSuffix(r.URL.Path, "query:execute") {
+			w.WriteHeader(http.StatusForbidden) // a token without table scopes
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	if err := checkPlatformToken(srv.URL, "dt0s16.testtoken"); err != nil {
+		t.Fatalf("checkPlatformToken() error = %v", err)
+	}
+	if len(paths) != 1 || paths[0] != "/platform/storage/query/v1/query:verify" {
+		t.Errorf("probe paths = %v, want exactly [/platform/storage/query/v1/query:verify]", paths)
 	}
 }
