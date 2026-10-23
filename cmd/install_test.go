@@ -83,7 +83,7 @@ func TestInstallAzureCmd_RunE_ValidatesPlatformToken(t *testing.T) {
 	validationCalled := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		validationCalled = true
-		if r.URL.Path != "/platform/storage/query/v1/query:execute" {
+		if r.URL.Path != "/platform/storage/query/v1/query:verify" {
 			t.Fatalf("unexpected request path: %s", r.URL.Path)
 		}
 		if got := r.Header.Get("Authorization"); got != "Bearer dt0s16.platform" {
