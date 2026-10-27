@@ -56,6 +56,8 @@ archives:
 
 
 release:
+  # -rc/-beta tags become pre-releases, never /releases/latest.
+  prerelease: auto
   extra_files:
     - glob: dtwiz-examples.tar.gz
 
