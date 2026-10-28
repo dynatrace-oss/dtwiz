@@ -75,6 +75,10 @@ type GoInstrumentationPlan struct {
 	Project  GoProject
 	EnvVars  map[string]string
 	Packages []goMainPackage
+	// Otelc selects compile-time instrumentation (otelc go build): server spans, connected
+	// traces and library coverage. When false (Go < 1.25 or otelc unavailable) the build
+	// falls back to an injected init() that only traces outgoing HTTP calls.
+	Otelc bool
 }
 
 func (p *GoInstrumentationPlan) Runtime() string { return "Go" }
@@ -104,6 +108,7 @@ func buildGoInstrumentationPlan(proj GoProject, collectorEndpoint string) *GoIns
 		Project:  proj,
 		EnvVars:  environment.GenerateBaseOtelEnvVars(collectorEndpoint, pkgs[0].ServiceName),
 		Packages: pkgs,
+		Otelc:    goToolchainSupportsOtelc(),
 	}
 }
 
@@ -183,6 +188,15 @@ func (p *GoInstrumentationPlan) PrintPlanSteps() {
 	if p.Project.ModuleName != "" {
 		fmt.Printf("     Module:     %s\n", p.Project.ModuleName)
 	}
+	if p.Otelc {
+		fmt.Println("     Method:     compile-time instrumentation (otelc go build) — server and client spans, project sources are not modified")
+		fmt.Printf("     Tooling:    otelc (%s), installed to ~/.opentelemetry/go/bin if not on PATH\n", otelcInstallPath)
+		fmt.Println("     Entrypoints (built with otelc and launched with OTEL_* settings):")
+		for _, mp := range p.Packages {
+			fmt.Printf("       ./%s  →  service %s\n", mp.RelDir, mp.ServiceName)
+		}
+		return
+	}
 	fmt.Printf("     Isolation:  %s/ (go.mod copy + generated init; project sources are not modified)\n", goOtelDirName)
 	fmt.Println("     Dependencies (go get into .otel/go.mod):")
 	for _, pkg := range otelGoPackages {
@@ -259,18 +273,11 @@ func writeGoSharedFiles(projectPath string, pkgs []goMainPackage) (string, error
 	return overlayPath, os.WriteFile(overlayPath, data, 0o644)
 }
 
-func (p *GoInstrumentationPlan) Execute() error {
+func (p *GoInstrumentationPlan) prepareOverlayBuild() (string, error) {
 	proj := p.Project
-
-	if len(proj.RunningProcessIDs) > 0 {
-		fmt.Print("  Stopping running processes... ")
-		stopProcesses(proj.RunningProcessIDs)
-		fmt.Println("done.")
-	}
-
 	overlayPath, err := writeGoSharedFiles(proj.Path, p.Packages)
 	if err != nil {
-		return fmt.Errorf("writing shared build files: %w", err)
+		return "", fmt.Errorf("writing shared build files: %w", err)
 	}
 
 	modules := map[string]bool{}
@@ -285,7 +292,7 @@ func (p *GoInstrumentationPlan) Execute() error {
 		if err := prepareGoOtelDir(mp.ModuleDir); err != nil {
 			fmt.Println("failed.")
 			fmt.Printf("    %v\n", err)
-			return fmt.Errorf("creating %s/ directory: %w", goOtelDirName, err)
+			return "", fmt.Errorf("creating %s/ directory: %w", goOtelDirName, err)
 		}
 		fmt.Println("done.")
 
@@ -293,9 +300,44 @@ func (p *GoInstrumentationPlan) Execute() error {
 		if err := runGo(goCmd(mp.ModuleDir, append([]string{"get"}, otelGoPackages...)...)); err != nil {
 			fmt.Println("failed.")
 			fmt.Printf("    %v\n", err)
-			return fmt.Errorf("installing OTel packages (%s/%s): %w", runtime.GOOS, runtime.GOARCH, err)
+			return "", fmt.Errorf("installing OTel packages (%s/%s): %w", runtime.GOOS, runtime.GOARCH, err)
 		}
 		fmt.Println("done.")
+	}
+
+	return overlayPath, nil
+}
+
+func (p *GoInstrumentationPlan) Execute() error {
+	proj := p.Project
+
+	if len(proj.RunningProcessIDs) > 0 {
+		fmt.Print("  Stopping running processes... ")
+		stopProcesses(proj.RunningProcessIDs)
+		fmt.Println("done.")
+	}
+
+	var otelcBin, overlayPath string
+	if p.Otelc {
+		fmt.Print("  Preparing otelc... ")
+		bin, err := ensureOtelc()
+		if err != nil {
+			fmt.Println("failed.")
+			fmt.Printf("    %v\n", err)
+			fmt.Println("  Falling back to SDK injection (outgoing HTTP calls only).")
+			p.Otelc = false
+		} else {
+			otelcBin = bin
+			fmt.Println("done.")
+		}
+	}
+
+	if !p.Otelc {
+		var err error
+		overlayPath, err = p.prepareOverlayBuild()
+		if err != nil {
+			return err
+		}
 	}
 
 	var procs []*ManagedProcess
@@ -306,7 +348,13 @@ func (p *GoInstrumentationPlan) Execute() error {
 		}
 		binPath := filepath.Join(binDir, goBinaryName(mp.ServiceName))
 		fmt.Printf("  Building %s (./%s)... ", mp.ServiceName, mp.RelDir)
-		if err := runGo(goCmd(mp.ModuleDir, "build", "-overlay="+overlayPath, "-o", binPath, "./"+mp.PkgDir)); err != nil {
+		var buildErr error
+		if p.Otelc {
+			buildErr = buildWithOtelc(otelcBin, mp, binPath)
+		} else {
+			buildErr = runGo(goCmd(mp.ModuleDir, "build", "-overlay="+overlayPath, "-o", binPath, "./"+mp.PkgDir))
+		}
+		if err := buildErr; err != nil {
 			fmt.Println("failed.")
 			fmt.Printf("    %v\n", err)
 			return fmt.Errorf("building %s: %w", mp.ServiceName, err)
@@ -336,6 +384,11 @@ func (p *GoInstrumentationPlan) Execute() error {
 
 	fmt.Println()
 	fmt.Println("  Waiting for traffic — send requests to your services to generate traces and metrics.")
+	if p.Otelc {
+		fmt.Println("  Incoming and outgoing HTTP, gRPC and database calls are traced at compile time (otelc);")
+		fmt.Println("  see https://opentelemetry.io/docs/zero-code/go/compile-time/")
+		return nil
+	}
 	fmt.Println("  Incoming HTTP requests are traced once handlers are wrapped with otelhttp.NewHandler;")
 	fmt.Println("  see https://docs.dynatrace.com/docs/ingest-from/opentelemetry/walkthroughs/go")
 	return nil
