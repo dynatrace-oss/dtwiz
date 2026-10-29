@@ -3,6 +3,8 @@ package oneagent
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -64,7 +66,9 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 	if err := validateEnvironment(env); err != nil {
 		return err
 	}
-	display.PrintStatusLine("OS", fmt.Sprintf("✓ %s / %s", env.OS, env.Arch), display.ColorOK)
+	if !opts.Quiet {
+		display.InstallHeader(fmt.Sprintf("dtwiz · OneAgent on %s %s", env.OS, env.Arch))
+	}
 
 	cfg := ResolveAgentConfig(opts)
 	cfg.ServerURL = c.Classic.BaseURL()
@@ -107,7 +111,12 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 	}
 
 	if !opts.SkipConnectivityCheck {
-		report := CheckAllEndpoints(endpoints, connectivityProbeTimeout)
+		var report ConnectivityReport
+		_ = runStep(opts, "Checked connectivity", func(s *display.Step) error {
+			report = CheckAllEndpoints(endpoints, connectivityProbeTimeout)
+			s.Detail("%d endpoints", len(report.Results))
+			return nil
+		})
 		if !report.AllPassed {
 			printConnectivityWarning(report)
 		}
@@ -115,24 +124,76 @@ func InstallOneAgentV2(c *client.Client, opts InstallOptions) error {
 		logger.Debug("skipping connectivity probe", "reason", "--skip-connectivity-check")
 	}
 
-	installerPath, err := DownloadInstaller(c.Classic, env)
+	var installerPath string
+	err = runStep(opts, "Downloaded installer", func(s *display.Step) error {
+		var derr error
+		installerPath, derr = DownloadInstallerWithProgress(c.Classic, env, func(read, total int64) {
+			if total > 0 {
+				s.Detail("%s / %s", display.HumanBytes(read), display.HumanBytes(total))
+			} else {
+				s.Detail("%s", display.HumanBytes(read))
+			}
+		})
+		if derr == nil {
+			if fi, serr := os.Stat(installerPath); serr == nil {
+				s.Detail("%s", display.HumanBytes(fi.Size()))
+			}
+		}
+		return derr
+	})
 	if err != nil {
 		return err
 	}
 	defer os.Remove(installerPath)
 
-	if err := VerifyInstallerSignature(env, installerPath, opts.NoVerifySignature); err != nil {
-		return err
+	if env.OS == "linux" && !opts.NoVerifySignature {
+		err = runStep(opts, "Verified signature", func(*display.Step) error {
+			return VerifyInstallerSignature(env, installerPath, opts.NoVerifySignature)
+		})
+		if err != nil {
+			return err
+		}
 	}
 
 	argv, err := BuildInstallCommand(env, cfg, opts, installerPath)
 	if err != nil {
 		return err
 	}
+	display.Detail("command: %s", strings.Join(argv, " "))
 
-	_, err = ExecuteInstallCommand(argv, opts.Quiet)
+	// sudo may prompt for a password, which a spinner would overwrite: prime
+	// its credential cache on the terminal first.
+	if err := primeSudo(argv, opts); err != nil {
+		return err
+	}
+
+	err = runStep(opts, "Installed OneAgent", func(*display.Step) error {
+		_, execErr := ExecuteInstallCommand(argv, opts.Quiet)
+		return execErr
+	})
 	installer.RecordFeature(installer.FeatureHostMonitoring, err == nil)
 	return err
+}
+
+// runStep runs fn as a spinner step, or plainly when --quiet suppresses output.
+func runStep(opts InstallOptions, label string, fn func(*display.Step) error) error {
+	if opts.Quiet {
+		return fn(&display.Step{})
+	}
+	return display.RunStep(label, fn)
+}
+
+// primeSudo runs "sudo -v" on the terminal when the install command is sudo-wrapped.
+func primeSudo(argv []string, opts InstallOptions) error {
+	if opts.Quiet || len(argv) == 0 || filepath.Base(argv[0]) != "sudo" {
+		return nil
+	}
+	cmd := exec.Command(argv[0], "-v")
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("sudo authentication failed: %w", err)
+	}
+	return nil
 }
 
 func printDryRun(env Environment, cfg AgentConfig, opts InstallOptions, updating bool) {

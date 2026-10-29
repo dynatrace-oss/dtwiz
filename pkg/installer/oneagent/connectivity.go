@@ -96,11 +96,10 @@ func printConnectivityReport(report ConnectivityReport) {
 // printConnectivityWarning prints a warning block for failed endpoints during a
 // normal install run (failures are non-blocking).
 func printConnectivityWarning(report ConnectivityReport) {
-	display.Header("Warning: some endpoints are unreachable")
 	for _, r := range report.Results {
 		if !r.Reachable {
-			display.PrintStatusLine(r.Endpoint.String(), "✗ "+r.Error, display.ColorError)
+			display.StepWarn("Endpoint unreachable: "+r.Endpoint.String(), r.Error)
 		}
 	}
-	display.PrintStatusLine("hint", "set HTTP_PROXY / HTTPS_PROXY if a proxy is required", display.ColorMuted)
+	display.Println("Set HTTP_PROXY / HTTPS_PROXY if a proxy is required.")
 }

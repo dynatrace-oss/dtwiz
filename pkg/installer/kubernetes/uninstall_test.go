@@ -11,6 +11,16 @@ import (
 	"github.com/dynatrace-oss/dtwiz/test/helpers"
 )
 
+// captureAll captures both fmt output (os.Stdout) and color.Output.
+func captureAll(t *testing.T, fn func()) string {
+	t.Helper()
+	var colorOut string
+	stdout := helpers.CaptureStdout(t, func() {
+		colorOut = helpers.CaptureOutput(t, fn)
+	})
+	return colorOut + stdout
+}
+
 func withStdin(t *testing.T, input string, fn func()) {
 	t.Helper()
 	r, w, err := os.Pipe()
@@ -55,10 +65,10 @@ func TestUninstallKubernetes_ShowsClusterInfo(t *testing.T) {
 
 	withFakeRunCmdQuiet(t, func(_ string, _ ...string) error { return nil })
 
-	out := helpers.CaptureStdout(t, func() {
+	out := captureAll(t, func() {
 		_ = UninstallKubernetes("FreeTrialKubernetesTest", analyzer.DistroAKS, false)
 	})
-	if !strings.Contains(out, "The affected cluster is: AKS context=FreeTrialKubernetesTest") {
+	if !strings.Contains(out, "AKS · context=FreeTrialKubernetesTest") {
 		t.Errorf("expected cluster info line in output, got: %q", out)
 	}
 }
@@ -73,7 +83,7 @@ func TestUninstallKubernetes_NoClusterInfoWhenContextEmpty(t *testing.T) {
 	out := helpers.CaptureStdout(t, func() {
 		_ = UninstallKubernetes("", "", false)
 	})
-	if strings.Contains(out, "The affected cluster is") {
+	if strings.Contains(out, "context=") {
 		t.Errorf("expected no cluster info line when context is empty, got: %q", out)
 	}
 }
@@ -95,7 +105,7 @@ func TestUninstallKubernetes_Success(t *testing.T) {
 		}
 	})
 
-	if !strings.Contains(out, "uninstalled successfully") {
+	if !strings.Contains(out, "✓ Uninstalled Dynatrace Operator") {
 		t.Errorf("expected success message, got: %q", out)
 	}
 	if len(calls) == 0 {
@@ -203,7 +213,7 @@ func TestUninstallKubernetes_HelmFailContinuesToNamespaceDeletion(t *testing.T) 
 	if !deletedNamespace {
 		t.Error("expected namespace deletion to run even after helm failure")
 	}
-	if !strings.Contains(out, "Namespace deleted") {
+	if !strings.Contains(out, "Deleted namespace dynatrace") {
 		t.Errorf("expected namespace deleted message in output, got: %q", out)
 	}
 }
@@ -290,7 +300,7 @@ func TestUninstallKubernetes_DryRun_NoClusterInfoWhenContextEmpty(t *testing.T) 
 	if len(calls) > 0 {
 		t.Errorf("expected no commands to run in dry-run mode, got: %v", calls)
 	}
-	if strings.Contains(out, "The affected cluster is") {
+	if strings.Contains(out, "context=") {
 		t.Errorf("expected no cluster info line when context is empty, got: %q", out)
 	}
 	for _, step := range []string{
@@ -330,7 +340,7 @@ func TestUninstallKubernetes_MultipleStepsFail(t *testing.T) {
 		}
 	})
 
-	if !strings.Contains(out, "Uninstall completed with errors") {
+	if !strings.Contains(out, "✗ Deleted namespace dynatrace") {
 		t.Errorf("expected completion-with-errors message, got: %q", out)
 	}
 }
@@ -356,7 +366,7 @@ func TestUninstallKubernetes_Step2WaitFailsNonFatal(t *testing.T) {
 		}
 	})
 
-	if !strings.Contains(out, "uninstalled successfully") {
+	if !strings.Contains(out, "✓ Uninstalled Dynatrace Operator") {
 		t.Errorf("expected success message, got: %q", out)
 	}
 	ranHelm, ranNamespace := false, false
@@ -398,7 +408,7 @@ func TestUninstallKubernetes_NamespaceOnlyFails(t *testing.T) {
 		}
 	})
 
-	if !strings.Contains(out, "Uninstall completed with errors") {
+	if !strings.Contains(out, "✗ Deleted namespace dynatrace") {
 		t.Errorf("expected errors message, got: %q", out)
 	}
 }

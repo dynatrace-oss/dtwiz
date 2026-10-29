@@ -79,7 +79,7 @@ The installer SHALL detect runnable entrypoints for the selected Java project wi
 - **GIVEN** exactly one runnable JAR or wrapper is found in the project
 - **WHEN** the entrypoint selection step runs
 - **THEN** the installer SHALL auto-select the single entrypoint without prompting the user
-- **AND** SHALL output the selected entrypoint's description and command for transparency via `display.PrintStatusLine("entrypoint", <command>, display.ColorOK)`
+- **AND** SHALL output the selected entrypoint's description and command for transparency via `display.Detail` (shown with `-v`/`--debug`)
 
 #### Scenario: Multiple entrypoint candidates
 
@@ -95,9 +95,9 @@ The installer SHALL detect runnable entrypoints for the selected Java project wi
 - **THEN** the installer SHALL attempt an auto-build:
   - Unix: `./mvnw clean package -DskipTests` or `./gradlew build -x test`
   - Windows: `cmd /c mvnw.cmd clean package -DskipTests` or `cmd /c gradlew.bat build -x test`
-- **AND** SHALL print the build command before running it
+- **AND** SHALL show the build as a step with the build command as its detail
 - **AND** if the build succeeds SHALL re-scan for entrypoints and continue normally
-  - **AND** if the build fails SHALL output `Auto-build failed: <error>` via `display.PrintStatusLine("error", "Auto-build failed: <error>", display.ColorError)` and direct the user to fix the build error and re-run
+  - **AND** if the build fails SHALL output `Auto-build failed: <error>` via `display.PrintStatusLine("error", "Auto-build failed: <error>", display.ColorError)` and direct the user to fix the build error and re-run (the step is shown as `✗ <label>  failed`)
 
 #### Scenario: No entrypoint found — no build tool available
 
@@ -172,14 +172,14 @@ The installer SHALL stop any running instance of the selected project and start 
 
 - **GIVEN** the instrumented process is launched
 - **WHEN** the process crashes within the startup settle window (2 seconds)
-- **THEN** the summary line SHALL be output via `display.PrintStatusLine(<service-name>, "[crashed: <exit error> — check log for details]", display.ColorError)` and show the log filename
+- **THEN** the summary line SHALL be shown as `✗ <service-name>  crashed: <exit error> · PID <pid> · log: <filename>`
 - **AND** the Dynatrace traffic-waiting prompt SHALL NOT be shown
 
 #### Scenario: Process starts successfully
 
 - **GIVEN** the instrumented process is launched
 - **WHEN** the process is still running after the settle period and has bound a TCP port
-- **THEN** the summary line SHALL be output via `display.PrintStatusLine(<service-name>, <listening-url>, display.ColorOK)`
+- **THEN** the summary line SHALL be shown as `✓ <service-name>  → <listening-url> · PID <pid> · log: <filename>`
 - **AND** the installer SHALL proceed to OTel Collector update and Dynatrace verification
 
 ### Requirement: OTel Collector config update
@@ -191,7 +191,7 @@ After launching the instrumented Java process, the installer SHALL update the lo
 - **GIVEN** the dtwiz well-known collector config path (`~/opentelemetry/config.yaml`) exists on the machine
 - **WHEN** the instrumented Java process has been started successfully
 - **THEN** the installer SHALL patch the collector config silently using `PatchConfigFile` — no interactive prompt, no restart
-- **AND** SHALL output a single summary line via `display.PrintStatusLine("collector", "config updated", display.ColorOK)` indicating the config was updated
+- **AND** SHALL show a single `✓ Updated collector config` step line
 
 #### Scenario: No OTel Collector config found
 
@@ -220,7 +220,7 @@ After `InstallOtelJava()` returns successfully, the CLI (`cmd/install.go`) SHALL
 
 - **GIVEN** the instrumented process crashed during startup
 - **WHEN** the installer checks for alive processes via `PrintProcessSummary`
-- **THEN** the installer SHALL output via `display.PrintStatusLine("error", "No services are running — check the logs above for errors.", display.ColorError)` and return an error
+- **THEN** the `Started services` step SHALL be shown as failed and the installer SHALL return an error
 - **AND** `InstallOtelJava()` SHALL return a non-nil error so `cmd/install.go` does not proceed to `WatchIngest`
 
 ### Requirement: Plan preview and confirmation
@@ -296,7 +296,7 @@ Each instrumented Java process SHALL have its stdout/stderr redirected to a log 
 
 - **GIVEN** the process summary is printed after launch
 - **WHEN** the summary line is displayed
-- **THEN** it SHALL be output via `display.PrintStatusLine(<service-name>, "[log: <filename>]", display.ColorMuted)` so the user knows where to find output
+- **THEN** the service line SHALL include `log: <filename>` so the user knows where to find output
 
 ### Requirement: Ingest watch terminates on user input
 
@@ -347,7 +347,7 @@ instrument all sub-modules as independent services rather than attempting to run
 - **GIVEN** at least one sub-module is missing a fat JAR
 - **WHEN** the user confirms the plan
 - **THEN** the installer SHALL run the build command at the project root (e.g. `./mvnw clean package -DskipTests`)
-- **AND** SHALL abort and output via `display.PrintStatusLine("error", "build failed: <error>", display.ColorError)` instructing the user to fix the build error if the build fails
+- **AND** SHALL abort with the build step shown as failed (`build failed: <error>`), instructing the user to fix the build error if the build fails
 - **AND** SHALL proceed to launch all modules after a successful build
 
 #### Scenario: No build wrapper available and JARs missing
@@ -366,7 +366,7 @@ instrument all sub-modules as independent services rather than attempting to run
 
 - **GIVEN** some sub-modules crash during the settle period
 - **WHEN** the process summary is printed
-- **THEN** crashed modules SHALL show `[crashed: <exit error>]` in the summary
+- **THEN** crashed modules SHALL show as `✗ <service-name>  crashed: <exit error>` lines in the summary
 - **AND** the installer SHALL continue with the surviving modules
 - **AND** DQL verification SHALL only track the surviving services
 

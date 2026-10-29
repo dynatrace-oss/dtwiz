@@ -351,16 +351,30 @@ func grailApplyMessage(action grailAction) (string, *color.Color) {
 }
 
 func printGrailApplyResults(plans []grailSignalPlan, errs []error) {
-	fmt.Printf("\n  ── OpenPipeline dynamic routes ──\n\n")
+	printGrailApplySummary(plans, errs)
+	// Per-signal outcomes only with -v/--debug (display.Detail is spinner-safe).
 	for i, p := range plans {
-		msg, colorFn := grailApplyMessage(p.action)
+		msg, _ := grailApplyMessage(p.action)
 		if i < len(errs) && errs[i] != nil {
 			msg = fmt.Sprintf("warning — %v", errs[i])
-			colorFn = display.ColorWarning
 		}
-		display.PrintStatusLine(p.signal.displayName, msg, colorFn)
+		display.Detail("OpenPipeline %s: %s", p.signal.displayName, msg)
 	}
-	fmt.Println()
+}
+
+// printGrailApplySummary prints one line when every route applied cleanly, and
+// one warning per route that did not.
+func printGrailApplySummary(plans []grailSignalPlan, errs []error) {
+	failed := false
+	for i, p := range plans {
+		if i < len(errs) && errs[i] != nil {
+			failed = true
+			display.StepWarn(fmt.Sprintf("OpenPipeline %s route", p.signal.displayName), errs[i].Error())
+		}
+	}
+	if !failed {
+		display.StepDone("OpenPipeline routes configured", "")
+	}
 }
 
 func grailRouteValidations(plans []grailSignalPlan, errs []error) []grailRouteValidation {
@@ -472,6 +486,32 @@ func grailPreviewMessage(action grailAction) (string, *color.Color) {
 		return "pending — extension not active yet", display.ColorMuted
 	}
 	return "", display.ColorDefault
+}
+
+// grailPlanSummary condenses the per-signal route plan into one preview line.
+// Colors follow the preview convention: green when this run will change
+// something, muted when there is nothing to do. extensionWillInstall is true
+// when the host monitoring extension is installed in this same run, in which
+// case routes that cannot be planned yet are configured right after it.
+func grailPlanSummary(plans []grailSignalPlan, extensionWillInstall bool) (string, *color.Color) {
+	var configure, pending int
+	for _, p := range plans {
+		switch p.action {
+		case grailActionCreate, grailActionReEnable:
+			configure++
+		case grailActionSkip:
+			pending++
+		}
+	}
+	switch {
+	case configure > 0:
+		return fmt.Sprintf("%d of %d routes will be configured", configure, len(plans)), display.ColorOK
+	case pending > 0 && extensionWillInstall:
+		return "will be configured once the extension is active", display.ColorOK
+	case pending > 0:
+		return "pending — extension not active yet", display.ColorMuted
+	}
+	return "already configured", display.ColorMuted
 }
 
 func printGrailPlan(plans []grailSignalPlan) {

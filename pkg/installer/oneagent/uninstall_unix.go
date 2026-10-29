@@ -5,7 +5,9 @@ package oneagent
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
@@ -21,7 +23,7 @@ var runUninstallFn = runUninstall
 
 // runCommandFn executes the uninstall subprocess. Overridable in tests to
 // capture argv without spawning a real process.
-var runCommandFn = installer.RunCommand
+var runCommandFn = installer.RunCommandQuiet
 
 // uninstallScriptPath derives the uninstall script location from
 // oneAgentInstallDir (declared in detect_unix.go) so detection and uninstall
@@ -30,11 +32,34 @@ func uninstallScriptPath() string {
 	return filepath.Join(oneAgentInstallDir, "agent", "uninstall.sh")
 }
 
-func printPlan() {
-	fmt.Printf("  Script:     %s\n", uninstallScriptPath())
-	if needsSudoFn() {
-		fmt.Println("  Privileges: sudo required (current user is not root)")
+func printPlan(showPlan bool) {
+	display.PrintAlignedStatusLines(display.ColorDefault, "Removes", "Dynatrace OneAgent from this host")
+	if showPlan {
+		display.Println("Script:     %s", uninstallScriptPath())
+	} else {
+		display.Detail("script: %s", uninstallScriptPath())
 	}
+	if needsSudoFn() {
+		display.PrintAlignedStatusLines(display.ColorDefault, "Privileges", "sudo required (current user is not root)")
+	}
+}
+
+// primeUninstallSudo caches sudo credentials on the terminal before the
+// uninstall step starts, so its password prompt is not drawn over by a spinner.
+func primeUninstallSudo() error {
+	if !needsSudoFn() {
+		return nil
+	}
+	sudoPath, err := sudoPathFn()
+	if err != nil {
+		return nil // runUninstall reports the missing sudo with context
+	}
+	cmd := exec.Command(sudoPath, "-v")
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("sudo authentication failed: %w", err)
+	}
+	return nil
 }
 
 func runUninstall() error {
@@ -61,7 +86,7 @@ func runUninstall() error {
 	}
 	logger.Debug("running uninstall script", "argv", args)
 
-	display.PrintStatusLine("uninstall", "running uninstall script...", display.ColorMessage)
+	display.Detail("running uninstall script: %s", strings.Join(args, " "))
 	if err := runCommandFn(args[0], args[1:]...); err != nil {
 		return fmt.Errorf("OneAgent uninstall failed: %w", err)
 	}
@@ -69,12 +94,12 @@ func runUninstall() error {
 
 	if err := cleanupInstallDir(oneAgentInstallDir, needsSudo); err != nil {
 		logger.Warn("could not remove residual directory", "path", oneAgentInstallDir, "error", err)
-		fmt.Printf("  Warning: could not remove %s: %v\n", oneAgentInstallDir, err)
+		display.StepWarn(fmt.Sprintf("Could not remove %s", oneAgentInstallDir), err.Error())
 	}
 
 	if _, statErr := os.Stat(stateDir); !os.IsNotExist(statErr) {
 		logger.Debug("state directory preserved", "path", stateDir)
-		display.PrintStatusLine("note", "configuration preserved at "+stateDir, display.ColorMuted)
+		display.StepDone("Kept OneAgent configuration", stateDir)
 	}
 
 	return nil

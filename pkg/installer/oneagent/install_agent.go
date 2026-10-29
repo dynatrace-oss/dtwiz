@@ -5,7 +5,6 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
@@ -70,16 +69,12 @@ func ExecuteInstallCommand(argv []string, quiet bool) (int, error) {
 	}
 	start := time.Now()
 	logger.Debug("executing installer", "argv", argv)
-	if !quiet {
-		display.PrintStatusLine("execute", "Executing installer...", display.ColorMessage)
-	}
-	code, err := runInstaller(argv, quiet)
+	// Installer output is only streamed with -v/--debug; otherwise it is
+	// captured and surfaces in the error if the installer fails.
+	code, err := runInstaller(argv, quiet || !logger.Enabled())
 	logger.Verbose("installer exited", "exit_code", code, "duration", time.Since(start))
 	if err != nil {
 		return code, fmt.Errorf("installer %w", err)
-	}
-	if !quiet {
-		display.PrintStatusLine("result", "Installer executed successfully", display.ColorOK)
 	}
 	return 0, nil
 }

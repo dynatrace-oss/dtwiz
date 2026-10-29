@@ -85,12 +85,13 @@ When the OTel host monitoring extension's pipeline is not found for a signal typ
 
 ### Requirement: Route plan shown in the install preview; no separate confirmation
 
-The planned route changes SHALL be shown as part of the main install preview before the existing "Proceed with installation?" prompt. No separate confirmation prompt SHALL be shown for routes.
+The planned route changes SHALL be shown as part of the main install preview before the existing "Apply?" prompt. No separate confirmation prompt SHALL be shown for routes.
 
 #### Scenario: Route plan shown in install preview
 
 - **WHEN** `install otel` prints its install preview
-- **THEN** the planned action for each of metrics, logs, and spans SHALL be printed one line each, showing whether the route will be created, re-enabled, already exists, or is pending on the extension not being active yet
+- **THEN** the default preview SHALL show one `OpenPipeline` line summarizing the plan (how many of the routes will be configured, already configured, or pending on the extension not being active yet; pending is shown as will be configured once the extension is active when the extension is installed in the same run)
+- **AND** with `-v`/`--debug` the planned action for each of metrics, logs, and spans SHALL be printed one line each
 - **AND** this section SHALL appear before the single install confirmation prompt
 - **AND** no additional confirmation prompt SHALL be shown for routes alone
 - **AND** the preview SHALL NOT describe a route as skipped, since nothing has actually been attempted yet at preview time; a final skip is only ever reported after the routes have actually been applied
@@ -225,8 +226,8 @@ When `dtwiz update otel` runs on a Dynatrace-managed OTel Collector with the exp
 #### Scenario: Route plan shown in update preview
 
 - **WHEN** `dtwiz update otel` prints its preview
-- **THEN** the planned action for each of metrics, logs, and spans is printed one line each
-- **AND** each line shows whether the route will be created, re-enabled, already exists, or is pending on the extension not being active yet
+- **THEN** the default preview shows one summary line for the routes, and with `-v`/`--debug` the planned action for each of metrics, logs, and spans is printed one line each
+- **AND** each per-signal line shows whether the route will be created, re-enabled, already exists, or is pending on the extension not being active yet
 - **AND** this section appears after the extension status section and before the single confirmation prompt
 - **AND** no additional confirmation prompt is shown for routes alone
 

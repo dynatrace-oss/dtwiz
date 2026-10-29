@@ -62,12 +62,12 @@ After user confirmation, `dtwiz uninstall otel` SHALL stop all detected Python p
 
 - **WHEN** the user confirms the prompt
 - **THEN** each detected Python process receives SIGINT (Unix) or is killed (Windows)
-- **THEN** a "Stopped PID n" line is printed for each successfully stopped process
+- **THEN** a `✓ Stopped instrumented Python processes` step line is shown, with a `stopped PID n` detail line per process only with `-v`/`--debug`
 
 #### Scenario: Process has already exited
 
 - **WHEN** a detected Python process is no longer alive at kill time
-- **THEN** a warning line is printed and uninstall continues
+- **THEN** a `⚠` warning line is shown and uninstall continues
 
 #### Scenario: User cancels
 

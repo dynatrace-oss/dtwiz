@@ -83,7 +83,7 @@ func UninstallGCP(envURL, platformToken string, dryRun bool) error {
 func uninstallGCPWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc dtclient) error {
 	var monConfigIDs []string
 	var conns []connRef
-	err := installer.RunConcurrently(
+	err := installer.RunConcurrentlyWithSpinner("Looking up Google Cloud integration resources",
 		func() (err error) { monConfigIDs, err = dtc.findAllMonitoringConfigs(integrationPrefix); return },
 		func() (err error) { conns, err = dtc.findAllConnections(integrationPrefix); return },
 	)
@@ -106,7 +106,7 @@ func uninstallGCPWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc dt
 		return nil
 	}
 
-	gcpUninstallPrintPreview(envURL, projectID, monConfigIDs, conns, allSAEmails, integrationPrefix+"*", integrationPrefix+"*")
+	gcpUninstallPrintPreview(envURL, projectID, monConfigIDs, conns, allSAEmails, integrationPrefix+"*", integrationPrefix+"*", dryRun)
 
 	if proceed, err := installer.ShouldProceed(dryRun, "Uninstall"); !proceed {
 		return err
@@ -117,9 +117,6 @@ func uninstallGCPWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc dt
 		return err
 	}
 
-	fmt.Println()
-	display.ColorMessage.Println("  Google Cloud integration removed.")
-	fmt.Println()
 	return nil
 }
 
@@ -139,67 +136,47 @@ func runUninstallSteps(total int, projectID string, monConfigIDs []string, conns
 	step := 0
 	var errs []error
 
-	for _, id := range monConfigIDs {
+	// run shows one step. Hard failures are collected as errors; soft failures
+	// (legacy resources, possibly created by someone else) only warn.
+	run := func(label string, hard bool, fn func() error) {
 		step++
-		fmt.Printf("  Step %d/%d: Delete GCP monitoring configuration...\n", step, total)
-		if err := dtc.deleteMonitoring(id); err != nil {
-			display.ColorWarning.Printf("  Warning: step %d failed: %v\n", step, err)
-			errs = append(errs, fmt.Errorf("step %d: %w", step, err))
-			continue
+		logger.Debug("uninstall step", "step", step, "total", total, "label", label)
+		if hard {
+			if err := display.RunStep(label, func(*display.Step) error { return fn() }); err != nil {
+				errs = append(errs, fmt.Errorf("step %d: %w", step, err))
+			}
+			return
 		}
-		display.ColorOK.Println("  ✓ Monitoring configuration deleted")
+		if err := fn(); err != nil {
+			display.StepWarn("Skipped "+label, "legacy cleanup failed (continuing): "+err.Error())
+			return
+		}
+		display.StepDone(label, "")
+	}
+
+	for _, id := range monConfigIDs {
+		run("Deleted monitoring configuration", true, func() error { return dtc.deleteMonitoring(id) })
 	}
 
 	// Service-account cleanup only runs with an active gcloud project to target.
 	if projectID != "" {
 		for _, email := range currentSAEmails {
-			step++
-			fmt.Printf("  Step %d/%d: Remove project IAM binding...\n", step, total)
-			if err := gcpRemoveProjectBinding(runner, projectID, serviceAccountMember(email), viewerRole); err != nil {
-				display.ColorWarning.Printf("  Warning: step %d failed: %v\n", step, err)
-				errs = append(errs, fmt.Errorf("step %d: %w", step, err))
-			} else {
-				display.ColorOK.Println("  ✓ Project IAM binding removed")
-			}
-
-			step++
-			fmt.Printf("  Step %d/%d: Delete Google Cloud service account...\n", step, total)
-			if err := gcpDeleteServiceAccount(runner, email, projectID); err != nil {
-				display.ColorWarning.Printf("  Warning: step %d failed: %v\n", step, err)
-				errs = append(errs, fmt.Errorf("step %d: %w", step, err))
-			} else {
-				display.ColorOK.Println("  ✓ Service account deleted (impersonation binding removed)")
-			}
+			run("Removed project IAM binding", true, func() error {
+				return gcpRemoveProjectBinding(runner, projectID, serviceAccountMember(email), viewerRole)
+			})
+			run("Deleted service account", true, func() error { return gcpDeleteServiceAccount(runner, email, projectID) })
 		}
 
 		for _, email := range legacySAEmails {
-			step++
-			fmt.Printf("  Step %d/%d: Remove legacy project IAM binding...\n", step, total)
-			if err := gcpRemoveProjectBinding(runner, projectID, serviceAccountMember(email), viewerRole); err != nil {
-				display.ColorWarning.Printf("  Warning: legacy step %d failed (non-fatal): %v\n", step, err)
-			} else {
-				display.ColorOK.Println("  ✓ Legacy IAM binding removed")
-			}
-
-			step++
-			fmt.Printf("  Step %d/%d: Delete legacy Google Cloud service account...\n", step, total)
-			if err := gcpDeleteServiceAccount(runner, email, projectID); err != nil {
-				display.ColorWarning.Printf("  Warning: legacy step %d failed (non-fatal): %v\n", step, err)
-			} else {
-				display.ColorOK.Println("  ✓ Legacy service account deleted")
-			}
+			run("Removed legacy project IAM binding", false, func() error {
+				return gcpRemoveProjectBinding(runner, projectID, serviceAccountMember(email), viewerRole)
+			})
+			run("Deleted legacy service account", false, func() error { return gcpDeleteServiceAccount(runner, email, projectID) })
 		}
 	}
 
 	for _, c := range conns {
-		step++
-		fmt.Printf("  Step %d/%d: Delete Dynatrace GCP connection...\n", step, total)
-		if err := dtc.deleteConnection(c.objectID); err != nil {
-			display.ColorWarning.Printf("  Warning: step %d failed: %v\n", step, err)
-			errs = append(errs, fmt.Errorf("step %d: %w", step, err))
-		} else {
-			display.ColorOK.Println("  ✓ Connection deleted")
-		}
+		run("Deleted Dynatrace connection", true, func() error { return dtc.deleteConnection(c.objectID) })
 	}
 
 	return errors.Join(errs...)
@@ -225,42 +202,45 @@ func gcpUninstallBuildSteps(projectID string, monConfigIDs []string, conns []con
 	return steps
 }
 
-func gcpUninstallPrintPreview(envURL, projectID string, monConfigIDs []string, conns []connRef, saEmails []string, configName, connName string) {
+func gcpUninstallPrintPreview(envURL, projectID string, monConfigIDs []string, conns []connRef, saEmails []string, configName, connName string, showPlan bool) {
 	fmt.Println()
-	display.ColorMessage.Println("  Dynatrace Google Cloud Integration: Uninstall")
-	fmt.Println()
-	fmt.Printf("  Environment: %s\n", envURL)
+	display.Header("dtwiz · Google Cloud uninstall")
+	rows := []string{}
 	if projectID != "" {
-		fmt.Printf("  Project:     %s\n", projectID)
+		rows = append(rows, "Project", projectID)
 	}
-	if len(conns) > 0 {
-		for _, c := range conns {
-			fmt.Printf("  Connection:  %s (id: %s)\n", connName, c.objectID)
-		}
-	} else {
-		fmt.Printf("  Connection:  %s: not found, skipping\n", connName)
+	for range conns {
+		rows = append(rows, "Removes", "Dynatrace GCP connection")
+	}
+	if projectID != "" && len(saEmails) > 0 {
+		rows = append(rows, "Removes", fmt.Sprintf("%d service account(s) and IAM binding(s)", len(saEmails)))
+	}
+	for range monConfigIDs {
+		rows = append(rows, "Removes", "GCP monitoring configuration")
+	}
+	display.PrintAlignedStatusLines(display.ColorDefault, rows...)
+	display.Detail("environment: %s", envURL)
+	for _, c := range conns {
+		display.Detail("connection: %s (id: %s)", connName, c.objectID)
 	}
 	if projectID != "" {
 		for _, email := range saEmails {
-			fmt.Printf("  Service account: %s\n", email)
+			display.Detail("service account: %s", email)
 		}
 	}
-	if len(monConfigIDs) > 0 {
-		for _, id := range monConfigIDs {
-			fmt.Printf("  Monitoring config: %s (id: %s)\n", configName, id)
+	for _, id := range monConfigIDs {
+		display.Detail("monitoring config: %s (id: %s)", configName, id)
+	}
+
+	if showPlan || logger.Enabled() {
+		fmt.Println()
+		display.PrintSectionDivider()
+		display.ColorMessage.Println("  Steps to be executed:")
+		display.PrintSectionDivider()
+		for i, s := range gcpUninstallBuildSteps(projectID, monConfigIDs, conns, saEmails, configName, connName) {
+			fmt.Printf("  Step %d: %s\n", i+1, s)
 		}
-	} else {
-		fmt.Printf("  Monitoring config: %s: not found, skipping\n", configName)
+		display.PrintSectionDivider()
 	}
-	fmt.Println()
-	display.PrintSectionDivider()
-	display.ColorMessage.Println("  Steps to be executed:")
-	display.PrintSectionDivider()
-
-	for i, s := range gcpUninstallBuildSteps(projectID, monConfigIDs, conns, saEmails, configName, connName) {
-		fmt.Printf("  Step %d: %s\n", i+1, s)
-	}
-
-	display.PrintSectionDivider()
 	fmt.Println()
 }
