@@ -435,6 +435,24 @@ func TestPrintDryRun_HostGroup(t *testing.T) {
 	}
 }
 
+func TestPrintDryRun_HostProperties(t *testing.T) {
+	withNeedsSudo(t, false)
+	flush := captureStdout(t)
+	printDryRun(
+		Environment{OS: "linux", Arch: "x86"},
+		AgentConfig{MonitoringMode: "fullstack", AppLogContentAccess: true, ServerURL: "https://abc.live.dynatrace.com"},
+		InstallOptions{HostProperties: []string{"team=payments", "env=prod"}, NoVerifySignature: true},
+		false,
+	)
+	out := flush()
+	if !strings.Contains(out, "Host props: team=payments, env=prod") {
+		t.Errorf("expected host properties line in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "--set-host-property=team=payments --set-host-property=env=prod") {
+		t.Errorf("expected host property args in previewed command, got:\n%s", out)
+	}
+}
+
 // skipNonLinux skips the test on platforms where InstallOneAgentV2 cannot
 // reach the detection logic (macOS returns an error from detectRuntimeEnvironment).
 func skipNonLinux(t *testing.T) {
