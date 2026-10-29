@@ -8,16 +8,20 @@
 <!-- What does this PR add? Why is it relevant? -->
 
 ## How to test
+
 1.
 
 ## Which other features are affected?
+
 1.
 
 ## Checklist
-- [ ] I have tested these changes locally.
-- [ ] I updated OpenSpec and other documentation where necessary.
-- [ ] I added or updated tests where appropriate.
-- [ ] I have run `make test-integration` locally.
-- [ ] I have updated the changelog if necessary.
+
 - [ ] I followed the existing code style and conventions.
-- [ ] Preview snapshot is available, or a testable binary is provided.
+- [ ] I added or updated tests where appropriate.
+- [ ] I have tested these changes locally.
+- [ ] I have run make test-integration locally.
+- [ ] A preview snapshot is available, or a testable binary is provided.
+- [ ] I tested the snapshot build on the OS(es) this change affects (Linux / macOS / Windows).
+- [ ] I updated OpenSpec and other documentation where necessary.
+- [ ] I updated the changelog if necessary.
