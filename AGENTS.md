@@ -234,6 +234,12 @@ When the user talks about "specs", "a spec", "writing a spec", or "a change" the
 
 **When to create a spec:** any non-trivial feature or architectural decision should go through `openspec-propose` before implementation begins. For small, clearly scoped bug fixes or documentation edits, skip it.
 
+## Pull requests
+
+- Use `.github/pull_request_template.md` for PR bodies. Fill in every section; tick only checklist items that were actually done.
+- Follow [docs/contributing/pull-requests.md](docs/contributing/pull-requests.md) and use Conventional Commits for the PR title.
+- Confirm title, body, and target branch with the user before pushing or opening a PR.
+
 ## Build & release
 
 ```sh
