@@ -132,13 +132,18 @@ was detected (OS, containers, Kubernetes, cloud, services) and list the recommen
 - Do NOT run a dry-run and do not offer one.
 - Let the user choose a recommendation. Offer ALL of them, in priority order (lowest `priority`
   first, same order as the JSON), each with its `title`, and mark the first one as your
-  suggestion without reordering or dropping any. Wait for the answer.
+  suggestion without reordering or dropping any. Offer exactly what `recommend --json`
+  returned: do not add, rename or invent entries (such as "skip for now"). Wait for the answer.
   - If your tool has an interactive picker (a multiple-choice question) that can show every
     entry, use it, with the entry number in each label.
   - If the picker cannot show every entry (many tools allow only about four), show the complete
     numbered list as plain text and ask for the number instead.
-- Map the chosen recommendation's `method` to a command, and run it with `--yes`:
+- Map the chosen recommendation's `method` to a command, and run it with `--yes` (the one
+  exception is the project-listing run for `otel` below):
   - `otel`: ask the user once, "Instrument one of your applications, or host monitoring only?"
+    Ask before you run any `dtwiz install otel` command. Never run `dtwiz install otel --yes`
+    without `--project`: `--yes` does not skip the project picker, and answering the picker
+    yourself would choose an application for the user.
     - Host only: run `dtwiz install otel-collector --yes`.
     - Application: dtwiz only lists the detected projects in an interactive picker, which you
       cannot answer. So read the list from it and let the user choose in the chat:
@@ -148,7 +153,8 @@ was detected (OS, containers, Kubernetes, cloud, services) and list the recommen
          is not listed, offer an entry such as "A project in another folder" and ask for the
          folder path.
       2. Cancel the command (Ctrl-C, for example with the terminal tool's stop action) without
-         choosing anything.
+         choosing anything. This is the only place where Ctrl-C is fine, because nothing is
+         installed yet.
       3. Let the user choose, in plain words. Never show dtwiz's menu codes (the numbers and the
          letters g, n, p, c, r, u, e, l, o, s) or ask the user which dtwiz menu item to press.
          Offer exactly these entries, in dtwiz's order:
@@ -179,13 +185,27 @@ was detected (OS, containers, Kubernetes, cloud, services) and list the recommen
     collector themselves, this may be a false positive (dtwiz can mistake an open `dtwiz install`
     terminal for a running collector). Say so, and suggest the `otel` option instead.
   - `already-installed`, `not-supported`: nothing to install; say so and offer the next option.
-- `--yes` only skips the confirmation. If a command still waits for input, you cannot type into
-  it: stop it and give the user the exact command to run themselves in the terminal.
+- `--yes` only skips the confirmation. Never answer a dtwiz menu or prompt on the user's behalf,
+  even if your tool can type into a running terminal: letters such as `g`, `n`, `p` or `s` are
+  menu codes, not choices to guess. If a command still waits for input, cancel it before
+  anything is installed and give the user the exact command to run themselves, or ask them
+  what they want.
 - dtwiz then checks that data arrives. For a Collector install, success is dtwiz printing
   "View in Dynatrace Logs"; the watch that follows then lists hosts, services and logs as they
   appear. Tell the user when data shows up. This can take up to about 4 minutes, so keep waiting
   that long and tell the user it is normal. Only if nothing shows up after about 4 minutes, say
-  so, stop the watch, and point the user to the collector log that dtwiz printed.
+  so and point the user to the collector log that dtwiz printed.
+- The install command does not exit by itself: after the data check, dtwiz keeps its watch open
+  ("Press Enter to continue or keep watching...") until someone presses Enter. So do not wait
+  for the command to finish, and do not treat the watch screen as a failure or a hang.
+  - Never end the watch with Ctrl-C, and never stop or close its terminal tab. The Collector
+    was started from that terminal and shares its process group, so this also kills the
+    Collector and the data stops.
+  - If your tool can type into a running terminal, send Enter once the data check is done.
+  - If it cannot (for example the Claude desktop terminal tool), leave the watch running, go on
+    with step 5, and tell the user they can press Enter in that terminal tab when they are done.
+    Run anything further in another terminal tab. That tab does not have the token, so for
+    "connect another system" the user has to copy a token again.
 
 ### Step 5: Next step
 
@@ -197,13 +217,15 @@ with these options in this order:
    end of its watch ("See all your data and findings in Dynatrace QuickStart"). Open
    `https://<env-id>.apps.dynatrace.com/ui/apps/dynatrace.quickstart/` in the user's default
    browser (macOS `open`, Linux `xdg-open`, Windows `start`), with their real environment ID.
+   If the install output shows that link as plain text with a `?tf=` time range (this happens
+   on Windows), open that exact URL instead, because it is scoped to this run's data.
 2. "Connect another system", only if dtwiz detected something the user has not connected yet.
    Name it (for example Kubernetes, Azure or GCP). If chosen, go back to the list in step 4.
 3. "Done".
 
 After the user is done, give the reminders below.
 
-When finished, remind the user to close the terminal or run `unset DT_PLATFORM_TOKEN`, to
+When finished, remind the user to run `unset DT_PLATFORM_TOKEN` in that terminal (and not to
+close the tab while the Collector is meant to keep running, because it was started from it), to
 delete the token in Dynatrace if they no longer need it, and to delete the token from their
-clipboard manager's history if they use one. The token is gone once the terminal
-closes, so a later session needs a new one.
+clipboard manager's history if they use one. A later session needs a new token.
