@@ -35,6 +35,10 @@ messages, and wait for them to confirm before moving on.
   `[ -n "$DT_PLATFORM_TOKEN" ] && echo set || echo missing`
 - Never pass the token as a command-line argument (no `--platform-token`). dtwiz reads it from
   the `DT_PLATFORM_TOKEN` environment variable.
+- Never run any `dtwiz uninstall` command during onboarding. `uninstall otel`, for example, also
+  deletes tenant-wide configuration (the OTel extension and the OpenPipeline routes) that other
+  people in the same environment may rely on. Only uninstall if the user explicitly asks, and
+  show them the preview first.
 
 ### Step 1: Install dtwiz
 
@@ -108,13 +112,20 @@ was detected (OS, containers, Kubernetes, cloud, services) and list the recommen
 
 - Do NOT run a dry-run and do not offer one.
 - Ask the user once which option to install (recommend the first one), and wait.
-- Map the chosen recommendation's `method` to a command, and run it right away with `--yes`:
-  - `otel`, `kubernetes`, `oneagent`, `docker`, `aws`, `azure`, `gcp`: `dtwiz install <method> --yes`
+- Map the chosen recommendation's `method` to a command, and run it with `--yes`:
+  - `otel`: ask the user once, "Instrument one of your applications, or host monitoring only?"
+    - Application: ask for the project path and run `dtwiz install otel --project <path> --yes`.
+      Without `--project`, dtwiz opens an interactive project picker that you cannot answer.
+    - Host only: run `dtwiz install otel-collector --yes`.
+  - `kubernetes`, `oneagent`, `docker`, `aws`, `azure`, `gcp`: `dtwiz install <method> --yes`
   - `azure-update`, `gcp-update`: `dtwiz update azure --yes` or `dtwiz update gcp --yes`
   - `otel-update`: `dtwiz update otel --yes --experimental`
   - `already-installed`, `not-supported`: nothing to install; say so and offer the next option.
-- dtwiz then watches for incoming data. Tell the user when data shows up in Dynatrace, or what
-  failed and the next fix to try.
+- `--yes` only skips the confirmation. If a command still waits for input, you cannot type into
+  it: stop it and give the user the exact command to run themselves in the terminal.
+- dtwiz then watches for incoming data. Tell the user when data shows up in Dynatrace. If nothing
+  shows up after about two minutes, say so instead of waiting longer, stop the watch, and point
+  the user to the collector log that dtwiz printed.
 
 When finished, remind the user to close the terminal or run `unset DT_PLATFORM_TOKEN`, to
 delete the token in Dynatrace if they no longer need it, and to delete the token from their
