@@ -99,14 +99,20 @@ Run all later dtwiz commands in that same terminal tab and read their output fro
 
 ### Step 3: Analyze and recommend
 
-Run `dtwiz analyze` and `dtwiz recommend`. Summarize what was detected (OS, containers,
-Kubernetes, cloud, services) and which ingestion method dtwiz ranks first.
+Run `dtwiz analyze` and `dtwiz recommend --json`. Always use `--json` for `recommend`: the plain
+output is an interactive menu (with a demo-app option) that you must not answer. Summarize what
+was detected (OS, containers, Kubernetes, cloud, services) and list the recommendations by
+`priority` (lowest number first), using their `title`.
 
 ### Step 4: Install
 
 - Do NOT run a dry-run and do not offer one.
-- Ask the user once which option to install (recommend the top-ranked one), and wait.
-- When they choose, run `dtwiz install <method> --yes` right away.
+- Ask the user once which option to install (recommend the first one), and wait.
+- Map the chosen recommendation's `method` to a command, and run it right away with `--yes`:
+  - `otel`, `kubernetes`, `oneagent`, `docker`, `aws`, `azure`, `gcp`: `dtwiz install <method> --yes`
+  - `azure-update`, `gcp-update`: `dtwiz update azure --yes` or `dtwiz update gcp --yes`
+  - `otel-update`: `dtwiz update otel --yes --experimental`
+  - `already-installed`, `not-supported`: nothing to install; say so and offer the next option.
 - dtwiz then watches for incoming data. Tell the user when data shows up in Dynatrace, or what
   failed and the next fix to try.
 
