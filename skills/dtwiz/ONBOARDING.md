@@ -10,7 +10,8 @@ Onboard this machine to my Dynatrace environment https://<env-id>.apps.dynatrace
 ```
 
 The agent installs dtwiz, opens the token page and a terminal for you, and runs the onboarding.
-Your platform token never goes into the chat: you paste it into a terminal with hidden input.
+Your platform token never goes into the chat: you only copy it, and the terminal reads it from
+the clipboard and then clears the clipboard.
 
 ---
 
@@ -57,35 +58,40 @@ until the user replies.
    https://<env-id>.apps.dynatrace.com/ui/apps/dynatrace.quickstart/add-data/automatic
    ```
 
-   Then say: "I opened the Dynatrace page. Create the platform token there and copy it. Don't
-   paste it here in the chat. Tell me when it's copied." Wait.
+   Then say: "I opened the Dynatrace page. Copy the platform token shown there. Don't paste it
+   here in the chat. Tell me when it's copied." Wait.
 
 2. When the user confirms, open a visible terminal tab for them (with a terminal tool, or ask
-   them to open one if you cannot). Send exactly ONE line to it, and nothing else.
+   them to open one if you cannot). Tell them: "Don't type in that terminal, I'll run
+   everything there." Then send exactly ONE line to it. It reads the token from the clipboard
+   into `DT_PLATFORM_TOKEN`, clears the clipboard, and prints only whether it worked. Never run
+   a clipboard command on its own or show its output.
 
-   macOS/Linux:
+   macOS:
 
    ```bash
-   export DT_ENVIRONMENT=https://<env-id>.apps.dynatrace.com; printf 'Paste platform token (hidden): '; stty -echo; read DT_PLATFORM_TOKEN; stty echo; echo; export DT_PLATFORM_TOKEN
+   export DT_ENVIRONMENT=https://<env-id>.apps.dynatrace.com; export DT_PLATFORM_TOKEN="$(pbpaste)"; pbcopy </dev/null; case "$DT_PLATFORM_TOKEN" in dt0s16.*) echo "token set";; *) unset DT_PLATFORM_TOKEN; echo "clipboard has no platform token";; esac
+   ```
+
+   Linux (Wayland or X11):
+
+   ```bash
+   export DT_ENVIRONMENT=https://<env-id>.apps.dynatrace.com; export DT_PLATFORM_TOKEN="$(wl-paste 2>/dev/null || xclip -selection clipboard -o)"; (wl-copy --clear 2>/dev/null || xclip -selection clipboard </dev/null); case "$DT_PLATFORM_TOKEN" in dt0s16.*) echo "token set";; *) unset DT_PLATFORM_TOKEN; echo "clipboard has no platform token";; esac
    ```
 
    Windows (PowerShell):
 
    ```powershell
-   $env:DT_ENVIRONMENT='https://<env-id>.apps.dynatrace.com'; $t = Read-Host 'Paste platform token (hidden)' -AsSecureString; $env:DT_PLATFORM_TOKEN = [System.Net.NetworkCredential]::new('', $t).Password
+   $env:DT_ENVIRONMENT='https://<env-id>.apps.dynatrace.com'; $env:DT_PLATFORM_TOKEN=(Get-Clipboard -Raw).Trim(); Set-Clipboard -Value $null; if ($env:DT_PLATFORM_TOKEN -like 'dt0s16.*') { 'token set' } else { Remove-Item Env:DT_PLATFORM_TOKEN; 'clipboard has no platform token' }
    ```
 
-   The terminal now waits for input. Do NOT send any further text, command or keypress to that
-   terminal until the user says they are done: the waiting prompt would swallow it as the
-   token. Then say: "I opened a terminal and it's waiting for the token. Click into it, paste
-   the token and press Enter. Nothing will show while you paste, that's expected. Tell me when
-   you're done." Wait.
+   If it prints "clipboard has no platform token", ask the user to copy the token again and
+   repeat this move.
 
-3. When the user confirms, run `dtwiz status` in that tab (now it is safe to send input
-   again). If it shows a connection, say "Connected, the token works" and continue. If not, say
-   what failed and offer to repeat move 2.
+3. Run `dtwiz status` in that same tab. If it shows a connection, say "Connected, the token
+   works" and continue. If not, say what failed and offer to repeat move 1.
 
-If you cannot open or drive a terminal, give the user the command from move 2 to run in their
+If you cannot open or drive a terminal, give the user the line from move 2 to run in their
 own terminal and ask them to paste back only the `dtwiz status` output, which contains no
 token.
 
@@ -104,6 +110,7 @@ Kubernetes, cloud, services) and which ingestion method dtwiz ranks first.
 - dtwiz then watches for incoming data. Tell the user when data shows up in Dynatrace, or what
   failed and the next fix to try.
 
-When finished, remind the user to close the terminal or run `unset DT_PLATFORM_TOKEN`, and to
-delete the token in Dynatrace if they no longer need it. The token is gone once the terminal
+When finished, remind the user to close the terminal or run `unset DT_PLATFORM_TOKEN`, to
+delete the token in Dynatrace if they no longer need it, and to delete the token from their
+clipboard manager's history if they use one. The token is gone once the terminal
 closes, so a later session needs a new one.
