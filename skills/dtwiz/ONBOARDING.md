@@ -111,7 +111,10 @@ was detected (OS, containers, Kubernetes, cloud, services) and list the recommen
 ### Step 4: Install
 
 - Do NOT run a dry-run and do not offer one.
-- Ask the user once which option to install (recommend the first one), and wait.
+- Show ALL recommendations as a plain numbered list in the chat, in priority order (lowest
+  `priority` first, same order as the JSON), with their `title`. Mark the first one as your
+  suggestion, but do not reorder or drop any. Ask the user once for the number to install, and
+  wait. Do not use a multiple-choice widget that can only show a few options.
 - Map the chosen recommendation's `method` to a command, and run it with `--yes`:
   - `otel`: ask the user once, "Instrument one of your applications, or host monitoring only?"
     - Host only: run `dtwiz install otel-collector --yes`.
@@ -121,8 +124,11 @@ was detected (OS, containers, Kubernetes, cloud, services) and list the recommen
          prints. dtwiz asks before it does anything.
       2. Cancel the command (Ctrl-C, for example with the terminal tool's stop action) without
          choosing anything.
-      3. Show the numbered list in the chat and ask the user to pick one by number, or "host
-         only". The user never needs to touch the terminal.
+      3. Show the complete list in the chat as plain text: every detected project with the
+         same number, order and path that dtwiz printed, plus a "host only" entry. Do not
+         reorder, shorten or drop entries, and do not use a multiple-choice widget that can
+         only show a few options. Ask the user to answer with the number. The user never
+         needs to touch the terminal.
       4. Run `dtwiz install otel --project <path of the chosen project> --yes`.
       5. If they pick a language without automatic detection (Go, .NET, PHP and so on) or
          "skip", run `dtwiz install otel-collector --yes` and tell them dtwiz cannot
@@ -130,7 +136,9 @@ was detected (OS, containers, Kubernetes, cloud, services) and list the recommen
       If you cannot read or stop the terminal, ask the user for the project path instead.
   - `kubernetes`, `oneagent`, `docker`, `aws`, `azure`, `gcp`: `dtwiz install <method> --yes`
   - `azure-update`, `gcp-update`: `dtwiz update azure --yes` or `dtwiz update gcp --yes`
-  - `otel-update`: `dtwiz update otel --yes --experimental`
+  - `otel-update`: `dtwiz update otel --yes --experimental`. If the user did not set up a
+    collector themselves, this may be a false positive (dtwiz can mistake an open `dtwiz install`
+    terminal for a running collector). Say so, and suggest the `otel` option instead.
   - `already-installed`, `not-supported`: nothing to install; say so and offer the next option.
 - `--yes` only skips the confirmation. If a command still waits for input, you cannot type into
   it: stop it and give the user the exact command to run themselves in the terminal.
