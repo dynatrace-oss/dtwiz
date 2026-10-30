@@ -192,9 +192,20 @@ was detected (OS, containers, Kubernetes, cloud, services) and list the recommen
   what they want.
 - dtwiz then checks that data arrives. For a Collector install, success is dtwiz printing
   "View in Dynatrace Logs"; the watch that follows then lists hosts, services and logs as they
-  appear. Tell the user when data shows up. This can take up to about 4 minutes, so keep waiting
-  that long and tell the user it is normal. Only if nothing shows up after about 4 minutes, say
-  so and point the user to the collector log that dtwiz printed.
+  appear. Tell the user when data shows up.
+- Waiting takes time, and it is normal:
+  - Collector installs: up to about 4 minutes.
+  - Kubernetes: up to about 10 minutes. The Operator, ActiveGate and the other pods take around
+    8 minutes to become ready, and some pods stay `Pending` for a while when the cluster is short
+    on memory, until the cluster autoscaler adds a node. Pending pods are not a failure.
+  - Other methods: until dtwiz reports data, or about 10 minutes.
+
+  Before you start waiting, tell the user in one line how long it can take, for example "This
+  takes up to about 8 minutes, I'll keep checking." Then keep checking the terminal output
+  yourself, with long waits, inside the same turn. Do not end your turn and ask the user to come
+  back or to click "check again". Report only when dtwiz shows data, the command fails, or the
+  limit is reached. At the limit, say so, give the current state (for Kubernetes
+  `kubectl get pods -n dynatrace`), and point to the log or output that dtwiz printed.
 - The install command does not exit by itself: after the data check, dtwiz keeps its watch open
   ("Press Enter to continue or keep watching...") until someone presses Enter. So do not wait
   for the command to finish, and do not treat the watch screen as a failure or a hang.
