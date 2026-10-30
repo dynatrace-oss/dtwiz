@@ -143,4 +143,4 @@ dtwiz uninstall oneagent
 
 - Use `--dry-run` before destructive operations
 - Without `--yes`, installs show a preview and prompt `Apply? [Y/n]` before executing
-- Without `--yes`, uninstall commands show what will be removed and require confirmation
+- Without `--yes`, uninstall commands show what will be removed and require confirmation. `uninstall otel` also removes tenant-wide configuration (the OTel extension and OpenPipeline routes), which can affect others in the same environment
