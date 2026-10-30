@@ -20,8 +20,8 @@ the chat. The rest of this file is the command reference.
 - Never ask the user for their platform token in the chat and never accept one there. If one
   is pasted, tell the user to revoke it and create a new one.
 - Never print the token, write it to a file, or pass it as `--platform-token`. Use the
-  `DT_PLATFORM_TOKEN` environment variable, set by the user in their own terminal with hidden
-  input.
+  `DT_PLATFORM_TOKEN` environment variable, set in a terminal from the user's clipboard (see
+  [ONBOARDING.md](ONBOARDING.md)).
 
 ## Prerequisites
 
