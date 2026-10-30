@@ -187,6 +187,22 @@ was detected (OS, containers, Kubernetes, cloud, services) and list the recommen
   that long and tell the user it is normal. Only if nothing shows up after about 4 minutes, say
   so, stop the watch, and point the user to the collector log that dtwiz printed.
 
+### Step 5: Next step
+
+When data has shown up (or the wait ended), summarize in at most four lines what is now
+connected and what is not. Then ask what to do next, as an interactive choice or a single word,
+with these options in this order:
+
+1. "Open Dynatrace QuickStart" (your recommendation). It is the same page dtwiz points to at the
+   end of its watch ("See all your data and findings in Dynatrace QuickStart"). Open
+   `https://<env-id>.apps.dynatrace.com/ui/apps/dynatrace.quickstart/` in the user's default
+   browser (macOS `open`, Linux `xdg-open`, Windows `start`), with their real environment ID.
+2. "Connect another system", only if dtwiz detected something the user has not connected yet.
+   Name it (for example Kubernetes, Azure or GCP). If chosen, go back to the list in step 4.
+3. "Done".
+
+After the user is done, give the reminders below.
+
 When finished, remind the user to close the terminal or run `unset DT_PLATFORM_TOKEN`, to
 delete the token in Dynatrace if they no longer need it, and to delete the token from their
 clipboard manager's history if they use one. The token is gone once the terminal
