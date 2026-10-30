@@ -145,9 +145,11 @@ was detected (OS, containers, Kubernetes, cloud, services) and list the recommen
   - `already-installed`, `not-supported`: nothing to install; say so and offer the next option.
 - `--yes` only skips the confirmation. If a command still waits for input, you cannot type into
   it: stop it and give the user the exact command to run themselves in the terminal.
-- dtwiz then watches for incoming data. Tell the user when data shows up in Dynatrace. If nothing
-  shows up after about two minutes, say so instead of waiting longer, stop the watch, and point
-  the user to the collector log that dtwiz printed.
+- dtwiz then checks that data arrives. For a Collector install, success is dtwiz printing
+  "View in Dynatrace Logs"; the watch that follows then lists hosts, services and logs as they
+  appear. Tell the user when data shows up. This can take up to about 4 minutes, so keep waiting
+  that long and tell the user it is normal. Only if nothing shows up after about 4 minutes, say
+  so, stop the watch, and point the user to the collector log that dtwiz printed.
 
 When finished, remind the user to close the terminal or run `unset DT_PLATFORM_TOKEN`, to
 delete the token in Dynatrace if they no longer need it, and to delete the token from their
