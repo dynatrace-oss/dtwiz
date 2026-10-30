@@ -60,8 +60,9 @@ dtwiz setup
 ### Onboard with an AI agent
 
 Prefer to let Claude or Cursor do it? Paste the prompt from
-[skills/dtwiz/ONBOARDING.md](skills/dtwiz/ONBOARDING.md). The agent guides you step by step, and
-your platform token never goes into the chat.
+[skills/dtwiz/ONBOARDING.md](skills/dtwiz/ONBOARDING.md). The agent guides you step by step, sets up
+only what you choose (this machine and its apps, Kubernetes, AWS, Azure, GCP), and your platform
+token never goes into the chat.
 
 ## Prerequisites
 

@@ -1,4 +1,4 @@
-# Onboard data with dtwiz using an AI agent
+# Get your data into Dynatrace with dtwiz and an AI agent
 
 ## Use this prompt
 
@@ -6,24 +6,29 @@ Paste this into Claude Code, Cursor, or any coding agent. Replace `<env-id>` wit
 environment ID.
 
 ```text
-Onboard this machine to my Dynatrace environment https://<env-id>.apps.dynatrace.com using dtwiz (https://github.com/dynatrace-oss/dtwiz). First read and follow https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/skills/dtwiz/ONBOARDING.md. Guide me step by step, and never ask for or accept my platform token in the chat.
+Connect my systems to my Dynatrace environment https://<env-id>.apps.dynatrace.com with dtwiz (https://github.com/dynatrace-oss/dtwiz): this machine and its apps, plus any Kubernetes, AWS, Azure or GCP environments it can reach. I choose what gets connected. First read and follow https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/skills/dtwiz/ONBOARDING.md
 ```
 
-The agent installs dtwiz, opens the token page and a terminal for you, and runs the onboarding.
-Your platform token never goes into the chat: you only copy it, and the terminal reads it from
-the clipboard and then clears the clipboard.
+The agent installs dtwiz, opens the token page and a terminal for you, shows what dtwiz detected
+(this machine and its apps, Kubernetes clusters, AWS, Azure and GCP accounts you are signed in
+to), and sets up only what you choose. Your platform token never goes into the chat: you only
+copy it, and the terminal reads it from the clipboard and then clears the clipboard.
 
 ---
 
 ## Instructions for the agent
 
-You are onboarding the user to Dynatrace with dtwiz. The user's environment URL is the one in
+You are helping the user get their data into Dynatrace with dtwiz: this machine and its
+applications, and the Kubernetes clusters and AWS, Azure or GCP accounts it can reach. The user's environment URL is the one in
 their message (`https://<env-id>.apps.dynatrace.com` with their real ID). Never use the
 placeholder from this file as the URL. If the message has no real URL, ask for it before
 anything else.
 
 Work through the steps in order. Guide the user one small action at a time, in short friendly
 messages, and wait for them to confirm before moving on.
+
+The user chooses what to connect. Never install, update or change anything the user did not
+select.
 
 ### Security rules (always apply)
 
@@ -137,8 +142,14 @@ was detected (OS, containers, Kubernetes, cloud, services) and list the recommen
          "skip", run `dtwiz install otel-collector --yes` and tell them dtwiz cannot
          instrument that language automatically yet.
       If you cannot read or stop the terminal, ask the user for the project path instead.
-  - `kubernetes`, `oneagent`, `docker`, `aws`, `azure`, `gcp`: `dtwiz install <method> --yes`
-  - `azure-update`, `gcp-update`: `dtwiz update azure --yes` or `dtwiz update gcp --yes`
+  - `kubernetes`, `aws`, `azure`, `gcp`: these change a real cluster or cloud account. First
+    say in one line what will change (for example "install the Dynatrace Operator into cluster
+    X"), using the detection details from `recommend --json`, and wait for the user's yes. Then
+    run `dtwiz install <method> --yes`.
+  - `oneagent`, `docker`: `dtwiz install <method> --yes`
+  - `azure-update`, `gcp-update`: these change a cloud account too. Say in one line what will
+    change, wait for the user's yes, then run `dtwiz update azure --yes` or
+    `dtwiz update gcp --yes`.
   - `otel-update`: `dtwiz update otel --yes --experimental`. If the user did not set up a
     collector themselves, this may be a false positive (dtwiz can mistake an open `dtwiz install`
     terminal for a running collector). Say so, and suggest the `otel` option instead.
