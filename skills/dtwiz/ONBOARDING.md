@@ -30,6 +30,17 @@ messages, and wait for them to confirm before moving on.
 The user chooses what to connect. Never install, update or change anything the user did not
 select.
 
+Every time you wait for the user (token copied, a choice, a go-ahead), make the answer a click
+or a single word, never free text:
+
+- If your tool has an interactive question or reply buttons (for example the `AskUserQuestion`
+  tool, or the app's reply buttons), use it, with short options such as "Copied" and "I need
+  help".
+- If it does not, tell the user the exact word to reply with, such as "copied".
+
+Never leave the user facing an open prompt after asking them to copy the token: that is when
+people paste it into the chat.
+
 ### Security rules (always apply)
 
 - Never ask the user for their Dynatrace platform token in the chat, and never accept it there.
@@ -68,7 +79,8 @@ until the user replies.
    ```
 
    Then say: "I opened the Dynatrace page. Copy the platform token shown there. Don't paste it
-   here in the chat. Tell me when it's copied." Wait.
+   here in the chat." and ask for confirmation as a button or single word, for example an
+   interactive question "Token copied?" with the options "Copied" and "I need help". Wait.
 
 2. When the user confirms, open a visible terminal tab for them (with a terminal tool, or ask
    them to open one if you cannot). Tell them: "Don't type in that terminal, I'll run
