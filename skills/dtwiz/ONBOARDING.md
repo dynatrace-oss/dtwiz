@@ -114,9 +114,20 @@ was detected (OS, containers, Kubernetes, cloud, services) and list the recommen
 - Ask the user once which option to install (recommend the first one), and wait.
 - Map the chosen recommendation's `method` to a command, and run it with `--yes`:
   - `otel`: ask the user once, "Instrument one of your applications, or host monitoring only?"
-    - Application: ask for the project path and run `dtwiz install otel --project <path> --yes`.
-      Without `--project`, dtwiz opens an interactive project picker that you cannot answer.
     - Host only: run `dtwiz install otel-collector --yes`.
+    - Application: dtwiz only lists the detected projects in an interactive picker, which you
+      cannot answer. So read the list from it and let the user choose in the chat:
+      1. In the terminal tab, run `dtwiz install otel` and read the numbered project list it
+         prints. dtwiz asks before it does anything.
+      2. Cancel the command (Ctrl-C, for example with the terminal tool's stop action) without
+         choosing anything.
+      3. Show the numbered list in the chat and ask the user to pick one by number, or "host
+         only". The user never needs to touch the terminal.
+      4. Run `dtwiz install otel --project <path of the chosen project> --yes`.
+      5. If they pick a language without automatic detection (Go, .NET, PHP and so on) or
+         "skip", run `dtwiz install otel-collector --yes` and tell them dtwiz cannot
+         instrument that language automatically yet.
+      If you cannot read or stop the terminal, ask the user for the project path instead.
   - `kubernetes`, `oneagent`, `docker`, `aws`, `azure`, `gcp`: `dtwiz install <method> --yes`
   - `azure-update`, `gcp-update`: `dtwiz update azure --yes` or `dtwiz update gcp --yes`
   - `otel-update`: `dtwiz update otel --yes --experimental`
