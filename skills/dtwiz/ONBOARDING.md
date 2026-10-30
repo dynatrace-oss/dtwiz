@@ -111,10 +111,13 @@ was detected (OS, containers, Kubernetes, cloud, services) and list the recommen
 ### Step 4: Install
 
 - Do NOT run a dry-run and do not offer one.
-- Show ALL recommendations as a plain numbered list in the chat, in priority order (lowest
-  `priority` first, same order as the JSON), with their `title`. Mark the first one as your
-  suggestion, but do not reorder or drop any. Ask the user once for the number to install, and
-  wait. Do not use a multiple-choice widget that can only show a few options.
+- Let the user choose a recommendation. Offer ALL of them, in priority order (lowest `priority`
+  first, same order as the JSON), each with its `title`, and mark the first one as your
+  suggestion without reordering or dropping any. Wait for the answer.
+  - If your tool has an interactive picker (a multiple-choice question) that can show every
+    entry, use it, with the entry number in each label.
+  - If the picker cannot show every entry (many tools allow only about four), show the complete
+    numbered list as plain text and ask for the number instead.
 - Map the chosen recommendation's `method` to a command, and run it with `--yes`:
   - `otel`: ask the user once, "Instrument one of your applications, or host monitoring only?"
     - Host only: run `dtwiz install otel-collector --yes`.
@@ -124,11 +127,11 @@ was detected (OS, containers, Kubernetes, cloud, services) and list the recommen
          prints. dtwiz asks before it does anything.
       2. Cancel the command (Ctrl-C, for example with the terminal tool's stop action) without
          choosing anything.
-      3. Show the complete list in the chat as plain text: every detected project with the
-         same number, order and path that dtwiz printed, plus a "host only" entry. Do not
-         reorder, shorten or drop entries, and do not use a multiple-choice widget that can
-         only show a few options. Ask the user to answer with the number. The user never
-         needs to touch the terminal.
+      3. Let the user choose. Offer every detected project with the same number, order and
+         path that dtwiz printed, plus a "host only" entry, and do not reorder, shorten or drop
+         any. Use an interactive picker if it can show every entry. Otherwise, which is likely
+         with five or more projects, show the complete numbered list as plain text and ask for
+         the number. The user never needs to touch the terminal.
       4. Run `dtwiz install otel --project <path of the chosen project> --yes`.
       5. If they pick a language without automatic detection (Go, .NET, PHP and so on) or
          "skip", run `dtwiz install otel-collector --yes` and tell them dtwiz cannot
