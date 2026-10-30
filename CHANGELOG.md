@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- AI-agent onboarding: `skills/dtwiz/ONBOARDING.md` has a paste-ready prompt and step-by-step agent instructions so Claude, Cursor or any coding agent can onboard a machine with dtwiz while the platform token never enters the chat.
+
 ### Changed
 
+- The `dtwiz` skill (`skills/dtwiz/SKILL.md`) now matches the CLI (Windows install, platform-token auth, Kubernetes, AWS, Docker and update details, `--yes`, `watch`) and drops the internal URL-family and token-type tables.
 - Self-monitoring: the `ist` event now only reports what the install did (feature outcomes and install time). It no longer carries `error` or error attributes, and it is only sent when install work started, so dry-runs, declined confirmations, and failures before the confirmation send no `ist`. The install error is reported on the `failed` or `cancelled` event of the same run, for both `dtwiz install <method>` and `dtwiz setup`.
 - Self-monitoring: `dtwiz install <method>` now ends every run that reaches the installer with exactly one `completed`, `failed`, or `cancelled` event, like `setup`, `update`, and `uninstall`.
 
