@@ -48,11 +48,11 @@ The shared install flow treats a runtime plan that returns nothing as "this proj
 ### 2. otelc pinned to v1.0.1, one constant
 
 `otelcVersion = "v1.0.1"` is the only place the version appears; install path is `…/otelc/tool/cmd/otelc@<version>`. The Go gate is the pinned version's own minimum (1.25). Bumping is a deliberate change that re-runs the spike.
-*Alternative:* `@latest`. Rejected: moving target, and currently demands Go 1.26.
+*Alternative:* `@latest` (currently v1.2.0, which needs Go 1.26). Rejected: it would exclude Go 1.25 users from compile-time instrumentation, it is untested by the spike, and we have no adoption data showing 1.26 is common enough. Revisit with the next version bump.
 
 ### 3. Isolated tool directory
 
-otelc is used from PATH if present (user's own, never removed); otherwise from `~/.opentelemetry/go/bin` (via `os.UserHomeDir()`), installed with `GOBIN` set there so nothing lands in the user's `GOPATH/bin`. Only the isolated copy is removed on uninstall.
+dtwiz installs otelc itself when it is missing. If a usable otelc is already on PATH it is reused (it is the user's own and is never removed). Otherwise dtwiz runs `go install` with `GOBIN` set to `~/.opentelemetry/go/bin` (via `os.UserHomeDir()`), so nothing lands in the user's `GOPATH/bin` and an existing otelc is never overwritten. Only the copy dtwiz installed is removed on uninstall.
 
 ### 4. Artifacts live under `<module>/.otel/go/`
 
@@ -63,7 +63,7 @@ Node already owns `<dir>/.otel/` (with `package.json`). A Go module that also ha
 
 otelc rejects `-modfile`, so tier 1 builds against the real module files. `modGuard` copies `go.mod`/`go.sum` to `.otel/go/modguard/` and restores them atomically afterwards, in a deferred function that also runs on SIGINT/SIGTERM (signal context). Safeguards:
 
-- If git reports uncommitted changes to `go.mod`/`go.sum`, tier 1 is not used for that module (restoring could otherwise destroy edits). Outside a git repository the check is skipped.
+- Uncommitted changes to `go.mod`/`go.sum` are not a special case: the backup is a copy of the files as they are, so restoring returns them to exactly that state. No git check is needed, and developers with a modified `go.mod` keep tier 1.
 - A leftover backup that differs from the current files stops the run for that module with the backup path; an identical one is deleted as stale.
 - Restore retries briefly (Windows can hold files open); failures are reported with the backup path and never swallowed.
 
@@ -106,14 +106,15 @@ The workspace spike (see Context) showed that workspace mode cannot be used with
 
 ### 14. Separate `GoInstrumentation` feature flag
 
-A new flag is registered in `pkg/featureflags/` next to `AllRuntimes` and `Experimental`: CLI `--go-instrumentation`, env `DTWIZ_GO_INSTRUMENTATION`, default off. It gates the whole new Go flow: detection as an auto-instrumentable runtime, tier selection, build/launch, the notice entry, and the manual-languages change. With it off, today's behavior (including the existing `AllRuntimes` stub) is untouched. Uninstall cleanup is not gated, so artifacts from an earlier run are always removable.
+A new flag is registered in `pkg/featureflags/` next to `AllRuntimes` and `Experimental`: CLI `--go-instrumentation`, env `DTWIZ_GO_INSTRUMENTATION`, default off. It gates the whole new Go flow: detection as an auto-instrumentable runtime, tier selection, build/launch, the notice entry, and the manual-languages change. With it off, today's behavior (including the existing `AllRuntimes` stub) is untouched. Uninstall cleanup is gated too: with the flag off, `dtwiz uninstall otel` does not scan for, list or remove Go artifacts and behaves as today.
 *Alternative:* reuse `AllRuntimes`. Rejected: it enables unrelated runtimes and cannot be removed for Go alone.
 
 ## Risks / Trade-offs
 
-- **otelc rewrites module files** → guard + dirty-tree refusal + leftover-backup check; documented limitation that an uncatchable kill (SIGKILL, power loss) relies on the leftover check at next run.
+- **otelc rewrites module files** → guard + leftover-backup check; documented limitation that an uncatchable kill (SIGKILL, power loss) relies on the leftover check at next run.
 - **First build downloads many modules and is slow; needs network** → preview says so; failure messages classify connectivity errors; fallback or manual steps follow.
 - **otelc behavior differs on Linux/Windows** → first task is a spike on all three OSes; the plan degrades per service if tier 1 fails.
+- **Turning the flag off after an install leaves Go artifacts in place** → the user must re-enable `GoInstrumentation` to remove them with `dtwiz uninstall otel`.
 - **Users with workspaces get manual steps only** → explicit message and walkthrough link; workspace support is a candidate follow-up with the spike results as input.
 - **Instrumented binary only exists in `.otel/`** → users' own builds are unchanged; the preview prints the equivalent `otelc go build` command and uninstall explains what is removed.
 - **Pinned version ages** → single constant; a periodic bump task, with the spike as the acceptance test.

@@ -66,6 +66,7 @@ When a service cannot be built by either method, no Go toolchain is available, o
 #### Scenario: No Go toolchain
 
 - **GIVEN** the selected project has no usable Go toolchain
+- **AND** the plan preview has already stated that the application will not be instrumented automatically
 - **WHEN** the user confirms the plan
 - **THEN** the OTel Collector is installed
 - **AND** manual steps are printed and nothing is built
@@ -80,7 +81,7 @@ When a service cannot be built by either method, no Go toolchain is available, o
 
 #### Scenario: Manual outcome is shown in the preview
 
-- **GIVEN** a project that will be handled with manual steps
+- **GIVEN** a project that will be handled with manual steps because it has no usable Go toolchain or is inside a Go workspace
 - **WHEN** the plan preview is shown
 - **THEN** it states that the application is not instrumented automatically and why
 - **AND** it shows that the OTel Collector will still be installed
@@ -138,12 +139,12 @@ The system SHALL NOT modify Go source files in the project. All generated files 
 - **WHEN** the user presses Ctrl+C
 - **THEN** `go.mod` and `go.sum` are restored before dtwiz exits
 
-#### Scenario: Module files already have uncommitted changes
+#### Scenario: Module files have uncommitted changes
 
 - **GIVEN** the module's `go.mod` or `go.sum` has uncommitted changes in version control
-- **WHEN** a service would be built with compile-time instrumentation
-- **THEN** that method is not used for the module
-- **AND** the service uses the client-only fallback instead
+- **WHEN** a service is built with compile-time instrumentation
+- **THEN** compile-time instrumentation is still used
+- **AND** after the build the files are byte-identical to their state before the build, uncommitted changes included
 
 #### Scenario: Leftover backup from an interrupted run
 

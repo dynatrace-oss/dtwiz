@@ -15,7 +15,7 @@
 - Go workspaces (`go.work`) are **not supported in this first version**: a project inside a workspace is detected, and dtwiz still installs the OTel Collector and prints manual Go instrumentation steps instead of building it.
 - Linux, macOS and Windows are supported.
 - `dtwiz uninstall otel` also detects and removes Go instrumentation added by dtwiz: stops its running services, deletes the generated `.otel/` directories and the isolated otelc copy dtwiz installed.
-- Automatic Go instrumentation is gated behind a new, separate feature flag `GoInstrumentation` (`--go-instrumentation` / `DTWIZ_GO_INSTRUMENTATION`, off by default), independent of `AllRuntimes`. With the flag off, Go behaves exactly as today (including the existing `AllRuntimes` behavior and manual-languages menu). With it on, Go is detected, auto-instrumented, and removed from the "manual languages" menu. Removing the gate is a later, separate change.
+- Automatic Go instrumentation is gated behind a new, separate feature flag `GoInstrumentation` (`--go-instrumentation` / `DTWIZ_GO_INSTRUMENTATION`, off by default), independent of `AllRuntimes`. With the flag off, Go behaves exactly as today (including the existing `AllRuntimes` behavior and manual-languages menu). With it on, Go is detected, auto-instrumented, and removed from the "manual languages" menu. The Go part of `dtwiz uninstall otel` is behind the same flag: with it off, uninstall does not look for or remove Go artifacts. Removing the gate is a later, separate change.
 
 Rollback: uninstall removes all generated artifacts; because sources and `go.mod`/`go.sum` are left unchanged, no revert of user code is needed. The existing manual-steps output remains as tier 3.
 
