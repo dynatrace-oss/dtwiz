@@ -25,7 +25,9 @@ placeholder from this file as the URL. If the message has no real URL, ask for i
 anything else.
 
 Work through the steps in order. Guide the user one small action at a time, in short friendly
-messages, and wait for them to confirm before moving on.
+messages, and wait for them to confirm before moving on. Keep every message short and say only
+what the user needs for the next action. Don't repeat earlier status or mention options they did
+not ask about.
 
 The user chooses what to connect. Never install, update or change anything the user did not
 select.
@@ -140,19 +142,30 @@ was detected (OS, containers, Kubernetes, cloud, services) and list the recommen
     - Host only: run `dtwiz install otel-collector --yes`.
     - Application: dtwiz only lists the detected projects in an interactive picker, which you
       cannot answer. So read the list from it and let the user choose in the chat:
-      1. In the terminal tab, run `dtwiz install otel` and read the numbered project list it
-         prints. dtwiz asks before it does anything.
+      1. In the terminal tab, run `dtwiz install otel` and read the project list it prints.
+         dtwiz asks before it does anything. The list depends on the folder it runs from, and
+         it only scans to a limited depth, so a project can be missing. If the user's project
+         is not listed, offer an entry such as "A project in another folder" and ask for the
+         folder path.
       2. Cancel the command (Ctrl-C, for example with the terminal tool's stop action) without
          choosing anything.
-      3. Let the user choose. Offer every detected project with the same number, order and
-         path that dtwiz printed, plus a "host only" entry, and do not reorder, shorten or drop
-         any. Use an interactive picker if it can show every entry. Otherwise, which is likely
-         with five or more projects, show the complete numbered list as plain text and ask for
-         the number. The user never needs to touch the terminal.
-      4. Run `dtwiz install otel --project <path of the chosen project> --yes`.
-      5. If they pick a language without automatic detection (Go, .NET, PHP and so on) or
-         "skip", run `dtwiz install otel-collector --yes` and tell them dtwiz cannot
-         instrument that language automatically yet.
+      3. Let the user choose, in plain words. Never show dtwiz's menu codes (the numbers and the
+         letters g, n, p, c, r, u, e, l, o, s) or ask the user which dtwiz menu item to press.
+         Offer exactly these entries, in dtwiz's order:
+         - One entry per detected project, labelled with its language, name and folder, for
+           example "Python: schnitzel (~/.dtwiz/examples/schnitzel)".
+         - "Host monitoring only (no application)".
+         - "A project in another folder", only if the user's project may be missing.
+         - "My application uses another language (Go, .NET, PHP, ...)" as one entry, not one per
+           language.
+
+         Use an interactive picker if it can show every entry. Otherwise show the complete
+         numbered list as plain text and ask for the number. The user never needs to touch the
+         terminal.
+      4. For a project, run `dtwiz install otel --project <folder of the chosen project> --yes`.
+      5. For "host monitoring only", or "another language", run `dtwiz install otel-collector
+         --yes`. For "another language", also tell them dtwiz cannot instrument that language
+         automatically yet, so only the host is monitored.
       If you cannot read or stop the terminal, ask the user for the project path instead.
   - `kubernetes`, `aws`, `azure`, `gcp`: these change a real cluster or cloud account. First
     say in one line what will change (for example "install the Dynatrace Operator into cluster
