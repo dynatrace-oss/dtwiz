@@ -1,6 +1,6 @@
 ---
 name: dtwiz
-description: Deploy Dynatrace observability with dtwiz — analyze systems, get ranked recommendations, and install monitoring (OneAgent, Kubernetes, Docker, OTel, AWS, Azure, GCP). Use when the user wants to set up, manage, or ingest data into Dynatrace monitoring. Covers ingesting metrics, logs, and traces from AWS, Azure, GCP, Kubernetes, containers, or hosts into Dynatrace via dtwiz. Also use when the user asks to onboard this machine, connect it to Dynatrace, or get data into Dynatrace for the first time.
+description: Deploy Dynatrace observability with dtwiz — analyze systems, get ranked recommendations, and install monitoring (OneAgent, Kubernetes, Docker, OTel, AWS, Azure, GCP). Use when the user wants to set up, manage, or ingest data into Dynatrace monitoring. Covers ingesting metrics, logs, and traces from AWS, Azure, GCP, Kubernetes, containers, or hosts into Dynatrace via dtwiz. Also use when the user asks to onboard this machine, connect their systems, Kubernetes clusters or cloud accounts to Dynatrace, or get data into Dynatrace for the first time.
 ---
 
 # Dynatrace Setup with dtwiz
@@ -9,7 +9,8 @@ Go CLI that detects your environment and deploys the best Dynatrace monitoring m
 
 ## Onboarding a new user
 
-When the user wants to onboard a machine for the first time, read and follow
+When the user wants to get data into Dynatrace for the first time (this machine and its apps,
+Kubernetes, AWS, Azure or GCP), read and follow
 [ONBOARDING.md](ONBOARDING.md) (raw URL:
 `https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/skills/dtwiz/ONBOARDING.md`). It
 covers the guided, step-by-step flow and how to handle the platform token without it entering
