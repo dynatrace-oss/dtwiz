@@ -86,7 +86,9 @@ func DownloadInstaller(c *client.ClassicClient, env Environment) (string, error)
 	resp, err := c.HTTP().R().SetDoNotParseResponse(true).Get(path)
 	if err != nil {
 		logger.Debug("installer download network error", "url", downloadURL, "error", err)
-		return "", fmt.Errorf("downloading OneAgent installer: %w", err)
+		return "", installerNetworkError(
+			fmt.Sprintf("downloading OneAgent installer: %v", err),
+			"environment_not_reachable", downloadURL, err)
 	}
 	defer resp.RawBody().Close()
 
@@ -99,12 +101,10 @@ func DownloadInstaller(c *client.ClassicClient, env Environment) (string, error)
 			"response_body", body,
 		)
 		if resp.StatusCode() == http.StatusForbidden || resp.StatusCode() == http.StatusUnauthorized {
-			return "", fmt.Errorf(
-				"installer download failed (%d) — if using a platform token, ensure it has the InstallerDownload scope; "+
-					"or pass a dt0c01.* access token with --access-token.\n"+
-					"Run with --debug for the API error detail",
-				resp.StatusCode(),
-			)
+			return "", installerAuthError(fmt.Sprintf(
+				"installer download failed (%d): %s.\nRun with --debug for the API error detail",
+				resp.StatusCode(), installerScopeHint,
+			), resp.StatusCode())
 		}
 		return "", fmt.Errorf("installer download failed with status %d: %s", resp.StatusCode(), body)
 	}
