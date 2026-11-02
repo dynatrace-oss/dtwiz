@@ -8,26 +8,33 @@ Define how dtwiz instruments a selected Go project with OpenTelemetry without so
 
 ### Requirement: Compile-time instrumentation is the preferred method
 
-For each service, the system SHALL first try compile-time instrumentation, which produces server and client spans for supported libraries, including third-party dependencies, without modifying project sources. It SHALL be used only when the installed Go toolchain is version 1.25 or newer. The instrumentation tool version SHALL be a fixed stable release, not "latest".
+For each service, the system SHALL first try compile-time instrumentation, which produces server and client spans for supported libraries, including third-party dependencies, without modifying project sources. It SHALL be used only when the installed Go toolchain is new enough for the latest release of the instrumentation tool, which is the version the system installs. The system SHALL NOT let Go download a different toolchain while installing the tool.
 
 #### Scenario: Supported toolchain
 
-- **GIVEN** Go 1.25 or newer is installed
+- **GIVEN** the installed Go toolchain is new enough for the latest instrumentation tool
 - **WHEN** the plan is built for a Go project
 - **THEN** each service is planned for compile-time instrumentation
 
 #### Scenario: Older toolchain
 
-- **GIVEN** Go older than 1.25 is installed
-- **WHEN** the plan is built
+- **GIVEN** the installed Go toolchain is too old for the latest instrumentation tool
+- **WHEN** the tool install fails because of the Go version
 - **THEN** each service is planned for the client-only fallback
 - **AND** the plan states why compile-time instrumentation is not used
+- **AND** the plan tells the user which Go version to upgrade to, as reported by Go, to get compile-time instrumentation
+
+#### Scenario: Installed tool version is visible
+
+- **GIVEN** the instrumentation tool was installed by the system
+- **WHEN** the plan preview is shown
+- **THEN** it names the installed tool version
 
 #### Scenario: Instrumentation tool not yet installed
 
 - **GIVEN** the instrumentation tool is neither on the PATH nor in dtwiz's own tool directory
 - **WHEN** the plan is confirmed
-- **THEN** the pinned version is installed into dtwiz's own tool directory, not into the user's `GOBIN` or `GOPATH`
+- **THEN** the latest release is installed into dtwiz's own tool directory, not into the user's `GOBIN` or `GOPATH`
 
 #### Scenario: Instrumentation tool already on the PATH
 

@@ -1,11 +1,13 @@
 # Tasks
 
-## 1. Spike: verify otelc v1.0.1 on real project shapes and all platforms
+## 1. Spike: verify the latest otelc on real project shapes and all platforms
 
-- [x] 1.1 Workspace spike with otelc v1.0.1 (done: results are in `design.md` Context and justify decision 13). Still open: repeat on a module that already has a `go.sum` and confirm it is byte-identical after the build; record the result in `design.md` Context.
+- [x] 1.1 Workspace spike with otelc v1.0.1 (done on v1.0.1, not the current latest; results are in `design.md` Context and justify decision 13, re-verified by 1.5). Still open: repeat on a module that already has a `go.sum` and confirm it is byte-identical after the build; record the result in `design.md` Context.
 - [ ] 1.2 Kill an otelc build mid-way (SIGKILL) and record the state of `go.mod`/`go.sum`. Verify the result confirms or changes the leftover-backup handling in design decision 5.
 - [ ] 1.3 Run the same tiny-module build on Linux and Windows (CI runners or machines) and confirm a server span is emitted. Verify by a green CI job or recorded output for each OS.
 - [ ] 1.4 Confirm how delta metric temporality is requested for an otelc-built binary (env var) and that `environment.GenerateBaseOtelEnvVars` in `pkg/installer/otel/environment/environment.go` sets it. Verify with a unit test asserting the variable, adding it if missing.
+
+- [ ] 1.5 Re-run the spike on the current latest otelc (v1.2.0 at the time of writing) with Go 1.26 (build works, `go.mod` unchanged, no stray `go.sum`, server span emitted, workspace cases from 1.1), and confirm the error text of `go install ...@latest` with `GOTOOLCHAIN=local` on an older Go (`requires go >= X`) so the classification in 3.1 can match it. Record the results in `design.md` Context; if workspace behavior differs from v1.0.1, revisit decision 13 before section 3. Verify by updated Context facts that name the tested otelc version.
 
 ## 2. Detection, entrypoints and registration
 
@@ -19,9 +21,11 @@
 
 ## 3. Tier 1: compile-time instrumentation (otelc)
 
-- [ ] 3.1 Add `pkg/installer/otel/golang_otelc.go` with the single `otelcVersion = "v1.0.1"` constant, Go ≥ 1.25 gate, PATH lookup, isolated install into `~/.opentelemetry/go/bin` (`GOBIN`), and `.exe` handling. Verify with tests for version parsing (1.24, 1.25, 1.26, garbage), PATH-wins, and the install command line (fake runner via the existing `CmdRunner`).
+- [ ] 3.1 Add `pkg/installer/otel/golang_otelc.go` installing `go.opentelemetry.io/otelc/tool/cmd/otelc@latest` (no version constant, no hard-coded Go gate) with `GOTOOLCHAIN=local`, PATH lookup, isolated install into `~/.opentelemetry/go/bin` (`GOBIN`), `.exe` handling, classification of a "requires go >= X" install failure into an "upgrade Go to X" message plus the tier-2 fallback, and reading the installed otelc version for the preview and `logger.Debug`. Verify with tests for the install command line and environment (fake runner via the existing `CmdRunner`), PATH-wins, the too-old-Go error producing the upgrade message with the reported version, an unrelated install failure not producing it, and the version shown in the preview.
 - [ ] 3.2 Add `golang_modguard.go` (backup, atomic restore with retry, leftover-backup check). Verify with tests: restore after success, after failure, after context cancellation, leftover differing backup refuses, identical leftover cleans, absent `go.sum` removed afterwards, a module with uncommitted `go.mod`/`go.sum` changes is restored byte-identical and still uses tier 1.
 - [ ] 3.3 Implement the tier-1 build (`otelc --work-dir <tmp> go build -o .otel/go/bin/<svc> ./<pkgdir>`) inside the guard, with SIGINT/SIGTERM-aware context and error messages that include `runtime.GOOS/GOARCH` and classify network errors. Verify with a unit test using a fake runner and an integration test (build tag) that builds a tiny module with real otelc and checks the binary exists and `go.mod`/`go.sum` are byte-identical.
+
+- [ ] 3.4 Add a scheduled CI smoke test (integration build tag) that installs the current `otelc@latest`, builds a tiny module, and checks the binary exists and `go.mod`/`go.sum` are byte-identical, so upstream regressions surface in CI instead of at users. Verify the job runs on a schedule and on demand, and fails when the build step is made to fail.
 
 ## 4. Tier 2: client-only fallback and manual steps
 

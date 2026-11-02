@@ -8,7 +8,7 @@
 
 - `dtwiz install otel` (and `dtwiz setup`) detects Go projects, matches them to running Go processes, lets the user pick one, finds every `package main` directory (up to 5 levels deep inside the module), names each service after its folder, and after one confirmation builds and launches each service with Dynatrace-ready `OTEL_*` settings.
 - Instrumentation is chosen **per service**, in this order:
-  1. **Compile-time (otelc)** — server and client spans, library coverage, no source or `go.mod` change left behind. Requires Go ≥ 1.25; otelc is pinned to a stable release (v1.0.1).
+  1. **Compile-time (otelc)** — server and client spans, library coverage, no source or `go.mod` change left behind. Requires a Go version new enough for the latest otelc (Go 1.26 for v1.2.0); otelc is installed at `@latest`.
   2. **Client-only fallback** — an SDK bootstrap injected at build time (traces/metrics/logs, outgoing HTTP spans only) when otelc is unavailable or its build fails for that service.
   3. **Manual steps** — the OTel Collector is still installed, and instructions are printed when neither can be applied (no Go toolchain, build failures in both tiers, module already uses its own OTel SDK).
 - Everything dtwiz generates lives in a per-module `.otel/` directory; project sources are never modified, and `go.mod`/`go.sum` are backed up before an otelc build and restored afterwards.
@@ -36,6 +36,6 @@ Rollback: uninstall removes all generated artifacts; because sources and `go.mod
 
 - Code: `pkg/installer/otel/` (`golang.go` and new Go-specific files for entrypoints, otelc handling, fallback init, `go.mod` guard, uninstall cleaner), `pkg/installer/otel/otel.go` (runtime registration, project inference, manual-language list), `pkg/installer/otel/uninstall_runtime.go` (register a Go cleaner), platform-specific process detection files.
 - Feature flags: new `GoInstrumentation` flag registered in `pkg/featureflags/` and applied via `ApplyCLIOverrides`; `AllRuntimes` no longer affects the new Go flow.
-- Dependencies at runtime (not dtwiz's own `go.mod`): `otelc` v1.0.1 installed into `~/.opentelemetry/go/bin`; OTel Go modules fetched into the Go module cache during builds. Network access is needed during the first build.
+- Dependencies at runtime (not dtwiz's own `go.mod`): `otelc` (latest release) installed into `~/.opentelemetry/go/bin`; OTel Go modules fetched into the Go module cache during builds. Network access is needed during the first build.
 - Docs: `CHANGELOG.md`, user-facing docs listing supported runtimes.
 - Tests: unit tests per new file, plus cross-platform build verification on Linux, macOS and Windows.

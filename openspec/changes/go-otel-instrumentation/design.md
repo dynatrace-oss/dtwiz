@@ -4,14 +4,14 @@
 
 `pkg/installer/otel/golang.go` today detects Go projects (`go.mod` scan) and prints manual steps; it is gated by `AllRuntimes`. Python, Java and Node.js plans already follow one shape: detect → pick project → build a plan → preview/confirm → execute → launch → watch. Node keeps its artifacts in `<project>/.otel/` and uninstall finds them via the `RuntimeCleaner` registry in `uninstall_runtime.go` plus a directory scan (`findNodeOtelDirs`). See proposal.md for motivation.
 
-Facts verified while exploring (otelc v1.0.1, macOS/arm64, Go 1.26):
+Facts verified while exploring (spike run on otelc v1.0.1, macOS/arm64, Go 1.26; dtwiz now installs `@latest` (v1.2.0 at the time of writing), so the spike results below must be re-verified on the current latest, task 1.5, and again by the scheduled smoke test, task 3.4):
 
-- Install path is `go.opentelemetry.io/otelc/tool/cmd/otelc`; tags before v1.0.1 are not served by the Go proxy, so v1.0.1 is the first installable stable release. v1.0.1 declares `go 1.25.0`; v1.2.0 (latest) declares `go 1.26.0`, so `@latest` would need Go 1.26.
+- Install path is `go.opentelemetry.io/otelc/tool/cmd/otelc`; tags before v1.0.1 are not served by the Go proxy, so v1.0.1 is the first installable stable release. v1.0.1 declares `go 1.25.0`; v1.2.0 (12 Oct, latest at the time of writing) declares `go 1.26.0`. The minimum Go version therefore follows whatever `@latest` resolves to and is not a dtwiz constant.
 - `otelc --work-dir <dir> go build -o <bin> .` works. It printed "Bumped go version" yet `go.mod` was identical afterwards and no `go.sum` was created. A project with an existing `go.sum` and an interrupted build were not tested.
 - A built binary emits a SERVER span for `net/http` from `OTEL_*` environment variables alone.
 - Upstream CI runs on Linux, macOS and Windows; dtwiz has not run it on Linux or Windows yet.
 - Workspace spike (`go.work` with modules a, b, c; a imports b only through the workspace, no `replace`; macOS, Go 1.26.2):
-  - Workspace mode on, `go.work` and modules at `go 1.22`: **fails** for every module with `module . listed in go.work file requires go >= 1.25.0, but go.work lists go 1.22` (otelc raises the module's `go` directive, the workspace rejects it).
+  - Workspace mode on, `go.work` and modules at `go 1.22`: **fails** for every module with `module . listed in go.work file requires go >= 1.25.0, but go.work lists go 1.22` (otelc v1.0.1 raises the module's `go` directive, the workspace rejects it; with newer otelc versions the message and threshold will differ, re-verify).
   - Workspace mode on, everything already at `go 1.25.0`: a module with no sibling dependency **builds**; a module importing a sibling through `go.work` only **fails** (otelc tries to download the sibling from the network).
   - `GOWORK=off`, module with no sibling dependency (even at `go 1.22`): **builds**; `go.mod` is bumped during the build and identical afterwards, no `go.sum` created.
   - `GOWORK=off`, module importing a sibling through `go.work` only: **fails**, and so does plain `go build` with `GOWORK=off` (missing go.sum entry). Adding `replace example.com/ws/b => ../b` makes it **build**.
@@ -30,25 +30,28 @@ Facts verified while exploring (otelc v1.0.1, macOS/arm64, Go 1.26):
 - Go workspaces (`go.work`) in this version: such projects get manual steps (decision 13).
 - Persisting instrumentation into the user's own build or deploy pipeline (dtwiz launches its own binary; the preview prints the equivalent otelc command as a hint only).
 - Instrumenting services that already configure their own OTel SDK.
-- eBPF / OBI based instrumentation, and Go versions below 1.25 for compile-time instrumentation.
+- eBPF / OBI based instrumentation, and Go versions too old for the latest otelc for compile-time instrumentation (such users are told which Go version to upgrade to and get the client-only fallback).
 - Removing OTel modules downloaded into the shared Go module cache.
 
 ## Decisions
 
 ### 1. Per-service tier selection, not per-plan
 
-`GoInstrumentationPlan` holds a list of services, each with a chosen method (`otelc`, `client-only`, `manual`). Tier 1 requires Go ≥ 1.25, a usable otelc, and and a project outside any Go workspace (decision 13). If otelc install fails, all services start at tier 2; if one `otelc go build` fails, only that service is rebuilt at tier 2; if tier 2 also fails, only that service gets manual steps.
-*Alternative:* one method for the whole plan. Rejected: one cgo or odd service would downgrade or abort the rest.
+`GoInstrumentationPlan` holds a list of services, each with a chosen method (`otelc`, `client-only`, `manual`). Tier 1 requires a Go toolchain new enough for the latest otelc (decision 2), a usable otelc, and a project outside any Go workspace (decision 13). If otelc install fails, all services start at tier 2; if one `otelc go build` fails, only that service is rebuilt at tier 2; if tier 2 also fails, only that service gets manual steps.
+_Alternative:_ one method for the whole plan. Rejected: one cgo or odd service would downgrade or abort the rest.
 
 ### 1a. Manual steps are a plan, not an absence of one
 
 The shared install flow treats a runtime plan that returns nothing as "this project can't be auto-instrumented" and asks to select another project. For Go, the manual outcome (workspace, no toolchain, both methods failed) is instead a real plan whose method is `manual`: the preview shows the collector section plus a Go section that says why nothing is automatic; after confirmation the collector is installed as usual, and `Execute()` only prints the manual steps (packages, env vars pointing at the local collector, walkthrough link). The existing stub's output is the basis. Exit status is success unless collector installation fails. A plan returns nothing only when there is nothing to say (no `package main`).
-*Alternative:* return no plan and let the generic flow handle it. Rejected: it offers "Select another project?" and drops the instructions.
+_Alternative:_ return no plan and let the generic flow handle it. Rejected: it offers "Select another project?" and drops the instructions.
 
-### 2. otelc pinned to v1.0.1, one constant
+### 2. otelc installed at `@latest`, no version constant
 
-`otelcVersion = "v1.0.1"` is the only place the version appears; install path is `…/otelc/tool/cmd/otelc@<version>`. The Go gate is the pinned version's own minimum (1.25). Bumping is a deliberate change that re-runs the spike.
-*Alternative:* `@latest` (currently v1.2.0, which needs Go 1.26). Rejected: it would exclude Go 1.25 users from compile-time instrumentation, it is untested by the spike, and we have no adoption data showing 1.26 is common enough. Revisit with the next version bump.
+dtwiz installs `go.opentelemetry.io/otelc/tool/cmd/otelc@latest`, so users always get the current fixes without dtwiz needing a release or a bump. There is no version constant and no hard-coded Go gate: the minimum Go version is whatever the latest otelc declares (1.26 for v1.2.0). The install runs with `GOTOOLCHAIN=local` so Go never silently downloads a different toolchain. If `go install` fails because the local Go is too old (`requires go >= X`), dtwiz classifies the error, tells the user "upgrade Go to X or newer for compile-time instrumentation" using the version Go reported, and plans the client-only fallback (decision 1). Go supports only its two newest releases, so asking users to move to a supported Go is reasonable. After installing, dtwiz logs the resolved otelc version (`logger.Debug`) and shows it in the preview so a failure report names the exact version.
+
+Because the version is no longer fixed, spike results can go stale when upstream releases. Mitigations: tier-1 failures degrade per service to tier 2 or manual steps (decision 1), and a scheduled CI smoke test builds a tiny module with the current `@latest` otelc and fails when it breaks (task 3.4), so regressions surface in CI instead of at users.
+
+_Alternative:_ an exact pin in one constant (`otelcVersion`) with a bump check. Rejected by the team: it needs ongoing bump maintenance (Dependabot cannot see a constant in Go source, so it would need a custom CI job or Renovate rule) and keeps users on older tool versions between bumps. Trade-off accepted: builds are not reproducible across time, and a compromised or broken upstream release would be installed on the next run; the smoke test and the per-service fallback limit the impact.
 
 ### 3. Isolated tool directory
 
@@ -57,7 +60,7 @@ dtwiz installs otelc itself when it is missing. If a usable otelc is already on 
 ### 4. Artifacts live under `<module>/.otel/go/`
 
 Node already owns `<dir>/.otel/` (with `package.json`). A Go module that also has a Node frontend in the same directory would collide if both used `.otel/` directly. Go uses the subdirectory `.otel/go/` containing `bin/<service>[.exe]`, tier-2 files (`overlay.json`, generated init, `go.mod`/`go.sum` copies), `modguard/` (only during/after an interrupted build) and a small marker file written last. Uninstall recognizes Go directories by that marker, removes only `.otel/go/`, then removes `.otel/` if it is empty.
-*Alternative:* reuse `.otel/` with a marker. Rejected for the polyglot case; the cost of the subdirectory is zero.
+_Alternative:_ reuse `.otel/` with a marker. Rejected for the polyglot case; the cost of the subdirectory is zero.
 
 ### 5. `go.mod`/`go.sum` guard (option A)
 
@@ -67,8 +70,8 @@ otelc rejects `-modfile`, so tier 1 builds against the real module files. `modGu
 - A leftover backup that differs from the current files stops the run for that module with the backup path; an identical one is deleted as stale.
 - Restore retries briefly (Windows can hold files open); failures are reported with the backup path and never swallowed.
 
-Spike result: v1.0.1 left `go.mod` unchanged in a trivial case, so the guard may rarely act, but it is cheap insurance against kills and other otelc versions.
-*Alternative B:* build in a temp copy of the module. Rejected: slow on large repos, breaks relative `replace` and vendored trees, and hides resolution differences.
+Spike result: v1.0.1 left `go.mod` unchanged in a trivial case (to be re-checked on the current latest), so the guard may rarely act, but it is cheap insurance against kills and other otelc versions.
+_Alternative B:_ build in a temp copy of the module. Rejected: slow on large repos, breaks relative `replace` and vendored trees, and hides resolution differences.
 
 ### 6. Tier 2 (client-only) via build overlay and isolated modfile
 
@@ -102,12 +105,12 @@ Following the one-concern-per-file rule, under `pkg/installer/otel/`: `golang.go
 ### 13. Go workspaces (`go.work`) are out of scope for the first version
 
 The workspace spike (see Context) showed that workspace mode cannot be used with otelc (the bumped `go` directive collides with `go.work`), and that building with `GOWORK=off` only works for modules that do not depend on workspace siblings through `go.work` alone. Supporting workspaces correctly would need dependency analysis or a pre-flight check per module, which is more than the first version needs. Instead, a project is treated as a workspace project when a `go.work` file exists in its directory or any parent directory (the lookup Go itself performs). Such a project is still listed, but selecting it yields the manual plan (decision 1a): the collector is installed, the explanation and manual steps are printed, and nothing is built. Builds for supported projects still set `GOWORK=off` so an inherited `GOWORK` environment variable cannot interfere.
-*Alternatives:* (a) support workspace modules that build in isolation with a `GOWORK=off` pre-flight (`go list`) — deferred, and the spike results are the starting point; (b) edit `go.work` or add `replace` directives — rejected, it changes user files beyond a restorable backup.
+_Alternatives:_ (a) support workspace modules that build in isolation with a `GOWORK=off` pre-flight (`go list`) — deferred, and the spike results are the starting point; (b) edit `go.work` or add `replace` directives — rejected, it changes user files beyond a restorable backup.
 
 ### 14. Separate `GoInstrumentation` feature flag
 
 A new flag is registered in `pkg/featureflags/` next to `AllRuntimes` and `Experimental`: CLI `--go-instrumentation`, env `DTWIZ_GO_INSTRUMENTATION`, default off. It gates the whole new Go flow: detection as an auto-instrumentable runtime, tier selection, build/launch, the notice entry, and the manual-languages change. With it off, today's behavior (including the existing `AllRuntimes` stub) is untouched. Uninstall cleanup is gated too: with the flag off, `dtwiz uninstall otel` does not scan for, list or remove Go artifacts and behaves as today.
-*Alternative:* reuse `AllRuntimes`. Rejected: it enables unrelated runtimes and cannot be removed for Go alone.
+_Alternative:_ reuse `AllRuntimes`. Rejected: it enables unrelated runtimes and cannot be removed for Go alone.
 
 ## Risks / Trade-offs
 
@@ -117,7 +120,8 @@ A new flag is registered in `pkg/featureflags/` next to `AllRuntimes` and `Exper
 - **Turning the flag off after an install leaves Go artifacts in place** → the user must re-enable `GoInstrumentation` to remove them with `dtwiz uninstall otel`.
 - **Users with workspaces get manual steps only** → explicit message and walkthrough link; workspace support is a candidate follow-up with the spike results as input.
 - **Instrumented binary only exists in `.otel/`** → users' own builds are unchanged; the preview prints the equivalent `otelc go build` command and uninstall explains what is removed.
-- **Pinned version ages** → single constant; a periodic bump task, with the spike as the acceptance test.
+- **`@latest` can change behavior, break, or ship a bad release without a dtwiz release** → scheduled CI smoke test against the current latest, per-service degradation to tier 2/manual, resolved version shown in the preview and logs.
+- **The latest otelc may raise its Go minimum at any time** → install runs with `GOTOOLCHAIN=local`; users on older Go get an explicit "upgrade Go to X" message (X taken from Go's own error) and the client-only fallback.
 - **Tier 2 wraps the default HTTP transport and slog default** → limited to the fallback, listed in the preview as "outgoing HTTP only".
 - **Process detection by path is a heuristic on some platforms** → matches only executables under `.otel/go/bin/`, never plain `go run` processes, so false positives cannot kill the user's own processes.
 
