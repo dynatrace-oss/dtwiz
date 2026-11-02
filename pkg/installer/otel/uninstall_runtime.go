@@ -11,4 +11,5 @@ type RuntimeCleaner interface {
 var runtimeCleaners = []RuntimeCleaner{
 	pythonCleaner{},
 	nodeCleaner{},
+	goCleaner{}, // gated by the GoInstrumentation flag inside DetectProcesses
 }

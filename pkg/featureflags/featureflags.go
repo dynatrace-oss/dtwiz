@@ -14,6 +14,7 @@ type Flag int
 const (
 	AllRuntimes Flag = iota
 	Experimental
+	GoInstrumentation
 )
 
 // CLIFeatureFlag defines a single feature flag with its metadata.
@@ -41,6 +42,14 @@ var registry = []CLIFeatureFlag{
 		"DTWIZ_EXPERIMENTAL",
 		false,
 		"enable experimental features (demo installation, Docker and OTel update in recommendations)",
+		false,
+	},
+	{
+		GoInstrumentation,
+		"go-instrumentation",
+		"DTWIZ_GO_INSTRUMENTATION",
+		false,
+		"enable automatic OTel instrumentation of Go projects",
 		false,
 	},
 }
