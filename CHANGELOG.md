@@ -7,10 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-11-02
+
+### Added
+
+- `dtwiz install otel` (experimental): detects the Real User Monitoring options for the selected project folder and shows them in the install preview, either as auto-inject (listing the files the RUM tag can be injected into) or as manual (naming the file to add the tag to and why auto-injection isn't possible). Detection recognizes common JS frameworks, including Nuxt.js.
+
+### Fixed
+
+- Token validation now calls `query:verify` instead of running a Grail read on `dt.system.events`, so a least-privilege platform token without the `storage:system:read` scope is no longer rejected as having insufficient permissions. Invalid tokens are still rejected.
+- Install script self-monitoring: `install.sh` and `install.ps1` now resolve the event ingest URL the same way the binary does (production `.apps.dynatrace.com` maps to `.live.dynatrace.com`; dev and sprint environments only drop `.apps.`).
+
 ### Changed
 
 - Self-monitoring: the `ist` event now only reports what the install did (feature outcomes and install time). It no longer carries `error` or error attributes, and it is only sent when install work started, so dry-runs, declined confirmations, and failures before the confirmation send no `ist`. The install error is reported on the `failed` or `cancelled` event of the same run, for both `dtwiz install <method>` and `dtwiz setup`.
 - Self-monitoring: `dtwiz install <method>` now ends every run that reaches the installer with exactly one `completed`, `failed`, or `cancelled` event, like `setup`, `update`, and `uninstall`.
+- Internal: Makefile cleanup, `markdownlint-cli` image tag updated with the resulting doc fixes, and the debug launch configuration now prompts for the directory to run the binary in.
 
 ## [1.13.0] - 2026-10-19
 
@@ -659,7 +671,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.13.0...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.14.0...HEAD
+[1.14.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.10.0...v1.11.0
