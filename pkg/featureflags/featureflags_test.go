@@ -216,3 +216,34 @@ func TestApplyCLIOverrides_UnsetFlagDoesNotStompEnvVar(t *testing.T) {
 		t.Errorf("expected source env, got %s", source)
 	}
 }
+
+func TestIsEnabled_GoInstrumentation_DefaultFalse(t *testing.T) {
+	t.Setenv("DTWIZ_GO_INSTRUMENTATION", "")
+	if IsEnabled(GoInstrumentation) {
+		t.Error("expected GoInstrumentation to be disabled by default")
+	}
+}
+
+func TestIsEnabled_GoInstrumentation_EnvTrue(t *testing.T) {
+	t.Setenv("DTWIZ_GO_INSTRUMENTATION", "true")
+	if !IsEnabled(GoInstrumentation) {
+		t.Error("expected GoInstrumentation enabled with DTWIZ_GO_INSTRUMENTATION=true")
+	}
+}
+
+func TestApplyCLIOverrides_GoInstrumentation(t *testing.T) {
+	SetCLIOverrideForTest(t, GoInstrumentation, false)
+	t.Setenv("DTWIZ_GO_INSTRUMENTATION", "")
+
+	fs := newFlagSet()
+	if fs.Lookup("go-instrumentation") == nil {
+		t.Fatal("expected --go-instrumentation to be registered")
+	}
+	if err := fs.Parse([]string{"--go-instrumentation"}); err != nil {
+		t.Fatal(err)
+	}
+	ApplyCLIOverrides(fs)
+	if !IsEnabled(GoInstrumentation) {
+		t.Error("expected GoInstrumentation enabled after CLI override")
+	}
+}

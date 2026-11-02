@@ -53,11 +53,6 @@ func detectGoProjects(roots []string) []GoProject {
 	return projects
 }
 
-type GoInstrumentationPlan struct {
-	Project GoProject
-	EnvVars map[string]string
-}
-
 func (p *GoInstrumentationPlan) Runtime() string { return "Go" }
 
 func DetectGoPlan(collectorEndpoint string) *GoInstrumentationPlan {
@@ -68,9 +63,7 @@ func DetectGoPlan(collectorEndpoint string) *GoInstrumentationPlan {
 
 	projects, processes := runInParallel(func() []GoProject {
 		return detectGoProjects(defaultScanRoots())
-	}, func() []DetectedProcess {
-		return detectProcesses("go", nil)
-	})
+	}, detectGoProcesses)
 	if len(projects) == 0 {
 		logger.Debug("no Go projects detected", "skipping Go instrumentation")
 		return nil
@@ -106,7 +99,7 @@ func DetectGoPlan(collectorEndpoint string) *GoInstrumentationPlan {
 	}
 }
 
-func (p *GoInstrumentationPlan) PrintPlanSteps() {
+func (p *GoInstrumentationPlan) printLegacyPlanSteps() {
 	fmt.Printf("     Project:    %s\n", p.Project.Path)
 	if p.Project.ModuleName != "" {
 		fmt.Printf("     Module:     %s\n", p.Project.ModuleName)
@@ -117,7 +110,7 @@ func (p *GoInstrumentationPlan) PrintPlanSteps() {
 	}
 }
 
-func (p *GoInstrumentationPlan) Execute() error {
+func (p *GoInstrumentationPlan) executeLegacy() error {
 	fmt.Println()
 	fmt.Printf("  cd %s\n", p.Project.Path)
 	fmt.Println()

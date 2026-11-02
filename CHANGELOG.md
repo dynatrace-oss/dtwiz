@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `dtwiz install otel` (experimental, behind `--go-instrumentation` / `DTWIZ_GO_INSTRUMENTATION=true`): Go projects are instrumented without source changes. dtwiz installs the latest `otelc` into its own tool directory (`~/.opentelemetry/go/bin`), builds each `package main` service into `<module>/.otel/go/bin/`, restores `go.mod`/`go.sum` afterwards, and launches the services against the local collector. Per service it falls back to client-only instrumentation (outgoing HTTP calls) and then to manual steps; Go workspaces (`go.work`) and modules that already configure the OpenTelemetry SDK are handled with manual steps or skipped. `dtwiz uninstall otel` (with the same flag) stops the launched services and removes the generated files and dtwiz's own `otelc`.
+
 ## [1.14.0] - 2026-11-02
 
 ### Added
