@@ -30,7 +30,7 @@ Rollback: uninstall removes all generated artifacts; because sources and `go.mod
 ### Modified Capabilities
 
 - `otel-collector-install`: the requirement "Go instrumentation guidance uses the local collector endpoint" changes — the local collector endpoint now applies to the environment of launched Go services and to the manual-steps fallback.
-- `otel-project-scan`: the supported-runtimes notice must list Go among the auto-instrumented runtimes.
+- `otel-project-scan`: with the flag on, Go projects are listed with the other runtimes and Go leaves the manual-languages list.
 
 ## Impact
 
