@@ -392,3 +392,14 @@ func TestInstallEvents_FailureBeforeWorkSendsOnlyFailed(t *testing.T) {
 		t.Errorf("Err = %q, want install_failed", p.Err)
 	}
 }
+
+func TestSelectionError_ClassifiedAsConfigError(t *testing.T) {
+	errType, attrs := selfmonitoring.ClassifyError(selectionError())
+
+	if errType != installer.ErrTypeConfigError {
+		t.Errorf("error type = %q, want %q", errType, installer.ErrTypeConfigError)
+	}
+	if attrs["config.missing_fields"] != "selection" {
+		t.Errorf("attrs = %v, want config.missing_fields=selection", attrs)
+	}
+}
