@@ -9,10 +9,12 @@ environment ID.
 Connect my systems to my Dynatrace environment https://<env-id>.apps.dynatrace.com with dtwiz (https://github.com/dynatrace-oss/dtwiz): this machine and its apps, plus any Kubernetes, AWS, Azure or GCP environments it can reach. I choose what gets connected. First read and follow https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/skills/dtwiz/ONBOARDING.md
 ```
 
-The agent installs dtwiz, opens the token page and a terminal for you, shows what dtwiz detected
-(this machine and its apps, Kubernetes clusters, AWS, Azure and GCP accounts you are signed in
-to), and sets up only what you choose. Your platform token never goes into the chat: you only
-copy it, and the terminal reads it from the clipboard and then clears the clipboard.
+The agent installs dtwiz, opens a terminal for you, shows what dtwiz detected (this machine and
+its apps, Kubernetes clusters, AWS, Azure and GCP accounts you are signed in to), and sets up only
+what you choose. Your platform token never goes into the chat: you only copy it, and the terminal
+reads it from the clipboard and then clears the clipboard. If you already copied a token (for
+example from the QuickStart app), the agent uses it right away. Otherwise it opens the token page
+and asks you to copy one.
 
 ---
 
@@ -71,10 +73,43 @@ Check whether `DT_ENVIRONMENT` and `DT_PLATFORM_TOKEN` are set in the shell you 
 dtwiz (see the check above). If both are, go to step 3.
 
 Otherwise guide the user through these moves. After each "Wait", stop and send nothing else
-until the user replies.
+until the user replies. The user may already have copied a token (the QuickStart app can do that
+when it opens the prompt), so try the clipboard first and only open the token page if it holds
+no token.
 
-1. Open the token page in the user's default browser (not in a built-in browser you can read):
-   macOS `open`, Linux `xdg-open`, Windows `start`.
+1. Open a visible terminal tab for the user (with a terminal tool, or ask them to open one if
+   you cannot). Tell them: "Don't type in that terminal, I'll run everything there." This tab is
+   where every dtwiz command runs from now on.
+
+2. Try the clipboard. Send exactly ONE line to the tab. It looks at the clipboard and, only if
+   it holds a platform token (it starts with `dt0s16.`), loads it into `DT_PLATFORM_TOKEN` and
+   clears the clipboard. Any other clipboard content is left untouched. It prints only whether
+   it worked. Never run a clipboard command on its own or show its output.
+
+   macOS:
+
+   ```bash
+   export DT_ENVIRONMENT=https://<env-id>.apps.dynatrace.com; _t="$(pbpaste)"; case "$_t" in dt0s16.*) export DT_PLATFORM_TOKEN="$_t"; pbcopy </dev/null; echo "token set";; *) echo "clipboard has no platform token";; esac; unset _t
+   ```
+
+   Linux (Wayland or X11):
+
+   ```bash
+   export DT_ENVIRONMENT=https://<env-id>.apps.dynatrace.com; _t="$(wl-paste 2>/dev/null || xclip -selection clipboard -o 2>/dev/null)"; case "$_t" in dt0s16.*) export DT_PLATFORM_TOKEN="$_t"; (wl-copy --clear 2>/dev/null || xclip -selection clipboard </dev/null); echo "token set";; *) echo "clipboard has no platform token";; esac; unset _t
+   ```
+
+   Windows (PowerShell):
+
+   ```powershell
+   $env:DT_ENVIRONMENT='https://<env-id>.apps.dynatrace.com'; $t="$(Get-Clipboard -Raw)".Trim(); if ($t -like 'dt0s16.*') { $env:DT_PLATFORM_TOKEN=$t; Set-Clipboard -Value $null; 'token set' } else { 'clipboard has no platform token' }; Remove-Variable t
+   ```
+
+   - If it prints "token set", say "I found the platform token you copied and loaded it into
+     the terminal." and go to move 4. Do not open the token page.
+   - If it prints "clipboard has no platform token", go to move 3.
+
+3. Get a token from the user. Open the token page in their default browser (not in a built-in
+   browser you can read): macOS `open`, Linux `xdg-open`, Windows `start`.
 
    ```text
    https://<env-id>.apps.dynatrace.com/ui/apps/dynatrace.quickstart/add-data/automatic
@@ -83,36 +118,13 @@ until the user replies.
    Then say: "I opened the Dynatrace page. Copy the platform token shown there. Don't paste it
    here in the chat." and ask for confirmation as a button or single word, for example an
    interactive question "Token copied?" with the options "Copied" and "I need help". Wait.
+   When the user confirms, send the same line from move 2 to the same tab again. If it still
+   prints "clipboard has no platform token", ask the user to copy the token again and repeat.
 
-2. When the user confirms, open a visible terminal tab for them (with a terminal tool, or ask
-   them to open one if you cannot). Tell them: "Don't type in that terminal, I'll run
-   everything there." Then send exactly ONE line to it. It reads the token from the clipboard
-   into `DT_PLATFORM_TOKEN`, clears the clipboard, and prints only whether it worked. Never run
-   a clipboard command on its own or show its output.
-
-   macOS:
-
-   ```bash
-   export DT_ENVIRONMENT=https://<env-id>.apps.dynatrace.com; export DT_PLATFORM_TOKEN="$(pbpaste)"; pbcopy </dev/null; case "$DT_PLATFORM_TOKEN" in dt0s16.*) echo "token set";; *) unset DT_PLATFORM_TOKEN; echo "clipboard has no platform token";; esac
-   ```
-
-   Linux (Wayland or X11):
-
-   ```bash
-   export DT_ENVIRONMENT=https://<env-id>.apps.dynatrace.com; export DT_PLATFORM_TOKEN="$(wl-paste 2>/dev/null || xclip -selection clipboard -o)"; (wl-copy --clear 2>/dev/null || xclip -selection clipboard </dev/null); case "$DT_PLATFORM_TOKEN" in dt0s16.*) echo "token set";; *) unset DT_PLATFORM_TOKEN; echo "clipboard has no platform token";; esac
-   ```
-
-   Windows (PowerShell):
-
-   ```powershell
-   $env:DT_ENVIRONMENT='https://<env-id>.apps.dynatrace.com'; $env:DT_PLATFORM_TOKEN=(Get-Clipboard -Raw).Trim(); Set-Clipboard -Value $null; if ($env:DT_PLATFORM_TOKEN -like 'dt0s16.*') { 'token set' } else { Remove-Item Env:DT_PLATFORM_TOKEN; 'clipboard has no platform token' }
-   ```
-
-   If it prints "clipboard has no platform token", ask the user to copy the token again and
-   repeat this move.
-
-3. Run `dtwiz status` in that same tab. If it shows a connection, say "Connected, the token
-   works" and continue. If not, say what failed and offer to repeat move 1.
+4. Run `dtwiz status` in that same tab. If it shows a connection, say "Connected, the token
+   works" and continue. If it does not (for example the token is expired, or belongs to another
+   environment), run `unset DT_PLATFORM_TOKEN` (PowerShell: `Remove-Item Env:DT_PLATFORM_TOKEN`)
+   in the tab, tell the user in one line what failed, and go to move 3 for a new token.
 
 If you cannot open or drive a terminal, give the user the line from move 2 to run in their
 own terminal and ask them to paste back only the `dtwiz status` output, which contains no
