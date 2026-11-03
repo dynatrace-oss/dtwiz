@@ -19,14 +19,40 @@ const goMaxServiceDepth = 5
 
 // GoService is one buildable `package main` inside a Go module.
 type GoService struct {
-	Name   string // service name used for OTEL_SERVICE_NAME and the binary
-	Dir    string // absolute directory of the main package
-	RelDir string // slash-separated path relative to the module root, "." for the root
+	Name       string // service name used for OTEL_SERVICE_NAME and the binary
+	Dir        string // absolute directory of the main package
+	RelDir     string // slash-separated path relative to the module root, "." for the root
+	ModuleDir  string // absolute directory of the module the package belongs to; empty means the project directory
+	ProjectRel string // slash-separated path of Dir relative to the project, "." for the project root
 }
 
-// discoverGoServices finds every `package main` directory in the module rooted
-// at modulePath, skipping testdata, ignored directories and nested modules.
-func discoverGoServices(modulePath string) []GoService {
+// moduleDir returns the module the service is built in; fallback is the
+// project directory, used when the service carries no module of its own.
+func (s GoService) moduleDir(fallback string) string {
+	if s.ModuleDir != "" {
+		return s.ModuleDir
+	}
+	return fallback
+}
+
+// discoverGoServices finds every `package main` directory of the project: in
+// its root module and, when the project has a go.work, in each workspace module
+// listed there that lies inside the project. Testdata, ignored directories and
+// other nested modules are skipped (those are separate projects).
+func discoverGoServices(projectPath string) []GoService {
+	var services []GoService
+	for _, moduleDir := range append([]string{projectPath}, goWorkspaceModules(projectPath)...) {
+		services = append(services, discoverModuleServices(projectPath, moduleDir)...)
+	}
+
+	sort.Slice(services, func(i, j int) bool { return services[i].ProjectRel < services[j].ProjectRel })
+	nameGoServices(services, filepath.Base(projectPath))
+	logger.Debug("go services discovered", "project", projectPath, "count", len(services))
+	return services
+}
+
+// discoverModuleServices walks one module without descending into nested modules.
+func discoverModuleServices(projectPath, moduleDir string) []GoService {
 	var services []GoService
 
 	var walk func(dir string, depth int)
@@ -37,8 +63,14 @@ func discoverGoServices(modulePath string) []GoService {
 			return
 		}
 		if hasMainPackage(dir, entries) {
-			rel, _ := filepath.Rel(modulePath, dir)
-			services = append(services, GoService{Dir: dir, RelDir: filepath.ToSlash(rel)})
+			rel, _ := filepath.Rel(moduleDir, dir)
+			projRel, _ := filepath.Rel(projectPath, dir)
+			services = append(services, GoService{
+				Dir:        dir,
+				RelDir:     filepath.ToSlash(rel),
+				ModuleDir:  moduleDir,
+				ProjectRel: filepath.ToSlash(projRel),
+			})
 		}
 		if depth >= goMaxServiceDepth {
 			return
@@ -49,16 +81,12 @@ func discoverGoServices(modulePath string) []GoService {
 			}
 			child := filepath.Join(dir, e.Name())
 			if _, err := os.Stat(filepath.Join(child, "go.mod")); err == nil {
-				continue // nested module: its own project
+				continue // nested module: its own project (or listed in go.work)
 			}
 			walk(child, depth+1)
 		}
 	}
-	walk(modulePath, 0)
-
-	sort.Slice(services, func(i, j int) bool { return services[i].RelDir < services[j].RelDir })
-	nameGoServices(services, filepath.Base(modulePath))
-	logger.Debug("go services discovered", "module", modulePath, "count", len(services))
+	walk(moduleDir, 0)
 	return services
 }
 
@@ -100,13 +128,13 @@ func hasIgnoreConstraint(f *ast.File) bool {
 }
 
 // nameGoServices assigns each service its directory name, the project folder
-// name for the root, and the normalized relative path when names collide.
+// name for the root, and the normalized project-relative path when names collide.
 func nameGoServices(services []GoService, projectFolder string) {
 	baseName := func(s GoService) string {
-		if s.RelDir == "." {
+		if s.ProjectRel == "." {
 			return environment.ProjectServiceName(projectFolder)
 		}
-		return filepath.Base(filepath.FromSlash(s.RelDir))
+		return filepath.Base(filepath.FromSlash(s.ProjectRel))
 	}
 	counts := make(map[string]int, len(services))
 	for _, s := range services {
@@ -114,8 +142,8 @@ func nameGoServices(services []GoService, projectFolder string) {
 	}
 	for i, s := range services {
 		name := baseName(s)
-		if counts[name] > 1 && s.RelDir != "." {
-			name = environment.NormalizeServiceName(s.RelDir)
+		if counts[name] > 1 && s.ProjectRel != "." {
+			name = environment.NormalizeServiceName(s.ProjectRel)
 		}
 		services[i].Name = name
 	}

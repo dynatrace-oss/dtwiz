@@ -3,6 +3,7 @@ package otel
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -61,5 +62,40 @@ func TestFindGoWork(t *testing.T) {
 	}
 	if got := findGoWork(root); got != work {
 		t.Fatalf("root go.work: got %q, want %q", got, work)
+	}
+}
+
+func TestGoWorkspaceModules(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "ws")
+	writeTree(t, root, map[string]string{
+		"a/go.mod": "module a\n", "b/go.mod": "module b\n", "c d/go.mod": "module c\n",
+		"nogomod/x.go": "package x\n",
+	})
+	tests := []struct {
+		name string
+		work string
+		want []string
+	}{
+		{"none", "", nil},
+		{"block with comments", "go 1.25\n\nuse (\n\t. // root\n\t./a\n\t// ./b\n\t\"./c d\"\n)\n", []string{"a", "c d"}},
+		{"single line", "go 1.25\nuse ./b\n", []string{"b"}},
+		{"outside project and dot-dot", "use (\n\t../other\n\t..\n\t./a\n)\n", []string{"a"}},
+		{"duplicates and missing go.mod", "use (\n\t./a\n\ta\n\t./nogomod\n\t./missing\n)\n", []string{"a"}},
+		{"several use lines", "use ./a\nuse ./b\n", []string{"a", "b"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = os.Remove(filepath.Join(root, "go.work"))
+			if tt.work != "" {
+				writeTree(t, root, map[string]string{"go.work": tt.work})
+			}
+			var want []string
+			for _, w := range tt.want {
+				want = append(want, filepath.Join(root, w))
+			}
+			if got := goWorkspaceModules(root); !reflect.DeepEqual(got, want) {
+				t.Fatalf("modules = %v, want %v", got, want)
+			}
+		})
 	}
 }

@@ -78,3 +78,50 @@ func findGoWork(dir string) string {
 		dir = parent
 	}
 }
+
+// goWorkspaceModules returns the absolute module directories named by the
+// `use` directives of <projectPath>/go.work that lie inside the project and
+// contain a go.mod. The project directory itself and entries outside it are
+// dropped; the result has no duplicates. It is empty without a go.work.
+func goWorkspaceModules(projectPath string) []string {
+	data, err := os.ReadFile(filepath.Join(projectPath, "go.work"))
+	if err != nil {
+		return nil
+	}
+	var dirs []string
+	seen := map[string]bool{}
+	inUse := false
+	for _, raw := range strings.Split(string(data), "\n") {
+		line := raw
+		if i := strings.Index(line, "//"); i >= 0 {
+			line = line[:i]
+		}
+		line = strings.TrimSpace(line)
+		var entry string
+		switch {
+		case inUse && line == ")":
+			inUse = false
+		case inUse:
+			entry = line
+		case line == "use (":
+			inUse = true
+		case strings.HasPrefix(line, "use ") && !strings.HasSuffix(line, "("):
+			entry = strings.TrimPrefix(line, "use ")
+		}
+		entry = strings.Trim(strings.TrimSpace(entry), "\"`")
+		if entry == "" {
+			continue
+		}
+		dir := filepath.Clean(filepath.Join(projectPath, filepath.FromSlash(entry)))
+		rel, err := filepath.Rel(projectPath, dir)
+		if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || seen[dir] {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err != nil {
+			continue
+		}
+		seen[dir] = true
+		dirs = append(dirs, dir)
+	}
+	return dirs
+}
