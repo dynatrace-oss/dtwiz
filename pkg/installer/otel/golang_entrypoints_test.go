@@ -84,3 +84,37 @@ func TestDiscoverGoServices_RelDir(t *testing.T) {
 		t.Fatalf("unexpected services: %#v", got)
 	}
 }
+
+func TestDiscoverGoServices_Workspace(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "pher")
+	writeTree(t, root, map[string]string{
+		"go.mod":       "module x\n",
+		"go.work":      "use (\n\t.\n\t./order\n\t./services/payment\n\t../outside\n)\n",
+		"doc.go":       "package pher\n",
+		"order/go.mod": "module order\n", "order/main.go": mainSrc,
+		"services/payment/go.mod": "module payment\n", "services/payment/cmd/server/main.go": mainSrc,
+		"unlisted/go.mod": "module unlisted\n", "unlisted/main.go": mainSrc,
+	})
+	got := discoverGoServices(root)
+	if want := []string{"order", "server"}; !reflect.DeepEqual(serviceNames(got), want) {
+		t.Fatalf("services = %v, want %v", serviceNames(got), want)
+	}
+	if got[0].ModuleDir != filepath.Join(root, "order") || got[0].RelDir != "." || got[0].ProjectRel != "order" {
+		t.Fatalf("order = %#v", got[0])
+	}
+	pay := got[1]
+	if pay.ModuleDir != filepath.Join(root, "services", "payment") || pay.RelDir != "cmd/server" || pay.ProjectRel != "services/payment/cmd/server" {
+		t.Fatalf("payment = %#v", pay)
+	}
+}
+
+func TestDiscoverGoServices_WorkspaceNameCollision(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "ws")
+	writeTree(t, root, map[string]string{
+		"go.mod": "module x\n", "go.work": "use (\n\t./a\n\t./b\n)\n",
+		"a/go.mod": "module a\n", "a/main.go": mainSrc, "b/go.mod": "module b\n", "b/cmd/a/main.go": mainSrc,
+	})
+	if got, want := serviceNames(discoverGoServices(root)), []string{"a", "b-cmd-a"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("services = %v, want %v", got, want)
+	}
+}

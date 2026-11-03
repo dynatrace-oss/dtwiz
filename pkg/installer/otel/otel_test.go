@@ -1656,7 +1656,7 @@ func manualGoPlanForTest() *GoInstrumentationPlan {
 		Automatic:         true,
 		CollectorEndpoint: "http://127.0.0.1:4318",
 		EnvVars:           map[string]string{"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"},
-		ManualReason:      goReasonWork,
+		ManualReason:      goReasonNoTool,
 	}
 }
 

@@ -31,7 +31,6 @@ const (
 	goMarkerFile   = "dtwiz-go-instrumentation.json"
 	goWalkthrough  = "https://dt-url.net/otel-go"
 	goReasonNoTool = "no Go toolchain was found on PATH"
-	goReasonWork   = "the project belongs to a Go workspace (go.work), which is not supported for automatic instrumentation"
 )
 
 // GoServicePlan is one service of a Go project with its chosen method.
@@ -40,6 +39,9 @@ type GoServicePlan struct {
 	Method  goMethod
 	BinPath string
 	Err     error // last build failure, set when the service ends up manual
+	// Reason says why the service is manual when that was decided before any
+	// build (for example a failed isolated pre-flight in a workspace).
+	Reason string
 }
 
 // GoInstrumentationPlan instruments a Go project. Plans built by
@@ -92,8 +94,19 @@ func buildGoInstrumentationPlan(proj detectedProject, collectorEndpoint string) 
 		return nil
 	}
 
-	if moduleUsesOtelSDK(filepath.Join(proj.Path, "go.mod")) {
-		printGoSkippedServices(services, collectorEndpoint)
+	var skipped []GoService
+	kept := services[:0:0]
+	for _, svc := range services {
+		if moduleUsesOtelSDK(filepath.Join(svc.moduleDir(proj.Path), "go.mod")) {
+			skipped = append(skipped, svc)
+			continue
+		}
+		kept = append(kept, svc)
+	}
+	if len(skipped) > 0 {
+		printGoSkippedServices(skipped, collectorEndpoint)
+	}
+	if len(kept) == 0 {
 		return nil
 	}
 
@@ -103,21 +116,18 @@ func buildGoInstrumentationPlan(proj detectedProject, collectorEndpoint string) 
 		CollectorEndpoint: collectorEndpoint,
 		EnvVars:           environment.GenerateBaseOtelEnvVars(collectorEndpoint, environment.ProjectServiceName(proj.Path)),
 	}
-	for _, s := range services {
+	for _, s := range kept {
 		plan.Services = append(plan.Services, &GoServicePlan{
 			GoService: s,
 			Method:    goMethodOtelc,
-			BinPath:   filepath.Join(goOtelDir(proj.Path), "bin", goBinaryName(s.Name)),
+			BinPath:   filepath.Join(goOtelDir(s.moduleDir(proj.Path)), "bin", goBinaryName(s.Name)),
 		})
 	}
 
-	switch {
-	case findGoWork(proj.Path) != "":
-		plan.setManual(goReasonWork)
-	default:
-		if _, err := goLookPath("go"); err != nil {
-			plan.setManual(goReasonNoTool)
-		}
+	if _, err := goLookPath("go"); err != nil {
+		plan.setManual(goReasonNoTool)
+	} else if findGoWork(proj.Path) != "" {
+		plan.runGoPreflight(context.Background())
 	}
 	return plan
 }
@@ -165,11 +175,18 @@ func (p *GoInstrumentationPlan) PrintPlanSteps() {
 		fmt.Printf("     Stop running processes (PIDs: %s)\n", strings.Join(pids, ", "))
 	}
 	fmt.Println("     Services:")
-	usesOtelc, usesFallback := false, false
+	usesOtelc, usesFallback, usesManual := false, false, false
 	for _, s := range p.Services {
-		fmt.Printf("       %-16s %-24s %s\n", s.Name, s.RelDir, goMethodLabel(s.Method))
+		fmt.Printf("       %-16s %-24s %s\n", s.Name, s.ProjectRel, goMethodLabel(s.Method))
+		if s.Reason != "" {
+			fmt.Printf("         %s\n", s.Reason)
+		}
 		usesOtelc = usesOtelc || s.Method == goMethodOtelc
 		usesFallback = usesFallback || s.Method == goMethodClientOnly
+		usesManual = usesManual || s.Method == goMethodManual
+	}
+	if usesManual {
+		fmt.Println("     Manual-step services are not built; manual steps are printed after the run.")
 	}
 	if usesOtelc {
 		fmt.Printf("     Tool:       %s\n", describeOtelcForPreview())
@@ -178,7 +195,11 @@ func (p *GoInstrumentationPlan) PrintPlanSteps() {
 		fmt.Println("     Client-only services trace outgoing HTTP calls only; incoming requests are not traced.")
 	}
 	fmt.Println("     Project sources are not modified; go.mod and go.sum are restored after each build.")
-	fmt.Printf("     Binaries and logs: %s\n", goOtelDir(p.Project.Path))
+	if dirs := p.moduleDirs(); len(dirs) == 1 {
+		fmt.Printf("     Binaries and logs: %s\n", goOtelDir(dirs[0]))
+	} else if len(dirs) > 1 {
+		fmt.Printf("     Binaries and logs: %s in each of the %d modules\n", filepath.Join(".otel", goOtelDirName), len(dirs))
+	}
 	fmt.Println("     The first build downloads modules and needs a network connection.")
 }
 
@@ -288,6 +309,9 @@ func isDtwizGoBinary(command string) bool {
 // buildServices builds every service, degrading per service: otelc, then the
 // client-only build, then manual steps.
 func (p *GoInstrumentationPlan) buildServices(ctx context.Context) {
+	// Modules with at least one build attempt get files under .otel/go, even
+	// when every attempt ends up manual.
+	attempted := p.moduleDirs()
 	var tool *otelcTool
 	needsTool := false
 	for _, s := range p.Services {
@@ -309,20 +333,20 @@ func (p *GoInstrumentationPlan) buildServices(ctx context.Context) {
 		}
 	}
 
-	var fallback *goFallback
-	var fallbackErr error
-	allServices := make([]GoService, len(p.Services))
-	for i, s := range p.Services {
-		allServices[i] = s.GoService
+	type moduleFallback struct {
+		fb  *goFallback
+		err error
 	}
+	fallbacks := map[string]*moduleFallback{}
 
 	for _, s := range p.Services {
 		if ctx.Err() != nil {
 			return
 		}
+		module := s.moduleDir(p.Project.Path)
 		if s.Method == goMethodOtelc {
 			fmt.Printf("  Building %s with compile-time instrumentation... ", s.Name)
-			err := goBuildOtelcFn(ctx, tool, p.Project.Path, s.GoService, s.BinPath)
+			err := goBuildOtelcFn(ctx, tool, module, s.GoService, s.BinPath)
 			if err == nil {
 				fmt.Println("done.")
 				continue
@@ -336,15 +360,18 @@ func (p *GoInstrumentationPlan) buildServices(ctx context.Context) {
 			s.Method = goMethodClientOnly
 		}
 		if s.Method == goMethodClientOnly {
-			if fallback == nil && fallbackErr == nil {
-				fallback, fallbackErr = goPrepareFallbackFn(p.Project.Path, allServices)
+			mf := fallbacks[module]
+			if mf == nil {
+				mf = &moduleFallback{}
+				mf.fb, mf.err = goPrepareFallbackFn(module, p.servicesOfModule(module))
+				fallbacks[module] = mf
 			}
 			var err error
-			if fallbackErr != nil {
-				err = fallbackErr
+			if mf.err != nil {
+				err = mf.err
 			} else {
 				fmt.Printf("  Building %s with client-only instrumentation... ", s.Name)
-				err = fallback.buildClientOnly(ctx, s.GoService, s.BinPath)
+				err = mf.fb.buildClientOnly(ctx, s.GoService, s.BinPath)
 			}
 			if err == nil {
 				fmt.Println("done.")
@@ -356,7 +383,7 @@ func (p *GoInstrumentationPlan) buildServices(ctx context.Context) {
 			s.Err = err
 		}
 	}
-	p.writeMarker()
+	writeGoMarkers(attempted)
 }
 
 func (p *GoInstrumentationPlan) reportToolFailure(err error) {
@@ -369,16 +396,48 @@ func (p *GoInstrumentationPlan) reportToolFailure(err error) {
 	fmt.Println("  Using client-only instrumentation instead: only outgoing HTTP calls will be traced.")
 }
 
-// writeMarker records that dtwiz created .otel/go, so uninstall can recognize it.
-func (p *GoInstrumentationPlan) writeMarker() {
-	dir := goOtelDir(p.Project.Path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		logger.Warn("could not create Go instrumentation directory", "dir", dir, "err", err)
-		return
+// moduleDirs returns the distinct module directories of the services that are
+// built (not manual), in service order.
+func (p *GoInstrumentationPlan) moduleDirs() []string {
+	var dirs []string
+	seen := map[string]bool{}
+	for _, s := range p.Services {
+		if s.Method == goMethodManual {
+			continue
+		}
+		dir := s.moduleDir(p.Project.Path)
+		if !seen[dir] {
+			seen[dir] = true
+			dirs = append(dirs, dir)
+		}
 	}
-	data, _ := json.Marshal(map[string]string{"created-by": "dtwiz", "runtime": "go"})
-	if err := os.WriteFile(filepath.Join(dir, goMarkerFile), append(data, '\n'), 0644); err != nil {
-		logger.Warn("could not write Go instrumentation marker", "dir", dir, "err", err)
+	return dirs
+}
+
+// servicesOfModule returns the services that belong to one module.
+func (p *GoInstrumentationPlan) servicesOfModule(module string) []GoService {
+	var out []GoService
+	for _, s := range p.Services {
+		if s.moduleDir(p.Project.Path) == module {
+			out = append(out, s.GoService)
+		}
+	}
+	return out
+}
+
+// writeGoMarkers records, in every given module, that dtwiz created .otel/go,
+// so uninstall can recognize it.
+func writeGoMarkers(modules []string) {
+	for _, module := range modules {
+		dir := goOtelDir(module)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			logger.Warn("could not create Go instrumentation directory", "dir", dir, "err", err)
+			continue
+		}
+		data, _ := json.Marshal(map[string]string{"created-by": "dtwiz", "runtime": "go"})
+		if err := os.WriteFile(filepath.Join(dir, goMarkerFile), append(data, '\n'), 0644); err != nil {
+			logger.Warn("could not write Go instrumentation marker", "dir", dir, "err", err)
+		}
 	}
 }
 
@@ -397,7 +456,7 @@ func (p *GoInstrumentationPlan) launchServices() error {
 			clientOnly = append(clientOnly, s)
 		}
 		env := goServiceEnv(os.Environ(), p.EnvVars, s.Name)
-		mp, err := goLaunchFn(s, p.Project.Path, env)
+		mp, err := goLaunchFn(s, s.moduleDir(p.Project.Path), env)
 		if err != nil {
 			fmt.Printf("  Failed to start %s: %v\n", s.Name, err)
 			continue
@@ -406,6 +465,11 @@ func (p *GoInstrumentationPlan) launchServices() error {
 	}
 
 	if len(manual) > 0 {
+		for _, s := range manual {
+			if s.Reason != "" {
+				fmt.Printf("  %s: not instrumented automatically: %s\n", s.Name, s.Reason)
+			}
+		}
 		p.printManualSteps()
 	}
 

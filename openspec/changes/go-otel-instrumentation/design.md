@@ -10,7 +10,7 @@ Facts verified while exploring (spike run on otelc v1.0.1, macOS/arm64, Go 1.26;
 - `otelc --work-dir <dir> go build -o <bin> .` works. It printed "Bumped go version" yet `go.mod` was identical afterwards and no `go.sum` was created. A project with an existing `go.sum` and an interrupted build were not tested.
 - A built binary emits a SERVER span for `net/http` from `OTEL_*` environment variables alone.
 - Upstream CI runs on Linux, macOS and Windows; dtwiz has not run it on Linux or Windows yet.
-- Workspace spike (`go.work` with modules a, b, c; a imports b only through the workspace, no `replace`; macOS, Go 1.26.2):
+- Workspace spike, used by decision 13 (`go.work` with modules a, b, c; a imports b only through the workspace, no `replace`; macOS, Go 1.26.2):
   - Workspace mode on, `go.work` and modules at `go 1.22`: **fails** for every module with `module . listed in go.work file requires go >= 1.25.0, but go.work lists go 1.22` (otelc v1.0.1 raises the module's `go` directive, the workspace rejects it; with newer otelc versions the message and threshold will differ, re-verify).
   - Workspace mode on, everything already at `go 1.25.0`: a module with no sibling dependency **builds**; a module importing a sibling through `go.work` only **fails** (otelc tries to download the sibling from the network).
   - `GOWORK=off`, module with no sibling dependency (even at `go 1.22`): **builds**; `go.mod` is bumped during the build and identical afterwards, no `go.sum` created.
@@ -27,7 +27,7 @@ Facts verified while exploring (spike run on otelc v1.0.1, macOS/arm64, Go 1.26;
 
 **Non-Goals:**
 
-- Go workspaces (`go.work`) in this version: such projects get manual steps (decision 13).
+- Workspace modules that depend on a workspace sibling only through `go.work`: they get manual steps with the reason (decision 13); making them build would need `replace` directives or editing `go.work`.
 - Persisting instrumentation into the user's own build or deploy pipeline (dtwiz launches its own binary; the preview prints the equivalent otelc command as a hint only).
 - Instrumenting services that already configure their own OTel SDK.
 - eBPF / OBI based instrumentation, and Go versions too old for the latest otelc for compile-time instrumentation (such users are told which Go version to upgrade to and get the client-only fallback).
@@ -37,7 +37,7 @@ Facts verified while exploring (spike run on otelc v1.0.1, macOS/arm64, Go 1.26;
 
 ### 1. Per-service tier selection, not per-plan
 
-`GoInstrumentationPlan` holds a list of services, each with a chosen method (`otelc`, `client-only`, `manual`). Tier 1 requires a Go toolchain new enough for the latest otelc (decision 2), a usable otelc, and a project outside any Go workspace (decision 13). If otelc install fails, all services start at tier 2; if one `otelc go build` fails, only that service is rebuilt at tier 2; if tier 2 also fails, only that service gets manual steps.
+`GoInstrumentationPlan` holds a list of services, each with a chosen method (`otelc`, `client-only`, `manual`). Tier 1 requires a Go toolchain new enough for the latest otelc (decision 2), a usable otelc, and, for workspace projects, a passing isolated pre-flight for that service (decision 13). If otelc install fails, all services start at tier 2; if one `otelc go build` fails, only that service is rebuilt at tier 2; if tier 2 also fails, only that service gets manual steps.
 _Alternative:_ one method for the whole plan. Rejected: one cgo or odd service would downgrade or abort the rest.
 
 ### 1a. Manual steps are a plan, not an absence of one
@@ -80,7 +80,7 @@ Only attempted when tier 1 is unavailable for that service, and not used at all 
 
 ### 7. Service discovery and naming
 
-A `package main` walker: depth 5, skip ignored dirs/`testdata`/nested modules, within the selected module only. Names: directory base name; project folder for the root; relative path (normalized) on collision. Own file `golang_entrypoints.go` with a table-driven test.
+A `package main` walker: depth 5, skip ignored dirs/`testdata`/nested modules, within the selected module and, for a project with a `go.work`, within each workspace module listed in it that lives inside the project (decision 13). Each service records its module directory, used for the build, `.otel/go/` and the modguard backup. Names: directory base name; project folder for the root; relative path (normalized) on collision. Own file `golang_entrypoints.go` with a table-driven test.
 
 ### 8. Skip modules that already set up OTel
 
@@ -102,10 +102,16 @@ Reuse `environment.GenerateBaseOtelEnvVars(collectorEndpoint, serviceName)` with
 
 Following the one-concern-per-file rule, under `pkg/installer/otel/`: `golang.go` (detection, plan, selection), `golang_entrypoints.go`, `golang_otelc.go` (tool install, version gate, tier-1 build), `golang_fallback.go` (overlay/init, tier-2 build) with the init source in its own file, `golang_modguard.go`, `golang_launch.go`, `uninstall_go.go` (+ `_unix`/`_windows` process detection), each with a matching `_test.go`. `otel.go` registers Go as an enabled runtime, infers Go from `go.mod`, and drops Go from the manual-language list.
 
-### 13. Go workspaces (`go.work`) are out of scope for the first version
+### 13. Go workspaces (`go.work`): build each workspace module in isolation
 
-The workspace spike (see Context) showed that workspace mode cannot be used with otelc (the bumped `go` directive collides with `go.work`), and that building with `GOWORK=off` only works for modules that do not depend on workspace siblings through `go.work` alone. Supporting workspaces correctly would need dependency analysis or a pre-flight check per module, which is more than the first version needs. Instead, a project is treated as a workspace project when a `go.work` file exists in its directory or any parent directory (the lookup Go itself performs). Such a project is still listed, but selecting it yields the manual plan (decision 1a): the collector is installed, the explanation and manual steps are printed, and nothing is built. Builds for supported projects still set `GOWORK=off` so an inherited `GOWORK` environment variable cannot interfere.
-_Alternatives:_ (a) support workspace modules that build in isolation with a `GOWORK=off` pre-flight (`go list`) — deferred, and the spike results are the starting point; (b) edit `go.work` or add `replace` directives — rejected, it changes user files beyond a restorable backup.
+The workspace spike (see Context) showed that workspace mode cannot be used with otelc (the bumped `go` directive collides with `go.work`), but that `GOWORK=off` builds a module that does not depend on workspace siblings through `go.work` alone. Many workspaces are exactly that shape: the motivating case, `go-pher-order-plain`, has a root module containing only `doc.go` and six independent service modules. A first version that sent every workspace to manual steps (and, in the implemented flow, reported "No Go service found" before reaching that path) left such projects uninstrumented although they build fine. The reference implementation is the `feat/go-instrumentation-poc` branch (`goWorkspaceModules`, `detectGoMainPackages`, `otelcBuildCmd`, `modGuard`).
+
+- **Discovery:** the project's services are the `package main` directories of the root module plus those of every module listed in the root `go.work` `use` directives (single-line and block forms, comments ignored) that lives inside the project. `use` entries outside the project are ignored. Nested modules not listed in `go.work` stay separate projects (decision 7). The "no service found" check runs only after this expansion, so a workspace root without its own `package main` is not a dead end.
+- **Build:** every service builds from its own module directory with `GOWORK=off`. Each module has its own `.otel/go/` (binaries, tier-2 files, marker) and its own modguard backup of its own `go.mod`/`go.sum`, since modules have different paths and pinned dependencies.
+- **Pre-flight:** before building a service in a workspace project, `go list -deps ./<pkgdir>` runs in its module with `GOWORK=off`. When it fails (typically a sibling module required only through `go.work`, "missing go.sum entry" or an unresolvable module), that service is not built: it gets manual steps (decision 1a) with the reason stated, and the other services continue. Neither tier is attempted for it, because tier 2 shares the `GOWORK=off` constraint and would fail the same way.
+- **Workspace membership:** a project is a workspace project when a `go.work` exists in its directory or any parent directory (the lookup Go itself performs). A selected module below a `go.work` is built alone under the same rules (its own `go.mod`, `GOWORK=off`, pre-flight); the parent's other modules are not touched. Builds for all projects set `GOWORK=off` so an inherited `GOWORK` cannot interfere.
+
+_Alternatives:_ (a) workspace mode with otelc — rejected, the bumped `go` directive collides with `go.work` and sibling imports are fetched from the network; (b) edit `go.work` or add `replace` directives so siblings resolve — rejected, it changes user files beyond a restorable backup; (c) keep workspaces as manual-only — rejected, it blocks the common independent-modules layout.
 
 ### 14. Separate `GoInstrumentation` feature flag
 
@@ -118,7 +124,7 @@ _Alternative:_ reuse `AllRuntimes`. Rejected: it enables unrelated runtimes and 
 - **First build downloads many modules and is slow; needs network** → preview says so; failure messages classify connectivity errors; fallback or manual steps follow.
 - **otelc behavior differs on Linux/Windows** → first task is a spike on all three OSes; the plan degrades per service if tier 1 fails.
 - **Turning the flag off after an install leaves Go artifacts in place** → the user must re-enable `GoInstrumentation` to remove them with `dtwiz uninstall otel`.
-- **Users with workspaces get manual steps only** → explicit message and walkthrough link; workspace support is a candidate follow-up with the spike results as input.
+- **Workspace modules that import siblings only through `go.work` cannot build in isolation** → the per-module `GOWORK=off` pre-flight detects this before building, the service gets manual steps with the reason, and independent modules in the same workspace are still instrumented.
 - **Instrumented binary only exists in `.otel/`** → users' own builds are unchanged; the preview prints the equivalent `otelc go build` command and uninstall explains what is removed.
 - **`@latest` can change behavior, break, or ship a bad release without a dtwiz release** → scheduled CI smoke test against the current latest, per-service degradation to tier 2/manual, resolved version shown in the preview and logs.
 - **The latest otelc may raise its Go minimum at any time** → install runs with `GOTOOLCHAIN=local`; users on older Go get an explicit "upgrade Go to X" message (X taken from Go's own error) and the client-only fallback.

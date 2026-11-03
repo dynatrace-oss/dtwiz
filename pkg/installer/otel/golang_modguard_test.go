@@ -129,3 +129,35 @@ func TestNewModGuard_MissingGoMod(t *testing.T) {
 		t.Fatal("expected an error for a module without go.mod")
 	}
 }
+
+func TestModGuard_SeparatePerModule(t *testing.T) {
+	a, b := t.TempDir(), t.TempDir()
+	for _, d := range []string{a, b} {
+		if err := os.WriteFile(filepath.Join(d, "go.mod"), []byte("module "+filepath.Base(d)+"\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	err := withModGuard(a, func() error {
+		if err := os.WriteFile(filepath.Join(a, "go.mod"), []byte("changed\n"), 0644); err != nil {
+			return err
+		}
+		return withModGuard(b, func() error {
+			if _, err := os.Stat(filepath.Join(goOtelDir(a), goModguardDirName)); err != nil {
+				t.Errorf("module a keeps its own backup while b is guarded: %v", err)
+			}
+			return errors.New("build failed")
+		})
+	})
+	if err == nil || !strings.Contains(err.Error(), "build failed") {
+		t.Fatalf("err = %v", err)
+	}
+	for _, d := range []string{a, b} {
+		got, _ := os.ReadFile(filepath.Join(d, "go.mod"))
+		if string(got) != "module "+filepath.Base(d)+"\n" {
+			t.Fatalf("%s go.mod = %q", d, got)
+		}
+		if _, err := os.Stat(filepath.Join(goOtelDir(d), goModguardDirName)); !os.IsNotExist(err) {
+			t.Fatalf("backup of %s must be removed", d)
+		}
+	}
+}
