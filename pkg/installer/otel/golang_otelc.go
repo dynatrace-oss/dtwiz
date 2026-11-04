@@ -121,11 +121,18 @@ func ensureOtelc() (*otelcTool, error) {
 		return nil, fmt.Errorf("create %s: %w", dir, err)
 	}
 	env := append(os.Environ(), "GOBIN="+dir, "GOTOOLCHAIN=local")
+	fmt.Print("  Installing otelc... ")
 	if _, err := goRunner("go", []string{"install", otelcInstallTarget}, env); err != nil {
+		fmt.Println("failed.")
 		return nil, fmt.Errorf("install otelc on %s/%s: %w", runtime.GOOS, runtime.GOARCH, classifyOtelcInstallError(err))
 	}
 	path := filepath.Join(dir, otelcBinaryName())
 	tool := &otelcTool{Path: path, Version: otelcVersion(path), Isolated: true}
+	if v := strings.TrimSpace(tool.Version); v != "" {
+		fmt.Printf("done (%s).\n", v)
+	} else {
+		fmt.Println("done.")
+	}
 	logger.Debug("installed otelc", "path", path, "version", tool.Version)
 	return tool, nil
 }

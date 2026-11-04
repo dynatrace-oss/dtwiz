@@ -14,10 +14,18 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/environment"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
+
+// goFallbackNote is shown once when otelc cannot be used.
+const goFallbackNote = "  Instrumentation with otelc is not possible, falling back to client-only instrumentation (outgoing HTTP calls only)."
+
+// errOtelcUnusable marks an otelc binary that is not a working otelc (it has
+// no module version).
+var errOtelcUnusable = errors.New("otelc binary is not usable")
 
 type goMethod string
 
@@ -313,6 +321,7 @@ func (p *GoInstrumentationPlan) buildServices(ctx context.Context) {
 	// when every attempt ends up manual.
 	attempted := p.moduleDirs()
 	var tool *otelcTool
+	otelcUsable := false
 	needsTool := false
 	for _, s := range p.Services {
 		needsTool = needsTool || s.Method == goMethodOtelc
@@ -320,6 +329,11 @@ func (p *GoInstrumentationPlan) buildServices(ctx context.Context) {
 	if needsTool {
 		var err error
 		tool, err = goEnsureOtelcFn()
+		if err == nil && strings.TrimSpace(tool.Version) == "" {
+			// A real otelc is a Go binary and always has a module version; a
+			// binary without one cannot be used.
+			err = errOtelcUnusable
+		}
 		if err != nil {
 			p.reportToolFailure(err)
 			for _, s := range p.Services {
@@ -329,8 +343,14 @@ func (p *GoInstrumentationPlan) buildServices(ctx context.Context) {
 			}
 		} else {
 			logger.Debug("otelc ready", "path", tool.Path, "version", tool.Version)
-			fmt.Printf("  Using otelc %s\n", strings.TrimSpace(tool.Version))
+			otelcUsable = true
 		}
+	}
+	if len(attempted) > 0 {
+		if otelcUsable {
+			fmt.Println("  The first build of each module can take up to a minute (downloading dependencies); later services in the same module are faster.")
+		}
+		fmt.Println()
 	}
 
 	type moduleFallback struct {
@@ -342,6 +362,7 @@ func (p *GoInstrumentationPlan) buildServices(ctx context.Context) {
 	// builds are much faster) and removed when this run ends.
 	var workDirs otelcWorkDirs
 	defer workDirs.Close()
+	fallbackNoted := false
 
 	for _, s := range p.Services {
 		if ctx.Err() != nil {
@@ -359,12 +380,17 @@ func (p *GoInstrumentationPlan) buildServices(ctx context.Context) {
 				continue
 			}
 			workDirs.Reset(module) // a failed build must not leave state for the next service
-			fmt.Println("failed.")
-			fmt.Printf("    %v\n", err)
 			if ctx.Err() != nil {
+				fmt.Println("failed.")
+				fmt.Printf("    %v\n", err)
 				return
 			}
-			fmt.Printf("    Falling back to client-only instrumentation for %s (outgoing HTTP calls only).\n", s.Name)
+			logger.Debug("otelc build failed, falling back to client-only instrumentation", "service", s.Name, "error", err)
+			display.AbandonStdoutLine()
+			if !fallbackNoted {
+				fmt.Println(goFallbackNote)
+				fallbackNoted = true
+			}
 			s.Method = goMethodClientOnly
 		}
 		if s.Method == goMethodClientOnly {
@@ -378,7 +404,7 @@ func (p *GoInstrumentationPlan) buildServices(ctx context.Context) {
 			if mf.err != nil {
 				err = mf.err
 			} else {
-				fmt.Printf("  Building %s with client-only instrumentation... ", s.Name)
+				fmt.Printf("  Building %s... ", s.Name)
 				err = mf.fb.buildClientOnly(ctx, s.GoService, s.BinPath)
 			}
 			if err == nil {
@@ -395,13 +421,16 @@ func (p *GoInstrumentationPlan) buildServices(ctx context.Context) {
 }
 
 func (p *GoInstrumentationPlan) reportToolFailure(err error) {
+	fmt.Println(goFallbackNote)
 	var tooOld *GoVersionTooOldError
-	if errors.As(err, &tooOld) {
-		fmt.Printf("  Compile-time instrumentation is not available: %v.\n", tooOld)
-	} else {
-		fmt.Printf("  Compile-time instrumentation is not available: %v\n", err)
+	switch {
+	case errors.As(err, &tooOld):
+		fmt.Printf("  %v.\n", tooOld)
+	case errors.Is(err, errOtelcUnusable):
+		logger.Debug("otelc is not usable", "error", err)
+	default:
+		fmt.Printf("  %v\n", err)
 	}
-	fmt.Println("  Using client-only instrumentation instead: only outgoing HTTP calls will be traced.")
 }
 
 // moduleDirs returns the distinct module directories of the services that are
@@ -554,23 +583,16 @@ func launchGoService(svc *GoServicePlan, modulePath string, env []string) (*Mana
 	return mp, nil
 }
 
-// printManualSteps prints the packages, environment and walkthrough for
-// services that are not instrumented automatically. The environment points at
-// the local collector and carries no Dynatrace token.
+// printManualSteps prints the walkthrough link and environment for services
+// that are not instrumented automatically. The environment points at the local
+// collector and carries no Dynatrace token.
 func (p *GoInstrumentationPlan) printManualSteps() {
 	fmt.Println()
-	fmt.Printf("  cd %s\n", p.Project.Path)
-	fmt.Println()
-	fmt.Println("  Add the OTel Go SDK dependencies:")
-	for _, pkg := range otelGoPackages {
-		fmt.Printf("    go get %s\n", pkg)
-	}
+	fmt.Printf("  Project %s can't be autoinstrumented.\n", p.Project.Path)
+	fmt.Printf("  For manual instrumentation follow: %s\n", termLink("Instrument your Go application with OpenTelemetry", goWalkthrough))
 	fmt.Println()
 	fmt.Printf("  Set the following environment variables (local collector at %s):\n\n", p.CollectorEndpoint)
 	for _, line := range environment.FormatEnvExportLines(p.EnvVars) {
 		fmt.Printf("    %s\n", line)
 	}
-	fmt.Println()
-	fmt.Println("  Initialize the OTel SDK in your main() function.")
-	fmt.Printf("  See: %s\n", termLink("Instrument your Go application with OpenTelemetry", goWalkthrough))
 }

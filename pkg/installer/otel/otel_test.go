@@ -1724,7 +1724,7 @@ func TestInstallOtelCollectorWithProject_GoManualPlan_InstructionsAfterCollector
 	if !collectorInstalled {
 		t.Fatal("collector installation step must run for a manual Go plan")
 	}
-	instr := strings.Index(out, "go get go.opentelemetry.io/otel")
+	instr := strings.Index(out, "can't be autoinstrumented")
 	if instr < 0 {
 		t.Fatalf("manual instructions should be printed:\n%s", out)
 	}
@@ -1747,7 +1747,7 @@ func TestInstallOtelCollectorWithProject_GoManualPlan_CollectorFailure(t *testin
 	if err == nil || !strings.Contains(err.Error(), "collector failed") {
 		t.Fatalf("collector failure must be reported, got %v", err)
 	}
-	if strings.Contains(out, "go get go.opentelemetry.io/otel") {
+	if strings.Contains(out, "can't be autoinstrumented") {
 		t.Fatalf("manual instructions must not be presented as ready after a collector failure:\n%s", out)
 	}
 }
