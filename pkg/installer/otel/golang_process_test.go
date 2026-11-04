@@ -18,8 +18,11 @@ func TestSplitCommandLine(t *testing.T) {
 }
 
 func TestSelectGoProcesses(t *testing.T) {
+	// t.TempDir() is absolute on every OS; a bare "/work" has no drive letter
+	// on Windows and would not count as absolute there.
+	root := t.TempDir()
 	abs := func(parts ...string) string {
-		return filepath.Join(append([]string{string(filepath.Separator) + "work"}, parts...)...)
+		return filepath.Join(append([]string{root}, parts...)...)
 	}
 	svc := abs("shop", ".otel", "go", "bin", "api")
 	isGo := func(path string) bool { return path == svc || path == filepath.Join(abs("shop"), "server") }
