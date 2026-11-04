@@ -155,6 +155,7 @@ func TestInferRuntimeFromPath(t *testing.T) {
 }
 
 func TestDetectAvailableRuntimes_DefaultEnabled(t *testing.T) {
+	featureflags.SetCLIOverrideForTest(t, featureflags.GoInstrumentation, false) // independent of DTWIZ_GO_INSTRUMENTATION
 	featureflags.ClearCLIOverrideForTest(t, featureflags.AllRuntimes)
 	t.Setenv("DTWIZ_ALL_RUNTIMES", "")
 
@@ -359,6 +360,7 @@ func TestPrintProjectList_NoAnnotationWhenNoProcesses(t *testing.T) {
 }
 
 func TestSelectProject(t *testing.T) {
+	featureflags.SetCLIOverrideForTest(t, featureflags.GoInstrumentation, false) // Go is a manual language only with the flag off
 	projects := []detectedProject{
 		{ScannedProject: ScannedProject{Path: "/tmp/api"}, Runtime: "Python"},
 		{ScannedProject: ScannedProject{Path: "/tmp/worker"}, Runtime: "Go"},
@@ -467,6 +469,7 @@ func TestDetectAllProjects_IncludesWhenUnlocked(t *testing.T) {
 }
 
 func TestCreateRuntimePlan(t *testing.T) {
+	featureflags.SetCLIOverrideForTest(t, featureflags.GoInstrumentation, false) // legacy Go plan; the flag-on flow has its own tests
 	const httpPort = 4318
 	token := "test-token"
 	envURL := "https://tenant.apps.dynatrace.com"
