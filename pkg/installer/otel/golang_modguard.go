@@ -28,18 +28,32 @@ func goOtelDir(modulePath string) string {
 	return filepath.Join(modulePath, ".otel", goOtelDirName)
 }
 
+// otelcGeneratedFiles are the source files otelc writes into the module
+// directory during a build. It removes them itself when it finishes, but an
+// interrupted build leaves them behind.
+var otelcGeneratedFiles = []string{"otel.instrumentation.go", "otelc.runtime.go"}
+
 // modGuard backs up go.mod/go.sum before otelc (which may rewrite them) runs
-// and restores them byte-identical afterwards.
+// and restores them byte-identical afterwards. It also removes the files otelc
+// generated in the module directory if they did not exist before.
 type modGuard struct {
 	moduleDir string
 	backupDir string
+	// preexisting lists otelcGeneratedFiles present before the build; those
+	// belong to the user and are never removed.
+	preexisting map[string]bool
 }
 
 // newModGuard backs up the module files. A leftover backup from an interrupted
 // run that differs from the current files stops the run; an identical one is
 // stale and is removed.
 func newModGuard(moduleDir string) (*modGuard, error) {
-	g := &modGuard{moduleDir: moduleDir, backupDir: filepath.Join(goOtelDir(moduleDir), goModguardDirName)}
+	g := &modGuard{moduleDir: moduleDir, backupDir: filepath.Join(goOtelDir(moduleDir), goModguardDirName), preexisting: map[string]bool{}}
+	for _, name := range otelcGeneratedFiles {
+		if _, err := os.Lstat(filepath.Join(moduleDir, name)); err == nil {
+			g.preexisting[name] = true
+		}
+	}
 
 	if _, err := os.Stat(g.backupDir); err == nil {
 		same, cmpErr := g.backupMatchesCurrent()
@@ -91,6 +105,14 @@ func (g *modGuard) backupMatchesCurrent() (bool, error) {
 // backup. On failure the backup is kept and its path is part of the error.
 func (g *modGuard) Restore() error {
 	var errs []error
+	for _, name := range otelcGeneratedFiles {
+		if g.preexisting[name] {
+			continue
+		}
+		if err := retry(func() error { return removeIfExists(filepath.Join(g.moduleDir, name)) }); err != nil {
+			errs = append(errs, fmt.Errorf("remove generated %s: %w", name, err))
+		}
+	}
 	for _, name := range []string{"go.mod", "go.sum"} {
 		target := filepath.Join(g.moduleDir, name)
 		data, err := os.ReadFile(filepath.Join(g.backupDir, name))
@@ -170,6 +192,16 @@ func atomicWriteFile(path string, data []byte) error {
 		return err
 	}
 	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	// CreateTemp makes the file 0600; keep the original file's permissions.
+	if info, err := os.Stat(path); err == nil {
+		if err := os.Chmod(tmpName, info.Mode().Perm()); err != nil {
+			os.Remove(tmpName)
+			return err
+		}
+	} else if err := os.Chmod(tmpName, 0644); err != nil {
 		os.Remove(tmpName)
 		return err
 	}

@@ -157,7 +157,7 @@ For a selected Go project the system SHALL install the OTel Collector as part of
 
 ### Requirement: Project sources and module files are unchanged
 
-The system SHALL NOT modify Go source files in the project. All generated files SHALL live in a `.otel/` directory inside each module. If a build step modifies the module's `go.mod` or `go.sum`, they SHALL be restored to their original content afterwards, including when the build fails or the run is interrupted by the user.
+The system SHALL NOT modify Go source files in the project. All generated files SHALL live in a `.otel/` directory inside each module. If a build step modifies the module's `go.mod` or `go.sum`, they SHALL be restored to their original content and file permissions afterwards, including when the build fails or the run is interrupted by the user. Source files that the instrumentation tool generates in the module directory during a build SHALL NOT remain afterwards, including after an interruption; a file with the same name that existed before the build SHALL be left untouched.
 
 #### Scenario: Build succeeds
 
@@ -171,6 +171,19 @@ The system SHALL NOT modify Go source files in the project. All generated files 
 - **GIVEN** a build with compile-time instrumentation is running
 - **WHEN** the user presses Ctrl+C
 - **THEN** `go.mod` and `go.sum` are restored before dtwiz exits
+
+#### Scenario: Build is interrupted while the tool has generated files
+
+- **GIVEN** the instrumentation tool has written generated source files into the module directory
+- **WHEN** the user presses Ctrl+C and the tool is stopped before it can remove them
+- **THEN** those files are removed before dtwiz exits
+- **AND** a file of the same name that existed before the build is kept
+
+#### Scenario: Restore keeps file permissions
+
+- **GIVEN** a `go.mod` with mode 0644
+- **WHEN** it is restored after a build
+- **THEN** its mode is still 0644
 
 #### Scenario: Module files have uncommitted changes
 

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -159,5 +160,53 @@ func TestModGuard_SeparatePerModule(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(goOtelDir(d), goModguardDirName)); !os.IsNotExist(err) {
 			t.Fatalf("backup of %s must be removed", d)
 		}
+	}
+}
+
+func TestWithModGuard_RemovesGeneratedFilesAfterInterruption(t *testing.T) {
+	dir := setupGuardModule(t, "module a\n", "")
+	_ = withModGuard(dir, func() error {
+		for _, name := range otelcGeneratedFiles {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte("package main\n"), 0644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return errors.New("context canceled")
+	})
+	for _, name := range otelcGeneratedFiles {
+		if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
+			t.Errorf("%s should have been removed, stat err = %v", name, err)
+		}
+	}
+}
+
+func TestWithModGuard_KeepsUsersOwnGeneratedNamedFile(t *testing.T) {
+	dir := setupGuardModule(t, "module a\n", "")
+	own := filepath.Join(dir, otelcGeneratedFiles[0])
+	if err := os.WriteFile(own, []byte("package main\n// mine\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := withModGuard(dir, func() error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if got := readFile(t, own); !strings.Contains(got, "mine") {
+		t.Errorf("user's file was changed or removed: %q", got)
+	}
+}
+
+func TestWithModGuard_RestorePreservesFileMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows ignores Unix permissions")
+	}
+	dir := setupGuardModule(t, "module a\n", "")
+	if err := withModGuard(dir, func() error { mutateModule(t, dir); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(filepath.Join(dir, "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0644 {
+		t.Errorf("go.mod mode = %v, want 0644", info.Mode().Perm())
 	}
 }
