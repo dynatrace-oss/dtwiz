@@ -44,7 +44,7 @@ func TestOtelcIntegration_BuildTinyModule(t *testing.T) {
 	defer cancel()
 	bin := filepath.Join(goOtelDir(module), "bin", goBinaryName("tiny"))
 	svc := GoService{Name: "tiny", Dir: module, RelDir: "."}
-	if err := buildWithOtelc(ctx, tool, module, svc, bin); err != nil {
+	if err := buildWithOtelc(ctx, tool, module, "", svc, bin); err != nil {
 		t.Fatalf("otelc build failed: %v", err)
 	}
 

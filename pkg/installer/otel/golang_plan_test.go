@@ -356,7 +356,7 @@ func newHarness(t *testing.T) *executeHarness {
 		}
 		return &otelcTool{Path: "/x/otelc", Version: "v1.2.0"}, nil
 	}
-	goBuildOtelcFn = func(ctx context.Context, tool *otelcTool, module string, svc GoService, bin string) error {
+	goBuildOtelcFn = func(ctx context.Context, tool *otelcTool, module, workDir string, svc GoService, bin string) error {
 		if h.otelcFails[svc.Name] {
 			return errors.New("otelc build failed")
 		}
@@ -637,7 +637,7 @@ func TestExecute_WorkspaceBuildsPerModule(t *testing.T) {
 	root := newWorkspaceProject(t)
 	// preflight shares goBuildRunner with the harness: it records nothing for `go list`.
 	var otelcModules, launchModules []string
-	goBuildOtelcFn = func(_ context.Context, _ *otelcTool, module string, svc GoService, _ string) error {
+	goBuildOtelcFn = func(_ context.Context, _ *otelcTool, module, _ string, svc GoService, _ string) error {
 		if svc.Name == "payment" {
 			return errors.New("otelc build failed")
 		}

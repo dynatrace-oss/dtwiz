@@ -338,6 +338,10 @@ func (p *GoInstrumentationPlan) buildServices(ctx context.Context) {
 		err error
 	}
 	fallbacks := map[string]*moduleFallback{}
+	// otelc's work directory is shared by the services of a module (later
+	// builds are much faster) and removed when this run ends.
+	var workDirs otelcWorkDirs
+	defer workDirs.Close()
 
 	for _, s := range p.Services {
 		if ctx.Err() != nil {
@@ -345,12 +349,16 @@ func (p *GoInstrumentationPlan) buildServices(ctx context.Context) {
 		}
 		module := s.moduleDir(p.Project.Path)
 		if s.Method == goMethodOtelc {
-			fmt.Printf("  Building %s with compile-time instrumentation... ", s.Name)
-			err := goBuildOtelcFn(ctx, tool, module, s.GoService, s.BinPath)
+			fmt.Printf("  Building %s... ", s.Name)
+			workDir, err := workDirs.For(module)
+			if err == nil {
+				err = goBuildOtelcFn(ctx, tool, module, workDir, s.GoService, s.BinPath)
+			}
 			if err == nil {
 				fmt.Println("done.")
 				continue
 			}
+			workDirs.Reset(module) // a failed build must not leave state for the next service
 			fmt.Println("failed.")
 			fmt.Printf("    %v\n", err)
 			if ctx.Err() != nil {

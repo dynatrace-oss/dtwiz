@@ -182,13 +182,18 @@ func isGoNetworkError(output string) bool {
 
 // buildWithOtelc builds one service with compile-time instrumentation. The
 // module's go.mod/go.sum are protected for the duration of the build. The binary
-// is written to binPath.
-func buildWithOtelc(ctx context.Context, tool *otelcTool, modulePath string, svc GoService, binPath string) error {
-	workDir, err := os.MkdirTemp("", "dtwiz-otelc-*")
-	if err != nil {
-		return fmt.Errorf("create otelc work directory: %w", err)
+// is written to binPath. workDir is otelc's work directory; the caller owns it
+// and may share it between services of one module. When empty, a private
+// temporary directory is used and removed afterwards.
+func buildWithOtelc(ctx context.Context, tool *otelcTool, modulePath, workDir string, svc GoService, binPath string) error {
+	if workDir == "" {
+		dir, err := os.MkdirTemp("", "dtwiz-otelc-*")
+		if err != nil {
+			return fmt.Errorf("create otelc work directory: %w", err)
+		}
+		defer os.RemoveAll(dir)
+		workDir = dir
 	}
-	defer os.RemoveAll(workDir)
 
 	if err := os.MkdirAll(filepath.Dir(binPath), 0755); err != nil {
 		return fmt.Errorf("create %s: %w", filepath.Dir(binPath), err)
