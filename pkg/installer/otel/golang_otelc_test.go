@@ -200,7 +200,7 @@ func TestBuildWithOtelc_CommandLineAndEnv(t *testing.T) {
 	})
 
 	tool := &otelcTool{Path: "/bin/otelc"}
-	if err := buildWithOtelc(context.Background(), tool, modulePath, svc, binPath); err != nil {
+	if err := buildWithOtelc(context.Background(), tool, modulePath, "", svc, binPath); err != nil {
 		t.Fatal(err)
 	}
 	if gotDir != modulePath || gotName != "/bin/otelc" {
@@ -225,7 +225,7 @@ func TestBuildWithOtelc_RootPackage(t *testing.T) {
 		return "", nil
 	})
 	svc := GoService{Name: "shop", RelDir: "."}
-	if err := buildWithOtelc(context.Background(), &otelcTool{Path: "otelc"}, modulePath, svc, filepath.Join(modulePath, "bin", "shop")); err != nil {
+	if err := buildWithOtelc(context.Background(), &otelcTool{Path: "otelc"}, modulePath, "", svc, filepath.Join(modulePath, "bin", "shop")); err != nil {
 		t.Fatal(err)
 	}
 	if gotArgs[len(gotArgs)-1] != "." {
@@ -239,7 +239,7 @@ func TestBuildWithOtelc_FailureClassifiesNetworkAndRestores(t *testing.T) {
 		mutateModule(t, modulePath)
 		return "go: downloading x\ndial tcp: lookup proxy.golang.org: no such host", errors.New("exit status 1")
 	})
-	err := buildWithOtelc(context.Background(), &otelcTool{Path: "otelc"}, modulePath,
+	err := buildWithOtelc(context.Background(), &otelcTool{Path: "otelc"}, modulePath, "",
 		GoService{Name: "api", RelDir: "."}, filepath.Join(modulePath, "bin", "api"))
 	if err == nil {
 		t.Fatal("expected error")
@@ -262,7 +262,7 @@ func TestBuildWithOtelc_Cancelled(t *testing.T) {
 		cancel()
 		return "", errors.New("signal: killed")
 	})
-	err := buildWithOtelc(ctx, &otelcTool{Path: "otelc"}, modulePath,
+	err := buildWithOtelc(ctx, &otelcTool{Path: "otelc"}, modulePath, "",
 		GoService{Name: "api", RelDir: "."}, filepath.Join(modulePath, "bin", "api"))
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected cancellation error, got %v", err)
