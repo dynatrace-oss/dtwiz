@@ -486,7 +486,7 @@ func TestExecute_TierSelection(t *testing.T) {
 			if strings.Join(h.launched, ",") != strings.Join(tt.wantLaunch, ",") {
 				t.Fatalf("launched = %v, want %v", h.launched, tt.wantLaunch)
 			}
-			if tt.wantManual != strings.Contains(out, "go get go.opentelemetry.io/otel") {
+			if tt.wantManual != strings.Contains(out, "can't be autoinstrumented") {
 				t.Fatalf("manual steps printed = %v, want %v\n%s", !tt.wantManual, tt.wantManual, out)
 			}
 			for _, w := range tt.wantOutputs {
@@ -599,7 +599,7 @@ func TestExecute_ManualPlan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("manual outcome must succeed: %v", err)
 	}
-	for _, want := range []string{"export OTEL_EXPORTER_OTLP_ENDPOINT=\"" + testEndpoint + "\"", "go get go.opentelemetry.io/otel", "dt-url.net/otel-go", goReasonNoTool} {
+	for _, want := range []string{"export OTEL_EXPORTER_OTLP_ENDPOINT=\"" + testEndpoint + "\"", "can't be autoinstrumented", "dt-url.net/otel-go", goReasonNoTool} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("manual steps should contain %q:\n%s", want, out)
 		}
@@ -702,7 +702,7 @@ func TestExecute_WorkspaceAllManualWhenPreflightFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("manual outcome must succeed: %v", err)
 	}
-	if len(h.launched) != 0 || !strings.Contains(out, "go get go.opentelemetry.io/otel") || !strings.Contains(out, "not instrumented automatically") {
+	if len(h.launched) != 0 || !strings.Contains(out, "can't be autoinstrumented") || !strings.Contains(out, "not instrumented automatically") {
 		t.Fatalf("out = %s", out)
 	}
 	if _, err := os.Stat(filepath.Join(root, "order", ".otel")); !os.IsNotExist(err) {

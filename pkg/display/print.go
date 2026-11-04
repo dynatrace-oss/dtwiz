@@ -100,6 +100,17 @@ func ClearPending() {
 	}
 }
 
+// AbandonStdoutLine ends a half-written stdout line (for example "Building x... ")
+// that will be reprinted: it erases the line on a TTY and just ends it otherwise,
+// so CI logs do not contain control characters.
+func AbandonStdoutLine() {
+	if isStdoutTTY() {
+		fmt.Print("\r\033[2K")
+		return
+	}
+	fmt.Println()
+}
+
 // Hyperlink returns an OSC 8 hyperlink (ESC \ terminated) when stdout is a TTY,
 // falling back to "text (url)" on non-TTY outputs to avoid stray control characters.
 func Hyperlink(text, url string) string {
