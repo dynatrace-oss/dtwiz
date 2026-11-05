@@ -301,3 +301,32 @@ Build and installation failures SHALL show the failing command's output and the 
 - **GIVEN** no network connection during the first build
 - **WHEN** the build fails to download modules
 - **THEN** the message says the failure is connectivity-related
+
+### Requirement: Instrumentation outcome is reported in self-monitoring
+
+The system SHALL report whether Go instrumentation instrumented at least one service automatically in the install self-monitoring event. When a build fails, even if another tier then instruments the service, or no service can be instrumented, the event SHALL carry the first failure as a classified error type with its attributes, and SHALL NOT carry error messages, paths or project names. A manual-steps outcome SHALL still end the command successfully; it is reported as a failed instrumentation with its cause.
+
+#### Scenario: All services instrumented without failures
+
+- **GIVEN** every service is built with the instrumentation tool
+- **WHEN** the install event is reported
+- **THEN** the Go instrumentation outcome is succeeded and carries no error
+
+#### Scenario: Tool unavailable but services still instrumented
+
+- **GIVEN** the instrumentation tool cannot be used and the services are built client-only
+- **WHEN** the install event is reported
+- **THEN** the outcome is succeeded and carries the classified error of the tool failure
+
+#### Scenario: Manual steps because there is no Go toolchain
+
+- **GIVEN** no Go toolchain is available
+- **WHEN** the install event is reported
+- **THEN** the outcome is failed with a missing-dependency error naming `go`
+- **AND** the command still exits successfully
+
+#### Scenario: Network failure during a build
+
+- **GIVEN** a build fails because modules cannot be downloaded
+- **WHEN** the install event is reported
+- **THEN** the error type is network error
