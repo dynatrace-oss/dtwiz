@@ -65,6 +65,8 @@ type GoInstrumentationPlan struct {
 	Services          []*GoServicePlan
 	// ManualReason is set when the whole project is handled with manual steps.
 	ManualReason string
+	// firstTierErr is the first classified build failure, kept for telemetry.
+	firstTierErr error
 }
 
 // Seams replaced in tests.
@@ -244,6 +246,7 @@ func (p *GoInstrumentationPlan) Execute() error {
 	if p.ManualReason != "" {
 		fmt.Printf("  Not instrumented automatically: %s.\n", p.ManualReason)
 		p.printManualSteps()
+		p.recordGoInstrumentation()
 		return nil
 	}
 
@@ -256,6 +259,7 @@ func (p *GoInstrumentationPlan) Execute() error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("interrupted: %w", err)
 	}
+	p.recordGoInstrumentation()
 	return p.launchServices()
 }
 
@@ -341,6 +345,7 @@ func (p *GoInstrumentationPlan) buildServices(ctx context.Context) {
 					s.Method = goMethodClientOnly
 				}
 			}
+			p.noteTierError("otelc-install", err)
 		} else {
 			logger.Debug("otelc ready", "path", tool.Path, "version", tool.Version)
 			otelcUsable = true
@@ -385,6 +390,7 @@ func (p *GoInstrumentationPlan) buildServices(ctx context.Context) {
 				fmt.Printf("    %v\n", err)
 				return
 			}
+			p.noteTierError("otelc-build", err)
 			logger.Debug("otelc build failed, falling back to client-only instrumentation", "service", s.Name, "error", err)
 			display.AbandonStdoutLine()
 			if !fallbackNoted {
@@ -413,6 +419,7 @@ func (p *GoInstrumentationPlan) buildServices(ctx context.Context) {
 			}
 			fmt.Println("failed.")
 			fmt.Printf("    %v\n", err)
+			p.noteTierError("go-client-build", err)
 			s.Method = goMethodManual
 			s.Err = err
 		}
