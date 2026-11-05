@@ -81,7 +81,7 @@ func TestPrintProcessSummary_AllCrashed_NoAliveNames(t *testing.T) {
 			t.Fatalf("aliveNames = %v, want empty", aliveNames)
 		}
 	})
-	if !strings.Contains(out, "[crashed:") {
+	if !strings.Contains(out, "crashed:") {
 		t.Fatalf("expected crash summary output, got %q", out)
 	}
 }
@@ -103,7 +103,7 @@ func TestPrintProcessSummary_CrashedNonZeroExit_SummaryLabel(t *testing.T) {
 			crashedManagedProcess("svc", errors.New("exit status 1")),
 		}, 0)
 	})
-	if !strings.Contains(out, "[crashed:") {
+	if !strings.Contains(out, "crashed:") {
 		t.Fatalf("expected crashed label, got %q", out)
 	}
 }
@@ -114,7 +114,7 @@ func TestPrintProcessSummary_CleanExit_SummaryLabel(t *testing.T) {
 			cleanExitedManagedProcess("svc"),
 		}, 0)
 	})
-	if !strings.Contains(out, "[exited cleanly]") {
+	if !strings.Contains(out, "exited cleanly") {
 		t.Fatalf("expected clean exit label, got %q", out)
 	}
 }
@@ -185,8 +185,8 @@ func TestStartManagedProcess_CleanExit(t *testing.T) {
 func TestPrintSummaryLine_Crashed_IncludesLabel(t *testing.T) {
 	p := crashedManagedProcess("my-svc", errors.New("exit status 1"))
 	out := helpers.CaptureStdout(t, func() { p.PrintSummaryLine() })
-	if !strings.Contains(out, "[crashed:") {
-		t.Fatalf("expected [crashed: in output, got %q", out)
+	if !strings.Contains(out, "crashed:") {
+		t.Fatalf("expected crashed: in output, got %q", out)
 	}
 	if !strings.Contains(out, "my-svc") {
 		t.Fatalf("expected service name in output, got %q", out)
@@ -196,8 +196,8 @@ func TestPrintSummaryLine_Crashed_IncludesLabel(t *testing.T) {
 func TestPrintSummaryLine_CleanExit_IncludesLabel(t *testing.T) {
 	p := cleanExitedManagedProcess("my-svc")
 	out := helpers.CaptureStdout(t, func() { p.PrintSummaryLine() })
-	if !strings.Contains(out, "[exited cleanly]") {
-		t.Fatalf("expected [exited cleanly] in output, got %q", out)
+	if !strings.Contains(out, "exited cleanly") {
+		t.Fatalf("expected exited cleanly in output, got %q", out)
 	}
 }
 

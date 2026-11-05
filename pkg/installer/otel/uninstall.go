@@ -129,14 +129,14 @@ func killCollectorProcesses(procs []otelProcessInfo) string {
 		}
 		proc, err := os.FindProcess(p.pid)
 		if err != nil {
-			fmt.Printf("  Warning: could not find process %d: %v\n", p.pid, err)
+			display.StepWarn(fmt.Sprintf("Could not find process %d", p.pid), err.Error())
 			continue
 		}
 		if err := installer.KillAndWaitProcess(proc); err != nil {
-			fmt.Printf("  Warning: could not kill process %d: %v\n", p.pid, err)
+			display.StepWarn(fmt.Sprintf("Could not kill process %d", p.pid), err.Error())
 			continue
 		}
-		fmt.Printf("  Stopped collector (PID %d).\n", p.pid)
+		display.Detail("stopped collector (PID %d)", p.pid)
 		if restartBinary == "" && p.binaryPath != "" {
 			restartBinary = p.binaryPath
 		}
@@ -339,7 +339,7 @@ func collectorToProcessInfo(c collectorInstance) otelProcessInfo {
 // If the user selects "Delete all", it also removes the OTel Host Monitoring
 // extension from the tenant after local cleanup completes.
 func UninstallOtelCollector(envURL, platformToken string, dryRun bool) error {
-	display.Header("Dynatrace OTel Collector Uninstall")
+	display.Header("dtwiz · OpenTelemetry uninstall")
 
 	// Find all Dynatrace OTel Collectors and let the user choose which to uninstall.
 	dtCollectors := findDynatraceOtelCollectors()
@@ -481,7 +481,15 @@ func UninstallOtelCollector(envURL, platformToken string, dryRun bool) error {
 	removeExtension = decision == uninstallAll
 	fmt.Println()
 
-	killCollectorProcesses(processes)
+	for _, p := range processes {
+		if p.pid > 0 {
+			_ = display.RunStep("Stopped collector", func(*display.Step) error {
+				killCollectorProcesses(processes)
+				return nil
+			})
+			break
+		}
+	}
 
 	for _, r := range runtimeResults {
 		if len(r.procs) == 0 {
@@ -492,7 +500,10 @@ func UninstallOtelCollector(envURL, platformToken string, dryRun bool) error {
 			pids[i] = p.PID
 		}
 		logger.Debug("stopping runtime processes", "runtime", r.label, "count", len(pids))
-		stopProcesses(pids)
+		_ = display.RunStep(fmt.Sprintf("Stopped instrumented %s processes", r.label), func(*display.Step) error {
+			stopProcesses(pids)
+			return nil
+		})
 	}
 
 	if len(javaProcs) > 0 {
@@ -501,37 +512,35 @@ func UninstallOtelCollector(envURL, platformToken string, dryRun bool) error {
 			javaPIDs[i] = p.PID
 		}
 		logger.Debug("stopping instrumented java processes", "count", len(javaPIDs))
-		stopProcesses(javaPIDs)
+		_ = display.RunStep("Stopped instrumented Java processes", func(*display.Step) error {
+			stopProcesses(javaPIDs)
+			return nil
+		})
 	}
 
-	for _, d := range dirs {
-		if err := removeWithRetry(d); err != nil {
-			fmt.Printf("  Warning: could not remove %s: %v\n", d, err)
-			continue
-		}
-		fmt.Printf("  Removed %s\n", d)
-	}
-
-	for _, d := range nodeOtelDirs {
-		if err := removeWithRetry(d); err != nil {
-			fmt.Printf("  Warning: could not remove %s: %v\n", d, err)
-			continue
-		}
-		fmt.Printf("  Removed %s\n", d)
-	}
+	removeAll := append(append([]string{}, dirs...), nodeOtelDirs...)
 	if agentDirExists {
-		if err := removeWithRetry(agentDir); err != nil {
-			fmt.Printf("  Warning: could not remove %s: %v\n", agentDir, err)
-		} else {
-			fmt.Printf("  Removed %s\n", agentDir)
-		}
+		removeAll = append(removeAll, agentDir)
+	}
+	if len(removeAll) > 0 {
+		_ = display.RunStep("Removed installation directories", func(s *display.Step) error {
+			removed := 0
+			for _, d := range removeAll {
+				if err := removeWithRetry(d); err != nil {
+					display.StepWarn(fmt.Sprintf("Could not remove %s", d), err.Error())
+					continue
+				}
+				display.Detail("removed %s", d)
+				removed++
+			}
+			s.Detail("%d of %d", removed, len(removeAll))
+			return nil
+		})
 	}
 
 	if removeExtension {
 		deactivateHostMonitoringExtensionFn(envURL, platformToken)
 	}
 
-	fmt.Println()
-	display.ColorOK.Println("  ✓ OTel Collector uninstalled.")
 	return nil
 }

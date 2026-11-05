@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/client"
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
@@ -26,8 +27,9 @@ var accessTokenFlag string
 var platformTokenFlag string
 
 var rootCmd = &cobra.Command{
-	Use:   "dtwiz",
-	Short: "Dynatrace Ingest CLI — analyze systems and deploy observability",
+	Use:           "dtwiz",
+	SilenceErrors: true,
+	Short:         "Dynatrace Ingest CLI — analyze systems and deploy observability",
 	Long: `dtwiz analyzes your system and deploys the best Dynatrace ingestion method.
 
 Set your Dynatrace credentials via environment variables:
@@ -87,6 +89,11 @@ func Execute(t time.Time) {
 	err := rootCmd.Execute()
 	selfmonitoring.Flush(500 * time.Millisecond)
 	if err != nil {
+		// Cobra's own error printing is silenced so a step failure that was
+		// already shown under its "✗" line is not repeated.
+		if !display.IsReported(err) {
+			fmt.Fprintln(os.Stderr, "Error:", err)
+		}
 		os.Exit(1)
 	}
 }

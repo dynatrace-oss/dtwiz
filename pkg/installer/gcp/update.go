@@ -32,7 +32,7 @@ func updateGCPWithRunner(
 	var monConfigIDs []string
 	var conns []connRef
 	var projectID string
-	err := installer.RunConcurrently(
+	err := installer.RunConcurrentlyWithSpinner("Looking up existing Google Cloud integration",
 		func() (err error) { monConfigIDs, err = dtc.findAllMonitoringConfigs(integrationPrefix); return },
 		func() (err error) { conns, err = dtc.findAllConnections(integrationPrefix); return },
 		func() (err error) { projectID, _, err = gcpAccountInfo(runner); return },
@@ -57,33 +57,32 @@ func updateGCPWithRunner(
 		ConnectionID:        conn.objectID,
 	}
 
-	gcpUpdatePrintPreview(cfg, monConfigIDs)
+	gcpUpdatePrintPreview(cfg, monConfigIDs, dryRun)
 
 	if proceed, err := installer.ShouldProceed(dryRun, "Update"); !proceed {
 		return err
 	}
 
-	freshlyInstalled, err := dtc.installExtension()
-	if err != nil {
-		return fmt.Errorf("installing extension %s: %w", extensionName, err)
-	}
-	if freshlyInstalled {
-		logger.Debug("extension freshly installed (async), waiting for it to become active")
-		fmt.Println("  Extension freshly installed — waiting for it to become active...")
-		if waitErr := waitForExtensionActive(dtc, sleeper); waitErr != nil {
-			logger.Debug("extension did not become active in time, proceeding anyway", "error", waitErr)
-		} else {
-			display.ColorOK.Println("  ✓ Extension is active")
+	if err := display.RunStep("Installed Dynatrace extension", func(s *display.Step) error {
+		freshlyInstalled, err := dtc.installExtension()
+		if err != nil {
+			return fmt.Errorf("installing extension %s: %w", extensionName, err)
 		}
+		if freshlyInstalled {
+			logger.Debug("extension freshly installed (async), waiting for it to become active")
+			s.Detail("waiting for it to become active")
+			if waitErr := waitForExtensionActive(dtc, sleeper); waitErr != nil {
+				logger.Debug("extension did not become active in time, proceeding anyway", "error", waitErr)
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	if err := reconcileMonitoring(cfg, monConfigIDs, dtc); err != nil {
 		return err
 	}
-
-	fmt.Println()
-	display.ColorMessage.Println("  Google Cloud integration updated!")
-	fmt.Println()
 
 	installer.MarkInstallDone()
 	installer.WatchIngestCloudFromTimeWithEvent(cfg.EnvURL, cfg.PlatformToken, startTime, installer.OnWatchSnapshot, installer.OnWatchComplete)
@@ -106,50 +105,53 @@ func selectUpdatableConnection(conns []connRef, name string) (connRef, error) {
 // reconcileMonitoring updates or creates the monitoring configuration. Each update is a single atomic call; failure leaves the prior config intact.
 func reconcileMonitoring(cfg gcpConfig, monConfigIDs []string, dtc dtclient) error {
 	if len(monConfigIDs) == 0 {
-		fmt.Println("  Step 1/1: Create GCP monitoring configuration...")
-		if err := dtc.createMonitoring(cfg.ConfigurationName, cfg.ConnectionID, cfg.ServiceAccountEmail, cfg.ProjectID); err != nil {
-			return fmt.Errorf("create monitoring configuration: %w", err)
-		}
-		display.ColorOK.Println("  ✓ Monitoring configuration created")
-		return nil
+		return display.RunStep("Created monitoring configuration", func(*display.Step) error {
+			if err := dtc.createMonitoring(cfg.ConfigurationName, cfg.ConnectionID, cfg.ServiceAccountEmail, cfg.ProjectID); err != nil {
+				return fmt.Errorf("create monitoring configuration: %w", err)
+			}
+			return nil
+		})
 	}
 
-	total := len(monConfigIDs)
-	for i, id := range monConfigIDs {
-		fmt.Printf("  Step %d/%d: Update GCP monitoring configuration...\n", i+1, total)
+	for _, id := range monConfigIDs {
 		logger.Debug("reconciling monitoring config", "configID", id)
-		if err := dtc.updateMonitoring(id, cfg.ConfigurationName, cfg.ConnectionID, cfg.ServiceAccountEmail, cfg.ProjectID); err != nil {
-			return fmt.Errorf("update monitoring configuration %s: %w", id, err)
+		if err := display.RunStep("Updated monitoring configuration", func(*display.Step) error {
+			if err := dtc.updateMonitoring(id, cfg.ConfigurationName, cfg.ConnectionID, cfg.ServiceAccountEmail, cfg.ProjectID); err != nil {
+				return fmt.Errorf("update monitoring configuration %s: %w", id, err)
+			}
+			return nil
+		}); err != nil {
+			return err
 		}
-		display.ColorOK.Println("  ✓ Monitoring configuration updated")
 	}
 	return nil
 }
 
-func gcpUpdatePrintPreview(cfg gcpConfig, monConfigIDs []string) {
+func gcpUpdatePrintPreview(cfg gcpConfig, monConfigIDs []string, showPlan bool) {
 	fmt.Println()
-	display.ColorMessage.Println("  Dynatrace Google Cloud Integration: Update")
-	fmt.Println()
-	fmt.Printf("  Environment:        %s\n", cfg.EnvURL)
-	fmt.Printf("  Project:            %s\n", cfg.ProjectID)
-	fmt.Printf("  Service account:    %s\n", cfg.ServiceAccountEmail)
-	fmt.Printf("  Connection name:    %s (unchanged)\n", cfg.ConnectionName)
-	fmt.Printf("  Configuration name: %s\n", cfg.ConfigurationName)
-	fmt.Println()
-	display.ColorMessage.Println("  Authentication (connection, service account, role grants) is left unchanged.")
-	fmt.Println()
-	display.PrintSectionDivider()
-	display.ColorMessage.Println("  Steps to be executed:")
-	display.PrintSectionDivider()
+	display.Header("dtwiz · Google Cloud update")
+	display.PrintAlignedStatusLines(display.ColorDefault,
+		"Project", cfg.ProjectID,
+		"Connection", cfg.ConnectionName+" (unchanged)",
+		"Updates", "GCP monitoring configuration "+cfg.ConfigurationName,
+	)
+	display.Detail("environment: %s", cfg.EnvURL)
+	display.Detail("service account: %s", cfg.ServiceAccountEmail)
+	display.Detail("authentication (connection, service account, role grants) is left unchanged")
 
-	if len(monConfigIDs) == 0 {
-		fmt.Printf("  Step 1: DT Extensions API: create GCP monitoring configuration '%s'\n", cfg.ConfigurationName)
-	} else {
-		for i, id := range monConfigIDs {
-			fmt.Printf("  Step %d: DT Extensions API: update GCP monitoring configuration '%s' (id: %s)\n", i+1, cfg.ConfigurationName, id)
+	if showPlan || logger.Enabled() {
+		fmt.Println()
+		display.PrintSectionDivider()
+		display.ColorMessage.Println("  Steps to be executed:")
+		display.PrintSectionDivider()
+		if len(monConfigIDs) == 0 {
+			fmt.Printf("  Step 1: DT Extensions API: create GCP monitoring configuration '%s'\n", cfg.ConfigurationName)
+		} else {
+			for i, id := range monConfigIDs {
+				fmt.Printf("  Step %d: DT Extensions API: update GCP monitoring configuration '%s' (id: %s)\n", i+1, cfg.ConfigurationName, id)
+			}
 		}
+		display.PrintSectionDivider()
 	}
-
-	display.PrintSectionDivider()
 	fmt.Println()
 }

@@ -310,10 +310,10 @@ func TestJavaInstrumentationPlan_Execute_MultiModuleDispatch(t *testing.T) {
 		},
 	}
 
-	helpers.CaptureStdout(t, func() {
+	stdout := helpers.CaptureStdout(t, func() {
 		_ = plan.Execute()
 	})
-	output := colorBuf.String()
+	output := colorBuf.String() + stdout
 
 	if !agentDownloaded {
 		t.Error("agent download not attempted — Execute() did not dispatch to executeMultiModule()")

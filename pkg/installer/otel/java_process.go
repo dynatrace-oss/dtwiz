@@ -354,7 +354,7 @@ func noEntrypointMessage(projectPath string) string {
 // Returns nil if the user skips.
 func promptEntrypointSelection(entrypoints []JavaEntrypoint) *JavaEntrypoint {
 	if len(entrypoints) == 1 {
-		display.PrintStatusLine("entrypoint", entrypoints[0].Command, display.ColorOK)
+		display.Detail("entrypoint: %s", entrypoints[0].Command)
 		return &entrypoints[0]
 	}
 

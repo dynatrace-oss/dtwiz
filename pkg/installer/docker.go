@@ -3,6 +3,8 @@ package installer
 import (
 	"fmt"
 	"os/exec"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 )
 
 // isDockerAvailable returns true when the `docker` binary is on PATH and the
@@ -58,14 +60,19 @@ func InstallDocker(envURL, token string, dryRun bool) error {
 	// Remove any existing container with the same name.
 	_ = exec.Command("docker", "rm", "-f", containerName).Run()
 
-	fmt.Printf("  Starting Dynatrace OneAgent container %q...\n", containerName)
-	if err := RunCommand("docker", dockerArgs...); err != nil {
-		RecordFeature(FeatureHostMonitoring, false)
-		return fmt.Errorf("starting Dynatrace OneAgent container: %w", err)
+	display.InstallHeader("dtwiz · OneAgent (Docker)")
+	err := display.RunStep("Started OneAgent container", func(s *display.Step) error {
+		s.Detail("%s", containerName)
+		if err := RunCommandQuiet("docker", dockerArgs...); err != nil {
+			return fmt.Errorf("starting Dynatrace OneAgent container: %w", err)
+		}
+		return nil
+	})
+	RecordFeature(FeatureHostMonitoring, err == nil)
+	if err != nil {
+		return err
 	}
-	RecordFeature(FeatureHostMonitoring, true)
 
-	fmt.Printf("  OneAgent container %q started successfully.\n", containerName)
-	fmt.Println("  To view logs: docker logs -f " + containerName)
+	display.Println("View logs: docker logs -f %s", containerName)
 	return nil
 }

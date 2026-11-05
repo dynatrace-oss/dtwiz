@@ -184,8 +184,8 @@ func TestUpdateDynatraceCollector_ShowsPreviewSections(t *testing.T) {
 		_ = runUpdateDynatrace(t, configPath, "dt0s16.test", true /* dryRun */)
 	})
 
-	if !strings.Contains(output, "OpenTelemetry Host Monitoring extension") {
-		t.Errorf("expected extension section in preview, got:\n%s", output)
+	if !strings.Contains(output, "Host monitoring") {
+		t.Errorf("expected extension row in preview, got:\n%s", output)
 	}
 	if !strings.Contains(output, "OpenPipeline") {
 		t.Errorf("expected OpenPipeline route plan section in preview, got:\n%s", output)

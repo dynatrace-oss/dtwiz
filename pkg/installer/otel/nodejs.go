@@ -336,13 +336,14 @@ func (p *NodeInstrumentationPlan) Execute() error {
 
 	// Ensure project dependencies are installed before any build step.
 	// Framework builds (npm run build) require node_modules to be present.
-	fmt.Print("  Installing project dependencies... ")
-	if err := installNodeProjectDeps(proj.Path); err != nil {
-		fmt.Println("failed.")
-		fmt.Printf("    %v\n", err)
-		return fmt.Errorf("installing project dependencies: %w", err)
+	if err := display.RunStep("Installed project dependencies", func(*display.Step) error {
+		if err := installNodeProjectDeps(proj.Path); err != nil {
+			return fmt.Errorf("installing project dependencies: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
-	fmt.Println("done.")
 
 	// Nuxt requires a pre-built Nitro server. If the build output is missing,
 	// automatically run `npm run build` (using the project's build script) so
@@ -350,22 +351,20 @@ func (p *NodeInstrumentationPlan) Execute() error {
 	if p.Framework == "nuxt" {
 		nitroEntry := filepath.Join(proj.Path, ".output", "server", "index.mjs")
 		if _, err := os.Stat(nitroEntry); os.IsNotExist(err) {
-			fmt.Print("  Building Nuxt project (npm run build)... ")
-			if err := runBuildScript(proj.Path); err != nil {
-				fmt.Println("failed.")
-				fmt.Printf("    %v\n", err)
-				return fmt.Errorf("building Nuxt project: %w", err)
-			}
-			fmt.Println("done.")
-			// Re-verify the build produced the expected output.
-			if _, err := os.Stat(nitroEntry); err != nil {
-				fmt.Printf("    Build completed but %s was not produced.\n", nitroEntry)
-				fmt.Println("    Check the build output above for errors.")
-				return fmt.Errorf("nuxt build did not produce %s", nitroEntry)
+			if err := display.RunStep("Built Nuxt project", func(*display.Step) error {
+				if err := runBuildScript(proj.Path); err != nil {
+					return fmt.Errorf("building Nuxt project: %w", err)
+				}
+				// Re-verify the build produced the expected output.
+				if _, err := os.Stat(nitroEntry); err != nil {
+					return fmt.Errorf("nuxt build did not produce %s — check the build output for errors", nitroEntry)
+				}
+				return nil
+			}); err != nil {
+				return err
 			}
 		} else if err != nil {
-			fmt.Printf("  Cannot access %s: %v\n", nitroEntry, err)
-			return fmt.Errorf("accessing Nuxt build output: %w", err)
+			return fmt.Errorf("accessing Nuxt build output %s: %w", nitroEntry, err)
 		}
 		logger.Debug("nuxt build output found", "path", nitroEntry)
 	}
@@ -375,79 +374,73 @@ func (p *NodeInstrumentationPlan) Execute() error {
 	if p.Framework == "next" {
 		nextBuildDir := filepath.Join(proj.Path, ".next")
 		if _, err := os.Stat(nextBuildDir); os.IsNotExist(err) {
-			fmt.Print("  Building Next.js project (npm run build)... ")
-			if err := runBuildScript(proj.Path); err != nil {
-				fmt.Println("failed.")
-				fmt.Printf("    %v\n", err)
-				return fmt.Errorf("building Next.js project: %w", err)
-			}
-			fmt.Println("done.")
-			// Re-verify the build produced the expected output.
-			if _, err := os.Stat(nextBuildDir); err != nil {
-				fmt.Printf("    Build completed but .next/ was not produced.\n")
-				fmt.Println("    Check the build output above for errors.")
-				return fmt.Errorf("next.js build did not produce .next/")
+			if err := display.RunStep("Built Next.js project", func(*display.Step) error {
+				if err := runBuildScript(proj.Path); err != nil {
+					return fmt.Errorf("building Next.js project: %w", err)
+				}
+				// Re-verify the build produced the expected output.
+				if _, err := os.Stat(nextBuildDir); err != nil {
+					return fmt.Errorf("next.js build did not produce .next/ — check the build output for errors")
+				}
+				return nil
+			}); err != nil {
+				return err
 			}
 		} else if err != nil {
-			fmt.Printf("  Cannot access %s: %v\n", nextBuildDir, err)
-			return fmt.Errorf("accessing Next.js build output: %w", err)
+			return fmt.Errorf("accessing Next.js build output %s: %w", nextBuildDir, err)
 		}
 		logger.Debug("next.js build output found", "path", nextBuildDir)
 	}
 
 	if len(proj.RunningProcessIDs) > 0 {
-		fmt.Print("  Stopping running processes... ")
-		stopProcesses(proj.RunningProcessIDs)
-		fmt.Println("done.")
+		_ = display.RunStep("Stopped running processes", func(*display.Step) error {
+			stopProcesses(proj.RunningProcessIDs)
+			return nil
+		})
 	}
 
-	fmt.Print("  Creating .otel/ directory... ")
-	if err := createOtelDir(p); err != nil {
-		fmt.Println("failed.")
-		fmt.Printf("    %v\n", err)
-		return fmt.Errorf("creating .otel/ directory: %w", err)
+	if err := display.RunStep("Created .otel/ directory", func(*display.Step) error {
+		if err := createOtelDir(p); err != nil {
+			return fmt.Errorf("creating .otel/ directory: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
-	fmt.Println("done.")
 
 	// For Next.js, write a CJS wrapper script. Nuxt bypasses the CLI entirely
 	// (nuxt preview spawns a child process that loses OTel registration),
 	// so we generate an ESM bootstrap script that uses module.register() for ESM hooks.
-	if p.Framework == "next" {
-		scriptName := "next-otel-bootstrap.js"
+	writeBootstrap := func(scriptName, content string) error {
 		scriptPath := filepath.Join(p.OtelDir, scriptName)
 		logger.Debug("writing bootstrap script", "path", scriptPath, "framework", p.Framework)
-		fmt.Printf("  Writing %s... ", scriptName)
-		content := generateWrapperJS(p.Framework)
-		if err := os.WriteFile(scriptPath, []byte(content), 0600); err != nil {
-			fmt.Println("failed.")
-			fmt.Printf("    %v\n", err)
-			return fmt.Errorf("writing %s: %w", scriptName, err)
+		return display.RunStep("Wrote "+scriptName, func(*display.Step) error {
+			if err := os.WriteFile(scriptPath, []byte(content), 0600); err != nil {
+				return fmt.Errorf("writing %s: %w", scriptName, err)
+			}
+			return nil
+		})
+	}
+	if p.Framework == "next" {
+		if err := writeBootstrap("next-otel-bootstrap.js", generateWrapperJS(p.Framework)); err != nil {
+			return err
 		}
-		fmt.Println("done.")
 	}
 	if p.Framework == "nuxt" {
-		scriptName := "nuxt-otel-bootstrap.mjs"
-		scriptPath := filepath.Join(p.OtelDir, scriptName)
-		logger.Debug("writing bootstrap script", "path", scriptPath, "framework", p.Framework)
-		fmt.Printf("  Writing %s... ", scriptName)
-		content := generateNuxtBootstrapMJS(p.OtelDir)
-		if err := os.WriteFile(scriptPath, []byte(content), 0600); err != nil {
-			fmt.Println("failed.")
-			fmt.Printf("    %v\n", err)
-			return fmt.Errorf("writing %s: %w", scriptName, err)
+		if err := writeBootstrap("nuxt-otel-bootstrap.mjs", generateNuxtBootstrapMJS(p.OtelDir)); err != nil {
+			return err
 		}
-		fmt.Println("done.")
 	}
 
-	fmt.Print("  Installing OTel packages (npm install)... ")
-	if err := installOtelNodeDeps(p.OtelDir); err != nil {
-		fmt.Println("failed.")
-		fmt.Printf("    %v\n", err)
-		return fmt.Errorf("installing OTel packages: %w", err)
+	if err := display.RunStep("Installed OTel packages", func(*display.Step) error {
+		if err := installOtelNodeDeps(p.OtelDir); err != nil {
+			return fmt.Errorf("installing OTel packages: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
-	fmt.Println("done.")
 
-	fmt.Println()
 	var procs []*ManagedProcess
 
 	switch p.Framework {
@@ -532,13 +525,13 @@ func launchEntrypoint(svcName, projectPath, entrypoint string, cmd *exec.Cmd) *M
 	logger.Debug("launching entrypoint", "service", svcName, "entrypoint", entrypoint, "logFile", logPath)
 	logFile, err := os.Create(logPath)
 	if err != nil {
-		fmt.Printf("    Failed to create log file %s: %v\n", logPath, err)
+		display.StepWarn(fmt.Sprintf("Could not create log file %s", logPath), err.Error())
 		return nil
 	}
 
 	mp, err := StartManagedProcess(svcName, logName, entrypoint, cmd, logFile)
 	if err != nil {
-		fmt.Printf("    Failed to start %s: %v\n", svcName, err)
+		display.StepWarn(fmt.Sprintf("Could not start %s", svcName), err.Error())
 		return nil
 	}
 	return mp
@@ -576,7 +569,7 @@ func InstallOtelNode(envURL, token, platformToken, serviceName, projectPath stri
 	}
 
 	fmt.Println()
-	display.Header("Dynatrace Node.js Auto-Instrumentation")
+	display.InstallHeader("dtwiz · Node.js")
 
 	var plan *NodeInstrumentationPlan
 	if projectPath != "" {
@@ -610,10 +603,15 @@ func InstallOtelNode(envURL, token, platformToken, serviceName, projectPath stri
 	}
 
 	fmt.Println()
-	display.ColorMessage.Println("  Steps:")
-	plan.PrintPlanSteps()
+	if logger.Enabled() {
+		display.PrintlnColored(display.ColorMessage, "Steps:")
+		plan.PrintPlanSteps()
+	} else {
+		display.PrintAlignedStatusLines(display.ColorDefault, "Instrument", fmt.Sprintf("%s · %s", plan.Runtime(), plan.Project.Path))
+	}
+	fmt.Println()
 
-	ok, err := installer.ConfirmProceed("  Proceed with installation?")
+	ok, err := installer.ConfirmProceed("  Apply?")
 	if err != nil {
 		return err
 	}

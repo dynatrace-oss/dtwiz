@@ -54,7 +54,7 @@ The combined configuration SHALL be shown to the user before it is written, cons
 #### Scenario: Combined config previewed with masked secrets
 
 - **WHEN** `install otel` reaches the preview step
-- **THEN** a summary of the configuration SHALL be printed inline with the ingest token masked: the receiver endpoint lines at the top and the service pipelines block at the bottom, with a note indicating how many lines are hidden and directing the user to `--debug` for the full output
+- **THEN** a compact summary of what will be installed SHALL be shown, and the configuration SHALL be printed inline with the ingest token masked only with `-v`/`--debug` or `--dry-run`: the receiver endpoint lines at the top and the service pipelines block at the bottom, with a note indicating how many lines are hidden and directing the user to `--debug` for the full output
 - **AND** the user SHALL be asked a single confirmation prompt defaulting to yes before any file is written
 
 #### Scenario: Dry-run makes no changes
