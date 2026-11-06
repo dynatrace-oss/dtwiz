@@ -174,7 +174,7 @@ func goBuildEnv(extra ...string) []string {
 
 var goNetworkErrorMarkers = []string{
 	"dial tcp", "no such host", "i/o timeout", "tls handshake", "connection refused",
-	"connection reset", "proxy.golang.org", "network is unreachable", "temporary failure in name resolution",
+	"connection reset", "proxy.golang.org", "module lookup disabled", "network is unreachable", "temporary failure in name resolution",
 }
 
 func isGoNetworkError(output string) bool {

@@ -368,6 +368,7 @@ func (p *GoInstrumentationPlan) buildServices(ctx context.Context) {
 	var workDirs otelcWorkDirs
 	defer workDirs.Close()
 	fallbackNoted := false
+	var clientBuildErrs []error
 
 	for _, s := range p.Services {
 		if ctx.Err() != nil {
@@ -418,13 +419,32 @@ func (p *GoInstrumentationPlan) buildServices(ctx context.Context) {
 				continue
 			}
 			fmt.Println("failed.")
-			fmt.Printf("    %v\n", err)
+			if ctx.Err() != nil {
+				fmt.Printf("    %v\n", err)
+			} else {
+				logger.Debug("client-only build failed", "service", s.Name, "error", err)
+			}
 			p.noteTierError("go-client-build", err)
+			clientBuildErrs = append(clientBuildErrs, err)
 			s.Method = goMethodManual
 			s.Err = err
 		}
 	}
+	if ctx.Err() == nil && len(clientBuildErrs) > 0 {
+		fmt.Println(goBuildFailureCause(clientBuildErrs))
+	}
 	writeGoMarkers(attempted)
+}
+
+// goBuildFailureCause is the one-line explanation printed after the list of
+// services whose client-only build failed. The full errors are in the debug log.
+func goBuildFailureCause(errs []error) string {
+	for _, err := range errs {
+		if isGoNetworkError(err.Error()) {
+			return "  Could not download the OpenTelemetry modules — check your network connection or GOPROXY (run with --debug for details)."
+		}
+	}
+	return "  Could not build the instrumented services — run with --debug for details."
 }
 
 func (p *GoInstrumentationPlan) reportToolFailure(err error) {
