@@ -11,12 +11,14 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/fatih/color"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/client"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 )
 
 // newTestClassicClient creates a ClassicClient pointing at the given test server URL.
@@ -691,5 +693,113 @@ func TestInstallOneAgentV2_DownloadFails_HostMonitoringNotTried(t *testing.T) {
 	}
 	if got := installer.FeatureOutcomes()[installer.FeatureHostMonitoring]; got != installer.OutcomeNotTried {
 		t.Errorf("host monitoring outcome = %v, want not tried: the install failed before the installer command ran", got)
+	}
+}
+
+// Reproduces mqa14477 (Oct 16): the token passes dtwiz's credential checks but the tenant answers
+// 403 on the connection-info call, so the installer download is never requested. dtwiz reported
+// install_failed; it must report auth_error with the insufficient_permissions reason.
+func TestInstallOneAgentV2_TokenWithoutInstallerScope_ReportedAsAuthError(t *testing.T) {
+	skipNonLinux(t)
+	withInstallDir(t, filepath.Join(t.TempDir(), "nonexistent"))
+	withNeedsSudo(t, false)
+
+	var downloadRequested atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == endpointsAPIPath:
+			w.WriteHeader(http.StatusForbidden)
+		case strings.Contains(r.URL.Path, "installer/agent"):
+			downloadRequested.Store(true)
+			http.NotFound(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	flush := captureStdout(t)
+	err := InstallOneAgentV2(newMockClient(t, srv.URL), InstallOptions{
+		MonitoringMode:        "fullstack",
+		SkipConnectivityCheck: true,
+		Quiet:                 true,
+	})
+	flush()
+
+	if err == nil {
+		t.Fatal("expected the install to fail")
+	}
+	errType, attrs := selfmonitoring.ClassifyError(err)
+	if errType != installer.ErrTypeAuthError {
+		t.Fatalf("reported as %q, want %q (error: %v)", errType, installer.ErrTypeAuthError, err)
+	}
+	if attrs["auth.failure_reason"] != "insufficient_permissions" {
+		t.Errorf("attrs = %v, want auth.failure_reason=insufficient_permissions", attrs)
+	}
+	if !strings.Contains(err.Error(), "InstallerDownload") {
+		t.Errorf("error %q does not tell the user which scope to add", err)
+	}
+	if downloadRequested.Load() {
+		t.Error("the installer download was requested after the 403 on connection info")
+	}
+}
+
+// Reproduces hyo68781 (Oct 16): the installer downloaded fine, then the signature check could not
+// fetch the Dynatrace root CA, so the installer never ran. dtwiz reported install_failed with no
+// cause. It must report network_error with the root_ca_unreachable reason.
+func TestInstallOneAgentV2_RootCAUnreachable_ReportedAsNetworkError(t *testing.T) {
+	skipNonLinux(t)
+	withInstallDir(t, filepath.Join(t.TempDir(), "nonexistent"))
+	withNeedsSudo(t, false)
+	installer.ResetInstallTelemetry()
+	t.Cleanup(installer.ResetInstallTelemetry)
+
+	// A fake openssl lets the signature check reach the root CA fetch on any Linux host.
+	binDir := t.TempDir()
+	createStubFile(t, filepath.Join(binDir, "openssl"), "#!/bin/sh\nexit 99\n", 0o755)
+	t.Setenv("PATH", binDir)
+
+	caSrv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	caURL := caSrv.URL
+	caSrv.Close() // nothing listens: egress to the CA host is blocked
+	withRootCertURL(t, caURL)
+
+	marker := filepath.Join(t.TempDir(), "installer-ran")
+	installerScript := "#!/bin/sh\ntouch '" + marker + "'\nexit 0\n"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == endpointsAPIPath:
+			_, _ = w.Write([]byte("host.example.com:443"))
+		case strings.Contains(r.URL.Path, "installer/agent"):
+			_, _ = w.Write([]byte(installerScript))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	flush := captureStdout(t)
+	err := InstallOneAgentV2(newMockClient(t, srv.URL), InstallOptions{
+		MonitoringMode:        "fullstack",
+		SkipConnectivityCheck: true,
+		Quiet:                 true,
+	})
+	flush()
+
+	if err == nil {
+		t.Fatal("expected the install to fail")
+	}
+	errType, attrs := selfmonitoring.ClassifyError(err)
+	if errType != installer.ErrTypeNetworkError {
+		t.Fatalf("reported as %q, want %q (error: %v)", errType, installer.ErrTypeNetworkError, err)
+	}
+	if attrs["network.failure_reason"] != "root_ca_unreachable" || attrs["network.url"] != caURL {
+		t.Errorf("attrs = %v, want root_ca_unreachable for %s", attrs, caURL)
+	}
+	if _, statErr := os.Stat(marker); statErr == nil {
+		t.Error("the installer ran although the signature check failed")
+	}
+	if got := installer.FeatureOutcomes()[installer.FeatureHostMonitoring]; got != installer.OutcomeNotTried {
+		t.Errorf("host monitoring outcome = %v, want not tried", got)
 	}
 }

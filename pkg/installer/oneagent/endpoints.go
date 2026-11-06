@@ -1,6 +1,7 @@
 package oneagent
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -32,12 +33,18 @@ func ResolveEndpoints(c *client.ClassicClient) ([]Endpoint, error) {
 
 	resp, err := c.HTTP().R().Get(endpointsAPIPath)
 	if err != nil {
-		return nil, fmt.Errorf("endpoint resolution network error: %w", err)
+		return nil, installerNetworkError(
+			fmt.Sprintf("endpoint resolution network error: %v", err),
+			"environment_not_reachable", reqURL, err)
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("endpoint resolution failed (status %d, url %s): %s",
+		msg := fmt.Sprintf("endpoint resolution failed (status %d, url %s): %s",
 			resp.StatusCode(), reqURL, strings.TrimSpace(resp.String()))
+		if resp.StatusCode() == http.StatusForbidden || resp.StatusCode() == http.StatusUnauthorized {
+			return nil, installerAuthError(msg+"\n"+installerScopeHint, resp.StatusCode())
+		}
+		return nil, errors.New(msg)
 	}
 
 	body := strings.TrimSpace(resp.String())

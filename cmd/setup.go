@@ -24,6 +24,13 @@ import (
 
 var setupDryRun bool
 
+// selectionError is the telemetry error for a menu selection that is missing (no input, for
+// example when stdin is not a terminal) or invalid. It is a user input problem, so it is
+// reported as config_error rather than install_failed.
+func selectionError() error {
+	return &installer.ConfigError{MissingFields: []string{"selection"}}
+}
+
 var setupCmd = &cobra.Command{
 	Use:   "setup",
 	Short: "Interactive setup — analyze, recommend, and install the best ingestion method",
@@ -102,7 +109,7 @@ var setupCmd = &cobra.Command{
 		reader := bufio.NewReader(cmd.InOrStdin())
 		input, err := reader.ReadString('\n')
 		if err != nil {
-			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), selectionError())
 			return fmt.Errorf("failed to read input: %w", err)
 		}
 		input = strings.TrimSpace(input)
@@ -156,7 +163,7 @@ var setupCmd = &cobra.Command{
 
 		choice, err := strconv.Atoi(input)
 		if err != nil || choice < 1 || choice > len(actionable) {
-			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), fmt.Errorf("invalid selection: %q", input))
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), selectionError())
 			return fmt.Errorf("invalid selection: %q", input)
 		}
 

@@ -3,6 +3,7 @@ package oneagent
 import (
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,9 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 )
 
 func TestInstallerOSSegment(t *testing.T) {
@@ -164,6 +168,87 @@ func TestDownloadInstaller_Unauthorized(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "401") {
 		t.Errorf("error %q does not mention 401", err)
+	}
+}
+
+func TestDownloadInstaller_AuthFailuresAreAuthErrors(t *testing.T) {
+	tests := []struct {
+		name       string
+		status     int
+		wantReason string
+	}{
+		{"401 unauthorized", http.StatusUnauthorized, "authentication_failed"},
+		{"403 forbidden", http.StatusForbidden, "insufficient_permissions"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tt.status)
+			}))
+			defer srv.Close()
+
+			_, err := DownloadInstaller(newTestClassicClient(t, srv.URL), Environment{OS: "linux", Arch: "x86"})
+
+			var authErr *installer.AuthError
+			if !errors.As(err, &authErr) {
+				t.Fatalf("error %v is not an AuthError", err)
+			}
+			if authErr.Reason != tt.wantReason {
+				t.Errorf("Reason = %q, want %q", authErr.Reason, tt.wantReason)
+			}
+			if !strings.Contains(err.Error(), "InstallerDownload") {
+				t.Errorf("error %q does not name the InstallerDownload scope", err)
+			}
+		})
+	}
+}
+
+// The download call has the same exposure as the connection-info call: a 403 means the token
+// lacks the InstallerDownload permission and must be reported as auth_error, not install_failed.
+func TestDownloadInstaller_403_ReportedAsAuthError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	_, err := DownloadInstaller(newTestClassicClient(t, srv.URL), Environment{OS: "linux", Arch: "x86"})
+
+	errType, attrs := selfmonitoring.ClassifyError(err)
+	if errType != installer.ErrTypeAuthError {
+		t.Fatalf("reported as %q, want %q (error: %v)", errType, installer.ErrTypeAuthError, err)
+	}
+	if attrs["auth.failure_reason"] != "insufficient_permissions" {
+		t.Errorf("attrs = %v, want auth.failure_reason=insufficient_permissions", attrs)
+	}
+}
+
+func TestDownloadInstaller_ServerErrorIsNotAuthError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	_, err := DownloadInstaller(newTestClassicClient(t, srv.URL), Environment{OS: "linux", Arch: "x86"})
+
+	var authErr *installer.AuthError
+	if errors.As(err, &authErr) {
+		t.Errorf("500 classified as AuthError: %v", err)
+	}
+}
+
+func TestDownloadInstaller_NetworkErrorIsNetworkError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	c := newTestClassicClient(t, srv.URL)
+	srv.Close()
+
+	_, err := DownloadInstaller(c, Environment{OS: "linux", Arch: "x86"})
+
+	var netErr *installer.NetworkError
+	if !errors.As(err, &netErr) {
+		t.Fatalf("error %v is not a NetworkError", err)
+	}
+	if netErr.Reason != "environment_not_reachable" {
+		t.Errorf("Reason = %q, want environment_not_reachable", netErr.Reason)
 	}
 }
 
