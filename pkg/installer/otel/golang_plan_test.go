@@ -723,3 +723,19 @@ func TestGoBuildEnv_OverridesInheritedGoWork(t *testing.T) {
 		t.Fatalf("effective GOWORK = %q", last)
 	}
 }
+
+func TestGoBuildFailureCause(t *testing.T) {
+	network := errors.New("add OpenTelemetry packages (client-only) failed on windows/amd64: exit status 1: go: go.opentelemetry.io/otel/sdk/metric: module lookup disabled by GOPROXY=off")
+	other := errors.New("build svc (client-only) failed on windows/amd64: exit status 1: ./main.go:3:1: syntax error")
+
+	if got := goBuildFailureCause([]error{network}); !strings.Contains(got, "GOPROXY") {
+		t.Errorf("network error: got %q, want a network/GOPROXY hint", got)
+	}
+	if got := goBuildFailureCause([]error{other, network}); !strings.Contains(got, "GOPROXY") {
+		t.Errorf("mixed errors: got %q, want the network hint", got)
+	}
+	got := goBuildFailureCause([]error{other})
+	if strings.Contains(got, "GOPROXY") || !strings.Contains(got, "--debug") {
+		t.Errorf("generic error: got %q, want the generic --debug line", got)
+	}
+}
