@@ -161,13 +161,9 @@ func TestDetectAvailableRuntimes_DefaultEnabled(t *testing.T) {
 
 	for _, rt := range runtimes {
 		switch rt.name {
-		case "Python", "Node.js", "Java":
+		case "Python", "Node.js", "Java", "Go":
 			if !rt.enabled {
 				t.Errorf("%s should be enabled by default, got enabled=false", rt.name)
-			}
-		case "Go":
-			if rt.enabled {
-				t.Errorf("%s should be disabled by default, got enabled=true", rt.name)
 			}
 		}
 	}
@@ -375,7 +371,6 @@ func TestSelectProject(t *testing.T) {
 		{name: "invalid input skips", input: "xyz\n", wantOK: false, wantIdx: -1},
 		{name: "out of range skips", input: "9\n", wantOK: false, wantIdx: -1},
 		{name: "valid project selection", input: "2\n", wantOK: true, wantIdx: 1},
-		{name: "language key selects go", input: "g\n", wantOK: true, wantIdx: -1, wantLang: "go"},
 		{name: "language key selects php", input: "p\n", wantOK: true, wantIdx: -1, wantLang: "php"},
 		{name: "language key selects rust", input: "u\n", wantOK: true, wantIdx: -1, wantLang: "rust"},
 		{name: "language key selects other", input: "o\n", wantOK: true, wantIdx: -1, wantLang: "other"},
@@ -569,6 +564,7 @@ func TestCreateRuntimePlan(t *testing.T) {
 
 	t.Run("go returns plan with module name", func(t *testing.T) {
 		projectDir := t.TempDir()
+		writeGoFiles(t, projectDir, map[string]string{"main.go": "package main\n"})
 
 		plan := createRuntimePlan(detectedProject{
 			ScannedProject: ScannedProject{Path: projectDir, Markers: []string{"go.mod"}},
@@ -587,6 +583,7 @@ func TestCreateRuntimePlan(t *testing.T) {
 
 	t.Run("go plan uses collector endpoint from httpPort", func(t *testing.T) {
 		projectDir := t.TempDir()
+		writeGoFiles(t, projectDir, map[string]string{"main.go": "package main\n"})
 
 		plan := createRuntimePlan(detectedProject{
 			ScannedProject: ScannedProject{Path: projectDir, Markers: []string{"go.mod"}},

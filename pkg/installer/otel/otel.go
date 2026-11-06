@@ -16,7 +16,6 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
-	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/environment"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/internal/rum"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
@@ -292,12 +291,11 @@ type detectedProject struct {
 }
 
 func detectAvailableRuntimes() []runtimeInfo {
-	allEnabled := featureflags.IsEnabled(featureflags.AllRuntimes)
 	return []runtimeInfo{
 		{name: "Python", binName: "python3", enabled: true, detect: detectPythonRuntimeProjects},
 		{name: "Java", binName: "java", enabled: true, detect: detectJavaRuntimeProjects},
 		{name: "Node.js", binName: "node", enabled: true, detect: detectNodeRuntimeProjects},
-		{name: "Go", binName: "go", enabled: allEnabled, detect: detectGoRuntimeProjects},
+		{name: "Go", binName: "go", enabled: true, detect: detectGoRuntimeProjects},
 	}
 }
 
@@ -328,11 +326,16 @@ func detectNodeRuntimeProjects(roots []string) []detectedProject {
 }
 
 func detectGoRuntimeProjects(roots []string) []detectedProject {
-	projects := detectGoProjects(roots)
+	projects, processes := runInParallel(func() []GoProject { return detectGoProjects(roots) }, detectGoProcesses)
+	scanned := make([]ScannedProject, len(projects))
+	for i := range projects {
+		scanned[i] = projects[i].ScannedProject
+	}
+	matchProcessesToProjects(scanned, processes)
 	detected := make([]detectedProject, 0, len(projects))
-	for _, project := range projects {
+	for i, project := range projects {
 		detected = append(detected, detectedProject{
-			ScannedProject: project.ScannedProject,
+			ScannedProject: scanned[i],
 			Runtime:        "Go",
 			ModuleName:     project.ModuleName,
 		})
@@ -412,7 +415,6 @@ type manualLanguageEntry struct {
 }
 
 var manualLanguages = []manualLanguageEntry{
-	{Key: "g", Name: "Go", URLSlug: "go"},
 	{Key: "n", Name: ".NET", URLSlug: "dotnet"},
 	{Key: "p", Name: "PHP", URLSlug: "php"},
 	{Key: "c", Name: "C++", URLSlug: "cpp"},
@@ -478,8 +480,6 @@ func selectProject(projects []detectedProject) (detectedProject, string, bool) {
 
 func createRuntimePlan(proj detectedProject, httpPort int, token, envURL, platformToken string) InstrumentationPlan {
 	collectorEndpoint := fmt.Sprintf("http://127.0.0.1:%d", httpPort)
-	svcName := environment.ProjectServiceName(proj.Path)
-
 	switch proj.Runtime {
 	case "Python":
 		plan := buildPythonInstrumentationPlan(proj.ScannedProject, collectorEndpoint, envURL, platformToken)
@@ -496,21 +496,22 @@ func createRuntimePlan(proj detectedProject, httpPort int, token, envURL, platfo
 		}
 		return plan
 	case "Go":
-		goProj := GoProject{
-			ScannedProject: proj.ScannedProject,
-			ModuleName:     proj.ModuleName,
+		moduleName := proj.ModuleName
+		if moduleName == "" {
+			moduleName = extractGoModuleName(filepath.Join(proj.Path, "go.mod"))
 		}
-		return &GoInstrumentationPlan{
-			Project: goProj,
-			EnvVars: environment.GenerateBaseOtelEnvVars(collectorEndpoint, svcName),
+		plan := buildGoInstrumentationPlan(GoProject{ScannedProject: proj.ScannedProject, ModuleName: moduleName}, collectorEndpoint)
+		if plan == nil {
+			return nil
 		}
+		return plan
 	}
 	return nil
 }
 
 var createRuntimePlanFn = createRuntimePlan
 
-// inferRuntimeFromPath returns "Java", "Node.js", "Python", or "" based on which
+// inferRuntimeFromPath returns "Java", "Node.js", "Python", "Go", or "" based on which
 // marker files or directories are present directly inside path.
 func inferRuntimeFromPath(path string) string {
 	hasFile := func(name string) bool {
@@ -531,6 +532,9 @@ func inferRuntimeFromPath(path string) string {
 		if hasFile(m) {
 			return "Python"
 		}
+	}
+	if hasFile("go.mod") {
+		return "Go"
 	}
 	return ""
 }
@@ -594,6 +598,8 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 			matchProcessesToProjects(projects, detectJavaProcesses())
 		case "Node.js":
 			matchProcessesToProjects(projects, detectNodeProcesses())
+		case "Go":
+			matchProcessesToProjects(projects, detectGoProcesses())
 		default:
 			matchProcessesToProjects(projects, detectPythonProcesses())
 		}
