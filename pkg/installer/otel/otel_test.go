@@ -17,6 +17,7 @@ import (
 
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/test/helpers"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -154,6 +155,7 @@ func TestInferRuntimeFromPath(t *testing.T) {
 }
 
 func TestDetectAvailableRuntimes_DefaultEnabled(t *testing.T) {
+	featureflags.SetCLIOverrideForTest(t, featureflags.GoInstrumentation, false) // independent of DTWIZ_GO_INSTRUMENTATION
 	featureflags.ClearCLIOverrideForTest(t, featureflags.AllRuntimes)
 	t.Setenv("DTWIZ_ALL_RUNTIMES", "")
 
@@ -358,6 +360,7 @@ func TestPrintProjectList_NoAnnotationWhenNoProcesses(t *testing.T) {
 }
 
 func TestSelectProject(t *testing.T) {
+	featureflags.SetCLIOverrideForTest(t, featureflags.GoInstrumentation, false) // Go is a manual language only with the flag off
 	projects := []detectedProject{
 		{ScannedProject: ScannedProject{Path: "/tmp/api"}, Runtime: "Python"},
 		{ScannedProject: ScannedProject{Path: "/tmp/worker"}, Runtime: "Go"},
@@ -466,6 +469,7 @@ func TestDetectAllProjects_IncludesWhenUnlocked(t *testing.T) {
 }
 
 func TestCreateRuntimePlan(t *testing.T) {
+	featureflags.SetCLIOverrideForTest(t, featureflags.GoInstrumentation, false) // legacy Go plan; the flag-on flow has its own tests
 	const httpPort = 4318
 	token := "test-token"
 	envURL := "https://tenant.apps.dynatrace.com"
@@ -1597,5 +1601,134 @@ func TestRenderOtelTemplate_DebugExporter_Excluded(t *testing.T) {
 	}
 	if strings.Contains(out, "- debug") {
 		t.Errorf("unexpected '- debug' in pipeline exporters (Debug=false):\n%s", out)
+	}
+}
+
+func TestDetectAvailableRuntimes_GoInstrumentationFlag(t *testing.T) {
+	featureflags.ClearCLIOverrideForTest(t, featureflags.AllRuntimes)
+	t.Setenv("DTWIZ_ALL_RUNTIMES", "")
+	featureflags.SetCLIOverrideForTest(t, featureflags.GoInstrumentation, true)
+
+	for _, rt := range detectAvailableRuntimes() {
+		if rt.name == "Go" && !rt.enabled {
+			t.Fatal("Go should be enabled by GoInstrumentation without AllRuntimes")
+		}
+	}
+}
+
+func TestInferRuntimeFromPath_GoFlag(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module x\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	featureflags.SetCLIOverrideForTest(t, featureflags.GoInstrumentation, false)
+	if got := inferRuntimeFromPath(dir); got != "" {
+		t.Fatalf("flag off: inferRuntimeFromPath = %q, want empty", got)
+	}
+
+	featureflags.SetCLIOverrideForTest(t, featureflags.GoInstrumentation, true)
+	if got := inferRuntimeFromPath(dir); got != "Go" {
+		t.Fatalf("flag on: inferRuntimeFromPath = %q, want Go", got)
+	}
+}
+
+func TestActiveManualLanguages_GoFlag(t *testing.T) {
+	hasGo := func() bool {
+		for _, l := range activeManualLanguages() {
+			if l.URLSlug == "go" {
+				return true
+			}
+		}
+		return false
+	}
+
+	featureflags.SetCLIOverrideForTest(t, featureflags.GoInstrumentation, false)
+	if !hasGo() {
+		t.Fatal("flag off: Go should stay in the manual language list")
+	}
+	featureflags.SetCLIOverrideForTest(t, featureflags.GoInstrumentation, true)
+	if hasGo() {
+		t.Fatal("flag on: Go should be dropped from the manual language list")
+	}
+}
+
+func manualGoPlanForTest() *GoInstrumentationPlan {
+	return &GoInstrumentationPlan{
+		Project:           GoProject{ScannedProject: ScannedProject{Path: "/tmp/shop"}},
+		Automatic:         true,
+		CollectorEndpoint: "http://127.0.0.1:4318",
+		EnvVars:           map[string]string{"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"},
+		ManualReason:      goReasonNoTool,
+	}
+}
+
+func setupGoManualInstall(t *testing.T) string {
+	t.Helper()
+	stubExtensionPreview(t)
+	stubActivation(t)
+	stubRoutePreview(t)
+	tmpDir := setupAutoConfirmedTempInstall(t)
+	featureflags.SetCLIOverrideForTest(t, featureflags.GoInstrumentation, true)
+
+	projectDir := filepath.Join(tmpDir, "gosvc")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projectDir, "go.mod"), []byte("module x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	origCreatePlan := createRuntimePlanFn
+	createRuntimePlanFn = func(_ detectedProject, _ int, _, _, _ string) InstrumentationPlan { return manualGoPlanForTest() }
+	t.Cleanup(func() { createRuntimePlanFn = origCreatePlan })
+	return projectDir
+}
+
+func TestInstallOtelCollectorWithProject_GoManualPlan_InstructionsAfterCollector(t *testing.T) {
+	projectDir := setupGoManualInstall(t)
+
+	collectorInstalled := false
+	origExecute := executeCollectorPlanFn
+	executeCollectorPlanFn = func(_ *collectorPlan, _, _ string, _ bool) error {
+		collectorInstalled = true
+		return nil
+	}
+	t.Cleanup(func() { executeCollectorPlanFn = origExecute })
+
+	var err error
+	out := helpers.CaptureStdout(t, func() {
+		_, err = InstallOtelCollectorWithProject("https://env.example.com", "tok", "dt0s16.test", projectDir, false)
+	})
+	if err != nil {
+		t.Fatalf("manual outcome must succeed: %v", err)
+	}
+	if !collectorInstalled {
+		t.Fatal("collector installation step must run for a manual Go plan")
+	}
+	instr := strings.Index(out, "can't be autoinstrumented")
+	if instr < 0 {
+		t.Fatalf("manual instructions should be printed:\n%s", out)
+	}
+	if strings.Contains(out, "Select another project?") {
+		t.Fatal("a manual plan must not trigger the 'Select another project?' prompt")
+	}
+}
+
+func TestInstallOtelCollectorWithProject_GoManualPlan_CollectorFailure(t *testing.T) {
+	projectDir := setupGoManualInstall(t)
+
+	origExecute := executeCollectorPlanFn
+	executeCollectorPlanFn = func(_ *collectorPlan, _, _ string, _ bool) error { return errors.New("collector failed") }
+	t.Cleanup(func() { executeCollectorPlanFn = origExecute })
+
+	var err error
+	out := helpers.CaptureStdout(t, func() {
+		_, err = InstallOtelCollectorWithProject("https://env.example.com", "tok", "dt0s16.test", projectDir, false)
+	})
+	if err == nil || !strings.Contains(err.Error(), "collector failed") {
+		t.Fatalf("collector failure must be reported, got %v", err)
+	}
+	if strings.Contains(out, "can't be autoinstrumented") {
+		t.Fatalf("manual instructions must not be presented as ready after a collector failure:\n%s", out)
 	}
 }

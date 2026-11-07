@@ -68,7 +68,7 @@ If compile-time instrumentation cannot be used for a service (tool installation 
 
 ### Requirement: Manual steps when automatic instrumentation is not possible
 
-When a service cannot be built by either method, no Go toolchain is available, or the project is a Go workspace, the system SHALL NOT build or launch it. The plan SHALL present manual instrumentation as the chosen method, and a manual outcome SHALL NOT be an error: the command exits successfully.
+When a service cannot be built by either method, no Go toolchain is available, or a workspace module fails the isolated build pre-flight, the system SHALL NOT build or launch it. The plan SHALL present manual instrumentation as the chosen method, and a manual outcome SHALL NOT be an error: the command exits successfully.
 
 #### Scenario: No Go toolchain
 
@@ -88,7 +88,7 @@ When a service cannot be built by either method, no Go toolchain is available, o
 
 #### Scenario: Manual outcome is shown in the preview
 
-- **GIVEN** a project that will be handled with manual steps because it has no usable Go toolchain or is inside a Go workspace
+- **GIVEN** a project that will be handled with manual steps because it has no usable Go toolchain or its workspace module cannot be built in isolation
 - **WHEN** the plan preview is shown
 - **THEN** it states that the application is not instrumented automatically and why
 - **AND** it shows that the OTel Collector will still be installed
@@ -98,6 +98,32 @@ When a service cannot be built by either method, no Go toolchain is available, o
 - **GIVEN** the user confirmed a plan whose outcome is manual steps
 - **WHEN** the collector installed successfully and the manual steps were printed
 - **THEN** the command exits with a success status
+
+### Requirement: Workspace modules are built in isolation
+
+Every service SHALL be built from its own module directory with Go workspace mode disabled (`GOWORK=off`), whether or not the project belongs to a workspace, so that an inherited `GOWORK` cannot interfere and the instrumentation tool's `go` directive change does not collide with a `go.work`. Each module SHALL have its own generated-files directory and its own backup and restore of its `go.mod` and `go.sum`. Before building a service of a workspace project, the system SHALL check that the service's package resolves in isolation. A service that does not resolve, for example because its module requires a workspace sibling only through `go.work`, SHALL NOT be built by either method: it SHALL get manual steps with the reason stated, and the other services SHALL continue.
+
+#### Scenario: Independent modules in a workspace
+
+- **GIVEN** a workspace with several modules that do not depend on each other
+- **WHEN** the plan is confirmed
+- **THEN** each service is built from its own module with workspace mode disabled
+- **AND** each module's `go.mod` and `go.sum` are byte-identical afterwards
+- **AND** each module has its own generated-files directory
+
+#### Scenario: Module depends on a workspace sibling
+
+- **GIVEN** a workspace module that imports a sibling module that is resolved only through `go.work`
+- **WHEN** the pre-flight check runs
+- **THEN** the service is not built
+- **AND** the preview and the run output state that the module depends on a workspace sibling and that manual steps apply
+- **AND** services in other modules are still built and launched
+
+#### Scenario: Inherited workspace variable
+
+- **GIVEN** `GOWORK` is set in the user's environment
+- **WHEN** a service is built
+- **THEN** the build runs with workspace mode disabled
 
 ### Requirement: Manual steps content
 
@@ -131,7 +157,7 @@ For a selected Go project the system SHALL install the OTel Collector as part of
 
 ### Requirement: Project sources and module files are unchanged
 
-The system SHALL NOT modify Go source files in the project. All generated files SHALL live in a `.otel/` directory inside each module. If a build step modifies the module's `go.mod` or `go.sum`, they SHALL be restored to their original content afterwards, including when the build fails or the run is interrupted by the user.
+The system SHALL NOT modify Go source files in the project. All generated files SHALL live in a `.otel/` directory inside each module. If a build step modifies the module's `go.mod` or `go.sum`, they SHALL be restored to their original content and file permissions afterwards, including when the build fails or the run is interrupted by the user. Source files that the instrumentation tool generates in the module directory during a build SHALL NOT remain afterwards, including after an interruption; a file with the same name that existed before the build SHALL be left untouched.
 
 #### Scenario: Build succeeds
 
@@ -145,6 +171,19 @@ The system SHALL NOT modify Go source files in the project. All generated files 
 - **GIVEN** a build with compile-time instrumentation is running
 - **WHEN** the user presses Ctrl+C
 - **THEN** `go.mod` and `go.sum` are restored before dtwiz exits
+
+#### Scenario: Build is interrupted while the tool has generated files
+
+- **GIVEN** the instrumentation tool has written generated source files into the module directory
+- **WHEN** the user presses Ctrl+C and the tool is stopped before it can remove them
+- **THEN** those files are removed before dtwiz exits
+- **AND** a file of the same name that existed before the build is kept
+
+#### Scenario: Restore keeps file permissions
+
+- **GIVEN** a `go.mod` with mode 0644
+- **WHEN** it is restored after a build
+- **THEN** its mode is still 0644
 
 #### Scenario: Module files have uncommitted changes
 
@@ -262,3 +301,32 @@ Build and installation failures SHALL show the failing command's output and the 
 - **GIVEN** no network connection during the first build
 - **WHEN** the build fails to download modules
 - **THEN** the message says the failure is connectivity-related
+
+### Requirement: Instrumentation outcome is reported in self-monitoring
+
+The system SHALL report whether Go instrumentation instrumented at least one service automatically in the install self-monitoring event. When a build fails, even if another tier then instruments the service, or no service can be instrumented, the event SHALL carry the first failure as a classified error type with its attributes, and SHALL NOT carry error messages, paths or project names. A manual-steps outcome SHALL still end the command successfully; it is reported as a failed instrumentation with its cause.
+
+#### Scenario: All services instrumented without failures
+
+- **GIVEN** every service is built with the instrumentation tool
+- **WHEN** the install event is reported
+- **THEN** the Go instrumentation outcome is succeeded and carries no error
+
+#### Scenario: Tool unavailable but services still instrumented
+
+- **GIVEN** the instrumentation tool cannot be used and the services are built client-only
+- **WHEN** the install event is reported
+- **THEN** the outcome is succeeded and carries the classified error of the tool failure
+
+#### Scenario: Manual steps because there is no Go toolchain
+
+- **GIVEN** no Go toolchain is available
+- **WHEN** the install event is reported
+- **THEN** the outcome is failed with a missing-dependency error naming `go`
+- **AND** the command still exits successfully
+
+#### Scenario: Network failure during a build
+
+- **GIVEN** a build fails because modules cannot be downloaded
+- **WHEN** the install event is reported
+- **THEN** the error type is network error

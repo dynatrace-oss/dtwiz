@@ -222,6 +222,24 @@ func findNodeOtelDirs() []string {
 		return false
 	}, isIgnoredDir)
 
+	// Directories dtwiz recorded when it created them, wherever they are.
+	for _, otelDir := range registeredOtelDirs() {
+		if filepath.Base(otelDir) != ".otel" || !isNodeOtelDir(otelDir) {
+			continue
+		}
+		key := otelDir
+		if resolved, err := filepath.EvalSymlinks(otelDir); err == nil {
+			key = resolved
+		}
+		mu.Lock()
+		if !seen[key] {
+			seen[key] = true
+			dirs = append(dirs, otelDir)
+			logger.Debug("found registered Node.js .otel/ directory", "dir", otelDir)
+		}
+		mu.Unlock()
+	}
+
 	return dirs
 }
 
@@ -366,6 +384,10 @@ func UninstallOtelCollector(envURL, platformToken string, dryRun bool) error {
 	// Node.js .otel/ directory artifacts.
 	nodeOtelDirs := findNodeOtelDirs()
 
+	// Go .otel/go/ artifacts and dtwiz's isolated otelc (flag-gated).
+	goOtelDirs := findGoOtelDirs()
+	goToolPath := isolatedOtelcPath()
+
 	logger.Debug("uninstall scan complete", "collectorProcesses", len(processes), "collectorDirs", len(dirs), "nodeOtelDirs", len(nodeOtelDirs))
 
 	type runtimeResult struct {
@@ -401,7 +423,7 @@ func UninstallOtelCollector(envURL, platformToken string, dryRun bool) error {
 	}
 	hasJavaCleanup := len(javaProcs) > 0 || agentDirExists
 
-	if len(processes) == 0 && len(dirs) == 0 && !anyRuntimeProcs && !hasJavaCleanup && len(nodeOtelDirs) == 0 {
+	if len(processes) == 0 && len(dirs) == 0 && !anyRuntimeProcs && !hasJavaCleanup && len(nodeOtelDirs) == 0 && len(goOtelDirs) == 0 && goToolPath == "" {
 		display.ColorDefault.Println("  Nothing to remove — no Dynatrace OTel Collectors or instrumentation artifacts found.")
 		return nil
 	}
@@ -443,6 +465,8 @@ func UninstallOtelCollector(envURL, platformToken string, dryRun bool) error {
 	}
 
 	display.PrintSectionDivider()
+
+	printGoUninstallSection(goOtelDirs, goToolPath)
 
 	if len(nodeOtelDirs) > 0 {
 		fmt.Println("  .otel/ directories that will be removed:")
@@ -511,6 +535,9 @@ func UninstallOtelCollector(envURL, platformToken string, dryRun bool) error {
 		}
 		fmt.Printf("  Removed %s\n", d)
 	}
+
+	removeGoArtifacts(goOtelDirs, goToolPath)
+	defer pruneOtelRegistry()
 
 	for _, d := range nodeOtelDirs {
 		if err := removeWithRetry(d); err != nil {

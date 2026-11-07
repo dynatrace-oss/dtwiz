@@ -1,28 +1,21 @@
 # Spec Delta
 
-## MODIFIED Requirements
+## ADDED Requirements
 
-### Requirement: Supported-runtimes notice shown before project selection
+### Requirement: Go projects are listed as auto-instrumentable when the flag is enabled
 
-When `dtwiz install otel` runs without `--project` and one or more projects are detected, the interactive flow SHALL display a notice — after the detected-projects list and before the `Select a project to instrument` prompt — stating that Python, Java, and Node.js projects (and Go projects when the `GoInstrumentation` flag is enabled) are auto-instrumented, and pointing to the OpenTelemetry walkthroughs documentation for other runtimes. The notice SHALL be shown once per install run and SHALL NOT be repeated if the user retries project selection after choosing a project that can't be auto-instrumented.
+When the `GoInstrumentation` flag is enabled, detected Go projects SHALL appear in the detected-projects list of `dtwiz install otel` like Python, Java, and Node.js projects, and Go SHALL NOT be offered in the list of languages without automatic project detection (the manual-languages list). When the flag is not enabled, Go SHALL remain in the manual-languages list and behavior is unchanged.
 
-#### Scenario: Notice shown on first project listing
+#### Scenario: Flag enabled
 
-- **GIVEN** the interactive project scan detects at least one project
-- **WHEN** the detected-projects list is printed
-- **THEN** the supported-runtimes notice is displayed immediately after the list and before the selection prompt
-- **AND** the notice names Go among the auto-instrumented runtimes only when the `GoInstrumentation` flag is enabled
+- **GIVEN** the `GoInstrumentation` flag is enabled
+- **WHEN** the interactive project list is printed
+- **THEN** detected Go projects are listed together with the other runtimes' projects
+- **AND** Go is not shown in the manual-languages list
 
-#### Scenario: Notice not repeated on reselection
+#### Scenario: Flag not enabled
 
-- **GIVEN** the supported-runtimes notice has already been shown once in the current install run
-- **WHEN** the user selects a project that can't be auto-instrumented and chooses to select another
-- **AND** the detected-projects list is printed again
-- **THEN** the supported-runtimes notice is NOT shown a second time
-
-#### Scenario: Notice links to walkthroughs documentation
-
-- **GIVEN** the supported-runtimes notice is displayed
-- **WHEN** the terminal supports OSC 8 hyperlinks
-- **THEN** the link to the OpenTelemetry walkthroughs documentation renders as a clickable hyperlink
-- **AND** WHEN the terminal does not support OSC 8 hyperlinks, the plain documentation URL is shown instead
+- **GIVEN** the `GoInstrumentation` flag is not enabled
+- **WHEN** the interactive project list is printed
+- **THEN** Go is shown in the manual-languages list as before
+- **AND** selecting it shows the manual OpenTelemetry guide after install

@@ -16,6 +16,9 @@ const (
 	FeatureRUM
 	FeatureSynthetic
 	FeatureRDSExtensions
+	// FeatureGoInstrumentation is the overall result of Go instrumentation: at least one
+	// service was instrumented automatically.
+	FeatureGoInstrumentation
 )
 
 // Outcome is the result of trying to enable a Feature during this run.
@@ -40,6 +43,7 @@ type pauseInterval struct{ from, to time.Time }
 var installTelemetry struct {
 	mu       sync.Mutex
 	outcomes map[Feature]Outcome
+	errors   map[Feature]error
 	start    time.Time
 	end      time.Time
 	pauses   []pauseInterval
@@ -57,6 +61,36 @@ func RecordFeature(f Feature, ok bool) {
 	} else {
 		installTelemetry.outcomes[f] = OutcomeFailed
 	}
+}
+
+// RecordFeatureError records why enabling f failed or only partly worked. It does not
+// change the outcome; the first error recorded for a feature wins. The error should be a
+// typed installer error so the self-monitoring layer can classify it without exposing
+// messages or paths.
+func RecordFeatureError(f Feature, err error) {
+	if err == nil {
+		return
+	}
+	installTelemetry.mu.Lock()
+	defer installTelemetry.mu.Unlock()
+	if installTelemetry.errors == nil {
+		installTelemetry.errors = make(map[Feature]error)
+	}
+	if _, ok := installTelemetry.errors[f]; !ok {
+		installTelemetry.errors[f] = err
+	}
+}
+
+// FeatureErrors returns a copy of the errors recorded with RecordFeatureError since the
+// last reset.
+func FeatureErrors() map[Feature]error {
+	installTelemetry.mu.Lock()
+	defer installTelemetry.mu.Unlock()
+	out := make(map[Feature]error, len(installTelemetry.errors))
+	for f, err := range installTelemetry.errors {
+		out[f] = err
+	}
+	return out
 }
 
 // FeatureOutcomes returns a copy of the outcomes recorded since the last reset.
@@ -77,6 +111,7 @@ func ResetInstallTelemetry() {
 	installTelemetry.mu.Lock()
 	defer installTelemetry.mu.Unlock()
 	installTelemetry.outcomes = nil
+	installTelemetry.errors = nil
 	installTelemetry.start = time.Time{}
 	installTelemetry.end = time.Time{}
 	installTelemetry.pauses = nil

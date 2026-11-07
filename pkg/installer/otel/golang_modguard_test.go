@@ -1,0 +1,212 @@
+package otel
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
+)
+
+func setupGuardModule(t *testing.T, goMod, goSum string) string {
+	t.Helper()
+	modguardRetryDelay = time.Millisecond
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(goMod), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if goSum != "" {
+		if err := os.WriteFile(filepath.Join(dir, "go.sum"), []byte(goSum), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+func mutateModule(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module changed\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "go.sum"), []byte("new sum\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWithModGuard_RestoresAfterSuccess(t *testing.T) {
+	dir := setupGuardModule(t, "module a\n", "sum a\n")
+	if err := withModGuard(dir, func() error { mutateModule(t, dir); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if got := readFile(t, filepath.Join(dir, "go.mod")); got != "module a\n" {
+		t.Fatalf("go.mod = %q", got)
+	}
+	if got := readFile(t, filepath.Join(dir, "go.sum")); got != "sum a\n" {
+		t.Fatalf("go.sum = %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(goOtelDir(dir), goModguardDirName)); !os.IsNotExist(err) {
+		t.Fatal("backup should be removed after a clean restore")
+	}
+}
+
+func TestWithModGuard_RestoresAfterFailureAndCancellation(t *testing.T) {
+	for _, failure := range []error{errors.New("build failed"), errors.New("context canceled")} {
+		dir := setupGuardModule(t, "module a\n", "sum a\n")
+		err := withModGuard(dir, func() error { mutateModule(t, dir); return failure })
+		if !errors.Is(err, failure) {
+			t.Fatalf("expected build error to be returned, got %v", err)
+		}
+		if got := readFile(t, filepath.Join(dir, "go.mod")); got != "module a\n" {
+			t.Fatalf("go.mod = %q after %v", got, failure)
+		}
+	}
+}
+
+func TestWithModGuard_UncommittedChangesRestoredByteIdentical(t *testing.T) {
+	// A modified go.mod is not special: the backup is a copy of the file as it is.
+	dir := setupGuardModule(t, "module a\n// local edit\n", "sum a\n// local edit\n")
+	if err := withModGuard(dir, func() error { mutateModule(t, dir); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if got := readFile(t, filepath.Join(dir, "go.mod")); got != "module a\n// local edit\n" {
+		t.Fatalf("go.mod = %q", got)
+	}
+}
+
+func TestWithModGuard_AbsentGoSumRemoved(t *testing.T) {
+	dir := setupGuardModule(t, "module a\n", "")
+	if err := withModGuard(dir, func() error { mutateModule(t, dir); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "go.sum")); !os.IsNotExist(err) {
+		t.Fatal("go.sum created by the build must be removed")
+	}
+}
+
+func TestNewModGuard_LeftoverDiffersRefuses(t *testing.T) {
+	dir := setupGuardModule(t, "module a\n", "sum a\n")
+	if _, err := newModGuard(dir); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate an interrupted run: the files were modified and the backup stayed.
+	mutateModule(t, dir)
+
+	_, err := newModGuard(dir)
+	if err == nil || !strings.Contains(err.Error(), goModguardDirName) {
+		t.Fatalf("expected refusal naming the backup path, got %v", err)
+	}
+	if got := readFile(t, filepath.Join(dir, "go.mod")); got != "module changed\n" {
+		t.Fatal("refusal must not touch the module files")
+	}
+}
+
+func TestNewModGuard_LeftoverIdenticalCleaned(t *testing.T) {
+	dir := setupGuardModule(t, "module a\n", "sum a\n")
+	if _, err := newModGuard(dir); err != nil {
+		t.Fatal(err)
+	}
+	g, err := newModGuard(dir)
+	if err != nil {
+		t.Fatalf("identical leftover backup should be treated as stale: %v", err)
+	}
+	if err := g.Restore(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNewModGuard_MissingGoMod(t *testing.T) {
+	if _, err := newModGuard(t.TempDir()); err == nil {
+		t.Fatal("expected an error for a module without go.mod")
+	}
+}
+
+func TestModGuard_SeparatePerModule(t *testing.T) {
+	a, b := t.TempDir(), t.TempDir()
+	for _, d := range []string{a, b} {
+		if err := os.WriteFile(filepath.Join(d, "go.mod"), []byte("module "+filepath.Base(d)+"\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	err := withModGuard(a, func() error {
+		if err := os.WriteFile(filepath.Join(a, "go.mod"), []byte("changed\n"), 0644); err != nil {
+			return err
+		}
+		return withModGuard(b, func() error {
+			if _, err := os.Stat(filepath.Join(goOtelDir(a), goModguardDirName)); err != nil {
+				t.Errorf("module a keeps its own backup while b is guarded: %v", err)
+			}
+			return errors.New("build failed")
+		})
+	})
+	if err == nil || !strings.Contains(err.Error(), "build failed") {
+		t.Fatalf("err = %v", err)
+	}
+	for _, d := range []string{a, b} {
+		got, _ := os.ReadFile(filepath.Join(d, "go.mod"))
+		if string(got) != "module "+filepath.Base(d)+"\n" {
+			t.Fatalf("%s go.mod = %q", d, got)
+		}
+		if _, err := os.Stat(filepath.Join(goOtelDir(d), goModguardDirName)); !os.IsNotExist(err) {
+			t.Fatalf("backup of %s must be removed", d)
+		}
+	}
+}
+
+func TestWithModGuard_RemovesGeneratedFilesAfterInterruption(t *testing.T) {
+	dir := setupGuardModule(t, "module a\n", "")
+	_ = withModGuard(dir, func() error {
+		for _, name := range otelcGeneratedFiles {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte("package main\n"), 0644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return errors.New("context canceled")
+	})
+	for _, name := range otelcGeneratedFiles {
+		if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
+			t.Errorf("%s should have been removed, stat err = %v", name, err)
+		}
+	}
+}
+
+func TestWithModGuard_KeepsUsersOwnGeneratedNamedFile(t *testing.T) {
+	dir := setupGuardModule(t, "module a\n", "")
+	own := filepath.Join(dir, otelcGeneratedFiles[0])
+	if err := os.WriteFile(own, []byte("package main\n// mine\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := withModGuard(dir, func() error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if got := readFile(t, own); !strings.Contains(got, "mine") {
+		t.Errorf("user's file was changed or removed: %q", got)
+	}
+}
+
+func TestWithModGuard_RestorePreservesFileMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows ignores Unix permissions")
+	}
+	dir := setupGuardModule(t, "module a\n", "")
+	if err := withModGuard(dir, func() error { mutateModule(t, dir); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(filepath.Join(dir, "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0644 {
+		t.Errorf("go.mod mode = %v, want 0644", info.Mode().Perm())
+	}
+}

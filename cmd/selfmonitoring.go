@@ -247,6 +247,7 @@ func applyInstallOutcomes(p *selfmonitoring.EventParams, err error) {
 	}
 	p.Install = &selfmonitoring.InstallReport{
 		Features: installer.FeatureOutcomes(),
+		Errors:   installer.FeatureErrors(),
 		Duration: elapsed,
 	}
 }
