@@ -1,7 +1,7 @@
 package otel
 
 import (
-	"go/ast"
+	"go/build"
 	"go/parser"
 	"go/token"
 	"os"
@@ -103,26 +103,16 @@ func hasMainPackage(dir string, entries []os.DirEntry) bool {
 		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
 			continue
 		}
-		f, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, parser.PackageClauseOnly|parser.ParseComments)
-		if err != nil || f.Name.Name != "main" || hasIgnoreConstraint(f) {
+		// MatchFile evaluates //go:build and // +build lines and the _GOOS/_GOARCH
+		// file-name suffixes for the current platform; the "ignore" tag is never set.
+		if ok, err := build.Default.MatchFile(dir, name); err != nil || !ok {
+			continue
+		}
+		f, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, parser.PackageClauseOnly)
+		if err != nil || f.Name.Name != "main" {
 			continue
 		}
 		return true
-	}
-	return false
-}
-
-// hasIgnoreConstraint reports files marked `//go:build ignore` (generators, scripts).
-func hasIgnoreConstraint(f *ast.File) bool {
-	for _, group := range f.Comments {
-		if group.Pos() > f.Package {
-			break
-		}
-		for _, c := range group.List {
-			if strings.HasPrefix(c.Text, "//go:build") && strings.Contains(c.Text, "ignore") {
-				return true
-			}
-		}
 	}
 	return false
 }

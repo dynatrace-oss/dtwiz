@@ -29,16 +29,15 @@ func (p *GoInstrumentationPlan) noteTierError(step string, err error) {
 	}
 }
 
-// recordGoInstrumentation reports the overall outcome: it succeeded when at least one
-// service is instrumented automatically, with the first tier failure (if any) as the
-// error. When no service is, the reason is reported as the error.
-func (p *GoInstrumentationPlan) recordGoInstrumentation() {
-	for _, s := range p.Services {
-		if s.Method != goMethodManual {
-			installer.RecordFeature(installer.FeatureGoInstrumentation, true)
-			installer.RecordFeatureError(installer.FeatureGoInstrumentation, p.firstTierErr)
-			return
-		}
+// recordGoInstrumentation reports the overall outcome. started is the number of
+// instrumented services that are running after launch. It succeeded when at least
+// one is, with the first tier failure (if any) as the error. Otherwise it failed,
+// and the reason (manual steps, or a launch failure) is reported as the error.
+func (p *GoInstrumentationPlan) recordGoInstrumentation(started int) {
+	if started > 0 {
+		installer.RecordFeature(installer.FeatureGoInstrumentation, true)
+		installer.RecordFeatureError(installer.FeatureGoInstrumentation, p.firstTierErr)
+		return
 	}
 	installer.RecordFeature(installer.FeatureGoInstrumentation, false)
 	installer.RecordFeatureError(installer.FeatureGoInstrumentation, p.manualCause())
@@ -55,6 +54,11 @@ func (p *GoInstrumentationPlan) manualCause() error {
 		}
 		if s.Reason != "" {
 			return &installer.InstallFailedError{Step: "go-preflight"}
+		}
+	}
+	for _, s := range p.Services {
+		if s.Method != goMethodManual {
+			return &installer.InstallFailedError{Step: "go-launch"}
 		}
 	}
 	return &installer.InstallFailedError{Step: "go-manual"}

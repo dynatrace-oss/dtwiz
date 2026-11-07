@@ -169,20 +169,47 @@ func TestBuildGoInstrumentationPlan_Workspace(t *testing.T) {
 			t.Fatalf("%s: BinPath = %q, want %q", s.Name, s.BinPath, want)
 		}
 	}
-	if len(*listed) != 2 {
-		t.Fatalf("pre-flight ran for %v, want both modules", *listed)
+	if !plan.Workspace {
+		t.Fatal("a go.work project must be marked as a workspace")
+	}
+	if len(*listed) != 0 {
+		t.Fatalf("pre-flight must not run while planning (before confirmation), ran for %v", *listed)
+	}
+	out = helpers.CaptureStdout(t, plan.PrintPlanSteps)
+	if !strings.Contains(out, "Workspace (go.work)") {
+		t.Fatalf("preview must mention the workspace check: %s", out)
 	}
 }
 
-func TestBuildGoInstrumentationPlan_WorkspacePreflightFails(t *testing.T) {
+func TestRunGoPreflight_Workspace(t *testing.T) {
+	stubGoToolchain(t, true)
+	listed := stubGoPreflight(t)
+	root := newWorkspaceProject(t)
+	plan := buildGoInstrumentationPlan(goDetected(root), testEndpoint)
+
+	plan.runGoPreflight(context.Background())
+
+	if len(*listed) != 2 {
+		t.Fatalf("pre-flight ran for %v, want both modules", *listed)
+	}
+	for name, m := range methods(plan) {
+		if m != goMethodOtelc {
+			t.Fatalf("%s: method = %s", name, m)
+		}
+	}
+}
+
+func TestRunGoPreflight_WorkspacePreflightFails(t *testing.T) {
 	stubGoToolchain(t, true)
 	stubGoPreflight(t, "order")
 	root := newWorkspaceProject(t)
-
 	plan := buildGoInstrumentationPlan(goDetected(root), testEndpoint)
 	if plan == nil {
 		t.Fatal("expected a plan")
 	}
+
+	plan.runGoPreflight(context.Background())
+
 	got := methods(plan)
 	if got["order"] != goMethodManual || got["payment"] != goMethodOtelc {
 		t.Fatalf("methods = %v", got)
@@ -192,9 +219,25 @@ func TestBuildGoInstrumentationPlan_WorkspacePreflightFails(t *testing.T) {
 			t.Fatalf("reason should carry the go output: %q", s.Reason)
 		}
 	}
-	out := helpers.CaptureStdout(t, plan.PrintPlanSteps)
-	if !strings.Contains(out, "cannot be built on its own") {
-		t.Fatalf("preview must state why: %s", out)
+}
+
+func TestRunGoPreflight_StopsWhenCancelled(t *testing.T) {
+	stubGoToolchain(t, true)
+	listed := stubGoPreflight(t)
+	root := newWorkspaceProject(t)
+	plan := buildGoInstrumentationPlan(goDetected(root), testEndpoint)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	plan.runGoPreflight(ctx)
+
+	if len(*listed) != 0 {
+		t.Fatalf("a cancelled context must not start `go list`, ran %v", *listed)
+	}
+	for name, m := range methods(plan) {
+		if m != goMethodOtelc {
+			t.Fatalf("%s: cancelling must not mark services manual, got %s", name, m)
+		}
 	}
 }
 
@@ -209,6 +252,7 @@ func TestBuildGoInstrumentationPlan_ModuleBelowGoWork(t *testing.T) {
 	if plan == nil || plan.ManualReason != "" || len(plan.Services) != 1 || plan.Services[0].Method != goMethodOtelc {
 		t.Fatalf("plan = %#v", plan)
 	}
+	plan.runGoPreflight(context.Background())
 	if len(*listed) != 1 {
 		t.Fatalf("only the selected module is checked, got %v", *listed)
 	}
@@ -221,7 +265,8 @@ func TestBuildGoInstrumentationPlan_NoWorkspaceNoPreflight(t *testing.T) {
 	if findGoWork(root) != "" {
 		t.Skip("go.work above temp dir")
 	}
-	if plan := buildGoInstrumentationPlan(goDetected(root), testEndpoint); plan == nil || plan.ManualReason != "" {
+	plan := buildGoInstrumentationPlan(goDetected(root), testEndpoint)
+	if plan == nil || plan.ManualReason != "" || plan.Workspace {
 		t.Fatalf("plan = %#v", plan)
 	}
 	if len(*listed) != 0 {
@@ -323,7 +368,7 @@ func TestPrintPlanSteps_Manual(t *testing.T) {
 func stubOtelcLookup(t *testing.T, tool *otelcTool) {
 	t.Helper()
 	orig := goFindOtelcFn
-	goFindOtelcFn = func() (*otelcTool, bool) { return tool, tool != nil }
+	goFindOtelcFn = func(context.Context) (*otelcTool, bool) { return tool, tool != nil }
 	t.Cleanup(func() { goFindOtelcFn = orig })
 }
 
@@ -350,7 +395,7 @@ func newHarness(t *testing.T) *executeHarness {
 			origEnsure, origBuild, origPrep, origStop, origList, origLaunch, origSummary, origRunner
 	})
 
-	goEnsureOtelcFn = func() (*otelcTool, error) {
+	goEnsureOtelcFn = func(context.Context) (*otelcTool, error) {
 		if h.otelcErr != nil {
 			return nil, h.otelcErr
 		}
@@ -707,6 +752,43 @@ func TestExecute_WorkspaceAllManualWhenPreflightFails(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "order", ".otel")); !os.IsNotExist(err) {
 		t.Fatal("nothing must be created for manual services")
+	}
+}
+
+func TestExecute_WorkspacePreflightRunsOnExecuteOnly(t *testing.T) {
+	h := newHarness(t)
+	stubGoToolchain(t, true)
+	root := newWorkspaceProject(t)
+	var listed []string
+	inner := goBuildRunner
+	goBuildRunner = func(ctx context.Context, dir string, env []string, name string, args ...string) (string, error) {
+		if len(args) > 0 && args[0] == "list" {
+			listed = append(listed, filepath.Base(dir))
+			if filepath.Base(dir) == "order" {
+				return "go: missing go.sum entry\n", errors.New("exit status 1")
+			}
+			return "", nil
+		}
+		return inner(ctx, dir, env, name, args...)
+	}
+
+	plan := buildGoInstrumentationPlan(goDetected(root), testEndpoint)
+	if len(listed) != 0 {
+		t.Fatalf("pre-flight ran while planning: %v", listed)
+	}
+	var err error
+	out := helpers.CaptureStdout(t, func() { err = plan.Execute() })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 2 {
+		t.Fatalf("Execute must pre-flight both modules, got %v", listed)
+	}
+	if strings.Join(h.launched, ",") != "payment" {
+		t.Fatalf("only payment may be launched, got %v", h.launched)
+	}
+	if !strings.Contains(out, "order: not instrumented automatically") || !strings.Contains(out, "cannot be built on its own") {
+		t.Fatalf("the failed pre-flight must be explained after Execute: %s", out)
 	}
 }
 

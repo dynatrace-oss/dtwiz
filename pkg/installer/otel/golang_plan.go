@@ -62,7 +62,10 @@ type GoInstrumentationPlan struct {
 
 	Automatic         bool
 	CollectorEndpoint string
-	Services          []*GoServicePlan
+	// Workspace is true when the project is part of a Go workspace (go.work).
+	// Its services get an isolated pre-flight at the start of Execute.
+	Workspace bool
+	Services  []*GoServicePlan
 	// ManualReason is set when the whole project is handled with manual steps.
 	ManualReason string
 	// firstTierErr is the first classified build failure, kept for telemetry.
@@ -137,7 +140,9 @@ func buildGoInstrumentationPlan(proj detectedProject, collectorEndpoint string) 
 	if _, err := goLookPath("go"); err != nil {
 		plan.setManual(goReasonNoTool)
 	} else if findGoWork(proj.Path) != "" {
-		plan.runGoPreflight(context.Background())
+		// Only recorded here: the pre-flight runs `go list -deps`, which can
+		// download modules, so it waits until the user has confirmed (Execute).
+		plan.Workspace = true
 	}
 	return plan
 }
@@ -204,6 +209,9 @@ func (p *GoInstrumentationPlan) PrintPlanSteps() {
 	if usesFallback {
 		fmt.Println("     Client-only services trace outgoing HTTP calls only; incoming requests are not traced.")
 	}
+	if p.Workspace {
+		fmt.Println("     Workspace (go.work): each module is checked to build on its own; modules that cannot are left to manual steps.")
+	}
 	fmt.Println("     Project sources are not modified; go.mod and go.sum are restored after each build.")
 	if dirs := p.moduleDirs(); len(dirs) == 1 {
 		fmt.Printf("     Binaries and logs: %s\n", goOtelDir(dirs[0]))
@@ -225,7 +233,7 @@ func goMethodLabel(m goMethod) string {
 }
 
 func describeOtelcForPreview() string {
-	if tool, ok := goFindOtelcFn(); ok {
+	if tool, ok := goFindOtelcFn(context.Background()); ok {
 		if tool.Version != "" {
 			return fmt.Sprintf("otelc %s (already installed)", tool.Version)
 		}
@@ -246,20 +254,30 @@ func (p *GoInstrumentationPlan) Execute() error {
 	if p.ManualReason != "" {
 		fmt.Printf("  Not instrumented automatically: %s.\n", p.ManualReason)
 		p.printManualSteps()
-		p.recordGoInstrumentation()
+		p.recordGoInstrumentation(0)
 		return nil
 	}
 
+	// Ctrl+C cancels the pre-flight and the builds. The handler is released as
+	// soon as they are done: launching does not look at ctx, so keeping it
+	// installed would swallow Ctrl+C there.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	p.stopReplacedProcesses()
-	p.buildServices(ctx)
-
+	if p.Workspace {
+		p.runGoPreflight(ctx)
+	}
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("interrupted: %w", err)
 	}
-	p.recordGoInstrumentation()
+	p.stopReplacedProcesses()
+	p.buildServices(ctx)
+	interrupted := ctx.Err() // read before stop(), which cancels ctx as well
+	stop()
+
+	if interrupted != nil {
+		return fmt.Errorf("interrupted: %w", interrupted)
+	}
 	return p.launchServices()
 }
 
@@ -296,7 +314,7 @@ func (p *GoInstrumentationPlan) stopReplacedProcesses() {
 	if len(pids) == 0 {
 		return
 	}
-	fmt.Print("  Stopping running processes...\n")
+	fmt.Println("  Stopping running processes...")
 	goStopProcessesFn(pids)
 }
 
@@ -332,7 +350,7 @@ func (p *GoInstrumentationPlan) buildServices(ctx context.Context) {
 	}
 	if needsTool {
 		var err error
-		tool, err = goEnsureOtelcFn()
+		tool, err = goEnsureOtelcFn(ctx)
 		if err == nil && strings.TrimSpace(tool.Version) == "" {
 			// A real otelc is a Go binary and always has a module version; a
 			// binary without one cannot be used.
@@ -501,7 +519,9 @@ func writeGoMarkers(modules []string) {
 		data, _ := json.Marshal(map[string]string{"created-by": "dtwiz", "runtime": "go"})
 		if err := os.WriteFile(filepath.Join(dir, goMarkerFile), append(data, '\n'), 0644); err != nil {
 			logger.Warn("could not write Go instrumentation marker", "dir", dir, "err", err)
+			continue
 		}
+		registerOtelDir(dir)
 	}
 }
 
@@ -538,6 +558,7 @@ func (p *GoInstrumentationPlan) launchServices() error {
 	}
 
 	started, _ := goSummaryFn(procs, processSettleDelay)
+	p.recordGoInstrumentation(len(started))
 
 	if len(clientOnly) > 0 {
 		names := make([]string, len(clientOnly))
@@ -553,7 +574,7 @@ func (p *GoInstrumentationPlan) launchServices() error {
 		}
 		fmt.Println()
 		fmt.Println("  No services are running — check the logs above for errors.")
-		return fmt.Errorf("no services started — all processes failed to start")
+		return errors.New("no services started — all processes failed to start")
 	}
 	fmt.Println()
 	fmt.Println("  Waiting for traffic — send requests to your services to generate traces and metrics.")

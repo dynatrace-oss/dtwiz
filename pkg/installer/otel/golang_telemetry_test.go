@@ -61,6 +61,18 @@ func TestExecute_RecordsGoInstrumentationOutcome(t *testing.T) {
 			outcome: installer.OutcomeFailed, err: stepErr,
 		},
 		{
+			name: "built, but no service could be started",
+			setup: func(h *executeHarness, _ *GoInstrumentationPlan) {
+				h.launchFails["api"], h.launchFails["worker"] = true, true
+			},
+			outcome: installer.OutcomeFailed, err: stepErr,
+		},
+		{
+			name:    "one service fails to start, the other runs",
+			setup:   func(h *executeHarness, _ *GoInstrumentationPlan) { h.launchFails["api"] = true },
+			outcome: installer.OutcomeSucceeded,
+		},
+		{
 			name:    "no Go toolchain",
 			setup:   func(_ *executeHarness, p *GoInstrumentationPlan) { p.setManual(goReasonNoTool) },
 			outcome: installer.OutcomeFailed, err: depErr,

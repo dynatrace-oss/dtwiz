@@ -13,8 +13,11 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "pkg/installer/otel/golang*.go"
+      - "pkg/installer/otel/golang*"
       - ".github/workflows/otelc-smoke.yml"
+
+permissions:
+  contents: read
 
 jobs:
   smoke:
@@ -36,3 +39,29 @@ jobs:
       - name: Build a tiny module with the latest otelc
         shell: bash
         run: go test -count=1 -v -tags otelc_integration -run OtelcIntegration ./pkg/installer/otel/
+
+  # A failed scheduled run only emails whoever last edited this workflow, so
+  # open (or update) an issue that the whole team sees. A toolchain older than
+  # the latest otelc needs ("requires go >= X") also lands here, on purpose.
+  notify:
+    name: report nightly failure
+    needs: smoke
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="otelc smoke test failing"
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number --jq '.[0].number')
+          body="The nightly otelc smoke test failed: $RUN_URL"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi

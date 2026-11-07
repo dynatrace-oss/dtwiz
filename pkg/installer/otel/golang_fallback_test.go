@@ -19,6 +19,19 @@ func TestGoInitSource_IsValidGo(t *testing.T) {
 	}
 }
 
+// The injected init must not replace the application's logger: output keeps
+// going to its original destination and the OTLP copy is added.
+func TestGoInitSource_KeepsApplicationLogging(t *testing.T) {
+	if strings.Contains(goInitSource, "SetDefault(dtwizotelslog") {
+		t.Error("slog.SetDefault must not be given the OTel-only logger")
+	}
+	for _, want := range []string{"dtwizTeeHandler", "dtwizlog.SetOutput(logOut)", "WithBatchTimeout", "WithExportInterval"} {
+		if !strings.Contains(goInitSource, want) {
+			t.Errorf("init source lost %q", want)
+		}
+	}
+}
+
 func TestPrepareGoFallback_OverlayAndIsolation(t *testing.T) {
 	module := setupGuardModule(t, "module a\n", "sum a\n")
 	services := []GoService{

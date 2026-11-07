@@ -38,6 +38,9 @@ func goPackageArg(svc GoService) string {
 // be built in isolation, and tells the user why.
 func (p *GoInstrumentationPlan) runGoPreflight(ctx context.Context) {
 	for _, s := range p.Services {
+		if ctx.Err() != nil {
+			return
+		}
 		if s.Method == goMethodManual {
 			continue
 		}
