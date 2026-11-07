@@ -27,6 +27,9 @@ func TestModuleUsesOtelSDK(t *testing.T) {
 		{"indirect sdk", "module x\n\nrequire (\n\tgo.opentelemetry.io/otel/sdk v1.30.0 // indirect\n)\n", false},
 		{"api only", "module x\n\nrequire go.opentelemetry.io/otel v1.30.0\n", false},
 		{"none", "module x\n\ngo 1.22\n", false},
+		{"require without space", "module x\n\nrequire(\n\tgo.opentelemetry.io/otel/sdk v1.30.0\n)\n", true},
+		{"comment after close paren", "module x\n\nrequire (\n\tgo.opentelemetry.io/otel/sdk v1.30.0\n) // deps\n", true},
+		{"indirect in single-line require", "module x\n\nrequire go.opentelemetry.io/otel/sdk v1.30.0 // indirect\n", false},
 		{"sdk metric", "module x\n\nrequire (\n\tgo.opentelemetry.io/otel/sdk/metric v1.30.0\n)\n", true},
 	}
 	for _, tt := range tests {
@@ -81,6 +84,7 @@ func TestGoWorkspaceModules(t *testing.T) {
 		{"single line", "go 1.25\nuse ./b\n", []string{"b"}},
 		{"outside project and dot-dot", "use (\n\t../other\n\t..\n\t./a\n)\n", []string{"a"}},
 		{"duplicates and missing go.mod", "use (\n\t./a\n\ta\n\t./nogomod\n\t./missing\n)\n", []string{"a"}},
+		{"use without space and trailing comment", "use(\n\t./a\n) // modules\n", []string{"a"}},
 		{"several use lines", "use ./a\nuse ./b\n", []string{"a", "b"}},
 	}
 	for _, tt := range tests {

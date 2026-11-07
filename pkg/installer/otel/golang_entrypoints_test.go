@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 )
 
@@ -53,6 +54,15 @@ func TestDiscoverGoServices(t *testing.T) {
 		}, []string{}},
 		{"ignore build tag", map[string]string{
 			"go.mod": "module x\n", "gen/gen.go": "//go:build ignore\n\npackage main\n",
+		}, []string{}},
+		{"not-ignore tag is a service", map[string]string{
+			"go.mod": "module x\n", "cmd/a/main.go": "//go:build !ignore\n\npackage main\n",
+		}, []string{"a"}},
+		{"custom tag containing ignore is not a match", map[string]string{
+			"go.mod": "module x\n", "cmd/a/main.go": "//go:build ignored_tag\n\npackage main\n",
+		}, []string{}},
+		{"other OS only", map[string]string{
+			"go.mod": "module x\n", "cmd/a/main.go": "//go:build " + otherGOOS() + "\n\npackage main\n",
 		}, []string{}},
 		{"name collision", map[string]string{
 			"go.mod": "module x\n", "services/a/cmd/server/main.go": mainSrc, "services/b/cmd/server/main.go": mainSrc,
@@ -117,4 +127,12 @@ func TestDiscoverGoServices_WorkspaceNameCollision(t *testing.T) {
 	if got, want := serviceNames(discoverGoServices(root)), []string{"a", "b-cmd-a"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("services = %v, want %v", got, want)
 	}
+}
+
+// otherGOOS returns a GOOS that is not the current one.
+func otherGOOS() string {
+	if runtime.GOOS == "windows" {
+		return "linux"
+	}
+	return "windows"
 }

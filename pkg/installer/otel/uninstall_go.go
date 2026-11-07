@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
@@ -30,20 +31,36 @@ func (goCleaner) DetectProcesses() []DetectedProcess {
 	return selectDtwizGoProcesses(all)
 }
 
-// selectDtwizGoProcesses keeps processes whose executable lives under
-// .otel/go/bin/. Plain `go run` processes never match.
+// selectDtwizGoProcesses keeps processes whose executable lives under a
+// .otel/go/bin/ directory that carries dtwiz's marker file, wherever that
+// directory is on the machine. Plain `go run` processes and binaries that merely
+// sit in a similarly named folder never match.
 func selectDtwizGoProcesses(all []DetectedProcess) []DetectedProcess {
 	matched := make([]DetectedProcess, 0)
 	for _, p := range all {
-		if isDtwizGoBinary(p.Command) {
+		if isDtwizGoBinary(p.Command) && hasDtwizGoMarker(p.Command) {
 			matched = append(matched, p)
 		}
 	}
 	return matched
 }
 
-// findGoOtelDirs scans the current directory tree for <module>/.otel/go
-// directories carrying dtwiz's marker file. It returns nil when the
+// hasDtwizGoMarker reports whether the .otel/go directory that holds the
+// command's executable carries the marker file dtwiz writes when it generates it.
+func hasDtwizGoMarker(command string) bool {
+	path := strings.ReplaceAll(strings.TrimPrefix(strings.TrimSpace(command), `"`), `\`, "/")
+	i := strings.Index(path, dtwizGoBinDir)
+	if i < 0 {
+		return false
+	}
+	goDir := path[:i+len("/.otel/go")]
+	_, err := os.Stat(filepath.Join(filepath.FromSlash(goDir), goMarkerFile))
+	return err == nil
+}
+
+// findGoOtelDirs finds <module>/.otel/go directories carrying dtwiz's marker
+// file: those recorded in the registry (any location) plus those below the
+// current directory (installs from before the registry existed). It returns nil when the
 // GoInstrumentation flag is off.
 func findGoOtelDirs() []string {
 	if !featureflags.IsEnabled(featureflags.GoInstrumentation) {
@@ -80,6 +97,22 @@ func findGoOtelDirs() []string {
 		}
 		return false
 	}, isIgnoredDir)
+
+	// Directories dtwiz recorded when it created them, wherever they are.
+	for _, goDir := range registeredOtelDirs() {
+		if _, err := os.Stat(filepath.Join(goDir, goMarkerFile)); err != nil {
+			continue
+		}
+		key := goDir
+		if resolved, err := filepath.EvalSymlinks(goDir); err == nil {
+			key = resolved
+		}
+		if !seen[key] {
+			seen[key] = true
+			dirs = append(dirs, goDir)
+			logger.Debug("found registered Go instrumentation directory", "dir", goDir)
+		}
+	}
 	return dirs
 }
 

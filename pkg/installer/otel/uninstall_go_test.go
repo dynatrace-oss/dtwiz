@@ -80,13 +80,24 @@ func TestGoCleaner_FlagOffNothingDetected(t *testing.T) {
 
 func TestGoCleaner_DetectsOnlyDtwizBinaries(t *testing.T) {
 	setGoFlag(t, true)
+	root, err := filepath.EvalSymlinks(t.TempDir()) // macOS temp dirs sit behind a symlink
+	if err != nil {
+		t.Fatal(err)
+	}
+	shop := makeGoOtelDir(t, filepath.Join(root, "shop"))
+	billing := makeGoOtelDir(t, filepath.Join(root, "billing"))
+	chdir(t, t.TempDir()) // uninstall may run from anywhere
+	api := filepath.Join(shop, "bin", "api")
+	worker := filepath.Join(shop, "bin", "worker.exe")
 	procs := []DetectedProcess{
-		{PID: 1, Command: "/work/shop/.otel/go/bin/api --x"},
+		{PID: 1, Command: api + " --x"},
 		{PID: 2, Command: "go run ./cmd/api"},
 		{PID: 3, Command: "/work/shop/bin/api"},
-		{PID: 4, Command: `"C:\Work\Shop\.otel\go\bin\worker.exe" -a`},
-		{PID: 5, Command: "vim /work/shop/.otel/go/bin/api"},
-		{PID: 6, Command: "go run /work/shop/.otel/go/bin/api"},
+		{PID: 4, Command: `"` + worker + `" -a`},
+		{PID: 5, Command: "vim " + api},
+		{PID: 6, Command: "go run " + api},
+		{PID: 7, Command: "/elsewhere/other/.otel/go/bin/api"}, // no dtwiz marker
+		{PID: 8, Command: filepath.Join(billing, "bin", "api")},
 	}
 	orig := goListProcessesFn
 	goListProcessesFn = func() []DetectedProcess { return procs }
@@ -97,8 +108,8 @@ func TestGoCleaner_DetectsOnlyDtwizBinaries(t *testing.T) {
 	for _, p := range got {
 		pids = append(pids, p.PID)
 	}
-	if len(pids) != 2 || pids[0] != 1 || pids[1] != 4 {
-		t.Fatalf("PIDs = %v, want [1 4] (unix path and windows quoted path only)", pids)
+	if len(pids) != 3 || pids[0] != 1 || pids[1] != 4 || pids[2] != 8 {
+		t.Fatalf("PIDs = %v, want [1 4 8] (binaries under a marked .otel/go/bin, from any directory)", pids)
 	}
 }
 
@@ -263,5 +274,27 @@ func TestUninstallOtelCollector_GoFlagOff(t *testing.T) {
 	}
 	if _, err := os.Stat(goDir); err != nil {
 		t.Fatal("nothing may be removed with the flag off")
+	}
+}
+
+func TestFindGoOtelDirs_RegisteredFoundFromAnyDirectory(t *testing.T) {
+	setGoFlag(t, true)
+	useTempRegistry(t)
+	project := t.TempDir()
+	goDir := makeGoOtelDir(t, project)
+	registerOtelDir(goDir)
+	chdir(t, t.TempDir()) // unrelated working directory
+
+	got := findGoOtelDirs()
+	if len(got) != 1 || got[0] != goDir {
+		t.Fatalf("findGoOtelDirs = %v, want [%s]", got, goDir)
+	}
+
+	// A registered directory without the dtwiz marker is not trusted.
+	if err := os.Remove(filepath.Join(goDir, goMarkerFile)); err != nil {
+		t.Fatal(err)
+	}
+	if got := findGoOtelDirs(); len(got) != 0 {
+		t.Fatalf("directory without marker must be ignored, got %v", got)
 	}
 }

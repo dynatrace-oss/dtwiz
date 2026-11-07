@@ -22,13 +22,13 @@ type runnerCall struct {
 func stubGoRunner(t *testing.T, fn func(call runnerCall) (string, error)) *[]runnerCall {
 	t.Helper()
 	var calls []runnerCall
-	orig := goRunner
-	goRunner = func(name string, args []string, env []string) (string, error) {
+	orig := goBuildRunner
+	goBuildRunner = func(_ context.Context, _ string, env []string, name string, args ...string) (string, error) {
 		c := runnerCall{name, args, env}
 		calls = append(calls, c)
 		return fn(c)
 	}
-	t.Cleanup(func() { goRunner = orig })
+	t.Cleanup(func() { goBuildRunner = orig })
 	return &calls
 }
 
@@ -64,7 +64,7 @@ func TestEnsureOtelc_InstallsLatestIsolated(t *testing.T) {
 		return "", nil
 	})
 
-	tool, err := ensureOtelc()
+	tool, err := ensureOtelc(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestEnsureOtelc_PathWins(t *testing.T) {
 	stubLookPath(t, map[string]string{"otelc": "/usr/local/bin/otelc"})
 	calls := stubGoRunner(t, func(c runnerCall) (string, error) { return versionOutput, nil })
 
-	tool, err := ensureOtelc()
+	tool, err := ensureOtelc(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestEnsureOtelc_ReusesIsolatedInstall(t *testing.T) {
 	}
 	calls := stubGoRunner(t, func(c runnerCall) (string, error) { return versionOutput, nil })
 
-	tool, err := ensureOtelc()
+	tool, err := ensureOtelc(context.Background())
 	if err != nil || !tool.Isolated {
 		t.Fatalf("tool=%#v err=%v", tool, err)
 	}
@@ -141,7 +141,7 @@ func TestEnsureOtelc_TooOldGo(t *testing.T) {
 		return "", errors.New("exit status 1: go: go.opentelemetry.io/otelc/tool/cmd/otelc@latest: go.opentelemetry.io/otelc/tool@v1.2.0 requires go >= 1.26.0 (running go 1.24.1; GOTOOLCHAIN=local)")
 	})
 
-	_, err := ensureOtelc()
+	_, err := ensureOtelc(context.Background())
 	var tooOld *GoVersionTooOldError
 	if !errors.As(err, &tooOld) {
 		t.Fatalf("expected GoVersionTooOldError, got %v", err)
@@ -158,7 +158,7 @@ func TestEnsureOtelc_UnrelatedInstallFailure(t *testing.T) {
 		return "", errors.New("dial tcp: lookup proxy.golang.org: no such host")
 	})
 
-	_, err := ensureOtelc()
+	_, err := ensureOtelc(context.Background())
 	var tooOld *GoVersionTooOldError
 	if err == nil || errors.As(err, &tooOld) || strings.Contains(err.Error(), "upgrade Go") {
 		t.Fatalf("unrelated failure must not produce the upgrade message: %v", err)

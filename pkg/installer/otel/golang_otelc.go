@@ -21,12 +21,9 @@ import (
 // latest otelc declares).
 const otelcInstallTarget = "go.opentelemetry.io/otelc/tool/cmd/otelc@latest"
 
-// goRunner runs go tool commands for install and version lookups. A variable so
-// tests can stub it.
-var goRunner installer.CmdRunner = installer.RealRunner
-
-// goBuildRunner runs a command in dir with the given environment and returns
-// its combined output. A variable so tests can stub it.
+// goBuildRunner runs a command in dir with the given environment (nil inherits
+// the current one) and returns its combined output. The command is killed when
+// ctx is cancelled. A variable so tests can stub it.
 var goBuildRunner = func(ctx context.Context, dir string, env []string, name string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
@@ -93,14 +90,14 @@ type otelcTool struct {
 
 // findOtelc returns an otelc from PATH (the user's own) or from the isolated
 // directory, without installing anything.
-func findOtelc() (*otelcTool, bool) {
+func findOtelc(ctx context.Context) (*otelcTool, bool) {
 	if path, err := installer.ExecLookPath("otelc"); err == nil {
-		return &otelcTool{Path: path, Version: otelcVersion(path)}, true
+		return &otelcTool{Path: path, Version: otelcVersion(ctx, path)}, true
 	}
 	if dir, err := isolatedOtelcDir(); err == nil {
 		candidate := filepath.Join(dir, otelcBinaryName())
 		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-			return &otelcTool{Path: candidate, Version: otelcVersion(candidate), Isolated: true}, true
+			return &otelcTool{Path: candidate, Version: otelcVersion(ctx, candidate), Isolated: true}, true
 		}
 	}
 	return nil, false
@@ -108,8 +105,8 @@ func findOtelc() (*otelcTool, bool) {
 
 // ensureOtelc returns a usable otelc, installing the latest one into the
 // isolated directory when none exists. A PATH copy always wins.
-func ensureOtelc() (*otelcTool, error) {
-	if tool, ok := findOtelc(); ok {
+func ensureOtelc(ctx context.Context) (*otelcTool, error) {
+	if tool, ok := findOtelc(ctx); ok {
 		logger.Debug("using existing otelc", "path", tool.Path, "version", tool.Version)
 		return tool, nil
 	}
@@ -122,12 +119,12 @@ func ensureOtelc() (*otelcTool, error) {
 	}
 	env := append(os.Environ(), "GOBIN="+dir, "GOTOOLCHAIN=local")
 	fmt.Print("  Installing otelc... ")
-	if _, err := goRunner("go", []string{"install", otelcInstallTarget}, env); err != nil {
+	if _, err := goBuildRunner(ctx, "", env, "go", "install", otelcInstallTarget); err != nil {
 		fmt.Println("failed.")
 		return nil, fmt.Errorf("install otelc on %s/%s: %w", runtime.GOOS, runtime.GOARCH, classifyOtelcInstallError(err))
 	}
 	path := filepath.Join(dir, otelcBinaryName())
-	tool := &otelcTool{Path: path, Version: otelcVersion(path), Isolated: true}
+	tool := &otelcTool{Path: path, Version: otelcVersion(ctx, path), Isolated: true}
 	if v := strings.TrimSpace(tool.Version); v != "" {
 		fmt.Printf("done (%s).\n", v)
 	} else {
@@ -139,8 +136,8 @@ func ensureOtelc() (*otelcTool, error) {
 
 // otelcVersion reads the module version embedded in the otelc binary
 // (`go version -m`). It returns "" when it cannot be determined.
-func otelcVersion(path string) string {
-	out, err := goRunner("go", []string{"version", "-m", path}, nil)
+func otelcVersion(ctx context.Context, path string) string {
+	out, err := goBuildRunner(ctx, "", nil, "go", "version", "-m", path)
 	if err != nil {
 		logger.Debug("could not read otelc version", "path", path, "err", err)
 		return ""

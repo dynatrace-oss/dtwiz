@@ -222,6 +222,24 @@ func findNodeOtelDirs() []string {
 		return false
 	}, isIgnoredDir)
 
+	// Directories dtwiz recorded when it created them, wherever they are.
+	for _, otelDir := range registeredOtelDirs() {
+		if filepath.Base(otelDir) != ".otel" || !isNodeOtelDir(otelDir) {
+			continue
+		}
+		key := otelDir
+		if resolved, err := filepath.EvalSymlinks(otelDir); err == nil {
+			key = resolved
+		}
+		mu.Lock()
+		if !seen[key] {
+			seen[key] = true
+			dirs = append(dirs, otelDir)
+			logger.Debug("found registered Node.js .otel/ directory", "dir", otelDir)
+		}
+		mu.Unlock()
+	}
+
 	return dirs
 }
 
@@ -519,6 +537,7 @@ func UninstallOtelCollector(envURL, platformToken string, dryRun bool) error {
 	}
 
 	removeGoArtifacts(goOtelDirs, goToolPath)
+	defer pruneOtelRegistry()
 
 	for _, d := range nodeOtelDirs {
 		if err := removeWithRetry(d); err != nil {

@@ -27,7 +27,7 @@ func TestOtelcIntegration_BuildTinyModule(t *testing.T) {
 	t.Setenv("GOMODCACHE", modCache)
 	t.Setenv("GOCACHE", buildCache)
 
-	tool, err := ensureOtelc()
+	tool, err := ensureOtelc(context.Background())
 	if err != nil {
 		t.Fatalf("installing otelc@latest failed: %v", err)
 	}

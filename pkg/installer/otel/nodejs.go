@@ -194,6 +194,7 @@ func createOtelDir(plan *NodeInstrumentationPlan) error {
 	}
 
 	logger.Debug("wrote .otel/package.json", "path", filepath.Join(plan.OtelDir, "package.json"))
+	registerOtelDir(plan.OtelDir)
 	return nil
 }
 
