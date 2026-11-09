@@ -50,7 +50,9 @@ people paste it into the chat.
 - Never ask the user for their Dynatrace platform token in the chat, and never accept it there.
   If they paste something that starts with `dt0s16.` or `dt0c01.`, stop, tell them to revoke
   that token in Dynatrace and create a new one.
-- Never print, echo, log or write the token anywhere. Do not run `env`, `printenv`, `set`, or
+- Never print, echo, log or write the token anywhere. The one exception is `dtctl config
+  set-credentials` in step 2, which stores it in the OS keychain (step 5 removes it again). Do
+  not run `env`, `printenv`, `set`, or
   `echo $DT_PLATFORM_TOKEN`. Check only whether it is set, with:
   `[ -n "$DT_PLATFORM_TOKEN" ] && echo set || echo missing`
 - Never pass the token as a command-line argument (no `--platform-token`). dtwiz reads it from
@@ -121,10 +123,17 @@ no token.
    When the user confirms, send the same line from move 2 to the same tab again. If it still
    prints "clipboard has no platform token", ask the user to copy the token again and repeat.
 
-4. Run `dtwiz status` in that same tab. If it shows a connection, say "Connected, the token
-   works" and continue. If it does not (for example the token is expired, or belongs to another
-   environment), run `unset DT_PLATFORM_TOKEN` (PowerShell: `Remove-Item Env:DT_PLATFORM_TOKEN`)
-   in the tab, tell the user in one line what failed, and go to move 3 for a new token.
+4. In that same tab, run `dtwiz status && dtwiz recommend --json` as one command (it saves a
+   round trip, and step 3 needs both outputs). `status` shows the connection and the system
+   analysis. If it shows a connection, say "Connected, the token works" and continue. If it does
+   not (for example the token is expired, or belongs to another environment), run
+   `unset DT_PLATFORM_TOKEN` (PowerShell: `Remove-Item Env:DT_PLATFORM_TOKEN`) in the tab, tell
+   the user in one line what failed, and go to move 3 for a new token.
+
+5. Once the connection works, and only if `dtctl version` works, store the token for dtctl
+   now, while this tab is still free (the install in step 4 blocks it with a watch). Use the
+   command from step 5, item 2. Step 5 then runs from a new tab that needs no token, because
+   dtctl reads it from the OS keychain.
 
 If you cannot open or drive a terminal, give the user the line from move 2 to run in their
 own terminal and ask them to paste back only the `dtwiz status` output, which contains no
@@ -134,10 +143,13 @@ Run all later dtwiz commands in that same terminal tab and read their output fro
 
 ### Step 3: Analyze and recommend
 
-Run `dtwiz analyze` and `dtwiz recommend --json`. Always use `--json` for `recommend`: the plain
-output is an interactive menu (with a demo-app option) that you must not answer. Summarize what
-was detected (OS, containers, Kubernetes, cloud, services) and list the recommendations by
-`priority` (lowest number first), using their `title`.
+Use the output of `dtwiz status` and `dtwiz recommend --json` from step 2 (run `dtwiz analyze`
+only if you need more detail, for example when you got here with the token already set). Always
+use `--json` for `recommend`: the plain output is an interactive menu (with a demo-app option)
+that you must not answer. If a terminal read returns "no new output", read again with a longer
+wait before you assume the command is stuck. Summarize what was detected (OS, containers,
+Kubernetes, cloud, services) and list the recommendations by `priority` (lowest number first),
+using their `title`.
 
 ### Step 4: Install
 
@@ -197,6 +209,11 @@ was detected (OS, containers, Kubernetes, cloud, services) and list the recommen
     collector themselves, this may be a false positive (dtwiz can mistake an open `dtwiz install`
     terminal for a running collector). Say so, and suggest the `otel` option instead.
   - `already-installed`, `not-supported`: nothing to install; say so and offer the next option.
+- If `install otel --project` ends with "service(s) failed to start" (for example "Port 8081 is
+  in use" because the app already runs from an earlier attempt), the Collector may still have
+  been installed and there is no watch to close. Do not kill the user's processes. Say which
+  ports are taken and by what (`lsof -i :<port>` or the dtwiz log path it prints), offer to
+  continue with what works, and let step 5 show what actually arrived.
 - `--yes` only skips the confirmation. Never answer a dtwiz menu or prompt on the user's behalf,
   even if your tool can type into a running terminal: letters such as `g`, `n`, `p` or `s` are
   menu codes, not choices to guess. If a command still waits for input, cancel it before
@@ -225,16 +242,86 @@ was detected (OS, containers, Kubernetes, cloud, services) and list the recommen
     was started from that terminal and shares its process group, so this also kills the
     Collector and the data stops.
   - If your tool can type into a running terminal, send Enter once the data check is done.
-  - If it cannot (for example the Claude desktop terminal tool), leave the watch running, go on
-    with step 5, and tell the user they can press Enter in that terminal tab when they are done.
-    Run anything further in another terminal tab. That tab does not have the token, so for
-    "connect another system" the user has to copy a token again.
+  - If it cannot (for example the Claude desktop terminal tool), stop only the dtwiz process
+    from another terminal tab, which needs no token. Look up its PID and send it SIGTERM:
+    `kill -TERM $(pgrep -f 'dtwiz install')` (several matches mean several installs; pick the one
+    you started). The Collector is a separate process and keeps running, which was verified
+    (its health check on port 13133 still answers). This is not Ctrl-C: Ctrl-C signals the whole
+    process group and kills the Collector too. On Windows use `Stop-Process -Id <pid>` for the
+    dtwiz process only (untested). If you cannot find the PID, leave the watch running and tell
+    the user they can press Enter in the install tab when they are done.
 
-### Step 5: Next step
+### Step 5: Show what arrived (dtctl)
 
-When data has shown up (or the wait ended), summarize in at most four lines what is now
-connected and what is not. Then ask what to do next, as an interactive choice or a single word,
-with these options in this order:
+Keep the user in the chat: show what is now in Dynatrace with `dtctl`
+(<https://github.com/Dynatrace/dtctl>), using the token from step 2. Open a new terminal tab
+for it: the install tab may still be held by dtwiz's watch, and dtctl
+reads its credentials from the config file created in step 2, not from the environment. Tell
+the user in one line that this takes a few seconds, and never print the token.
+
+1. Check `dtctl version`. If dtctl is missing, say so in one line, skip to step 6, and do not
+   install it.
+2. Use a scratch config file with a read-only context and a credential name of its own, so
+   the user's own dtctl contexts and credentials stay untouched. dtctl cannot resolve
+   `${DT_PLATFORM_TOKEN}` as a credential, so the shell passes the real value to
+   `set-credentials`, which stores it in the OS keychain (the config file holds no token). Step 2,
+   move 5 runs the command below in the tab that has the token. If it has not run yet, run it now,
+   only in a tab that has the token. Do not use `-v`, `-vv` or `--debug` (they print auth
+   headers).
+   - macOS/Linux:
+     `C="${TMPDIR:-/tmp}/dtwiz-dtctl.yaml"; dtctl --config "$C" config set-context dtwiz --environment "$DT_ENVIRONMENT" --token-ref dtwiz-onboarding --safety-level readonly && dtctl --config "$C" config set-credentials dtwiz-onboarding --token "$DT_PLATFORM_TOKEN" && dtctl --config "$C" config use-context dtwiz`
+   - Windows (PowerShell):
+     `$C="$env:TEMP\dtwiz-dtctl.yaml"; dtctl --config $C config set-context dtwiz --environment $env:DT_ENVIRONMENT --token-ref dtwiz-onboarding --safety-level readonly; dtctl --config $C config set-credentials dtwiz-onboarding --token $env:DT_PLATFORM_TOKEN; dtctl --config $C config use-context dtwiz`
+3. In the new tab, first set the path again (a new tab does not have `C`): macOS/Linux
+   `C="${TMPDIR:-/tmp}/dtwiz-dtctl.yaml"`, PowerShell `$C="$env:TEMP\dtwiz-dtctl.yaml"`. Then run
+   these read-only queries, one `dtctl --config "$C" query '<DQL>' -o csv` call each (each takes
+   about a second). If the terminal tool rejects a long one-line batch, run each query on its
+   own or put them in a small script file. Use the last 2 hours, and read the output yourself:
+   - Logs: `fetch logs, from:now()-2h | summarize records=count(), by:{dt.system.bucket}`
+   - Hosts: `smartscapeNodes OTEL_HOST | fields name` (for OneAgent hosts use `HOST`)
+   - Host load: `timeseries cpu=avg(system.cpu.utilization), mem=avg(system.memory.utilization), from:now()-30m | fieldsAdd cpu_pct=arrayAvg(cpu)*100, mem_pct=arrayAvg(mem)*100 | fields cpu_pct, mem_pct`
+   - Services: `smartscapeNodes SERVICE | fields name | limit 10`
+   - Processes: `smartscapeNodes OTEL_PROCESS | summarize n=count()`
+   - Problems: `fetch dt.davis.problems, from:now()-24h | summarize problems=count()`
+   - Service names with ids: `smartscapeNodes SERVICE | fields id, name | limit 10`
+   - Calls between services (map the ids to names with the services query):
+     `smartscapeEdges "calls" | fields source_id, target_id | limit 20`
+   - Log levels: `fetch logs, from:now()-2h | summarize n=count(), by:{loglevel} | sort n desc`
+   - Top error: `fetch logs, from:now()-2h | filter loglevel=="ERROR" | summarize n=count(), by:{content} | sort n desc | limit 1`
+   - Slowest service (duration in nanoseconds): `fetch spans, from:now()-2h | filter span.kind=="server" | summarize p95=percentile(duration,95), by:{service.name} | sort p95 desc | limit 1`
+   - After a Kubernetes install also: `smartscapeNodes K8S_CLUSTER | fields name`
+   - CPU trend, as a text chart you paste into a code block (works in every client):
+     `dtctl --config "$C" query 'timeseries cpu=avg(system.cpu.utilization), from:now()-30m' -o chart --width 60 --height 6`
+   An empty result is an answer ("nothing yet"), not an error. A parse error means the query
+   does not fit this environment; skip it.
+4. Show the result first, as a message of its own, before the cleanup and before any
+   question (never inside the question of an interactive choice, where it is overlooked).
+   Plain Markdown, so it renders in every client, at most about ten lines, in this order:
+   - A headline with the time: "Your <machine> is in Dynatrace: first data after <m> min".
+   - A table with what is connected: host (CPU, memory), processes, logs (with errors and
+     warnings), services, open problems.
+   - The service flow from the calls query as one line, for example
+     `loadgenerator → frontend → order, delivery`. Skip it if there are no calls.
+   - The CPU chart from the last query, in a code block.
+   - One finding, the most useful of: the top error log, the slowest service (p95 in ms), or
+     "no open problems" as a healthy baseline. One line, with real numbers.
+   - What is not connected (for example Kubernetes, Azure, GCP, or no application traces when no
+     instrumented app runs). The `dtctl` service that may appear comes from dtctl itself; say so.
+   - Links: Dynatrace Services `https://<env-id>.apps.dynatrace.com/ui/apps/dynatrace.services/`
+     and Logs `https://<env-id>.apps.dynatrace.com/ui/apps/dynatrace.logs/`, with the real
+     environment ID.
+   Do not go on to the cleanup or to step 6 before this message is written: the user should
+   see it, and the next-step question must not repeat it.
+5. Then clean up: `dtctl --config "$C" config delete-credentials dtwiz-onboarding`, then
+   delete the scratch config (`rm -f "$C"`; PowerShell: `Remove-Item $C`). Older dtctl versions
+   (for example 0.28) have no `delete-credentials`: then tell the user in one line that a
+   keychain item named dtwiz-onboarding stays and can be removed in their keychain app. Also run
+   this cleanup if the user stops before the overview.
+
+### Step 6: Next step
+
+Ask what to do next, as an interactive choice or a single word, with these options in this
+order:
 
 1. "Open Dynatrace QuickStart" (your recommendation). It is the same page dtwiz points to at the
    end of its watch ("See all your data and findings in Dynatrace QuickStart"). Open
