@@ -297,7 +297,7 @@ the user in one line that this takes a few seconds, and never print the token.
 4. Show the result first, as a message of its own, before the cleanup and before any
    question (never inside the question of an interactive choice, where it is overlooked).
    Plain Markdown, so it renders in every client, at most about ten lines, in this order:
-   - A headline with the time: "Your <machine> is in Dynatrace: first data after <m> min".
+   - A headline with the time: `Your <machine> is in Dynatrace: first data after <m> min`.
    - A table with what is connected: host (CPU, memory), processes, logs (with errors and
      warnings), services, open problems.
    - The service flow from the calls query as one line, for example
