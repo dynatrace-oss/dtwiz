@@ -1,16 +1,35 @@
 ---
 name: dtwiz
-description: Deploy Dynatrace observability with dtwiz — analyze systems, get ranked recommendations, and install monitoring (OneAgent, Kubernetes, Docker, OTel, AWS, Azure, GCP). Use when the user wants to set up, manage, or ingest data into Dynatrace monitoring. Covers ingesting metrics, logs, and traces from AWS, Azure, GCP, Kubernetes, containers, or hosts into Dynatrace via dtwiz.
+description: Deploy Dynatrace observability with dtwiz — analyze systems, get ranked recommendations, and install monitoring (OneAgent, Kubernetes, Docker, OTel, AWS, Azure, GCP). Use when the user wants to set up, manage, or ingest data into Dynatrace monitoring. Covers ingesting metrics, logs, and traces from AWS, Azure, GCP, Kubernetes, containers, or hosts into Dynatrace via dtwiz. Also use when the user asks to onboard this machine, connect their systems, Kubernetes clusters or cloud accounts to Dynatrace, or get data into Dynatrace for the first time.
 ---
 
 # Dynatrace Setup with dtwiz
 
 Go CLI that detects your environment and deploys the best Dynatrace monitoring method automatically. Core principle: if we detect it, we enable monitoring for it — zero config, all defaults on.
 
+## Onboarding a new user
+
+When the user wants to get data into Dynatrace for the first time (this machine and its apps,
+Kubernetes, AWS, Azure or GCP), read and follow
+[ONBOARDING.md](ONBOARDING.md) (raw URL:
+`https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/skills/dtwiz/ONBOARDING.md`). It
+covers the guided, step-by-step flow and how to handle the platform token without it entering
+the chat. The rest of this file is the command reference.
+
+## Token handling (always)
+
+- Never ask the user for their platform token in the chat and never accept one there. If one
+  is pasted, tell the user to revoke it and create a new one.
+- Never print the token, write it to a file, or pass it as `--platform-token`. Use the
+  `DT_PLATFORM_TOKEN` environment variable, set in a terminal from the user's clipboard (see
+  [ONBOARDING.md](ONBOARDING.md)).
+
 ## Prerequisites
 
-- `dtwiz` installed (`curl -sfL https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.sh | sh`)
-- Dynatrace environment URL + API token
+- `dtwiz` installed:
+  - macOS/Linux: `source <(curl -sSL https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.sh)`
+  - Windows (PowerShell): `irm https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.ps1 | iex`
+- Dynatrace environment URL + platform token (`dt0s16.*`)
 - Auth via flags or env vars:
 
 ```bash
@@ -20,7 +39,7 @@ export DT_PLATFORM_TOKEN=dt0s16.****
 
 Or pass per-command: `--environment`, `--platform-token`.
 
-For environments where the access token is required, pass `--access-token dt0c01.****` explicitly.
+The environment URL may be given with or without `https://`. The Classic API access token (`dt0c01.*`) is deprecated; ignore it.
 
 ## Recommended Initialization
 
@@ -46,48 +65,36 @@ dtwiz recommend --json
 | `dtwiz recommend [--json]` | Ranked ingestion recommendations based on analysis |
 | `dtwiz status` | Connection status + system analysis |
 | `dtwiz install <method>` | Install a specific ingestion method |
-| `dtwiz update <method>` | Patch an existing method configuration |
-| `dtwiz uninstall <method>` | Remove an installed method |
+| `dtwiz update <method>` | Reconcile an existing configuration (`azure`, `gcp`; `otel` is experimental) |
+| `dtwiz uninstall <method>` | Remove an installed method (`oneagent`, `kubernetes`, `otel`, `aws`, `aws-lambda`, `azure`, `gcp`, `self`) |
+| `dtwiz watch [--from <time>]` | Poll Dynatrace and show a live ingest summary |
 | `dtwiz version` | Print the dtwiz version |
 
-All `install`, `update`, and `uninstall` commands support `--dry-run`.
+All `install`, `update`, and `uninstall` commands support `--dry-run` (preview only) and `--yes`/`-y` (skip confirmation prompts). After a successful install, dtwiz watches until new data arrives.
 
 ## Install Methods
 
 | Method | Command | What it does |
 | -------- | --------- | ------------- |
 | **OneAgent** | `dtwiz install oneagent` | Full-stack host monitoring |
-| **Kubernetes** | `dtwiz install kubernetes` | Deploy Dynatrace Operator (cloudNativeFullStack) |
-| **Docker** | `dtwiz install docker` | OneAgent for Docker containers |
+| **Kubernetes** | `dtwiz install kubernetes` | Deploy Dynatrace Operator with a DynaKube (application monitoring, Kubernetes monitoring, log monitoring) |
+| **Docker** (experimental) | `dtwiz install docker` | OneAgent for Docker containers; needs `--experimental` or `DTWIZ_EXPERIMENTAL=true` |
 | **OTel** | `dtwiz install otel` | OTel Collector + application instrumentation |
 | **OTel Collector** | `dtwiz install otel-collector` | OTel Collector only (no app instrumentation) |
 | **OTel Java** | `dtwiz install otel-java` | OpenTelemetry Java auto-instrumentation |
 | **OTel Python** | `dtwiz install otel-python` | OpenTelemetry Python auto-instrumentation |
-| **AWS** | `dtwiz install aws` | CloudFormation integration (all services, all regions) |
+| **OTel Node.js** | `dtwiz install otel-node` | OpenTelemetry Node.js auto-instrumentation |
+| **AWS** | `dtwiz install aws` | CloudFormation integration for the current AWS account and region |
+| **AWS Lambda** | `dtwiz install aws-lambda` | Dynatrace Lambda Layer on all functions |
 | **Azure** | `dtwiz install azure` | Azure Monitor integration |
 | **GCP** | `dtwiz install gcp` | Google Cloud Platform integration |
 
 ## Key Concepts
 
-### URL Families
-
-Two URL families — using the wrong one causes 404s or auth errors:
-
-| Family       | Pattern                               | Auth header          | Use for                                              |
-| ------------ | ------------------------------------- | -------------------- | ---------------------------------------------------- |
-| **Classic**  | `<env-id>.<domain>/api/...`           | `Api-Token dt0c01.*` | `/api/v1`, `/api/v2`, OneAgent download, OTel ingest |
-| **Platform** | `<env-id>.apps.<domain>/platform/...` | `Bearer <token>`     | DQL/Grail queries, Platform APIs                     |
-
-### Token Types
-
-| Prefix     | Type           | Auth header         |
-| ---------- | -------------- | ------------------- |
-| `dt0c01.*` | API token      | `Api-Token <token>` |
-| `dt0s16.*` | Platform token | `Bearer <token>`    |
-
 ### Dry Run
 
-Preview any install/update/uninstall without executing:
+Preview any install/update/uninstall without executing. (The guided onboarding flow in
+[ONBOARDING.md](ONBOARDING.md) deliberately skips this; use it for everything else.)
 
 ```bash
 dtwiz install otel --dry-run
@@ -97,8 +104,8 @@ dtwiz uninstall oneagent --dry-run
 ### Zero-Config Defaults
 
 - OneAgent: full-stack mode
-- Kubernetes: `cloudNativeFullStack`
-- AWS: all services + all regions
+- Kubernetes: DynaKube with application, Kubernetes and log monitoring
+- AWS: default feature sets, current account and region
 
 ## Common Workflows
 
@@ -129,21 +136,12 @@ dtwiz uninstall oneagent
 - Azure → sign in with `az login`
 - GCP → sign in with `gcloud auth login`
 
-**404 errors:**
+**Connection or auth errors:**
 
-- Wrong URL family. Classic endpoints must not have `.apps.` in the URL. Platform endpoints must.
-
-**403 errors:**
-
-- Wrong auth header. DQL/Platform endpoints need `Bearer` auth, even for `dt0c01.*` tokens. Classic API endpoints need `Api-Token` auth.
-
-**Token prefix mismatch:**
-
-- `dt0c01.*` = API token (Classic API)
-- `dt0s16.*` = Platform token (new APIs)
+- Run `dtwiz status` and check the environment URL and platform token. If the token is expired or wrong, create a new one on the quickstart page (see [ONBOARDING.md](ONBOARDING.md)).
 
 ## Safety Reminders
 
 - Use `--dry-run` before destructive operations
-- All installs show a preview and prompt `Apply? [Y/n]` before executing
-- Uninstall commands show what will be removed and require confirmation
+- Without `--yes`, installs show a preview and prompt `Apply? [Y/n]` before executing
+- Without `--yes`, uninstall commands show what will be removed and require confirmation. `uninstall otel` also removes tenant-wide configuration (the OTel extension and OpenPipeline routes), which can affect others in the same environment
