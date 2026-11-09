@@ -539,8 +539,12 @@ func TestExecute_TierSelection(t *testing.T) {
 					t.Fatalf("output should contain %q:\n%s", w, out)
 				}
 			}
-			if _, statErr := os.Stat(filepath.Join(goOtelDir(root), goMarkerFile)); statErr != nil {
+			_, statErr := os.Stat(filepath.Join(goOtelDir(root), goMarkerFile))
+			switch {
+			case len(tt.wantBuilt) > 0 && statErr != nil:
 				t.Fatalf("marker file must be written: %v", statErr)
+			case len(tt.wantBuilt) == 0 && !os.IsNotExist(statErr):
+				t.Fatalf("nothing was built, so no marker may be left: %v", statErr)
 			}
 		})
 	}
@@ -819,5 +823,75 @@ func TestGoBuildFailureCause(t *testing.T) {
 	got := goBuildFailureCause([]error{other})
 	if strings.Contains(got, "GOPROXY") || !strings.Contains(got, "--debug") {
 		t.Errorf("generic error: got %q, want the generic --debug line", got)
+	}
+}
+
+func failAllBuilds(h *executeHarness) {
+	for _, n := range []string{"api", "worker"} {
+		h.otelcFails[n] = true
+		h.fallbackFails[n] = true
+	}
+}
+
+func TestExecute_AllManualLeavesNoArtifacts(t *testing.T) {
+	h := newHarness(t)
+	failAllBuilds(h)
+	plan, root := newTwoServicePlan(t)
+	helpers.CaptureStdout(t, func() {
+		if err := plan.Execute(); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if _, err := os.Stat(filepath.Join(root, ".otel")); !os.IsNotExist(err) {
+		t.Fatalf(".otel must be removed when every service is manual, stat err = %v", err)
+	}
+}
+
+func TestExecute_AllManualKeepsSiblingsInOtelDir(t *testing.T) {
+	h := newHarness(t)
+	failAllBuilds(h)
+	plan, root := newTwoServicePlan(t)
+	writeTree(t, root, map[string]string{".otel/other/keep.txt": "x"})
+	helpers.CaptureStdout(t, func() { _ = plan.Execute() })
+	if _, err := os.Stat(goOtelDir(root)); !os.IsNotExist(err) {
+		t.Fatal(".otel/go must be removed")
+	}
+	if _, err := os.Stat(filepath.Join(root, ".otel", "other", "keep.txt")); err != nil {
+		t.Fatalf("unrelated .otel content must stay: %v", err)
+	}
+}
+
+func TestExecute_AllManualKeepsEarlierInstall(t *testing.T) {
+	h := newHarness(t)
+	failAllBuilds(h)
+	plan, root := newTwoServicePlan(t)
+	writeTree(t, root, map[string]string{".otel/go/" + goMarkerFile: "{}\n", ".otel/go/bin/api": "bin"})
+	helpers.CaptureStdout(t, func() { _ = plan.Execute() })
+	for _, f := range []string{goMarkerFile, "bin/api"} {
+		if _, err := os.Stat(filepath.Join(goOtelDir(root), filepath.FromSlash(f))); err != nil {
+			t.Fatalf("%s of an earlier install must stay: %v", f, err)
+		}
+	}
+}
+
+func TestExecute_AllManualKeepsModguardBackup(t *testing.T) {
+	h := newHarness(t)
+	failAllBuilds(h)
+	plan, root := newTwoServicePlan(t)
+	writeTree(t, root, map[string]string{".otel/go/modguard/go.mod": "module x\n"})
+	helpers.CaptureStdout(t, func() { _ = plan.Execute() })
+	if _, err := os.Stat(filepath.Join(goOtelDir(root), goModguardDirName, "go.mod")); err != nil {
+		t.Fatalf("go.mod backup must stay: %v", err)
+	}
+}
+
+func TestExecute_PartialSuccessKeepsMarker(t *testing.T) {
+	h := newHarness(t)
+	h.otelcFails["worker"] = true
+	h.fallbackFails["worker"] = true
+	plan, root := newTwoServicePlan(t)
+	helpers.CaptureStdout(t, func() { _ = plan.Execute() })
+	if _, err := os.Stat(filepath.Join(goOtelDir(root), goMarkerFile)); err != nil {
+		t.Fatalf("module with a built service needs its marker: %v", err)
 	}
 }

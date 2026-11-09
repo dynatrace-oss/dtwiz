@@ -342,6 +342,13 @@ func (p *GoInstrumentationPlan) buildServices(ctx context.Context) {
 	// Modules with at least one build attempt get files under .otel/go, even
 	// when every attempt ends up manual.
 	attempted := p.moduleDirs()
+	// A marker from an earlier run means .otel/go is not ours to clean up now.
+	preexisting := map[string]bool{}
+	for _, m := range attempted {
+		if _, err := os.Stat(filepath.Join(goOtelDir(m), goMarkerFile)); err == nil {
+			preexisting[m] = true
+		}
+	}
 	var tool *otelcTool
 	otelcUsable := false
 	needsTool := false
@@ -451,7 +458,7 @@ func (p *GoInstrumentationPlan) buildServices(ctx context.Context) {
 	if ctx.Err() == nil && len(clientBuildErrs) > 0 {
 		fmt.Println(goBuildFailureCause(clientBuildErrs))
 	}
-	writeGoMarkers(attempted)
+	p.finalizeGoModules(attempted, preexisting)
 }
 
 // goBuildFailureCause is the one-line explanation printed after the list of
@@ -505,6 +512,49 @@ func (p *GoInstrumentationPlan) servicesOfModule(module string) []GoService {
 		}
 	}
 	return out
+}
+
+// finalizeGoModules marks the modules that kept at least one built service and
+// removes the files the failed build attempts left in modules where every
+// service ended up manual. A module whose .otel/go existed before this run, or
+// whose go.mod backup could not be restored, is left untouched.
+func (p *GoInstrumentationPlan) finalizeGoModules(attempted []string, preexisting map[string]bool) {
+	var built []string
+	for _, module := range attempted {
+		if p.moduleHasBuiltService(module) || preexisting[module] {
+			built = append(built, module)
+			continue
+		}
+		removeFailedGoArtifacts(module)
+	}
+	writeGoMarkers(built)
+}
+
+// moduleHasBuiltService reports whether any service of the module has a binary.
+func (p *GoInstrumentationPlan) moduleHasBuiltService(module string) bool {
+	for _, s := range p.Services {
+		if s.moduleDir(p.Project.Path) == module && s.Method != goMethodManual {
+			return true
+		}
+	}
+	return false
+}
+
+// removeFailedGoArtifacts deletes <module>/.otel/go, and .otel when that leaves
+// it empty. The modguard backup is the user's recovery path for go.mod/go.sum,
+// so its presence keeps everything in place.
+func removeFailedGoArtifacts(module string) {
+	dir := goOtelDir(module)
+	if _, err := os.Stat(filepath.Join(dir, goModguardDirName)); err == nil {
+		logger.Warn("keeping Go instrumentation directory: go.mod backup present", "dir", dir)
+		return
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		logger.Warn("could not remove files of failed Go instrumentation", "dir", dir, "err", err)
+		return
+	}
+	// os.Remove only succeeds on an empty directory, which is the intent.
+	_ = os.Remove(filepath.Dir(dir))
 }
 
 // writeGoMarkers records, in every given module, that dtwiz created .otel/go,
