@@ -20,7 +20,8 @@
 
 ## 4. Integration check
 
-- [ ] 4.1 Run `make test` and `make lint`. Then run `DTWIZ_ONEAGENT_HOST_PROPERTIES=true dtwiz install oneagent --dry-run --host-property team=payments --host-property env=prod` on Linux and Windows snapshot builds, and confirm the preview matches the spec.
+- [x] 4.1 Run `make test` and `make lint`. Then run `DTWIZ_ONEAGENT_HOST_PROPERTIES=true dtwiz install oneagent --dry-run --host-property team=payments --host-property env=prod` on Linux and Windows snapshot builds, and confirm the preview matches the spec.
+  *(Linux: snapshot dry-run on Ubuntu 24.04 arm64 matched the spec. Windows: covered by the `windows-latest` CI unit tests; no snapshot dry-run on Windows yet.)*
 
 ## Workflow follow-up
 
