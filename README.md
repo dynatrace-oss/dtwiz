@@ -107,6 +107,16 @@ source <(curl -sSL https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/sc
 irm https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.ps1 | iex
 ```
 
+**Unattended install (CI, AI agents):** pass `--yes` / `-Yes` to skip the `Continue? [Y/n]` prompt. The install preview is still printed. `irm | iex` cannot pass parameters, so Windows uses a script block.
+
+```bash
+source <(curl -sSL https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.sh) --yes
+```
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.ps1))) -Yes
+```
+
 **From source:**
 
 ```bash

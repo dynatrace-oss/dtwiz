@@ -11,6 +11,11 @@
 # By default the binary is installed to /usr/local/bin (requires sudo) or
 # ~/bin if /usr/local/bin is not writable.
 #
+# Pass --yes (or -y) to skip the "Continue? [Y/n]" confirmation, for unattended
+# installs (CI, AI agents). The install preview is still printed. Unattended forms:
+#   source <(curl -sSL https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.sh) --yes
+#   curl -sSL https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.sh | sh -s -- --yes
+#
 # The script requires curl.
 #
 # Install channels:
@@ -157,11 +162,14 @@ dtwiz_send_event inv
 
 # ── Parse known flags ──────────────────────────────────────────────────────────
 INSTALL_DIR=""
+AUTO_CONFIRM=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --install-dir)
             INSTALL_DIR="$2"; shift 2 ;;
+        --yes|-y)
+            AUTO_CONFIRM=1; shift ;;
         *)
             dtwiz_fail unknown_argument "Unknown argument: $1" ;;
     esac
@@ -259,14 +267,16 @@ echo "  - Download from github.com/${REPO}"
 echo "  - Install to ${INSTALL_DIR}"
 echo "  - Add ${INSTALL_DIR} to your PATH (if not already present)"
 echo ""
-printf 'Continue? [Y/n] '
-read -r REPLY </dev/tty
-case "$REPLY" in
-    [Nn]|[Nn][Oo])
-        echo "Installation cancelled."
-        dtwiz_send_event can
-        exit 0 ;;
-esac
+if [ -z "$AUTO_CONFIRM" ]; then
+    printf 'Continue? [Y/n] '
+    read -r REPLY </dev/tty
+    case "$REPLY" in
+        [Nn]|[Nn][Oo])
+            echo "Installation cancelled."
+            dtwiz_send_event can
+            exit 0 ;;
+    esac
+fi
 
 # ── Download and extract ───────────────────────────────────────────────────────
 echo ""

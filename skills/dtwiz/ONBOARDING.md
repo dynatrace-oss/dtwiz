@@ -65,8 +65,10 @@ people paste it into the chat.
 ### Step 1: Install dtwiz
 
 - Run `command -v dtwiz`. If it is missing, install it:
-  - macOS/Linux: `source <(curl -sSL https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.sh)`
-  - Windows (PowerShell): `irm https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.ps1 | iex`
+  - macOS/Linux: `source <(curl -sSL https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.sh) --yes`
+  - Windows (PowerShell): `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.ps1))) -Yes`
+  - `--yes` / `-Yes` only skips the install script's own confirmation prompt; the user asked for
+    this install by pasting the prompt.
 - Confirm with `dtwiz version`.
 
 ### Step 2: Credentials (guided, one action at a time)
