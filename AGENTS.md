@@ -199,6 +199,15 @@ Each package has a single responsibility. Before adding a file to an existing pa
 
 > The codebase contains existing violations of these rules. Do not treat any existing file placement as a precedent — follow the rules above, not the current layout.
 
+### Test structure
+
+Follow [docs/contributing/testing.md](docs/contributing/testing.md). In particular:
+
+- **Arrange / Act / Assert:** every test body (including each `t.Run` body in a table-driven test) is split into three phases, each introduced by its own comment: `// Arrange`, `// Act`, `// Assert`. Phases appear once each, in this order, with a blank line before `// Act` and `// Assert`.
+- Leave out `// Arrange` only when there is nothing to set up. Use `// Act & Assert` only when the call and the check can't be separated (e.g. a panic check, or a helper that both runs and asserts).
+- Never return to an earlier phase (assert, act again, assert again); split such a test into separate tests or subtests. Act may hold several calls when the test compares their results.
+- Apply this to new tests and to existing tests you substantially change. Don't reformat untouched tests as part of an unrelated change.
+
 ### Error handling
 
 - Wrap with context: `fmt.Errorf("failed to do X: %w", err)`
