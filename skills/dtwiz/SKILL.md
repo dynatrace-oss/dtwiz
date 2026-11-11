@@ -27,8 +27,8 @@ the chat. The rest of this file is the command reference.
 ## Prerequisites
 
 - `dtwiz` installed:
-  - macOS/Linux: `source <(curl -sSL https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.sh)`
-  - Windows (PowerShell): `irm https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.ps1 | iex`
+  - macOS/Linux: `source <(curl -sSL https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.sh) --yes`
+  - Windows (PowerShell): `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.ps1))) -Yes`
 - Dynatrace environment URL + platform token (`dt0s16.*`)
 - Auth via flags or env vars:
 

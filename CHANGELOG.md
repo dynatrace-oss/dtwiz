@@ -10,9 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - AI-agent onboarding: `skills/dtwiz/ONBOARDING.md` has a paste-ready prompt and step-by-step agent instructions so Claude, Cursor or any coding agent can connect this machine and its apps, Kubernetes clusters and AWS, Azure or GCP accounts to Dynatrace with dtwiz, setting up only what the user chooses, while the platform token never enters the chat.
+- `install.sh --yes`/`-y` and `install.ps1 -Yes`/`-y` skip the install confirmation for unattended installs (CI, AI agents). The install preview is still printed.
 
 ### Changed
 
+- `install.ps1` no longer accepts the install directory positionally; use `-InstallDir <dir>`.
 - The `dtwiz` skill (`skills/dtwiz/SKILL.md`) now matches the CLI (Windows install, platform-token auth, Kubernetes, AWS, Docker and update details, `--yes`, `watch`) and drops the internal URL-family and token-type tables.
 
 ## [1.14.0] - 2026-11-02
