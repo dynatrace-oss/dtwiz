@@ -21,33 +21,35 @@ func classifyGoError(step string, err error) error {
 	}
 }
 
-// noteTierError remembers the first failure of a tier (otelc install or build, client-only
-// build) so it is reported even when a later tier rescues the service.
-func (p *GoInstrumentationPlan) noteTierError(step string, err error) {
-	if p.firstTierErr == nil {
-		p.firstTierErr = classifyGoError(step, err)
+// noteOtelcError remembers the first otelc failure (install or build). A later tier may
+// rescue the service, so it is only reported when nothing ends up instrumented.
+func (p *GoInstrumentationPlan) noteOtelcError(step string, err error) {
+	if p.otelcErr == nil {
+		p.otelcErr = classifyGoError(step, err)
 	}
 }
 
-// recordGoInstrumentation reports the overall outcome. started is the number of
-// instrumented services that are running after launch. It succeeded when at least
-// one is, with the first tier failure (if any) as the error. Otherwise it failed,
-// and the reason (manual steps, or a launch failure) is reported as the error.
-func (p *GoInstrumentationPlan) recordGoInstrumentation(started int) {
-	if started > 0 {
-		installer.RecordFeature(installer.FeatureGoInstrumentation, true)
-		installer.RecordFeatureError(installer.FeatureGoInstrumentation, p.firstTierErr)
-		return
+// noInstrumentationError explains why no service ended up instrumented, as a typed
+// installer error so the failed event can classify it without messages or paths. It
+// returns nil when nothing failed: a project handled with manual steps from the start
+// (no toolchain, no automatic method) is a planned outcome, not a failure. When otelc
+// failed first, its error is joined with the final cause, so both reach the event.
+func (p *GoInstrumentationPlan) noInstrumentationError() error {
+	if p.ManualReason != "" {
+		return nil
 	}
-	installer.RecordFeature(installer.FeatureGoInstrumentation, false)
-	installer.RecordFeatureError(installer.FeatureGoInstrumentation, p.manualCause())
+	cause := p.finalCause()
+	if cause == nil {
+		return nil
+	}
+	if p.otelcErr != nil {
+		return errors.Join(p.otelcErr, cause)
+	}
+	return cause
 }
 
-// manualCause explains why no service could be instrumented automatically.
-func (p *GoInstrumentationPlan) manualCause() error {
-	if p.ManualReason == goReasonNoTool {
-		return &installer.DependencyMissingError{Name: "go"}
-	}
+// finalCause is the last stage that failed: a client-only build, the pre-flight or the launch.
+func (p *GoInstrumentationPlan) finalCause() error {
 	for _, s := range p.Services {
 		if s.Err != nil {
 			return classifyGoError("go-client-build", s.Err)
@@ -61,5 +63,5 @@ func (p *GoInstrumentationPlan) manualCause() error {
 			return &installer.InstallFailedError{Step: "go-launch"}
 		}
 	}
-	return &installer.InstallFailedError{Step: "go-manual"}
+	return nil
 }

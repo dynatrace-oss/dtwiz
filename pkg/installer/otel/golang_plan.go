@@ -68,8 +68,9 @@ type GoInstrumentationPlan struct {
 	Services  []*GoServicePlan
 	// ManualReason is set when the whole project is handled with manual steps.
 	ManualReason string
-	// firstTierErr is the first classified build failure, kept for telemetry.
-	firstTierErr error
+	// otelcErr is the first classified otelc failure (install or build), kept so a total
+	// failure reports it next to the client-only failure.
+	otelcErr error
 }
 
 // Seams replaced in tests.
@@ -254,7 +255,6 @@ func (p *GoInstrumentationPlan) Execute() error {
 	if p.ManualReason != "" {
 		fmt.Printf("  Not instrumented automatically: %s.\n", p.ManualReason)
 		p.printManualSteps()
-		p.recordGoInstrumentation(0)
 		return nil
 	}
 
@@ -370,7 +370,7 @@ func (p *GoInstrumentationPlan) buildServices(ctx context.Context) {
 					s.Method = goMethodClientOnly
 				}
 			}
-			p.noteTierError("otelc-install", err)
+			p.noteOtelcError("otelc-install", err)
 		} else {
 			logger.Debug("otelc ready", "path", tool.Path, "version", tool.Version)
 			otelcUsable = true
@@ -416,7 +416,7 @@ func (p *GoInstrumentationPlan) buildServices(ctx context.Context) {
 				fmt.Printf("    %v\n", err)
 				return
 			}
-			p.noteTierError("otelc-build", err)
+			p.noteOtelcError("otelc-build", err)
 			logger.Debug("otelc build failed, falling back to client-only instrumentation", "service", s.Name, "error", err)
 			display.AbandonStdoutLine()
 			if !fallbackNoted {
@@ -449,7 +449,6 @@ func (p *GoInstrumentationPlan) buildServices(ctx context.Context) {
 			} else {
 				logger.Debug("client-only build failed", "service", s.Name, "error", err)
 			}
-			p.noteTierError("go-client-build", err)
 			clientBuildErrs = append(clientBuildErrs, err)
 			s.Method = goMethodManual
 			s.Err = err
@@ -608,7 +607,6 @@ func (p *GoInstrumentationPlan) launchServices() error {
 	}
 
 	started, _ := goSummaryFn(procs, processSettleDelay)
-	p.recordGoInstrumentation(len(started))
 
 	if len(clientOnly) > 0 {
 		names := make([]string, len(clientOnly))
@@ -620,11 +618,14 @@ func (p *GoInstrumentationPlan) launchServices() error {
 
 	if len(started) == 0 {
 		if len(manual) == len(p.Services) {
-			return nil // every service ended up with manual steps, which is not an error
+			// Every service ended up with manual steps. That is an error only when
+			// automatic instrumentation was tried and failed.
+			return p.noInstrumentationError()
 		}
 		fmt.Println()
 		fmt.Println("  No services are running — check the logs above for errors.")
-		return errors.New("no services started — all processes failed to start")
+		return fmt.Errorf("no services started — all processes failed to start: %w",
+			&installer.InstallFailedError{Step: "go-launch"})
 	}
 	fmt.Println()
 	fmt.Println("  Waiting for traffic — send requests to your services to generate traces and metrics.")

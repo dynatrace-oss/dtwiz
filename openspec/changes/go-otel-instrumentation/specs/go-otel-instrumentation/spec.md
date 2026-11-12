@@ -302,31 +302,37 @@ Build and installation failures SHALL show the failing command's output and the 
 - **WHEN** the build fails to download modules
 - **THEN** the message says the failure is connectivity-related
 
-### Requirement: Instrumentation outcome is reported in self-monitoring
+### Requirement: Total instrumentation failure is reported as a failed event
 
-The system SHALL report whether Go instrumentation instrumented at least one service automatically in the install self-monitoring event. When a build fails, even if another tier then instruments the service, or no service can be instrumented, the event SHALL carry the first failure as a classified error type with its attributes, and SHALL NOT carry error messages, paths or project names. A manual-steps outcome SHALL still end the command successfully; it is reported as a failed instrumentation with its cause.
+The system SHALL report a total Go instrumentation failure through the existing failed self-monitoring event. When automatic instrumentation was tried and no service could be instrumented, `Execute()` SHALL return an installer error classified by the failing stage: a missing dependency (for example a Go version that is too old), a network error, or an install failure naming the step (`otelc-install`, `otelc-build`, `go-client-build`, `go-preflight` or `go-launch`). When otelc failed before the final failure, the error SHALL carry both, so the otelc cause is not lost. The failed event SHALL carry only that error type and its attributes. Partial results (some service instrumented, including through the client-only tier) and a project handled with manual steps from the start (for example no Go toolchain) SHALL end the command successfully.
 
-#### Scenario: All services instrumented without failures
+#### Scenario: Every build fails
 
-- **GIVEN** every service is built with the instrumentation tool
-- **WHEN** the install event is reported
-- **THEN** the Go instrumentation outcome is succeeded and carries no error
+- **GIVEN** the otelc build and the client-only build fail for every service
+- **WHEN** `Execute()` finishes
+- **THEN** it returns an install-failed error naming the failing step
+- **AND** the manual steps are still printed
+
+#### Scenario: Network failure during a build
+
+- **GIVEN** every build fails because modules cannot be downloaded
+- **WHEN** `Execute()` finishes
+- **THEN** the returned error is a network error
+
+#### Scenario: Built but nothing starts
+
+- **GIVEN** all services built but none could be started
+- **WHEN** `Execute()` finishes
+- **THEN** it returns an install-failed error for the launch step
 
 #### Scenario: Tool unavailable but services still instrumented
 
 - **GIVEN** the instrumentation tool cannot be used and the services are built client-only
-- **WHEN** the install event is reported
-- **THEN** the outcome is succeeded and carries the classified error of the tool failure
+- **WHEN** `Execute()` finishes
+- **THEN** it returns no error
 
 #### Scenario: Manual steps because there is no Go toolchain
 
 - **GIVEN** no Go toolchain is available
-- **WHEN** the install event is reported
-- **THEN** the outcome is failed with a missing-dependency error naming `go`
-- **AND** the command still exits successfully
-
-#### Scenario: Network failure during a build
-
-- **GIVEN** a build fails because modules cannot be downloaded
-- **WHEN** the install event is reported
-- **THEN** the error type is network error
+- **WHEN** `Execute()` finishes
+- **THEN** it prints the manual steps and returns no error

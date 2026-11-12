@@ -24,7 +24,9 @@ func TestClassifyGoError(t *testing.T) {
 	}
 }
 
-func TestExecute_RecordsGoInstrumentationOutcome(t *testing.T) {
+// A total failure must come back from Execute as a typed error so the command fires the
+// failed event with its category. Partial results and planned manual outcomes succeed.
+func TestExecute_ReturnsClassifiedErrorWhenNothingIsInstrumented(t *testing.T) {
 	type errKind string
 	const (
 		noErr   errKind = ""
@@ -33,49 +35,44 @@ func TestExecute_RecordsGoInstrumentationOutcome(t *testing.T) {
 	)
 
 	tests := []struct {
-		name    string
-		setup   func(h *executeHarness, p *GoInstrumentationPlan)
-		outcome installer.Outcome
-		err     errKind
+		name  string
+		setup func(h *executeHarness, p *GoInstrumentationPlan)
+		want  errKind
 	}{
-		{name: "all compile-time", outcome: installer.OutcomeSucceeded},
+		{name: "all compile-time"},
 		{
 			name: "otelc unavailable, services built client-only",
 			setup: func(h *executeHarness, _ *GoInstrumentationPlan) {
 				h.otelcErr = &GoVersionTooOldError{Required: "1.26.0"}
 			},
-			outcome: installer.OutcomeSucceeded, err: depErr,
 		},
 		{
-			name:    "one otelc build fails, rescued by client-only",
-			setup:   func(h *executeHarness, _ *GoInstrumentationPlan) { h.otelcFails["worker"] = true },
-			outcome: installer.OutcomeSucceeded, err: stepErr,
+			name:  "one otelc build fails, rescued by client-only",
+			setup: func(h *executeHarness, _ *GoInstrumentationPlan) { h.otelcFails["worker"] = true },
 		},
 		{
-			name: "everything fails",
+			name: "everything fails to build",
 			setup: func(h *executeHarness, _ *GoInstrumentationPlan) {
 				h.otelcErr = errors.New("install failed")
 				h.fallbackFails["api"] = true
 				h.fallbackFails["worker"] = true
 			},
-			outcome: installer.OutcomeFailed, err: stepErr,
+			want: stepErr,
 		},
 		{
 			name: "built, but no service could be started",
 			setup: func(h *executeHarness, _ *GoInstrumentationPlan) {
 				h.launchFails["api"], h.launchFails["worker"] = true, true
 			},
-			outcome: installer.OutcomeFailed, err: stepErr,
+			want: stepErr,
 		},
 		{
-			name:    "one service fails to start, the other runs",
-			setup:   func(h *executeHarness, _ *GoInstrumentationPlan) { h.launchFails["api"] = true },
-			outcome: installer.OutcomeSucceeded,
+			name:  "one service fails to start, the other runs",
+			setup: func(h *executeHarness, _ *GoInstrumentationPlan) { h.launchFails["api"] = true },
 		},
 		{
-			name:    "no Go toolchain",
-			setup:   func(_ *executeHarness, p *GoInstrumentationPlan) { p.setManual(goReasonNoTool) },
-			outcome: installer.OutcomeFailed, err: depErr,
+			name:  "no Go toolchain is a planned manual outcome",
+			setup: func(_ *executeHarness, p *GoInstrumentationPlan) { p.setManual(goReasonNoTool) },
 		},
 	}
 
@@ -95,22 +92,40 @@ func TestExecute_RecordsGoInstrumentationOutcome(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			installer.ResetInstallTelemetry()
-			t.Cleanup(installer.ResetInstallTelemetry)
 			h := newHarness(t)
 			plan, _ := newTwoServicePlan(t)
 			if tt.setup != nil {
 				tt.setup(h, plan)
 			}
 
-			helpers.CaptureStdout(t, func() { _ = plan.Execute() })
+			var err error
+			helpers.CaptureStdout(t, func() { err = plan.Execute() })
 
-			if got := installer.FeatureOutcomes()[installer.FeatureGoInstrumentation]; got != tt.outcome {
-				t.Errorf("outcome = %v, want %v", got, tt.outcome)
-			}
-			if k := kind(installer.FeatureErrors()[installer.FeatureGoInstrumentation]); k != tt.err {
-				t.Errorf("error = %q, want %q", k, tt.err)
+			if got := kind(err); got != tt.want {
+				t.Errorf("Execute() error = %q (%v), want %q", got, err, tt.want)
 			}
 		})
+	}
+}
+
+// When otelc fails first and the client-only build then fails too, the error carries
+// both, so classification and the message do not lose the otelc cause.
+func TestExecute_TotalFailureKeepsOtelcAndClientOnlyErrors(t *testing.T) {
+	h := newHarness(t)
+	h.otelcErr = errors.New("dial tcp: lookup proxy.golang.org: no such host")
+	h.fallbackFails["api"] = true
+	h.fallbackFails["worker"] = true
+	plan, _ := newTwoServicePlan(t)
+
+	var err error
+	helpers.CaptureStdout(t, func() { err = plan.Execute() })
+
+	var netErr *installer.NetworkError
+	if !errors.As(err, &netErr) || netErr.Reason != "otelc-install" {
+		t.Errorf("otelc network failure missing from %v", err)
+	}
+	var failed *installer.InstallFailedError
+	if !errors.As(err, &failed) || failed.Step != "go-client-build" {
+		t.Errorf("client-only failure missing from %v", err)
 	}
 }

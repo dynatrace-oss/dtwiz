@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/test/helpers"
 )
 
@@ -497,13 +498,14 @@ func TestExecute_TierSelection(t *testing.T) {
 			wantLaunch: []string{"api"}, wantManual: true,
 		},
 		{
-			name: "everything fails → manual, not an error",
+			name: "everything fails → manual steps and an error",
 			setup: func(h *executeHarness) {
 				h.otelcErr = errors.New("network")
 				h.fallbackFails["api"] = true
 				h.fallbackFails["worker"] = true
 			},
 			want: map[string]goMethod{"api": goMethodManual, "worker": goMethodManual}, wantManual: true,
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
@@ -748,8 +750,9 @@ func TestExecute_WorkspaceAllManualWhenPreflightFails(t *testing.T) {
 	plan := buildGoInstrumentationPlan(goDetected(root), testEndpoint)
 	var err error
 	out := helpers.CaptureStdout(t, func() { err = plan.Execute() })
-	if err != nil {
-		t.Fatalf("manual outcome must succeed: %v", err)
+	var failed *installer.InstallFailedError
+	if !errors.As(err, &failed) {
+		t.Fatalf("a failed pre-flight must return a classified error, got %v", err)
 	}
 	if len(h.launched) != 0 || !strings.Contains(out, "can't be autoinstrumented") || !strings.Contains(out, "not instrumented automatically") {
 		t.Fatalf("out = %s", out)
@@ -837,11 +840,7 @@ func TestExecute_AllManualLeavesNoArtifacts(t *testing.T) {
 	h := newHarness(t)
 	failAllBuilds(h)
 	plan, root := newTwoServicePlan(t)
-	helpers.CaptureStdout(t, func() {
-		if err := plan.Execute(); err != nil {
-			t.Fatal(err)
-		}
-	})
+	helpers.CaptureStdout(t, func() { _ = plan.Execute() })
 	if _, err := os.Stat(filepath.Join(root, ".otel")); !os.IsNotExist(err) {
 		t.Fatalf(".otel must be removed when every service is manual, stat err = %v", err)
 	}

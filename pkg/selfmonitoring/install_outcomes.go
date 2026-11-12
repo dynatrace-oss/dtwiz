@@ -15,9 +15,6 @@ import (
 type InstallReport struct {
 	Features map[installer.Feature]installer.Outcome // features absent from the map were not tried
 	Duration time.Duration                           // install work time, excluding prompts and the watch
-	// Errors explains features that failed or only partly worked. Only the classified
-	// type and its attributes are reported, never the message.
-	Errors map[installer.Feature]error
 }
 
 // installFeatures lists the reported features in the fixed order of their characters in
@@ -34,7 +31,6 @@ var installFeatures = []struct {
 	{installer.FeatureRUM, "install.rum"},
 	{installer.FeatureSynthetic, "install.synthetic_monitoring"},
 	{installer.FeatureRDSExtensions, "install.rds_extensions"},
-	{installer.FeatureGoInstrumentation, "install.go_instrumentation"},
 }
 
 const (
@@ -72,8 +68,7 @@ func (r InstallReport) durationHeader() string {
 }
 
 // bodyProps returns the readable body properties: one per feature, always all of them,
-// plus the classified error of each feature that has one and the unclamped work time in
-// milliseconds.
+// plus the unclamped work time in milliseconds.
 func (r InstallReport) bodyProps() map[string]string {
 	props := make(map[string]string, len(installFeatures)+1)
 	for _, f := range installFeatures {
@@ -84,17 +79,6 @@ func (r InstallReport) bodyProps() map[string]string {
 			props[f.prop] = "failed"
 		default:
 			props[f.prop] = "not_tried"
-		}
-	}
-	for _, f := range installFeatures {
-		err := r.Errors[f.feature]
-		if err == nil {
-			continue
-		}
-		errType, attrs := ClassifyError(err)
-		props[f.prop+".error"] = string(errType)
-		for k, v := range attrs {
-			props[f.prop+".error."+k] = v
 		}
 	}
 	props[bodyInstallDurationMs] = strconv.FormatInt(r.Duration.Milliseconds(), 10)

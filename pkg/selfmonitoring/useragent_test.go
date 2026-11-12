@@ -392,12 +392,12 @@ func TestBuildUserAgentInstallOutcomes(t *testing.T) {
 		{
 			name:   "features_and_duration_after_error",
 			params: EventParams{Cmd: "install", Sub: "otel-collector", StepID: StepInstall, Err: "install_failed", Install: &InstallReport{Features: hostOK, Duration: 42 * time.Second}},
-			want:   "dtwiz/1.2.3;c=ins;st=ist;s=otlc;er=ifl;f=11----;d=42",
+			want:   "dtwiz/1.2.3;c=ins;st=ist;s=otlc;er=ifl;f=11---;d=42",
 		},
 		{
 			name:   "no_error",
 			params: EventParams{Cmd: "setup", Sub: "otel-collector", StepID: StepInstall, Install: &InstallReport{Features: map[installer.Feature]installer.Outcome{installer.FeatureHostMonitoring: installer.OutcomeSucceeded}, Duration: 7 * time.Second}},
-			want:   "dtwiz/1.2.3;c=set;st=ist;s=otlc;f=-1----;d=7",
+			want:   "dtwiz/1.2.3;c=set;st=ist;s=otlc;f=-1---;d=7",
 		},
 		{
 			name:   "omitted_when_no_install_work_started",
@@ -407,7 +407,7 @@ func TestBuildUserAgentInstallOutcomes(t *testing.T) {
 		{
 			name:   "zero_seconds_is_still_reported",
 			params: EventParams{Cmd: "install", Sub: "oneagent", StepID: StepInstall, Install: &InstallReport{}},
-			want:   "dtwiz/1.2.3;c=ins;st=ist;s=oa;f=------;d=0",
+			want:   "dtwiz/1.2.3;c=ins;st=ist;s=oa;f=-----;d=0",
 		},
 		{
 			name:   "not_emitted_on_other_steps",

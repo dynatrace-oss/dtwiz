@@ -14,13 +14,12 @@ func TestInstallReport_FeaturesHeader(t *testing.T) {
 		features map[installer.Feature]installer.Outcome
 		want     string
 	}{
-		{"nothing_tried", nil, "------"},
-		{"otel_config_and_host_monitoring_succeeded", map[installer.Feature]installer.Outcome{installer.FeatureOtelConfig: ok, installer.FeatureHostMonitoring: ok}, "11----"},
-		{"host_monitoring_failed", map[installer.Feature]installer.Outcome{installer.FeatureOtelConfig: ok, installer.FeatureHostMonitoring: failed}, "10----"},
-		{"only_host_monitoring_reached", map[installer.Feature]installer.Outcome{installer.FeatureHostMonitoring: ok}, "-1----"},
-		{"each_reserved_feature_in_its_own_position", map[installer.Feature]installer.Outcome{installer.FeatureRUM: ok, installer.FeatureSynthetic: failed, installer.FeatureRDSExtensions: ok}, "--101-"},
-		{"go_instrumentation_in_its_own_position", map[installer.Feature]installer.Outcome{installer.FeatureGoInstrumentation: ok}, "-----1"},
-		{"explicit_not_tried_outcome", map[installer.Feature]installer.Outcome{installer.FeatureOtelConfig: installer.OutcomeNotTried}, "------"},
+		{"nothing_tried", nil, "-----"},
+		{"otel_config_and_host_monitoring_succeeded", map[installer.Feature]installer.Outcome{installer.FeatureOtelConfig: ok, installer.FeatureHostMonitoring: ok}, "11---"},
+		{"host_monitoring_failed", map[installer.Feature]installer.Outcome{installer.FeatureOtelConfig: ok, installer.FeatureHostMonitoring: failed}, "10---"},
+		{"only_host_monitoring_reached", map[installer.Feature]installer.Outcome{installer.FeatureHostMonitoring: ok}, "-1---"},
+		{"each_reserved_feature_in_its_own_position", map[installer.Feature]installer.Outcome{installer.FeatureRUM: ok, installer.FeatureSynthetic: failed, installer.FeatureRDSExtensions: ok}, "--101"},
+		{"explicit_not_tried_outcome", map[installer.Feature]installer.Outcome{installer.FeatureOtelConfig: installer.OutcomeNotTried}, "-----"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -46,7 +45,6 @@ func TestInstallReport_BodyPropsAreReadableAndComplete(t *testing.T) {
 		"install.rum":                  "not_tried",
 		"install.synthetic_monitoring": "not_tried",
 		"install.rds_extensions":       "not_tried",
-		"install.go_instrumentation":   "not_tried",
 		"install.duration_ms":          "1500",
 	}
 	if len(props) != len(want) {
@@ -87,7 +85,6 @@ func TestInstallFeatures_PositionsAreStable(t *testing.T) {
 		installer.FeatureRUM,
 		installer.FeatureSynthetic,
 		installer.FeatureRDSExtensions,
-		installer.FeatureGoInstrumentation,
 	}
 	if len(installFeatures) < len(want) {
 		t.Fatalf("installFeatures has %d entries, fewer than the %d shipped positions", len(installFeatures), len(want))
@@ -124,32 +121,5 @@ func TestInstallReport_DurationClampedInHeaderOnly(t *testing.T) {
 	}
 	if got := r.bodyProps()["install.duration_ms"]; got != "10800000" {
 		t.Errorf("body install.duration_ms = %q, want the unclamped 10800000", got)
-	}
-}
-
-// A feature error is reported as its classified type and attributes, never as the message.
-func TestInstallReport_BodyCarriesClassifiedFeatureErrors(t *testing.T) {
-	r := InstallReport{
-		Features: map[installer.Feature]installer.Outcome{
-			installer.FeatureGoInstrumentation: installer.OutcomeSucceeded,
-			installer.FeatureHostMonitoring:    installer.OutcomeFailed,
-		},
-		Errors: map[installer.Feature]error{
-			installer.FeatureGoInstrumentation: &installer.NetworkError{Reason: "otelc-build"},
-		},
-	}
-	props := r.bodyProps()
-
-	want := map[string]string{
-		"install.go_instrumentation.error":                        "network_error",
-		"install.go_instrumentation.error.network.failure_reason": "otelc-build",
-	}
-	for k, v := range want {
-		if props[k] != v {
-			t.Errorf("props[%q] = %q, want %q", k, props[k], v)
-		}
-	}
-	if _, ok := props["install.host_monitoring.error"]; ok {
-		t.Error("a feature without an error must not carry an error property")
 	}
 }
