@@ -7,11 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- AI-agent onboarding: `skills/dtwiz/ONBOARDING.md` has a paste-ready prompt and step-by-step agent instructions so Claude, Cursor or any coding agent can connect this machine and its apps, Kubernetes clusters and AWS, Azure or GCP accounts to Dynatrace with dtwiz, setting up only what the user chooses, while the platform token never enters the chat.
+- `install.sh --yes`/`-y` and `install.ps1 -Yes`/`-y` skip the install confirmation for unattended installs (CI, AI agents). The install preview is still printed.
+
+### Changed
+
+- `install.ps1` no longer accepts the install directory positionally; use `-InstallDir <dir>`.
+- The `dtwiz` skill (`skills/dtwiz/SKILL.md`) now matches the CLI (Windows install, platform-token auth, Kubernetes, AWS, Docker and update details, `--yes`, `watch`) and drops the internal URL-family and token-type tables.
+
+## [1.14.0] - 2026-11-02
+
+### Added
+
+- `dtwiz install otel` (experimental): detects the Real User Monitoring options for the selected project folder and shows them in the install preview, either as auto-inject (listing the files the RUM tag can be injected into) or as manual (naming the file to add the tag to and why auto-injection isn't possible). Detection recognizes common JS frameworks, including Nuxt.js.
+
+### Fixed
+
+- Token validation now calls `query:verify` instead of running a Grail read on `dt.system.events`, so a least-privilege platform token without the `storage:system:read` scope is no longer rejected as having insufficient permissions. Invalid tokens are still rejected.
+- Install script self-monitoring: `install.sh` and `install.ps1` now resolve the event ingest URL the same way the binary does (production `.apps.dynatrace.com` maps to `.live.dynatrace.com`; dev and sprint environments only drop `.apps.`).
+
 ### Changed
 
 - Leaner install output: each step of `install oneagent`, `kubernetes`, `otel` (including the Python, Node.js and Java instrumentation), `aws` (including Lambda), `azure` and `gcp` is one line with a spinner that turns into `✓` or `✗`. Commands, URLs, paths, manifests and generated config now appear with `-v` (and in `--dry-run`); a failed step shows the last lines of its error without a flag. The same step style now applies to the `uninstall` commands (kubernetes, aws, aws-lambda, azure, gcp, otel, oneagent, self), the azure/gcp/otel `update` commands, `install demo` and `install docker`. Phases that used to show nothing while they ran (tenant setup, lookups, project scans) now show a spinner. The pre-confirmation prompt now reads `Apply?`.
 - Self-monitoring: the `ist` event now only reports what the install did (feature outcomes and install time). It no longer carries `error` or error attributes, and it is only sent when install work started, so dry-runs, declined confirmations, and failures before the confirmation send no `ist`. The install error is reported on the `failed` or `cancelled` event of the same run, for both `dtwiz install <method>` and `dtwiz setup`.
 - Self-monitoring: `dtwiz install <method>` now ends every run that reaches the installer with exactly one `completed`, `failed`, or `cancelled` event, like `setup`, `update`, and `uninstall`.
+- Internal: Makefile cleanup, `markdownlint-cli` image tag updated with the resulting doc fixes, and the debug launch configuration now prompts for the directory to run the binary in.
 
 ## [1.13.0] - 2026-10-19
 
@@ -660,7 +682,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.13.0...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.14.0...HEAD
+[1.14.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.10.0...v1.11.0

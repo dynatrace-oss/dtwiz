@@ -1,9 +1,9 @@
 module github.com/dynatrace-oss/dtwiz
 
-go 1.26.9
+go 1.26.10
 
 require (
-	github.com/dynatrace-oss/dtctl/sdk v0.43.0
+	github.com/dynatrace-oss/dtctl/sdk v0.45.0
 	github.com/fatih/color v1.19.0
 	github.com/go-resty/resty/v2 v2.17.2
 	github.com/spf13/cobra v1.10.2

@@ -131,7 +131,7 @@ func TestPrintCredentialStatus_SingleErrorMarker(t *testing.T) {
 	if n := strings.Count(got, "✗"); n != 1 {
 		t.Errorf("expected exactly one ✗ marker, got %d in %q", n, got)
 	}
-	if want := "✗ Platform token: authentication failed"; !strings.Contains(got, want) {
+	if want := "✗ platform token: authentication failed"; !strings.Contains(got, want) {
 		t.Errorf("expected output to contain %q, got %q", want, got)
 	}
 }

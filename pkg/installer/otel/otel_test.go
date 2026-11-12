@@ -18,6 +18,7 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
+	"github.com/dynatrace-oss/dtwiz/test/helpers"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -1338,6 +1339,22 @@ func runUninstallDryRun(t *testing.T) {
 	_ = UninstallOtelCollector("https://env.example.com", "dt0s16.test", true)
 }
 
+// isolateUninstallScan points HOME and the working directory at a fresh temp dir
+// holding an opentelemetry/ install dir, so the uninstall scan always finds one
+// artifact and never touches the developer's real files.
+func isolateUninstallScan(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	dir := filepath.Join(home, "opentelemetry")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	helpers.SetTestWorkingDir(t, home)
+	return dir
+}
+
 // runUninstallWithConfirm calls UninstallOtelCollector with dryRun=false and AutoConfirm=true.
 func runUninstallWithConfirm(t *testing.T) {
 	t.Helper()
@@ -1364,6 +1381,7 @@ func runUninstallWithConfirm(t *testing.T) {
 
 func TestUninstallOtelCollector_DeleteAll_CallsDeactivation(t *testing.T) {
 	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
+	installDir := isolateUninstallScan(t)
 	t.Setenv("DTWIZ_EXPERIMENTAL", "")
 	stubPromptDecision(t, uninstallAll)
 	called := stubDeactivation(t)
@@ -1373,10 +1391,14 @@ func TestUninstallOtelCollector_DeleteAll_CallsDeactivation(t *testing.T) {
 	if !*called {
 		t.Error("expected deactivateHostMonitoringExtensionFn to be called when user selects Delete all")
 	}
+	if _, err := os.Stat(installDir); !os.IsNotExist(err) {
+		t.Errorf("expected %s to be removed, stat err = %v", installDir, err)
+	}
 }
 
 func TestUninstallOtelCollector_CollectorOnly_SkipsDeactivation(t *testing.T) {
 	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
+	isolateUninstallScan(t)
 	t.Setenv("DTWIZ_EXPERIMENTAL", "")
 	stubPromptDecision(t, uninstallCollectorOnly)
 	called := stubDeactivation(t)
@@ -1390,6 +1412,7 @@ func TestUninstallOtelCollector_CollectorOnly_SkipsDeactivation(t *testing.T) {
 
 func TestUninstallOtelCollector_DryRun_SkipsDeactivation(t *testing.T) {
 	featureflags.ClearCLIOverrideForTest(t, featureflags.Experimental)
+	isolateUninstallScan(t)
 	t.Setenv("DTWIZ_EXPERIMENTAL", "")
 	called := stubDeactivation(t)
 

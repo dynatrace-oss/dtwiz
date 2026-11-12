@@ -47,6 +47,40 @@ Unit tests live next to the code they test (`pkg/foo/foo_test.go`).
 
 **Package:** use the `_test` suffix (`package recommender_test`) so tests only access exported symbols.
 
+**Arrange / Act / Assert:** every test body is split into three phases, each introduced by its own comment line:
+
+1. `// Arrange`: build inputs, fakes, servers, temp dirs, and expected values.
+2. `// Act`: call the code under test. Usually this is a single statement.
+3. `// Assert`: check results, errors, captured output, and recorded calls.
+
+Rules:
+
+- The phases appear once each and in this order. Never go back to an earlier phase: no assert, act again, assert again. If a test needs that, it's checking two behaviours, so split it into two tests or subtests.
+- Act may hold more than one call when the test's claim is about how the results relate, e.g. "`PrintWarning` and `PrintError` produce different output". Put all the calls together under `// Act`, then compare them under `// Assert`.
+- Act holds only calls to the code under test. Setup calls go under Arrange, even when they call production code (for example writing a config file the function will read).
+- Put a blank line before `// Act` and before `// Assert` so the phases stand out.
+- Leave out `// Arrange` only when there is nothing to set up. `// Act` and `// Assert` are always present.
+- Use `// Act & Assert` only when the call and the check can't be separated, e.g. a `defer`/`recover` panic check, or a helper that fails the test itself (`assertRunEValidatesPlatformToken`). Don't use it just to save a line.
+- In table-driven tests the table holds the case data, and the phases go inside the `t.Run` body. Per-case setup goes under `// Arrange` there.
+- `t.Cleanup`/`defer` for resources created during Arrange belong in Arrange.
+- In integration tests, cleanup checks (for example an uninstall followed by verification) are a separate test step or subtest with their own phases, not a fourth phase.
+
+```go
+func TestAPIURL_ConvertsPlatformURLToClassic(t *testing.T) {
+    // Arrange
+    platformURL := "https://abc12345.apps.dynatrace.com/"
+    want := "https://abc12345.live.dynatrace.com"
+
+    // Act
+    got := installer.APIURL(platformURL)
+
+    // Assert
+    if got != want {
+        t.Errorf("APIURL(%q) = %q, want %q", platformURL, got, want)
+    }
+}
+```
+
 **Structure:** prefer table-driven tests for multiple scenarios:
 
 ```go
@@ -70,7 +104,10 @@ func TestAuthHeader(t *testing.T) {
 
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
+            // Act
             got := installer.AuthHeader(tt.token)
+
+            // Assert
             if got != tt.want {
                 t.Errorf("AuthHeader(%q) = %q, want %q", tt.token, got, tt.want)
             }
@@ -78,6 +115,8 @@ func TestAuthHeader(t *testing.T) {
     }
 }
 ```
+
+Existing tests predate this convention. Apply it to every test you write, and to any existing test whose body you change substantially. Don't reformat untouched tests as a side effect of an unrelated change.
 
 Use `httptest.NewServer` when testing code that makes HTTP calls — no real network needed:
 

@@ -57,6 +57,13 @@ irm https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.p
 dtwiz setup
 ```
 
+### Onboard with an AI agent
+
+Prefer to let Claude or Cursor do it? Paste the prompt from
+[skills/dtwiz/ONBOARDING.md](skills/dtwiz/ONBOARDING.md). The agent guides you step by step, sets up
+only what you choose (this machine and its apps, Kubernetes, AWS, Azure, GCP), and your platform
+token never goes into the chat.
+
 ## Prerequisites
 
 Set the following environment variables before running `dtwiz`:
@@ -98,6 +105,16 @@ source <(curl -sSL https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/sc
 
 ```powershell
 irm https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.ps1 | iex
+```
+
+**Unattended install (CI, AI agents):** pass `--yes` / `-Yes` to skip the `Continue? [Y/n]` prompt. The install preview is still printed. `irm | iex` cannot pass parameters, so Windows uses a script block.
+
+```bash
+source <(curl -sSL https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.sh) --yes
+```
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.ps1))) -Yes
 ```
 
 **From source:**
@@ -184,54 +201,9 @@ dtwiz install otel-python --project ./my-python-app
 
 ## Self-monitoring
 
-`dtwiz` sends a `CUSTOM_INFO` event to your Dynatrace environment on every command invocation. These events let you monitor the state of `dtwiz` executions and keep a history of which commands were run, when, and whether they succeeded.
+`dtwiz` sends `CUSTOM_INFO` events to your Dynatrace environment that record which commands ran, how far each run got, which monitoring was set up, and how long it took until data arrived. The install scripts send events too when `DT_ENVIRONMENT` is set. The events contain anonymous usage data only and count against your environment's event ingest quota.
 
-Use the following DQL query in your tenant's **Notebooks** or **Dashboards** app to explore them:
-
-```sql
-fetch events
-| filter event.type == "CUSTOM_INFO" and startsWith(event.name, "dtwiz")
-| fields timestamp, event.name, step, command, subcommand, error, version, os
-| sort timestamp desc
-| limit 100
-```
-
-Key fields:
-
-| Field        | Values                                                   | Description                 |
-| ------------ | -------------------------------------------------------- | --------------------------- |
-| `event.name` | `dtwiz status`, `dtwiz install otel`, …                  | Command that was run        |
-| `step`       | `invoked`, `install`, `completed`, `failed`, `cancelled` | Execution stage             |
-| `command`    | `install`, `setup`, `watch`, …                           | Top-level command           |
-| `subcommand` | `otel`, `kubernetes`, `oneagent`, …                      | Subcommand, when applicable |
-| `error`      | `auth_error`, `dependency_missing`, `user_cancelled`, …  | Error category on failures  |
-| `version`    | `1.9.0`                                                  | dtwiz version that ran      |
-| `os`         | `darwin`, `linux`, `windows`                             | Operating system            |
-
-Events are sent to the Events v2 API and count against your environment's event ingest quota.
-
-### Install script events
-
-When `DT_ENVIRONMENT` is set, the install scripts (`install.sh` and `install.ps1`) also send events: one when they start, and one when the install completes, fails, or is cancelled. Their `event.name` is `dtwiz install script`:
-
-```sql
-fetch events
-| filter event.type == "CUSTOM_INFO" and event.name == "dtwiz install script"
-| fields timestamp, executionId, script, step, error, version, channel, tag, os
-| sort timestamp desc
-| limit 100
-```
-
-| Field         | Values                                                                                                                                                                                                                                          | Description                                                          |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `executionId` | `3ab`                                                                                                                                                                                                                                           | Correlates the events of one script run                              |
-| `script`      | `sh`, `ps1`                                                                                                                                                                                                                                     | Install script that ran                                              |
-| `step`        | `invoked`, `completed`, `failed`, `cancelled`                                                                                                                                                                                                   | Execution stage                                                      |
-| `error`       | `unknown_argument`, `unsupported_os`, `unsupported_arch`, `curl_missing`, `github_unreachable`, `release_not_found`, `install_dir_failed`, `prompt_failed`, `download_failed`, `extract_failed`, `binary_missing`, `move_failed`, `interrupted` | Failure reason; `interrupted` on a cancelled run stopped with Ctrl+C |
-| `version`     | `1.9.0`, `1.9.1-next`                                                                                                                                                                                                                           | dtwiz version being installed, once resolved                         |
-| `channel`     | `stable`, `main`, `tag`                                                                                                                                                                                                                         | Requested release source                                             |
-| `tag`         | `snapshot-main`, `snapshot-<branch>`                                                                                                                                                                                                            | Requested release tag, when set                                      |
-| `os`          | `darwin`, `linux`, `windows`                                                                                                                                                                                                                    | Operating system                                                     |
+See [Self-monitoring events](docs/self-monitoring/README.md) for every event, its properties, and sample queries.
 
 ## Demo
 

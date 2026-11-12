@@ -199,6 +199,10 @@ Each package has a single responsibility. Before adding a file to an existing pa
 
 > The codebase contains existing violations of these rules. Do not treat any existing file placement as a precedent — follow the rules above, not the current layout.
 
+### Testing
+
+When writing or updating tests, read [docs/contributing/testing.md](docs/contributing/testing.md) first. It defines test naming, structure (Arrange / Act / Assert), mocking helpers, and integration test setup.
+
 ### Error handling
 
 - Wrap with context: `fmt.Errorf("failed to do X: %w", err)`
@@ -233,6 +237,12 @@ When the user talks about "specs", "a spec", "writing a spec", or "a change" the
 - Standalone specs (no implementation yet): `openspec/specs/<name>/`
 
 **When to create a spec:** any non-trivial feature or architectural decision should go through `openspec-propose` before implementation begins. For small, clearly scoped bug fixes or documentation edits, skip it.
+
+## Pull requests
+
+- Use `.github/pull_request_template.md` for PR bodies. Fill in every section; tick only checklist items that were actually done.
+- Follow [docs/contributing/pull-requests.md](docs/contributing/pull-requests.md) and use Conventional Commits for the PR title.
+- Confirm title, body, and target branch with the user before pushing or opening a PR.
 
 ## Build & release
 

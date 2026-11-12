@@ -24,6 +24,10 @@ func skipIfNoJava(t *testing.T) {
 	if _, err := exec.LookPath("java"); err != nil {
 		t.Skip("java not installed on PATH")
 	}
+	// macOS ships a /usr/bin/java stub that is on PATH even without a JRE.
+	if err := exec.Command("java", "-version").Run(); err != nil {
+		t.Skip("java on PATH but no runtime available")
+	}
 }
 
 // redirectAgentDownloadURL points otelJavaAgentURL at srv for the duration of
