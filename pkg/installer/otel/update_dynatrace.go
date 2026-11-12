@@ -116,12 +116,12 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 	// When the config is already current and tenant-side prerequisites are not
 	// in scope (no platform token), there is nothing to do.
 	if !configChanged && platformTok == "" {
-		display.ColorOK.Println("  Collector configuration is up to date.")
+		display.StepDone("Collector configuration is up to date", "")
 		return ErrUpToDate
 	}
 
 	if configChanged {
-		display.Header(fmt.Sprintf("Preview: collector configuration changes to %s:", configPath))
+		display.Header(fmt.Sprintf("dtwiz · OpenTelemetry update — %s", configPath))
 		fmt.Println()
 
 		showConfigDiff(origData, updatedData)
@@ -196,7 +196,7 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 	if !configChanged {
 		// The config is already current, which counts as written.
 		installer.RecordFeature(installer.FeatureOtelConfig, true)
-		display.ColorOK.Println("  Collector configuration is up to date.")
+		display.StepDone("Collector configuration is up to date", "")
 		return nil
 	}
 
@@ -208,9 +208,9 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 	if err != nil {
 		return err
 	}
-	fmt.Printf("  Config updated: %s\n", result.ConfigPath)
-	fmt.Printf("  Backup created: %s\n", backupPath)
-	fmt.Println()
+	display.StepDone("Updated collector config", "backup created")
+	display.Detail("config: %s", result.ConfigPath)
+	display.Detail("backup: %s", backupPath)
 
 	if len(runningProcs) == 0 {
 		display.ColorDefault.Println("  No running collector to restart.")
@@ -227,65 +227,67 @@ func updateDynatraceCollector(configPath string, runningProcs []otelProcessInfo,
 	}
 
 	for _, p := range containerProcs {
-		if p.containerCfgPath != "" {
-			fmt.Printf("  Copying updated config into container %s...\n", p.containerName)
-			if err := copyFileToContainer(p.containerRuntime, p.containerName, configPath, p.containerCfgPath); err != nil {
-				return fmt.Errorf("copying config to container %s: %w", p.containerName, err)
+		if err := display.RunStep("Restarted container "+p.containerName, func(*display.Step) error {
+			if p.containerCfgPath != "" {
+				if err := copyFileToContainer(p.containerRuntime, p.containerName, configPath, p.containerCfgPath); err != nil {
+					return fmt.Errorf("copying config to container %s: %w", p.containerName, err)
+				}
 			}
+			if err := restartContainer(p.containerRuntime, p.containerName); err != nil {
+				return fmt.Errorf("restarting container %s: %w", p.containerName, err)
+			}
+			return nil
+		}); err != nil {
+			return err
 		}
-		fmt.Printf("  Restarting container %s...\n", p.containerName)
-		if err := restartContainer(p.containerRuntime, p.containerName); err != nil {
-			return fmt.Errorf("restarting container %s: %w", p.containerName, err)
-		}
-		fmt.Printf("  Container %s restarted.\n", p.containerName)
 	}
 
 	if len(nativeProcs) > 0 {
-		restartBinary := killCollectorProcesses(nativeProcs)
-		fmt.Println()
+		var restartBinary string
+		_ = display.RunStep("Stopped collector", func(*display.Step) error {
+			restartBinary = killCollectorProcesses(nativeProcs)
+			return nil
+		})
 
 		if restartBinary == "" {
-			display.ColorDefault.Println("  Could not determine binary path — skipping restart.")
-			display.ColorDefault.Println("  Start the collector manually with the updated config.")
+			display.StepWarn("Could not determine binary path — skipping restart", "start the collector manually with the updated config")
 			return nil
 		}
 
-		fmt.Printf("  Restarting collector with updated config...\n")
-		crashed, err := startOtelCollector(restartBinary, configPath)
-		if err != nil {
-			return fmt.Errorf("restarting collector: %w", err)
+		var crashed <-chan error
+		if err := display.RunStep("Restarted collector", func(*display.Step) error {
+			var serr error
+			crashed, serr = startOtelCollector(restartBinary, configPath)
+			if serr != nil {
+				return fmt.Errorf("restarting collector: %w", serr)
+			}
+			return nil
+		}); err != nil {
+			return err
 		}
 		httpPort := otlpHTTPPortFromConfig(configPath)
-		fmt.Println()
-		fmt.Printf("  Waiting for collector to be ready...")
-		if err := waitForOtelCollectorReady(httpPort, 30*time.Second, crashed); err != nil {
-			return fmt.Errorf("collector port did not open: %w", err)
+		verified, err := verifyRestartedCollector(envURL, platformTok, token, httpPort, crashed)
+		if err != nil {
+			return err
 		}
-		fmt.Println(" ✓")
-		if err := verifyOtelInstall(envURL, platformTok, token, httpPort); err != nil {
-			fmt.Printf("\n  Warning: log verification failed: %v\n", err)
-			fmt.Println("  The collector may still be working — check the Dynatrace UI.")
+		if !verified {
 			return nil
 		}
 	}
 
 	if len(containerProcs) > 0 {
 		httpPort := otlpHTTPPortFromConfig(configPath)
+		// Best-effort verification for containers: httpPort may or may not be
+		// exposed to the host depending on how the container was started.
 		noCrash := make(chan error, 1) // never sends — no process to monitor
-		fmt.Println()
-		fmt.Printf("  Waiting for collector to be ready...")
-		if err := waitForOtelCollectorReady(httpPort, 30*time.Second, noCrash); err != nil {
-			return fmt.Errorf("collector port did not open: %w", err)
+		verified, err := verifyRestartedCollector(envURL, platformTok, token, httpPort, noCrash)
+		if err != nil {
+			return err
 		}
-		fmt.Println(" ✓")
-		if err := verifyOtelInstall(envURL, platformTok, token, httpPort); err != nil {
-			fmt.Printf("\n  Warning: log verification failed: %v\n", err)
-			fmt.Println("  The collector may still be working — check the Dynatrace UI.")
+		if !verified {
 			return nil
 		}
 	}
-
-	display.ColorOK.Println("  ✓ Collector restarted and verified.")
 
 	installer.MarkInstallDone()
 	installer.WatchIngest(envURL, platformTok, startTime.UTC().Format(installer.IngestTimeFormat))

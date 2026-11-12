@@ -466,13 +466,13 @@ func TestAzureGatherClientIDs_VerificationFailureSkipsWithWarning(t *testing.T) 
 		return "{}", nil
 	}
 	var ids []string
-	out := captureColorOutput(func() {
+	out := captureStdout(t, func() {
 		ids = azureGatherClientIDs(runner, nil, []string{"dtwiz-azure"}, "https://abc.live.dynatrace.com")
 	})
 	if len(ids) != 0 {
 		t.Errorf("expected empty (unverifiable app skipped), got %v", ids)
 	}
-	if !strings.Contains(out, "Warning") {
+	if !strings.Contains(out, "⚠ Skipped App Registration") {
 		t.Errorf("expected a Warning for unverifiable app, got: %s", out)
 	}
 }

@@ -157,8 +157,9 @@ func TestUpdateAzurePreviewLeavesAuthUnchanged(t *testing.T) {
 	if !strings.Contains(out, "update Azure monitoring configuration") {
 		t.Errorf("expected an update step in preview; got:\n%s", out)
 	}
-	if !strings.Contains(out, "(already exists, unchanged)") {
-		t.Errorf("expected preview to mark the connection as unchanged; got:\n%s", out)
+	// Only the monitoring configuration is touched: no auth-chain step is planned.
+	if strings.Contains(out, "az ad") || strings.Contains(out, "federated") {
+		t.Errorf("update preview must not plan authentication changes; got:\n%s", out)
 	}
 }
 

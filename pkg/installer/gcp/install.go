@@ -38,28 +38,28 @@ func gcpBuildStepCommands(cfg gcpConfig) []string {
 	}
 }
 
-func gcpPrintPreview(cfg gcpConfig) {
+func gcpPrintPreview(cfg gcpConfig, showPlan bool) {
 	fmt.Println()
-	display.ColorMessage.Println("  Dynatrace Google Cloud Integration")
-	fmt.Println()
-	fmt.Printf("  Environment:         %s\n", cfg.EnvURL)
-	fmt.Printf("  Project:             %s\n", cfg.ProjectID)
-	fmt.Printf("  Service account:     %s\n", cfg.serviceAccountEmail())
-	fmt.Printf("  Dynatrace principal: %s\n", cfg.DTServiceAccount)
-	fmt.Printf("  Connection name:     %s\n", cfg.ConnectionName)
-	fmt.Printf("  Configuration name:  %s\n", cfg.ConfigurationName)
-	fmt.Println()
-	display.PrintSectionDivider()
-	display.ColorMessage.Println("  Commands to be executed:")
-	display.PrintSectionDivider()
+	display.InstallHeader("dtwiz · Google Cloud")
+	display.PrintAlignedStatusLines(display.ColorDefault,
+		"Project", cfg.ProjectID,
+		"Service account", cfg.serviceAccountEmail(),
+		"Connection", cfg.ConnectionName,
+		"Configuration", cfg.ConfigurationName,
+	)
+	display.Detail("environment: %s", cfg.EnvURL)
+	display.Detail("dynatrace principal: %s", cfg.DTServiceAccount)
 
-	steps := gcpBuildStepCommands(cfg)
-	for i, s := range steps {
-		masked := installer.MaskSecret(s, cfg.PlatformToken)
-		fmt.Printf("  Step %d: %s\n", i+1, masked)
+	if showPlan || logger.Enabled() {
+		fmt.Println()
+		display.PrintSectionDivider()
+		display.ColorMessage.Println("  Commands to be executed:")
+		display.PrintSectionDivider()
+		for i, s := range gcpBuildStepCommands(cfg) {
+			fmt.Printf("  Step %d: %s\n", i+1, installer.MaskSecret(s, cfg.PlatformToken))
+		}
+		display.PrintSectionDivider()
 	}
-
-	display.PrintSectionDivider()
 	fmt.Println()
 }
 
@@ -74,7 +74,8 @@ const (
 )
 
 func gcpRunStep(n, total int, runner cmdRunner, sleeper func(time.Duration), name string, args []string, env []string, desc string) (string, error) {
-	fmt.Printf("  Step %d/%d: %s...\n", n, total, desc)
+	display.Detail("%s %s", name, strings.Join(args, " "))
+	logger.Debug("starting step", "step", n, "total", total, "desc", desc)
 	var out string
 	err := installer.Retry(sleeper, installer.RetryConfig{
 		MaxAttempts: gcpStepMaxAttempts,
@@ -182,15 +183,23 @@ func installGCPWithRunner(
 	sleeper func(time.Duration),
 	dtc dtclient,
 ) error {
-	projectID, _, err := gcpAccountInfo(runner)
-	if err != nil {
+	var projectID string
+	if err := display.RunQuiet("Checking Google Cloud project", func(*display.Step) error {
+		var err error
+		projectID, _, err = gcpAccountInfo(runner)
+		return err
+	}); err != nil {
 		return err
 	}
 
 	name := integrationNameForEnv(envURL)
 
-	existing, err := dtc.findAllConnections(integrationPrefix)
-	if err != nil {
+	var existing []connRef
+	if err := display.RunQuiet("Checking existing Dynatrace connections", func(*display.Step) error {
+		var err error
+		existing, err = dtc.findAllConnections(integrationPrefix)
+		return err
+	}); err != nil {
 		return fmt.Errorf("checking existing connection: %w", err)
 	}
 	// Complete connection found: reconcile monitoring config in place; don't recreate the SA/bindings.
@@ -203,7 +212,12 @@ func installGCPWithRunner(
 		return err
 	}
 
-	dtPrincipal, err := dtc.dtServiceAccount()
+	var dtPrincipal string
+	err = display.RunQuiet("Resolving Dynatrace principal", func(*display.Step) error {
+		var derr error
+		dtPrincipal, derr = dtc.dtServiceAccount()
+		return derr
+	})
 	if err != nil {
 		if errors.Is(err, errNoPrincipal) {
 			fmt.Println("  GCP is currently in Preview. Please first subscribe to it on https://docs.dynatrace.com/docs/whats-new/preview-releases.")
@@ -223,7 +237,7 @@ func installGCPWithRunner(
 		ConnectionID:       resumeConnID,
 	}
 
-	gcpPrintPreview(cfg)
+	gcpPrintPreview(cfg, dryRun)
 
 	if proceed, err := installer.ShouldProceed(dryRun, "Installation"); !proceed {
 		return err
@@ -232,8 +246,6 @@ func installGCPWithRunner(
 	if err := runInstallSteps(cfg, runner, sleeper, dtc); err != nil {
 		return err
 	}
-	fmt.Println()
-	display.ColorMessage.Println("  Google Cloud integration setup complete!")
 	fmt.Println()
 
 	installer.MarkInstallDone()
@@ -245,94 +257,110 @@ func runInstallSteps(cfg gcpConfig, runner cmdRunner, sleeper func(time.Duration
 	const total = 7
 	completed := make(map[int]bool)
 
-	_, err := gcpRunStep(1, total, runner, sleeper, "gcloud",
-		append([]string{"services", "enable"}, append(append([]string{}, requiredAPIs...), "--project", cfg.ProjectID)...),
-		nil, "Enable required Google Cloud APIs")
-	if err != nil {
-		gcpPartialFailureHint(cfg, completed)
+	// step runs one install step as a spinner line; a failure prints the
+	// cleanup hint for the resources created so far.
+	step := func(n int, label string, fn func(*display.Step) error) error {
+		if err := display.RunStep(label, fn); err != nil {
+			gcpPartialFailureHint(cfg, completed)
+			return err
+		}
+		completed[n] = true
+		return nil
+	}
+
+	if err := step(1, "Enabled Google Cloud APIs", func(*display.Step) error {
+		_, err := gcpRunStep(1, total, runner, sleeper, "gcloud",
+			append([]string{"services", "enable"}, append(append([]string{}, requiredAPIs...), "--project", cfg.ProjectID)...),
+			nil, "Enable required Google Cloud APIs")
+		return err
+	}); err != nil {
 		return err
 	}
-	completed[1] = true
-	display.ColorOK.Println("  ✓ APIs enabled")
 
-	fmt.Printf("  Step 2/%d: Create Dynatrace GCP connection...\n", total)
 	connObjectID := cfg.ConnectionID
+	connLabel := "Created Dynatrace connection"
 	if connObjectID != "" {
-		logger.Debug("resuming partial install, reusing existing connection", "objectId", connObjectID)
-		display.ColorOK.Printf("  ✓ Connection already exists, resuming: %s\n", connObjectID)
-	} else {
-		connObjectID, err = dtc.createConnection(cfg.ConnectionName)
-		if err != nil {
-			gcpPartialFailureHint(cfg, completed)
-			return fmt.Errorf("step 2: %w%s", err, gcpConnectionConflictHint(err, cfg.ConnectionName))
-		}
-		display.ColorOK.Printf("  ✓ Connection created: %s\n", connObjectID)
+		connLabel = "Reused existing Dynatrace connection"
 	}
-	completed[2] = true
+	if err := step(2, connLabel, func(s *display.Step) error {
+		if connObjectID != "" {
+			logger.Debug("resuming partial install, reusing existing connection", "objectId", connObjectID)
+		} else {
+			var err error
+			connObjectID, err = dtc.createConnection(cfg.ConnectionName)
+			if err != nil {
+				return fmt.Errorf("step 2: %w%s", err, gcpConnectionConflictHint(err, cfg.ConnectionName))
+			}
+		}
+		s.Detail("%s", connObjectID)
+		return nil
+	}); err != nil {
+		return err
+	}
 	cfg.ConnectionID = connObjectID
 
-	fmt.Printf("  Step 3/%d: Create Google Cloud service account...\n", total)
-	saEmail, err := gcpCreateServiceAccount(runner, cfg.ServiceAccountName, cfg.ProjectID)
-	if err != nil {
-		gcpPartialFailureHint(cfg, completed)
-		return fmt.Errorf("step 3: %w%s", err, gcpPermissionHint(3, err))
-	}
-	completed[3] = true
-	cfg.ServiceAccountEmail = saEmail
-	display.ColorOK.Printf("  ✓ Service account created: %s\n", saEmail)
-
-	_, err = gcpRunStep(4, total, runner, sleeper, "gcloud",
-		[]string{"projects", "add-iam-policy-binding", cfg.ProjectID,
-			"--member", serviceAccountMember(saEmail), "--role", viewerRole, "--condition=None"},
-		nil, "Grant Viewer role to service account")
-	if err != nil {
-		gcpPartialFailureHint(cfg, completed)
-		return err
-	}
-	completed[4] = true
-	display.ColorOK.Println("  ✓ Viewer role granted")
-
-	_, err = gcpRunStep(5, total, runner, sleeper, "gcloud",
-		[]string{"iam", "service-accounts", "add-iam-policy-binding", saEmail,
-			"--member", serviceAccountMember(cfg.DTServiceAccount), "--role", tokenCreatorRole},
-		nil, "Grant impersonation to Dynatrace principal")
-	if err != nil {
-		gcpPartialFailureHint(cfg, completed)
-		return err
-	}
-	completed[5] = true
-	display.ColorOK.Println("  ✓ Impersonation trust granted")
-
-	fmt.Printf("  Step 6/%d: Update Dynatrace GCP connection...\n", total)
-	if err := updateConnectionWithRetry(dtc, connObjectID, cfg.ConnectionName, saEmail, sleeper); err != nil {
-		gcpPartialFailureHint(cfg, completed)
-		return fmt.Errorf("step 6: %w", err)
-	}
-	display.ColorOK.Println("  ✓ Connection updated")
-
-	freshlyInstalled, err := dtc.installExtension()
-	if err != nil {
-		gcpPartialFailureHint(cfg, completed)
-		return fmt.Errorf("installing extension %s: %w", extensionName, err)
-	}
-	if freshlyInstalled {
-		logger.Debug("extension freshly installed (async), waiting for it to become active")
-		fmt.Println("  Extension freshly installed — waiting for it to become active...")
-		if waitErr := waitForExtensionActive(dtc, sleeper); waitErr != nil {
-			logger.Debug("extension did not become active in time, proceeding anyway", "error", waitErr)
-		} else {
-			display.ColorOK.Println("  ✓ Extension is active")
+	var saEmail string
+	if err := step(3, "Created service account", func(s *display.Step) error {
+		var err error
+		saEmail, err = gcpCreateServiceAccount(runner, cfg.ServiceAccountName, cfg.ProjectID)
+		if err != nil {
+			return fmt.Errorf("step 3: %w%s", err, gcpPermissionHint(3, err))
 		}
+		s.Detail("%s", saEmail)
+		return nil
+	}); err != nil {
+		return err
+	}
+	cfg.ServiceAccountEmail = saEmail
+
+	if err := step(4, "Granted Viewer role", func(*display.Step) error {
+		_, err := gcpRunStep(4, total, runner, sleeper, "gcloud",
+			[]string{"projects", "add-iam-policy-binding", cfg.ProjectID,
+				"--member", serviceAccountMember(saEmail), "--role", viewerRole, "--condition=None"},
+			nil, "Grant Viewer role to service account")
+		return err
+	}); err != nil {
+		return err
 	}
 
-	fmt.Printf("  Step 7/%d: Create GCP monitoring configuration...\n", total)
-	if err := dtc.createMonitoring(cfg.ConfigurationName, connObjectID, saEmail, cfg.ProjectID); err != nil {
-		gcpPartialFailureHint(cfg, completed)
-		return fmt.Errorf("step 7: %w", err)
+	if err := step(5, "Granted impersonation to Dynatrace", func(*display.Step) error {
+		_, err := gcpRunStep(5, total, runner, sleeper, "gcloud",
+			[]string{"iam", "service-accounts", "add-iam-policy-binding", saEmail,
+				"--member", serviceAccountMember(cfg.DTServiceAccount), "--role", tokenCreatorRole},
+			nil, "Grant impersonation to Dynatrace principal")
+		return err
+	}); err != nil {
+		return err
 	}
-	display.ColorOK.Println("  ✓ Monitoring configuration created")
 
-	return nil
+	if err := step(6, "Linked Dynatrace connection", func(s *display.Step) error {
+		s.Detail("waiting for IAM changes to propagate (can take a minute)")
+		if err := updateConnectionWithRetry(dtc, connObjectID, cfg.ConnectionName, saEmail, sleeper); err != nil {
+			return fmt.Errorf("step 6: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	return step(7, "Created monitoring configuration", func(s *display.Step) error {
+		freshlyInstalled, err := dtc.installExtension()
+		if err != nil {
+			return fmt.Errorf("installing extension %s: %w", extensionName, err)
+		}
+		if freshlyInstalled {
+			logger.Debug("extension freshly installed (async), waiting for it to become active")
+			s.Detail("waiting for extension to become active")
+			if waitErr := waitForExtensionActive(dtc, sleeper); waitErr != nil {
+				logger.Debug("extension did not become active in time, proceeding anyway", "error", waitErr)
+			}
+			s.Detail("")
+		}
+		if err := dtc.createMonitoring(cfg.ConfigurationName, connObjectID, saEmail, cfg.ProjectID); err != nil {
+			return fmt.Errorf("step 7: %w", err)
+		}
+		return nil
+	})
 }
 
 // gcpConnectionConflictHint explains a name-uniqueness conflict on connection creation.
@@ -399,9 +427,6 @@ func updateConnectionWithRetry(dtc dtclient, connObjectID, connName, serviceAcco
 		},
 		Retryable: updateConnectionRetryable,
 		OnRetry: func(attempt int, delay time.Duration, err error) {
-			if attempt == 1 {
-				fmt.Println("  Waiting for GCP IAM changes to propagate before linking (this can take a minute)...")
-			}
 			logger.Debug("connection update failed, retrying", "attempt", attempt, "delay", delay, "error", err)
 		},
 	}, func() error {

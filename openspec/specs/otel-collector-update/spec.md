@@ -149,25 +149,23 @@ After patching the config file, any running collector that owns the patched conf
 - **WHEN** the user confirms
 - **THEN** the old process is killed and the collector is restarted with the updated config
 - **THEN** the restart is verified against Dynatrace
-- **THEN** `✓ Collector restarted and verified.` is printed on success
+- **THEN** the `Restarted collector`, `Collector ready` and `Verified ingest` steps each end as `✓` on success
 
 #### Scenario: Container restarted after patch (host-mounted config)
 
 - **GIVEN** a container collector matched the patched config via a host-mounted path
 - **WHEN** the user confirms
-- **THEN** `Restarting container <name>...` is printed
 - **THEN** `<runtime> restart <name>` is executed
-- **THEN** `Container <name> restarted.` is printed
+- **THEN** a `✓ Restarted container <name>` step line is shown
 - **THEN** Dynatrace verification is attempted and a warning is printed on failure
 
 #### Scenario: Container restarted after patch (config extracted from container)
 
 - **GIVEN** a container collector's config was extracted to a temp file, patched, and copied back
 - **WHEN** the user confirms
-- **THEN** `Copying updated config into container <name>...` is printed before the restart
-- **THEN** `<runtime> cp <tmpPath> <name>:<containerPath>` is executed
+- **THEN** `<runtime> cp <tmpPath> <name>:<containerPath>` is executed before the restart, within the same step
 - **THEN** `<runtime> restart <name>` is executed
-- **THEN** `Container <name> restarted.` is printed
+- **THEN** a `✓ Restarted container <name>` step line is shown
 
 #### Scenario: No running collector found for the patched config
 
@@ -211,9 +209,9 @@ Existing OTLP receiver port assignments SHALL be preserved from the current conf
 
 The regenerated config SHALL always include host-monitoring collector settings.
 
-If the freshly rendered config is byte-identical to the existing file and no platform token is available, the update prints `Collector configuration is up to date.` and returns `ErrUpToDate`. The `cmd/update.go` handler treats `ErrUpToDate` the same as `ErrInstallCancelled`: clean exit and no error printed.
+If the freshly rendered config is byte-identical to the existing file and no platform token is available, the update prints `✓ Collector configuration is up to date` and returns `ErrUpToDate`. The `cmd/update.go` handler treats `ErrUpToDate` the same as `ErrInstallCancelled`: clean exit and no error printed.
 
-If the freshly rendered config is byte-identical to the existing file and a platform token is available, the update SHALL still preview and apply tenant-side prerequisites for host monitoring, including extension activation and OpenPipeline route reconciliation. In that case, the update prints `Collector configuration is up to date.` after applying tenant-side prerequisites, returns success, and does not call `WatchIngest()` because no collector restart occurred.
+If the freshly rendered config is byte-identical to the existing file and a platform token is available, the update SHALL still preview and apply tenant-side prerequisites for host monitoring, including extension activation and OpenPipeline route reconciliation. In that case, the update prints `✓ Collector configuration is up to date` after applying tenant-side prerequisites, returns success, and does not call `WatchIngest()` because no collector restart occurred.
 
 After a successful collector restart and verification, `WatchIngest()` is called to poll until new telemetry data appears in Dynatrace.
 
@@ -223,7 +221,7 @@ After a successful collector restart and verification, `WatchIngest()` is called
 - **AND** the existing config already reflects the current tenant and token
 - **AND** no platform token is available
 - **WHEN** `dtwiz update otel` is run
-- **THEN** `Collector configuration is up to date.` is printed
+- **THEN** `✓ Collector configuration is up to date` is printed
 - **THEN** the command exits cleanly (`ErrUpToDate`), no error is printed, and `WatchIngest` is not called
 
 #### Scenario: Dynatrace collector config is current and tenant prerequisites still need reconciliation
@@ -234,7 +232,7 @@ After a successful collector restart and verification, `WatchIngest()` is called
 - **WHEN** `dtwiz update otel` is run and the user confirms the tenant-side prerequisite preview
 - **THEN** the host monitoring extension activation step is attempted
 - **THEN** the OpenPipeline route reconciliation step is attempted
-- **THEN** `Collector configuration is up to date.` is printed
+- **THEN** `✓ Collector configuration is up to date` is printed
 - **THEN** the command returns success rather than `ErrUpToDate`
 - **THEN** `WatchIngest` is not called because no collector restart occurred
 

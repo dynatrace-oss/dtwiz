@@ -1,6 +1,7 @@
 package otel
 
 import (
+	"bytes"
 	"encoding/xml"
 	"fmt"
 	"os"
@@ -179,36 +180,44 @@ func buildMultiModulePlan(mm *MultiModuleProject, proj ScannedProject, collector
 // It returns an error if any critical step fails (build, agent download, no services started/running).
 func (p *JavaInstrumentationPlan) executeMultiModule() error {
 	if p.BuildCommand != "" {
-		display.PrintStatusLine("build", "Running "+p.BuildCommand+"...", display.ColorOK)
-		fields := strings.Fields(p.BuildCommand)
-		var cmd *exec.Cmd
-		if len(fields) > 0 && (strings.HasSuffix(fields[0], ".cmd") || strings.HasSuffix(fields[0], ".bat")) {
-			cmd = exec.Command("cmd", append([]string{"/c", fields[0]}, fields[1:]...)...)
-		} else {
-			cmd = exec.Command(fields[0], fields[1:]...)
-		}
-		cmd.Dir = p.Project.Path
-		if logger.IsDebug() {
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-		}
-		if err := cmd.Run(); err != nil {
-			display.PrintStatusLine("error", "build failed: "+err.Error(), display.ColorError)
-			return fmt.Errorf("build failed: %w", err)
+		if err := display.RunStep("Built project", func(s *display.Step) error {
+			s.Detail("%s", p.BuildCommand)
+			fields := strings.Fields(p.BuildCommand)
+			var cmd *exec.Cmd
+			if len(fields) > 0 && (strings.HasSuffix(fields[0], ".cmd") || strings.HasSuffix(fields[0], ".bat")) {
+				cmd = exec.Command("cmd", append([]string{"/c", fields[0]}, fields[1:]...)...)
+			} else {
+				cmd = exec.Command(fields[0], fields[1:]...)
+			}
+			cmd.Dir = p.Project.Path
+			var out bytes.Buffer
+			cmd.Stdout, cmd.Stderr = &out, &out
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("build failed: %w\n%s", err, strings.TrimSpace(out.String()))
+			}
+			return nil
+		}); err != nil {
+			return err
 		}
 	}
 
-	agentPath, err := downloadJavaAgent()
-	if err != nil {
-		display.PrintStatusLine("error", fmt.Sprintf("failed to download agent: %v", err), display.ColorError)
-		return fmt.Errorf("failed to download agent: %w", err)
+	var agentPath string
+	if err := display.RunStep("Downloaded OpenTelemetry Java agent", func(*display.Step) error {
+		var err error
+		agentPath, err = downloadJavaAgent()
+		if err != nil {
+			return fmt.Errorf("failed to download agent: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	var procs []*ManagedProcess
 	for i, sub := range p.SubModules {
 		entrypoints := detectJavaEntrypoints(sub.Path)
 		if len(entrypoints) == 0 {
-			display.PrintStatusLine("skip", sub.Name+": no runnable entrypoint found", display.ColorMuted)
+			display.StepWarn("Skipped "+sub.Name, "no runnable entrypoint found")
 			continue
 		}
 		ep := &entrypoints[0]
@@ -217,7 +226,7 @@ func (p *JavaInstrumentationPlan) executeMultiModule() error {
 		logPath := filepath.Join(sub.Path, svcName+".log")
 		logFile, err := os.Create(logPath)
 		if err != nil {
-			display.PrintStatusLine("error", fmt.Sprintf("failed to create log file for %s: %v", svcName, err), display.ColorError)
+			display.StepWarn("Could not create log file for "+svcName, err.Error())
 			continue
 		}
 
@@ -227,7 +236,7 @@ func (p *JavaInstrumentationPlan) executeMultiModule() error {
 
 		proc, err := StartManagedProcess(svcName, svcName+".log", "", cmd, logFile)
 		if err != nil {
-			display.PrintStatusLine("error", fmt.Sprintf("failed to start %s: %v", svcName, err), display.ColorError)
+			display.StepWarn("Could not start "+svcName, err.Error())
 			continue
 		}
 		proc.portDetector = func(pid int) string { return detectJavaListeningPort(pid, sub.Path) }
@@ -235,13 +244,11 @@ func (p *JavaInstrumentationPlan) executeMultiModule() error {
 	}
 
 	if len(procs) == 0 {
-		display.PrintStatusLine("error", "No services started.", display.ColorError)
 		return fmt.Errorf("no services started")
 	}
 
 	aliveNames, _ := PrintProcessSummary(procs, processSettleDelay)
 	if len(aliveNames) == 0 {
-		display.PrintStatusLine("error", "No services are running — check the logs above for errors.", display.ColorError)
 		return fmt.Errorf("no services are running")
 	}
 

@@ -69,7 +69,7 @@ The system SHALL require exactly one `dtwiz-azure` connection with a bound appli
 
 ### Requirement: Preview and confirmation
 
-The system SHALL present a preview showing environment, tenant, subscription, connection name (unchanged), and configuration name, followed by numbered steps. Authentication is left unchanged. All credentials SHALL be masked. It SHALL prompt a single `Apply?` confirmation; `--dry-run` stops after preview and decline cancels without changes.
+The system SHALL present a compact preview showing subscription, connection name (unchanged), and the monitoring configuration to update (environment and tenant with `-v`/`--debug`). The numbered steps SHALL be shown only with `-v`/`--debug` or `--dry-run`. Authentication is left unchanged. All credentials SHALL be masked. It SHALL prompt a single `Apply?` confirmation; `--dry-run` stops after preview and decline cancels without changes.
 
 #### Scenario: Dry run previews only
 

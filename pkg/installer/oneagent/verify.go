@@ -13,7 +13,6 @@ import (
 
 	"github.com/go-resty/resty/v2"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
@@ -46,17 +45,13 @@ func VerifyInstallerSignature(env Environment, installerPath string, skip bool) 
 		return fmt.Errorf("%s: %w", openSSLMissingError, &installer.DependencyMissingError{Name: "openssl"}) //nolint:staticcheck // ST1005: exact wording is required by spec (user-facing remediation hint)
 	}
 
-	display.PrintPending("signature", "fetching root CA...")
 	certPath, err := fetchDynatraceRootCA(dtRootCertURL)
 	if err != nil {
-		display.ClearPending()
 		return err
 	}
 	defer os.Remove(certPath)
 
-	display.PrintPending("signature", "verifying...")
 	code, stderr, err := runOpensslVerify(opensslPath, installerPath, certPath)
-	display.ClearPending()
 	if err != nil {
 		return fmt.Errorf("running openssl: %w", err)
 	}
@@ -66,7 +61,6 @@ func VerifyInstallerSignature(env Environment, installerPath string, skip bool) 
 	}
 
 	logger.Verbose("installer signature verified")
-	display.PrintStatusLine("signature", "Installer signature verified", display.ColorOK)
 	return nil
 }
 
