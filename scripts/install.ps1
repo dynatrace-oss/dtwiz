@@ -1,11 +1,16 @@
 # install.ps1 - Download and install dtwiz on Windows.
 #
 # Usage:
-#   .\install.ps1 [-InstallDir <dir>]
+#   .\install.ps1 [-InstallDir <dir>] [-Yes]
 #
 # By default the binary is installed to $env:LOCALAPPDATA\Programs\dtwiz.
 # Pass -InstallDir to override.  The install directory is added permanently
 # to the current user's PATH.
+#
+# Pass -Yes (or -y) to skip the "Continue? [Y/n]" confirmation, for unattended
+# installs (CI, AI agents). The install preview is still printed. Parameters
+# cannot be passed through "irm ... | iex", so use a script block instead:
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.ps1))) -Yes
 #
 # The script requires an internet connection (uses Invoke-WebRequest).
 #
@@ -22,11 +27,12 @@
 #   Dynatrace environment when it starts and when it completes, fails, or is
 #   cancelled. DT_PLATFORM_TOKEN is used for authorization when set.
 
-[CmdletBinding()]
+[CmdletBinding(PositionalBinding = $false)]
 param(
     [string]$InstallDir = "",
     [string]$Tag = $env:DTWIZ_TAG,
-    [string]$Channel = $env:DTWIZ_CHANNEL
+    [string]$Channel = $env:DTWIZ_CHANNEL,
+    [Alias('y')] [switch]$Yes
 )
 
 # Make failing cmdlets (Invoke-WebRequest, Expand-Archive, Move-Item, ...) throw,
@@ -257,14 +263,16 @@ try {
     Write-Host "  * Install to $InstallDir"
     Write-Host "  * Add $InstallDir to your user PATH (if not already present)"
     Write-Host ""
-    # Read-Host throws in sessions that cannot prompt (-NonInteractive, CI).
-    $FailReason = "prompt_failed"
-    $Confirm = Read-Host "Continue? [Y/n]"
-    if ($Confirm -match '^[Nn]') {
-        Write-Host "Installation cancelled."
-        Send-InstallEvent "can"
-        $SmOutcomeSent = $true
-        exit 0
+    if (-not $Yes) {
+        # Read-Host throws in sessions that cannot prompt (-NonInteractive, CI).
+        $FailReason = "prompt_failed"
+        $Confirm = Read-Host "Continue? [Y/n]"
+        if ($Confirm -match '^[Nn]') {
+            Write-Host "Installation cancelled."
+            Send-InstallEvent "can"
+            $SmOutcomeSent = $true
+            exit 0
+        }
     }
 
     # -- Download and extract ---------------------------------------------------

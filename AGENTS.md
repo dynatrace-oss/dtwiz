@@ -199,6 +199,10 @@ Each package has a single responsibility. Before adding a file to an existing pa
 
 > The codebase contains existing violations of these rules. Do not treat any existing file placement as a precedent — follow the rules above, not the current layout.
 
+### Testing
+
+When writing or updating tests, read [docs/contributing/testing.md](docs/contributing/testing.md) first. It defines test naming, structure (Arrange / Act / Assert), mocking helpers, and integration test setup.
+
 ### Error handling
 
 - Wrap with context: `fmt.Errorf("failed to do X: %w", err)`
