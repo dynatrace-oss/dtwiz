@@ -50,6 +50,11 @@ var installOneAgentCmd = &cobra.Command{
 	Short: "Install Dynatrace OneAgent on this host",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		hostProperties, err := oneAgentHostProperties(cmd)
+		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
+			return err
+		}
 		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
 			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
@@ -72,6 +77,7 @@ var installOneAgentCmd = &cobra.Command{
 			DryRun:                installDryRun,
 			MonitoringMode:        flagMonitoringMode,
 			HostGroup:             hostGroup,
+			HostProperties:        hostProperties,
 			NoVerifySignature:     flagNoVerifySignature,
 			SkipConnectivityCheck: flagSkipConnectivityCheck,
 			ConnectivityCheckOnly: flagConnectivityCheckOnly,
@@ -133,6 +139,22 @@ var installKubernetesCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+// oneAgentHostProperties returns the validated --host-property values. Using
+// the flag requires the oneagent-host-properties feature flag.
+func oneAgentHostProperties(cmd *cobra.Command) ([]string, error) {
+	props, _ := cmd.Flags().GetStringArray("host-property")
+	if len(props) == 0 {
+		return nil, nil
+	}
+	if !featureflags.IsEnabled(featureflags.OneAgentHostProperties) {
+		return nil, fmt.Errorf("host properties are an experimental feature; enable them with --oneagent-host-properties or DTWIZ_ONEAGENT_HOST_PROPERTIES=true")
+	}
+	if err := oneagent.ValidateHostProperties(props); err != nil {
+		return nil, err
+	}
+	return props, nil
 }
 
 var installDockerCmd = &cobra.Command{
@@ -490,6 +512,8 @@ func init() {
 
 	installOneAgentCmd.Flags().Bool("quiet", false, "Suppress prompts and output; requires an elevated terminal on Windows")
 	installOneAgentCmd.Flags().String("host-group", "", "Assign the host to a host group (--set-host-group)")
+	installOneAgentCmd.Flags().StringArray("host-property", nil, "Assign a host property KEY or KEY=VALUE; repeatable (--set-host-property)")
+	_ = installOneAgentCmd.Flags().MarkHidden("host-property")
 	installOneAgentCmd.Flags().StringVar(&flagMonitoringMode, "monitoring-mode", string(oneagent.InstallModeFullStack), "OneAgent monitoring mode to pass to the installer")
 	installOneAgentCmd.Flags().BoolVar(&flagNoVerifySignature, "no-verify-signature", false, "Skip installer signature verification (Linux only)")
 	installOneAgentCmd.Flags().BoolVar(&flagSkipConnectivityCheck, "skip-connectivity-check", false, "Skip endpoint connectivity probe before installation")
@@ -514,6 +538,7 @@ func init() {
 	installCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		featureflags.ApplyCLIOverrides(cmd.Flags())
 		installDockerCmd.Hidden = !featureflags.IsEnabled(featureflags.Experimental)
+		installOneAgentCmd.Flags().Lookup("host-property").Hidden = !featureflags.IsEnabled(featureflags.OneAgentHostProperties)
 		defaultInstallHelp(cmd, args)
 	})
 }

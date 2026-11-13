@@ -1,11 +1,14 @@
 package cmd
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 )
@@ -138,5 +141,74 @@ func TestInstallCmd_CancelledSubcommands(t *testing.T) {
 		if !registered[name] {
 			t.Errorf("expected install subcommand %q to be registered", name)
 		}
+	}
+}
+
+func setHostPropertyFlagForTest(t *testing.T, values ...string) {
+	t.Helper()
+	f := installOneAgentCmd.Flags().Lookup("host-property")
+	for _, v := range values {
+		if err := f.Value.Set(v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Cleanup(func() {
+		_ = f.Value.(pflag.SliceValue).Replace(nil)
+		f.Changed = false
+	})
+}
+
+func TestInstallOneAgentCmd_HostProperty_BlockedWithoutFeatureFlag(t *testing.T) {
+	featureflags.SetCLIOverrideForTest(t, featureflags.OneAgentHostProperties, false)
+	setHostPropertyFlagForTest(t, "team=payments")
+
+	err := installOneAgentCmd.RunE(installOneAgentCmd, nil)
+	if err == nil {
+		t.Fatal("expected error when --host-property is used without the feature flag")
+	}
+	want := "host properties are an experimental feature; enable them with --oneagent-host-properties or DTWIZ_ONEAGENT_HOST_PROPERTIES=true"
+	if err.Error() != want {
+		t.Errorf("unexpected error message:\n got:  %s\n want: %s", err.Error(), want)
+	}
+}
+
+func TestInstallOneAgentCmd_HostProperty_InvalidValueRejectedBeforeCredentials(t *testing.T) {
+	featureflags.SetCLIOverrideForTest(t, featureflags.OneAgentHostProperties, true)
+	// Credentials are set to an unreachable server: reaching credential
+	// validation would surface a different error than the validation one.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("unexpected network call to %s", r.URL.Path)
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("DT_ENVIRONMENT", srv.URL)
+	t.Setenv("DT_PLATFORM_TOKEN", "dt0s16.TEST")
+	setHostPropertyFlagForTest(t, "team=web shop")
+
+	err := installOneAgentCmd.RunE(installOneAgentCmd, nil)
+	if err == nil {
+		t.Fatal("expected validation error for a host property containing whitespace")
+	}
+	if !strings.Contains(err.Error(), `invalid host property "team=web shop"`) {
+		t.Errorf("expected validation error naming the value, got: %v", err)
+	}
+}
+
+func TestInstallOneAgentCmd_HostProperty_HelpVisibility(t *testing.T) {
+	help := func() string {
+		var buf bytes.Buffer
+		installOneAgentCmd.SetOut(&buf)
+		t.Cleanup(func() { installOneAgentCmd.SetOut(nil) })
+		installCmd.HelpFunc()(installOneAgentCmd, nil)
+		return buf.String()
+	}
+
+	featureflags.SetCLIOverrideForTest(t, featureflags.OneAgentHostProperties, false)
+	if out := help(); strings.Contains(out, "Assign a host property") {
+		t.Errorf("expected --host-property hidden when the feature flag is off, got:\n%s", out)
+	}
+
+	featureflags.SetCLIOverrideForTest(t, featureflags.OneAgentHostProperties, true)
+	if out := help(); !strings.Contains(out, "Assign a host property") {
+		t.Errorf("expected --host-property listed when the feature flag is on, got:\n%s", out)
 	}
 }

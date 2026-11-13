@@ -21,8 +21,8 @@ var sudoPathFn = func() (string, error) { return exec.LookPath("sudo") }
 // BuildInstallCommand constructs the OS-specific installer argv from the
 // resolved AgentConfig and InstallOptions.
 //
-// Linux: [sudo?] /bin/sh <installer> --set-server=... --set-monitoring-mode=... --set-app-log-content-access=... [--set-host-group=...]
-// Windows: <installer> [--quiet] --set-monitoring-mode=... --set-app-log-content-access=... [--set-host-group=...]
+// Linux: [sudo?] /bin/sh <installer> --set-server=... --set-monitoring-mode=... --set-app-log-content-access=... [--set-host-group=...] [--set-host-property=...]
+// Windows: <installer> [--quiet] --set-monitoring-mode=... --set-app-log-content-access=... [--set-host-group=...] [--set-host-property=...]
 func BuildInstallCommand(env Environment, cfg AgentConfig, opts InstallOptions, installerPath string) ([]string, error) {
 	var argv []string
 	switch env.OS {
@@ -36,6 +36,7 @@ func BuildInstallCommand(env Environment, cfg AgentConfig, opts InstallOptions, 
 		if opts.HostGroup != "" {
 			argv = append(argv, fmt.Sprintf("--set-host-group=%s", opts.HostGroup))
 		}
+		argv = append(argv, hostPropertyArgs(opts.HostProperties)...)
 		if needsSudoFn() {
 			sudoPath, err := sudoPathFn()
 			if err != nil {
@@ -53,6 +54,7 @@ func BuildInstallCommand(env Environment, cfg AgentConfig, opts InstallOptions, 
 		if opts.HostGroup != "" {
 			argv = append(argv, fmt.Sprintf("--set-host-group=%s", opts.HostGroup))
 		}
+		argv = append(argv, hostPropertyArgs(opts.HostProperties)...)
 	default:
 		return nil, fmt.Errorf("unsupported OS for install command: %q", env.OS)
 	}

@@ -14,6 +14,7 @@ type Flag int
 const (
 	AllRuntimes Flag = iota
 	Experimental
+	OneAgentHostProperties
 )
 
 // CLIFeatureFlag defines a single feature flag with its metadata.
@@ -41,6 +42,14 @@ var registry = []CLIFeatureFlag{
 		"DTWIZ_EXPERIMENTAL",
 		false,
 		"enable experimental features (demo installation, Docker and OTel update in recommendations)",
+		false,
+	},
+	{
+		OneAgentHostProperties,
+		"oneagent-host-properties",
+		"DTWIZ_ONEAGENT_HOST_PROPERTIES",
+		false,
+		"enable --host-property on install oneagent (development only)",
 		false,
 	},
 }

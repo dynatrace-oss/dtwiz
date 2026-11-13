@@ -34,9 +34,19 @@ func oneAgentInstallDir() string {
 	return "/opt/dynatrace/oneagent"
 }
 
+// oneAgentCtl returns the oneagentctl binary inside a default OneAgent install.
+func oneAgentCtl() string {
+	name := "oneagentctl"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	return filepath.Join(oneAgentInstallDir(), "agent", "tools", name)
+}
+
 // TestOneAgentLifecycle exercises the full OneAgent V2 lifecycle against a real
-// Dynatrace tenant: install → the host registers in Smartscape topology (Grail)
-// → uninstall → install dir removed.
+// Dynatrace tenant: install with host properties → oneagentctl reports them →
+// the host registers in Smartscape topology (Grail) → uninstall → install dir
+// removed.
 //
 // It mirrors TestOTelAutoInstrumentation but, because OneAgent installs
 // system-wide and there is exactly one agent per host, it runs as a single
@@ -71,16 +81,30 @@ func TestOneAgentLifecycle(t *testing.T) {
 		}
 	})
 
+	// One KEY=VALUE and one bare KEY, the two forms the installer accepts.
+	hostProperties := []string{"dtwiz-test-id=" + env.TestID, "dtwiz-e2e"}
+
 	t.Log("installing OneAgent (fullstack)")
 	if err := oneagent.InstallOneAgentV2(env.Client, oneagent.InstallOptions{
-		HostGroup: env.TestID, // unique tag to aid correlation and manual debugging
-		Quiet:     *oneAgentQuiet,
+		HostGroup:      env.TestID, // unique tag to aid correlation and manual debugging
+		HostProperties: hostProperties,
+		Quiet:          *oneAgentQuiet,
 	}); err != nil {
 		t.Fatalf("InstallOneAgentV2: %v", err)
 	}
 	installed = true
 	if _, err := os.Stat(installDir); err != nil {
 		t.Fatalf("expected install dir %s to exist after install: %v", installDir, err)
+	}
+
+	out, err := exec.Command(oneAgentCtl(), "--get-host-properties").CombinedOutput()
+	if err != nil {
+		t.Fatalf("oneagentctl --get-host-properties: %v\n%s", err, out)
+	}
+	for _, p := range hostProperties {
+		if !strings.Contains(string(out), p) {
+			t.Errorf("expected host property %q in oneagentctl output, got:\n%s", p, out)
+		}
 	}
 
 	hostName, err := os.Hostname()

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -137,6 +138,43 @@ func TestBuildInstallCommand_Windows_HostGroup(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	assertContains(t, argv, "--set-host-group=staging")
+}
+
+func TestBuildInstallCommand_Linux_HostProperties(t *testing.T) {
+	withNeedsSudo(t, false)
+	opts := InstallOptions{HostProperties: []string{"team=payments", "env=prod", "pci"}}
+	argv, err := BuildInstallCommand(Environment{OS: "linux", Arch: "x86"}, testLinuxCfg("https://env.live.dynatrace.com"), opts, "/tmp/agent.sh")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := []string{"--set-host-property=team=payments", "--set-host-property=env=prod", "--set-host-property=pci"}
+	if got := argv[len(argv)-len(want):]; !reflect.DeepEqual(got, want) {
+		t.Errorf("host property args = %v, want %v in order at the end of argv", got, want)
+	}
+}
+
+func TestBuildInstallCommand_Windows_HostProperties(t *testing.T) {
+	opts := InstallOptions{HostProperties: []string{"env=prod"}}
+	argv, err := BuildInstallCommand(Environment{OS: "windows", Arch: "x86"}, testLinuxCfg("https://env.live.dynatrace.com"), opts, `C:\agent.exe`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertContains(t, argv, "--set-host-property=env=prod")
+}
+
+func TestBuildInstallCommand_NoHostProperties(t *testing.T) {
+	withNeedsSudo(t, false)
+	for _, osName := range []string{"linux", "windows"} {
+		argv, err := BuildInstallCommand(Environment{OS: osName, Arch: "x86"}, testLinuxCfg("https://env.live.dynatrace.com"), InstallOptions{}, "/tmp/agent")
+		if err != nil {
+			t.Fatalf("%s: unexpected error: %v", osName, err)
+		}
+		for _, a := range argv {
+			if strings.HasPrefix(a, "--set-host-property") {
+				t.Errorf("%s: unexpected --set-host-property flag: %s", osName, a)
+			}
+		}
+	}
 }
 
 func TestBuildInstallCommand_MonitoringModeOverride(t *testing.T) {

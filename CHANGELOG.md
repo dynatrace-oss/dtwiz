@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - AI-agent onboarding: `skills/dtwiz/ONBOARDING.md` has a paste-ready prompt and step-by-step agent instructions so Claude, Cursor or any coding agent can connect this machine and its apps, Kubernetes clusters and AWS, Azure or GCP accounts to Dynatrace with dtwiz, setting up only what the user chooses, while the platform token never enters the chat.
 - `install.sh --yes`/`-y` and `install.ps1 -Yes`/`-y` skip the install confirmation for unattended installs (CI, AI agents). The install preview is still printed.
+- `dtwiz install oneagent --host-property KEY[=VALUE]` (repeatable) assigns custom host properties through the installer's `--set-host-property`, behind the `oneagent-host-properties` feature flag (`--oneagent-host-properties` or `DTWIZ_ONEAGENT_HOST_PROPERTIES=true`).
 
 ### Changed
 

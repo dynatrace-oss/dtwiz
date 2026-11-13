@@ -199,6 +199,14 @@ dtwiz install otel --project ./my-service
 dtwiz install otel-python --project ./my-python-app
 ```
 
+### `--host-property <KEY[=VALUE]>`
+
+Assign custom host properties when installing OneAgent, for example to carry team, environment, or cost-center tags. Repeatable. Each value is passed to the OneAgent installer as `--set-host-property` and may contain only letters, digits, `.`, `_`, and `-`. _(Experimental; enable with `--oneagent-host-properties` or `DTWIZ_ONEAGENT_HOST_PROPERTIES=true`.)_
+
+```bash
+DTWIZ_ONEAGENT_HOST_PROPERTIES=true dtwiz install oneagent --host-property team=payments --host-property env=prod
+```
+
 ## Self-monitoring
 
 `dtwiz` sends `CUSTOM_INFO` events to your Dynatrace environment that record which commands ran, how far each run got, which monitoring was set up, and how long it took until data arrived. The install scripts send events too when `DT_ENVIRONMENT` is set. The events contain anonymous usage data only and count against your environment's event ingest quota.
