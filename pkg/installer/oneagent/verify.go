@@ -26,6 +26,10 @@ var dtRootCertURL = "https://ca.dynatrace.com/dt-root.cert.pem"
 // found on a Linux host where signature verification is required.
 const openSSLMissingError = "openssl is required to verify the installer signature. Install openssl or pass --no-verify-signature to skip."
 
+// rootCAUnreachable is the network failure reason reported when the root CA cannot be
+// fetched, so egress problems to ca.dynatrace.com are distinguishable from tenant ones.
+const rootCAUnreachable = "root_ca_unreachable"
+
 // rootCAFetchTimeout caps the time allowed to download the Dynatrace root CA
 // certificate. Kept short because the file is tiny (~2 KB); a stalled
 // connection should not block the install indefinitely.
@@ -85,11 +89,15 @@ func fetchDynatraceRootCA(caURL string) (string, error) {
 	resp, err := resty.New().SetTimeout(rootCAFetchTimeout).R().SetOutput(certPath).Get(caURL)
 	if err != nil {
 		_ = os.Remove(certPath)
-		return "", fmt.Errorf("downloading Dynatrace root CA: %w", err)
+		return "", installerNetworkError(
+			fmt.Sprintf("downloading Dynatrace root CA: %v", err),
+			rootCAUnreachable, caURL, err)
 	}
 	if resp.StatusCode() != http.StatusOK {
 		_ = os.Remove(certPath)
-		return "", fmt.Errorf("downloading Dynatrace root CA: status %d", resp.StatusCode())
+		return "", installerNetworkError(
+			fmt.Sprintf("downloading Dynatrace root CA: status %d", resp.StatusCode()),
+			rootCAUnreachable, caURL, nil)
 	}
 	return certPath, nil
 }
