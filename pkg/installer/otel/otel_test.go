@@ -155,7 +155,6 @@ func TestInferRuntimeFromPath(t *testing.T) {
 }
 
 func TestDetectAvailableRuntimes_DefaultEnabled(t *testing.T) {
-	featureflags.SetCLIOverrideForTest(t, featureflags.GoInstrumentation, false) // independent of DTWIZ_GO_INSTRUMENTATION
 	featureflags.ClearCLIOverrideForTest(t, featureflags.AllRuntimes)
 	t.Setenv("DTWIZ_ALL_RUNTIMES", "")
 
@@ -163,13 +162,9 @@ func TestDetectAvailableRuntimes_DefaultEnabled(t *testing.T) {
 
 	for _, rt := range runtimes {
 		switch rt.name {
-		case "Python", "Node.js", "Java":
+		case "Python", "Node.js", "Java", "Go":
 			if !rt.enabled {
 				t.Errorf("%s should be enabled by default, got enabled=false", rt.name)
-			}
-		case "Go":
-			if rt.enabled {
-				t.Errorf("%s should be disabled by default, got enabled=true", rt.name)
 			}
 		}
 	}
@@ -360,7 +355,6 @@ func TestPrintProjectList_NoAnnotationWhenNoProcesses(t *testing.T) {
 }
 
 func TestSelectProject(t *testing.T) {
-	featureflags.SetCLIOverrideForTest(t, featureflags.GoInstrumentation, false) // Go is a manual language only with the flag off
 	projects := []detectedProject{
 		{ScannedProject: ScannedProject{Path: "/tmp/api"}, Runtime: "Python"},
 		{ScannedProject: ScannedProject{Path: "/tmp/worker"}, Runtime: "Go"},
@@ -378,7 +372,7 @@ func TestSelectProject(t *testing.T) {
 		{name: "invalid input skips", input: "xyz\n", wantOK: false, wantIdx: -1},
 		{name: "out of range skips", input: "9\n", wantOK: false, wantIdx: -1},
 		{name: "valid project selection", input: "2\n", wantOK: true, wantIdx: 1},
-		{name: "language key selects go", input: "g\n", wantOK: true, wantIdx: -1, wantLang: "go"},
+		{name: "go is not a manual language", input: "g\n", wantOK: false, wantIdx: -1},
 		{name: "language key selects php", input: "p\n", wantOK: true, wantIdx: -1, wantLang: "php"},
 		{name: "language key selects rust", input: "u\n", wantOK: true, wantIdx: -1, wantLang: "rust"},
 		{name: "language key selects other", input: "o\n", wantOK: true, wantIdx: -1, wantLang: "other"},
@@ -469,7 +463,6 @@ func TestDetectAllProjects_IncludesWhenUnlocked(t *testing.T) {
 }
 
 func TestCreateRuntimePlan(t *testing.T) {
-	featureflags.SetCLIOverrideForTest(t, featureflags.GoInstrumentation, false) // legacy Go plan; the flag-on flow has its own tests
 	const httpPort = 4318
 	token := "test-token"
 	envURL := "https://tenant.apps.dynatrace.com"
@@ -571,31 +564,11 @@ func TestCreateRuntimePlan(t *testing.T) {
 		}
 	})
 
-	t.Run("go returns plan with module name", func(t *testing.T) {
-		projectDir := t.TempDir()
-
-		plan := createRuntimePlan(detectedProject{
-			ScannedProject: ScannedProject{Path: projectDir, Markers: []string{"go.mod"}},
-			Runtime:        "Go",
-			ModuleName:     "github.com/example/svc",
-		}, httpPort, token, envURL, platformToken)
-
-		goPlan, ok := plan.(*GoInstrumentationPlan)
-		if !ok {
-			t.Fatalf("expected GoInstrumentationPlan, got %T", plan)
-		}
-		if goPlan.Project.ModuleName != "github.com/example/svc" {
-			t.Fatalf("unexpected module name: %s", goPlan.Project.ModuleName)
-		}
-	})
-
 	t.Run("go plan uses collector endpoint from httpPort", func(t *testing.T) {
-		projectDir := t.TempDir()
+		stubGoToolchain(t, true)
+		root := newGoProject(t, map[string]string{"main.go": mainSrc})
 
-		plan := createRuntimePlan(detectedProject{
-			ScannedProject: ScannedProject{Path: projectDir, Markers: []string{"go.mod"}},
-			Runtime:        "Go",
-		}, 4320, token, envURL, platformToken)
+		plan := createRuntimePlan(goDetected(root), 4320, token, envURL, platformToken)
 
 		goPlan, ok := plan.(*GoInstrumentationPlan)
 		if !ok {
@@ -1626,59 +1599,17 @@ func TestRenderOtelTemplate_DebugExporter_Excluded(t *testing.T) {
 	}
 }
 
-func TestDetectAvailableRuntimes_GoInstrumentationFlag(t *testing.T) {
-	featureflags.ClearCLIOverrideForTest(t, featureflags.AllRuntimes)
-	t.Setenv("DTWIZ_ALL_RUNTIMES", "")
-	featureflags.SetCLIOverrideForTest(t, featureflags.GoInstrumentation, true)
-
-	for _, rt := range detectAvailableRuntimes() {
-		if rt.name == "Go" && !rt.enabled {
-			t.Fatal("Go should be enabled by GoInstrumentation without AllRuntimes")
+func TestActiveManualLanguages_ExcludesGo(t *testing.T) {
+	for _, l := range activeManualLanguages() {
+		if l.URLSlug == "go" {
+			t.Fatal("Go is auto-instrumented and must not be in the manual language list")
 		}
-	}
-}
-
-func TestInferRuntimeFromPath_GoFlag(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module x\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	featureflags.SetCLIOverrideForTest(t, featureflags.GoInstrumentation, false)
-	if got := inferRuntimeFromPath(dir); got != "" {
-		t.Fatalf("flag off: inferRuntimeFromPath = %q, want empty", got)
-	}
-
-	featureflags.SetCLIOverrideForTest(t, featureflags.GoInstrumentation, true)
-	if got := inferRuntimeFromPath(dir); got != "Go" {
-		t.Fatalf("flag on: inferRuntimeFromPath = %q, want Go", got)
-	}
-}
-
-func TestActiveManualLanguages_GoFlag(t *testing.T) {
-	hasGo := func() bool {
-		for _, l := range activeManualLanguages() {
-			if l.URLSlug == "go" {
-				return true
-			}
-		}
-		return false
-	}
-
-	featureflags.SetCLIOverrideForTest(t, featureflags.GoInstrumentation, false)
-	if !hasGo() {
-		t.Fatal("flag off: Go should stay in the manual language list")
-	}
-	featureflags.SetCLIOverrideForTest(t, featureflags.GoInstrumentation, true)
-	if hasGo() {
-		t.Fatal("flag on: Go should be dropped from the manual language list")
 	}
 }
 
 func manualGoPlanForTest() *GoInstrumentationPlan {
 	return &GoInstrumentationPlan{
 		Project:           GoProject{ScannedProject: ScannedProject{Path: "/tmp/shop"}},
-		Automatic:         true,
 		CollectorEndpoint: "http://127.0.0.1:4318",
 		EnvVars:           map[string]string{"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"},
 		ManualReason:      goReasonNoTool,
@@ -1691,7 +1622,6 @@ func setupGoManualInstall(t *testing.T) string {
 	stubActivation(t)
 	stubRoutePreview(t)
 	tmpDir := setupAutoConfirmedTempInstall(t)
-	featureflags.SetCLIOverrideForTest(t, featureflags.GoInstrumentation, true)
 
 	projectDir := filepath.Join(tmpDir, "gosvc")
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {

@@ -8,7 +8,7 @@ Define how dtwiz discovers Go projects, associates them with running Go processe
 
 ### Requirement: Go project discovery
 
-The system SHALL detect Go projects by scanning the current directory and common development directories for `go.mod` files, using the same scan scope and ignore rules as other runtimes. Automatic Go instrumentation SHALL be available only when the `GoInstrumentation` feature flag is enabled (`--go-instrumentation` or `DTWIZ_GO_INSTRUMENTATION=true`), independently of `AllRuntimes`.
+The system SHALL detect Go projects by scanning the current directory and common development directories for `go.mod` files, using the same scan scope and ignore rules as other runtimes. Automatic Go instrumentation is generally available and is not gated by a feature flag.
 
 #### Scenario: Go project found
 
@@ -23,18 +23,11 @@ The system SHALL detect Go projects by scanning the current directory and common
 - **THEN** the Go project is still listed
 - **AND** selecting it leads to the manual-steps outcome rather than an automatic build
 
-#### Scenario: Go flag enabled
+#### Scenario: No feature flag required
 
-- **GIVEN** the `GoInstrumentation` feature flag is enabled and `AllRuntimes` is not
+- **GIVEN** no feature flag is set
 - **WHEN** a Go project exists in the scan scope
 - **THEN** it is detected and offered for automatic instrumentation
-
-#### Scenario: Go flag not enabled
-
-- **GIVEN** the `GoInstrumentation` feature flag is not enabled
-- **WHEN** a Go project exists in the scan scope
-- **THEN** no Go build, launch or file creation takes place
-- **AND** Go behaves as before this change
 
 ### Requirement: Go project selection by path
 

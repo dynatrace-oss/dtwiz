@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/test/helpers"
 )
@@ -51,7 +50,7 @@ func TestBuildGoInstrumentationPlan_Services(t *testing.T) {
 	root := newGoProject(t, map[string]string{"cmd/api/main.go": mainSrc, "cmd/worker/main.go": mainSrc})
 
 	plan := buildGoInstrumentationPlan(goDetected(root), testEndpoint)
-	if plan == nil || !plan.Automatic || plan.ManualReason != "" {
+	if plan == nil || plan.ManualReason != "" {
 		t.Fatalf("unexpected plan: %#v", plan)
 	}
 	if len(plan.Services) != 2 || plan.Services[0].Method != goMethodOtelc {
@@ -300,20 +299,13 @@ func TestBuildGoInstrumentationPlan_NoToolchain(t *testing.T) {
 	}
 }
 
-func TestCreateRuntimePlan_GoFlag(t *testing.T) {
+func TestCreateRuntimePlan_Go(t *testing.T) {
 	stubGoToolchain(t, true)
 	root := newGoProject(t, map[string]string{"main.go": mainSrc})
 
-	setGoFlag(t, false)
 	plan := createRuntimePlan(goDetected(root), 4318, "", "", "")
-	if p, ok := plan.(*GoInstrumentationPlan); !ok || p.Automatic {
-		t.Fatalf("flag off must keep the legacy plan, got %#v", plan)
-	}
-
-	setGoFlag(t, true)
-	plan = createRuntimePlan(goDetected(root), 4318, "", "", "")
-	if p, ok := plan.(*GoInstrumentationPlan); !ok || !p.Automatic || p.CollectorEndpoint != testEndpoint {
-		t.Fatalf("flag on must build the automatic plan, got %#v", plan)
+	if p, ok := plan.(*GoInstrumentationPlan); !ok || p.CollectorEndpoint != testEndpoint {
+		t.Fatalf("expected the automatic plan, got %#v", plan)
 	}
 
 	lib := newGoProject(t, map[string]string{"lib.go": "package lib\n"})
@@ -674,11 +666,6 @@ func TestGoBinaryName(t *testing.T) {
 	if got := goBinaryName("api"); got != want {
 		t.Fatalf("goBinaryName = %q, want %q", got, want)
 	}
-}
-
-func setGoFlag(t *testing.T, on bool) {
-	t.Helper()
-	featureflags.SetCLIOverrideForTest(t, featureflags.GoInstrumentation, on)
 }
 
 func TestExecute_WorkspaceBuildsPerModule(t *testing.T) {

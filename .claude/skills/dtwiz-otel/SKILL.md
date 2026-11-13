@@ -63,7 +63,7 @@ Process detection is OS-specific (see AGENTS.md); each runtime has its own heuri
 
 `detectAvailableRuntimes()` determines which runtimes are available by default.
 
-**Feature flag**: `DTWIZ_ALL_RUNTIMES` / `--all-runtimes` enables all runtimes (Java and Go are gated by default).
+**Feature flag**: `DTWIZ_ALL_RUNTIMES` / `--all-runtimes` enables all runtimes (Python, Java, Node.js and Go are enabled by default).
 
 ## Dynatrace Auth & Environment Variables
 

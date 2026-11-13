@@ -23,7 +23,6 @@ func chdir(t *testing.T, dir string) {
 }
 
 func TestFindGoOtelDirs(t *testing.T) {
-	setGoFlag(t, true)
 	root := t.TempDir()
 	a := makeGoOtelDir(t, filepath.Join(root, "a"))
 	b := makeGoOtelDir(t, filepath.Join(root, "services", "b"))
@@ -52,34 +51,7 @@ func TestFindGoOtelDirs(t *testing.T) {
 	}
 }
 
-func TestFindGoOtelDirs_FlagOff(t *testing.T) {
-	setGoFlag(t, false)
-	root := t.TempDir()
-	makeGoOtelDir(t, root)
-	chdir(t, root)
-	if got := findGoOtelDirs(); got != nil {
-		t.Fatalf("flag off: no Go scan expected, got %v", got)
-	}
-	if tool := isolatedOtelcPath(); tool != "" {
-		t.Fatalf("flag off: tool must not be reported, got %q", tool)
-	}
-}
-
-func TestGoCleaner_FlagOffNothingDetected(t *testing.T) {
-	setGoFlag(t, false)
-	orig := goListProcessesFn
-	goListProcessesFn = func() []DetectedProcess {
-		t.Fatal("process scan must not run with the flag off")
-		return nil
-	}
-	t.Cleanup(func() { goListProcessesFn = orig })
-	if got := (goCleaner{}).DetectProcesses(); got == nil || len(got) != 0 {
-		t.Fatalf("expected empty non-nil result, got %#v", got)
-	}
-}
-
 func TestGoCleaner_DetectsOnlyDtwizBinaries(t *testing.T) {
-	setGoFlag(t, true)
 	root, err := filepath.EvalSymlinks(t.TempDir()) // macOS temp dirs sit behind a symlink
 	if err != nil {
 		t.Fatal(err)
@@ -114,7 +86,6 @@ func TestGoCleaner_DetectsOnlyDtwizBinaries(t *testing.T) {
 }
 
 func TestGoCleaner_ScanFailureSkipsRuntime(t *testing.T) {
-	setGoFlag(t, true)
 	orig := goListProcessesFn
 	goListProcessesFn = func() []DetectedProcess { return nil }
 	t.Cleanup(func() { goListProcessesFn = orig })
@@ -186,7 +157,6 @@ func TestRemoveGoOtelDir_PreservesBackup(t *testing.T) {
 
 func TestRemoveIsolatedOtelc_OnlyDtwizCopy(t *testing.T) {
 	home := setHome(t)
-	setGoFlag(t, true)
 	binDir := filepath.Join(home, ".opentelemetry", "go", "bin")
 	writeTree(t, binDir, map[string]string{otelcBinaryName(): "x"})
 	// A user-owned copy in GOBIN must never be listed or deleted.
@@ -214,7 +184,6 @@ func TestRemoveIsolatedOtelc_OnlyDtwizCopy(t *testing.T) {
 
 func TestUninstallOtelCollector_GoSection(t *testing.T) {
 	home := setHome(t)
-	setGoFlag(t, true)
 	root := t.TempDir()
 	goDir := makeGoOtelDir(t, filepath.Join(root, "shop"))
 	writeTree(t, goDir, map[string]string{"modguard/go.mod": "module orig\n"})
@@ -231,10 +200,9 @@ func TestUninstallOtelCollector_GoSection(t *testing.T) {
 	}
 }
 
-func runGoDryRunUninstall(t *testing.T, flag bool) (string, string) {
+func runGoDryRunUninstall(t *testing.T) (string, string) {
 	t.Helper()
 	setHome(t)
-	setGoFlag(t, flag)
 	origDetect, origEnrich := detectJavaProcessesFunc, enrichProcessesWithJPSFunc
 	detectJavaProcessesFunc = func() []DetectedProcess { return []DetectedProcess{} }
 	enrichProcessesWithJPSFunc = func(procs []DetectedProcess) []DetectedProcess { return procs }
@@ -258,7 +226,7 @@ func runGoDryRunUninstall(t *testing.T, flag bool) (string, string) {
 }
 
 func TestUninstallOtelCollector_GoDryRun(t *testing.T) {
-	out, goDir := runGoDryRunUninstall(t, true)
+	out, goDir := runGoDryRunUninstall(t)
 	if !strings.Contains(out, "Go instrumentation directories that will be removed") || !strings.Contains(out, goDir) {
 		t.Fatalf("Go section expected in the preview:\n%s", out)
 	}
@@ -267,18 +235,7 @@ func TestUninstallOtelCollector_GoDryRun(t *testing.T) {
 	}
 }
 
-func TestUninstallOtelCollector_GoFlagOff(t *testing.T) {
-	out, goDir := runGoDryRunUninstall(t, false)
-	if strings.Contains(out, "Go instrumentation") {
-		t.Fatalf("no Go section expected with the flag off:\n%s", out)
-	}
-	if _, err := os.Stat(goDir); err != nil {
-		t.Fatal("nothing may be removed with the flag off")
-	}
-}
-
 func TestFindGoOtelDirs_RegisteredFoundFromAnyDirectory(t *testing.T) {
-	setGoFlag(t, true)
 	useTempRegistry(t)
 	project := t.TempDir()
 	goDir := makeGoOtelDir(t, project)

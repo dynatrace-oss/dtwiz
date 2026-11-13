@@ -6,24 +6,15 @@ Define how `dtwiz uninstall otel` finds and removes Go instrumentation that dtwi
 
 ## Requirements
 
-### Requirement: Go uninstall is gated by the feature flag
+### Requirement: Go uninstall is part of the otel uninstall
 
-Go cleanup in `dtwiz uninstall otel` SHALL run only when the `GoInstrumentation` feature flag is enabled (`--go-instrumentation` or `DTWIZ_GO_INSTRUMENTATION=true`), independently of `AllRuntimes`. With the flag disabled, uninstall SHALL NOT scan for, list, stop or delete any Go artifact, service or tool, and the Go section SHALL be omitted, including from the "Nothing to remove" decision.
+Go cleanup SHALL run as part of `dtwiz uninstall otel` without any feature flag.
 
-#### Scenario: Flag enabled
+#### Scenario: Artifacts exist
 
-- **GIVEN** the `GoInstrumentation` flag is enabled
-- **AND** Go instrumentation artifacts exist
+- **GIVEN** Go instrumentation artifacts exist
 - **WHEN** `dtwiz uninstall otel` runs
 - **THEN** the Go section is shown in the preview
-
-#### Scenario: Flag not enabled
-
-- **GIVEN** the `GoInstrumentation` flag is not enabled
-- **AND** Go instrumentation artifacts exist
-- **WHEN** `dtwiz uninstall otel` runs
-- **THEN** no Go section is shown
-- **AND** no Go artifact, service or tool is stopped or deleted
 
 ### Requirement: Uninstall detects Go instrumentation artifacts
 

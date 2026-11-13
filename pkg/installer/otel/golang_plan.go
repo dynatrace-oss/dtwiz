@@ -53,14 +53,11 @@ type GoServicePlan struct {
 }
 
 // GoInstrumentationPlan instruments a Go project. Plans built by
-// buildGoInstrumentationPlan (Automatic) build and launch each service; a zero
-// value Automatic keeps the legacy manual-steps output used while the
-// GoInstrumentation flag is off.
+// buildGoInstrumentationPlan build and launch each service.
 type GoInstrumentationPlan struct {
 	Project GoProject
 	EnvVars map[string]string
 
-	Automatic         bool
 	CollectorEndpoint string
 	// Workspace is true when the project is part of a Go workspace (go.work).
 	// Its services get an isolated pre-flight at the start of Execute.
@@ -126,7 +123,6 @@ func buildGoInstrumentationPlan(proj detectedProject, collectorEndpoint string) 
 
 	plan := &GoInstrumentationPlan{
 		Project:           goProj,
-		Automatic:         true,
 		CollectorEndpoint: collectorEndpoint,
 		EnvVars:           environment.GenerateBaseOtelEnvVars(collectorEndpoint, environment.ProjectServiceName(proj.Path)),
 	}
@@ -168,10 +164,6 @@ func printGoSkippedServices(services []GoService, collectorEndpoint string) {
 // PrintPlanSteps shows the project, the method per service and the tooling.
 // It creates no files.
 func (p *GoInstrumentationPlan) PrintPlanSteps() {
-	if !p.Automatic {
-		p.printLegacyPlanSteps()
-		return
-	}
 	fmt.Printf("     Project:    %s\n", p.Project.Path)
 	if p.Project.ModuleName != "" {
 		fmt.Printf("     Module:     %s\n", p.Project.ModuleName)
@@ -249,9 +241,6 @@ func describeOtelcForPreview() string {
 // Execute builds, launches and reports the services. Manual outcomes are not
 // errors; an error is returned only when no service could be started.
 func (p *GoInstrumentationPlan) Execute() error {
-	if !p.Automatic {
-		return p.executeLegacy()
-	}
 	if p.ManualReason != "" {
 		fmt.Printf("  Not instrumented automatically: %s.\n", p.ManualReason)
 		p.printManualSteps()

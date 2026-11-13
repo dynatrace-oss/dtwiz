@@ -1,21 +1,12 @@
 package otel
 
 import (
-	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/environment"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
-
-var otelGoPackages = []string{
-	"go.opentelemetry.io/otel",
-	"go.opentelemetry.io/otel/sdk",
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp",
-}
 
 type GoProject struct {
 	ScannedProject
@@ -54,78 +45,3 @@ func detectGoProjects(roots []string) []GoProject {
 }
 
 func (p *GoInstrumentationPlan) Runtime() string { return "Go" }
-
-func DetectGoPlan(collectorEndpoint string) *GoInstrumentationPlan {
-	if _, err := exec.LookPath("go"); err != nil {
-		logger.Debug("go not found on PATH", "skipping Go instrumentation")
-		return nil
-	}
-
-	projects, processes := runInParallel(func() []GoProject {
-		return detectGoProjects(defaultScanRoots())
-	}, detectGoProcesses)
-	if len(projects) == 0 {
-		logger.Debug("no Go projects detected", "skipping Go instrumentation")
-		return nil
-	}
-
-	scanned := make([]ScannedProject, len(projects))
-	for i := range projects {
-		scanned[i] = projects[i].ScannedProject
-	}
-
-	matchProcessesToProjects(scanned, processes)
-
-	sel := promptProjectSelection("Go", scanned)
-	if sel == nil {
-		return nil
-	}
-
-	var goProj GoProject
-	for _, p := range projects {
-		if p.Path == sel.Path {
-			goProj = p
-			goProj.ScannedProject = *sel
-			break
-		}
-	}
-
-	svcName := environment.ProjectServiceName(sel.Path)
-	envVars := environment.GenerateBaseOtelEnvVars(collectorEndpoint, svcName)
-
-	return &GoInstrumentationPlan{
-		Project: goProj,
-		EnvVars: envVars,
-	}
-}
-
-func (p *GoInstrumentationPlan) printLegacyPlanSteps() {
-	fmt.Printf("     Project:    %s\n", p.Project.Path)
-	if p.Project.ModuleName != "" {
-		fmt.Printf("     Module:     %s\n", p.Project.ModuleName)
-	}
-	fmt.Println("     SDK integration (manual):")
-	for _, pkg := range otelGoPackages {
-		fmt.Printf("       go get %s\n", pkg)
-	}
-}
-
-func (p *GoInstrumentationPlan) executeLegacy() error {
-	fmt.Println()
-	fmt.Printf("  cd %s\n", p.Project.Path)
-	fmt.Println()
-	fmt.Println("  Add OTel Go SDK dependencies:")
-	for _, pkg := range otelGoPackages {
-		fmt.Printf("    go get %s\n", pkg)
-	}
-	fmt.Println()
-	fmt.Println("  Set the following environment variables:")
-	fmt.Println()
-	for _, line := range environment.FormatEnvExportLines(p.EnvVars) {
-		fmt.Printf("    %s\n", line)
-	}
-	fmt.Println()
-	fmt.Println("  Initialize the OTel SDK in your main() function.")
-	fmt.Println("  See: https://opentelemetry.io/docs/languages/go/getting-started/")
-	return nil
-}

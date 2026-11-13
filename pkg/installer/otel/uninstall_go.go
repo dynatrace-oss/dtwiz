@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -18,12 +17,9 @@ type goCleaner struct{}
 
 func (goCleaner) Label() string { return "Go" }
 
-// DetectProcesses implements RuntimeCleaner. With the GoInstrumentation flag off
-// it reports nothing, and a failed process scan yields nil (runtime skipped).
+// DetectProcesses implements RuntimeCleaner. A failed process scan
+// yields nil (runtime skipped).
 func (goCleaner) DetectProcesses() []DetectedProcess {
-	if !featureflags.IsEnabled(featureflags.GoInstrumentation) {
-		return []DetectedProcess{}
-	}
 	all := goListProcessesFn()
 	if all == nil {
 		return nil
@@ -60,12 +56,8 @@ func hasDtwizGoMarker(command string) bool {
 
 // findGoOtelDirs finds <module>/.otel/go directories carrying dtwiz's marker
 // file: those recorded in the registry (any location) plus those below the
-// current directory (installs from before the registry existed). It returns nil when the
-// GoInstrumentation flag is off.
+// current directory (installs from before the registry existed).
 func findGoOtelDirs() []string {
-	if !featureflags.IsEnabled(featureflags.GoInstrumentation) {
-		return nil
-	}
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil
@@ -126,11 +118,7 @@ func goBackupDir(goDir string) (string, bool) {
 
 // isolatedOtelcPath returns the path of the otelc that dtwiz installed into its
 // own tool directory, if present. Copies on PATH or in GOBIN are never returned.
-// It returns "" when the GoInstrumentation flag is off.
 func isolatedOtelcPath() string {
-	if !featureflags.IsEnabled(featureflags.GoInstrumentation) {
-		return ""
-	}
 	dir, err := isolatedOtelcDir()
 	if err != nil {
 		return ""

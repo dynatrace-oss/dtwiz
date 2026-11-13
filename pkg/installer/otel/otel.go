@@ -16,7 +16,6 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
-	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/environment"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/internal/rum"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
@@ -292,13 +291,11 @@ type detectedProject struct {
 }
 
 func detectAvailableRuntimes() []runtimeInfo {
-	// The Go flow is available behind its own flag; AllRuntimes keeps unlocking the legacy Go stub.
-	goEnabled := featureflags.IsEnabled(featureflags.AllRuntimes) || featureflags.IsEnabled(featureflags.GoInstrumentation)
 	return []runtimeInfo{
 		{name: "Python", binName: "python3", enabled: true, detect: detectPythonRuntimeProjects},
 		{name: "Java", binName: "java", enabled: true, detect: detectJavaRuntimeProjects},
 		{name: "Node.js", binName: "node", enabled: true, detect: detectNodeRuntimeProjects},
-		{name: "Go", binName: "go", enabled: goEnabled, detect: detectGoRuntimeProjects},
+		{name: "Go", binName: "go", enabled: true, detect: detectGoRuntimeProjects},
 	}
 }
 
@@ -425,11 +422,8 @@ var manualLanguages = []manualLanguageEntry{
 }
 
 // activeManualLanguages returns the manual-instruction languages offered to the
-// user. Go is dropped once it is auto-instrumented (GoInstrumentation flag).
+// user. Go is dropped because it is auto-instrumented.
 func activeManualLanguages() []manualLanguageEntry {
-	if !featureflags.IsEnabled(featureflags.GoInstrumentation) {
-		return manualLanguages
-	}
 	langs := make([]manualLanguageEntry, 0, len(manualLanguages))
 	for _, lang := range manualLanguages {
 		if lang.URLSlug != "go" {
@@ -494,8 +488,6 @@ func selectProject(projects []detectedProject) (detectedProject, string, bool) {
 
 func createRuntimePlan(proj detectedProject, httpPort int, token, envURL, platformToken string) InstrumentationPlan {
 	collectorEndpoint := fmt.Sprintf("http://127.0.0.1:%d", httpPort)
-	svcName := environment.ProjectServiceName(proj.Path)
-
 	switch proj.Runtime {
 	case "Python":
 		plan := buildPythonInstrumentationPlan(proj.ScannedProject, collectorEndpoint, envURL, platformToken)
@@ -512,28 +504,18 @@ func createRuntimePlan(proj detectedProject, httpPort int, token, envURL, platfo
 		}
 		return plan
 	case "Go":
-		if featureflags.IsEnabled(featureflags.GoInstrumentation) {
-			plan := buildGoInstrumentationPlan(proj, collectorEndpoint)
-			if plan == nil {
-				return nil
-			}
-			return plan
+		plan := buildGoInstrumentationPlan(proj, collectorEndpoint)
+		if plan == nil {
+			return nil
 		}
-		goProj := GoProject{
-			ScannedProject: proj.ScannedProject,
-			ModuleName:     proj.ModuleName,
-		}
-		return &GoInstrumentationPlan{
-			Project: goProj,
-			EnvVars: environment.GenerateBaseOtelEnvVars(collectorEndpoint, svcName),
-		}
+		return plan
 	}
 	return nil
 }
 
 var createRuntimePlanFn = createRuntimePlan
 
-// inferRuntimeFromPath returns "Java", "Node.js", "Python", "Go" (flag-gated), or "" based on which
+// inferRuntimeFromPath returns "Java", "Node.js", "Python", "Go", or "" based on which
 // marker files or directories are present directly inside path.
 func inferRuntimeFromPath(path string) string {
 	hasFile := func(name string) bool {
@@ -555,7 +537,7 @@ func inferRuntimeFromPath(path string) string {
 			return "Python"
 		}
 	}
-	if featureflags.IsEnabled(featureflags.GoInstrumentation) && hasFile("go.mod") {
+	if hasFile("go.mod") {
 		return "Go"
 	}
 	return ""
