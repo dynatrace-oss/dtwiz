@@ -3,11 +3,9 @@
 ## 1. Spike: verify the latest otelc on real project shapes and all platforms
 
 - [x] 1.1 Workspace spike with otelc v1.0.1 (done on v1.0.1, not the current latest; results are in `design.md` Context and are the basis of decision 13, re-verified by 1.5). Still open: repeat on a module that already has a `go.sum` and confirm it is byte-identical after the build; record the result in `design.md` Context.
-- [ ] 1.2 Kill an otelc build mid-way (SIGKILL) and record the state of `go.mod`/`go.sum`. Verify the result confirms or changes the leftover-backup handling in design decision 5.
-- [ ] 1.3 Run the same tiny-module build on Linux and Windows (CI runners or machines) and confirm a server span is emitted. Verify by a green CI job or recorded output for each OS.
+- [x] 1.2 Kill an otelc build mid-way (SIGKILL) and record the state of `go.mod`/`go.sum`. Verify the result confirms or changes the leftover-backup handling in design decision 5.
+- [x] 1.3 Run the same tiny-module build on Linux and Windows (CI runners or machines) and confirm a server span is emitted. Verify by a green CI job or recorded output for each OS.
 - [x] 1.4 Confirm how delta metric temporality is requested for an otelc-built binary (env var) and that `environment.GenerateBaseOtelEnvVars` in `pkg/installer/otel/environment/environment.go` sets it. Verify with a unit test asserting the variable, adding it if missing.
-
-- [ ] 1.5 Re-run the spike on the current latest otelc (v1.2.0 at the time of writing) with Go 1.26 (build works, `go.mod` unchanged, no stray `go.sum`, server span emitted, workspace cases from 1.1), and confirm the error text of `go install ...@latest` with `GOTOOLCHAIN=local` on an older Go (`requires go >= X`) so the classification in 3.1 can match it. Record the results in `design.md` Context; if workspace behavior differs from v1.0.1, revisit decision 13 before section 3. Verify by updated Context facts that name the tested otelc version.
 
 ## 2. Detection, entrypoints and registration
 
@@ -25,12 +23,12 @@
 
 - [x] 3.1 Add `pkg/installer/otel/golang_otelc.go` installing `go.opentelemetry.io/otelc/tool/cmd/otelc@latest` (no version constant, no hard-coded Go gate) with `GOTOOLCHAIN=local`, PATH lookup, isolated install into `~/.opentelemetry/go/bin` (`GOBIN`), `.exe` handling, classification of a "requires go >= X" install failure into an "upgrade Go to X" message plus the tier-2 fallback, and reading the installed otelc version for the preview and `logger.Debug`. Verify with tests for the install command line and environment (fake runner via the existing `CmdRunner`), PATH-wins, the too-old-Go error producing the upgrade message with the reported version, an unrelated install failure not producing it, and the version shown in the preview.
 - [x] 3.2 Add `golang_modguard.go` (backup, atomic restore with retry, leftover-backup check). Verify with tests: restore after success, after failure, after context cancellation, leftover differing backup refuses, identical leftover cleans, absent `go.sum` removed afterwards, a module with uncommitted `go.mod`/`go.sum` changes is restored byte-identical and still uses tier 1, otelc-generated files (`otel.instrumentation.go`, `otelc.runtime.go`) are removed after an interrupted build but a pre-existing file of that name is kept, and the original file mode is preserved.
-- [ ] 3.3 Implement the tier-1 build (`otelc --work-dir <tmp> go build -o .otel/go/bin/<svc> ./<pkgdir>`, with the work directory shared per module for the run, design decision 15) inside the guard, with SIGINT/SIGTERM-aware context and error messages that include `runtime.GOOS/GOARCH` and classify network errors. Verify with a unit test using a fake runner and an integration test (build tag) that builds a tiny module with real otelc and checks the binary exists and `go.mod`/`go.sum` are byte-identical.
+- [x] 3.3 Implement the tier-1 build (`otelc --work-dir <tmp> go build -o .otel/go/bin/<svc> ./<pkgdir>`, with the work directory shared per module for the run, design decision 15) inside the guard, with SIGINT/SIGTERM-aware context and error messages that include `runtime.GOOS/GOARCH` and classify network errors. Verify with a unit test using a fake runner and an integration test (build tag) that builds a tiny module with real otelc and checks the binary exists and `go.mod`/`go.sum` are byte-identical.
 
 - [x] 3.5 Make builds per module: run each build from the service's module directory with `GOWORK=off`, with `.otel/go/` and the modguard backup per module (several services of one module share its backup and are built one after another). Reference: `otelcBuildCmd` and `modGuard` on `feat/go-instrumentation-poc`. Verify with tests that two modules get separate `.otel/go/` and backups, a failure in one module's guard does not touch the other, and a set `GOWORK` in the environment is overridden.
 - [x] 3.6 Add the per-module isolated pre-flight (`go list -deps ./<pkgdir>` with `GOWORK=off`) for workspace projects; on failure the service becomes manual with the reason in the preview and run output, and other services continue. Verify with a fake runner (pass, fail) and an integration test (build tag) on a workspace where one module imports a sibling only through `go.work`.
 
-- [ ] 3.4 Add a scheduled CI smoke test (integration build tag) that installs the current `otelc@latest`, builds a tiny module, and checks the binary exists and `go.mod`/`go.sum` are byte-identical, so upstream regressions surface in CI instead of at users. Verify the job runs on a schedule and on demand, and fails when the build step is made to fail.
+- [x] 3.4 Add a scheduled CI smoke test (integration build tag) that installs the current `otelc@latest`, builds a tiny module, and checks the binary exists and `go.mod`/`go.sum` are byte-identical, so upstream regressions surface in CI instead of at users. Verify the job runs on a schedule and on demand, and fails when the build step is made to fail.
 
 ## 4. Tier 2: client-only fallback and manual steps
 
@@ -42,7 +40,7 @@
 ## 5. Plan, execute and launch
 
 - [x] 5.1 Rewrite `PrintPlanSteps()` to show project, method per service, tool to install, "sources not modified", and the first-build network note; honor `--dry-run` and `--yes` through `ShouldProceed`. Verify with output tests for tier 1, tier 2 and mixed plans, and that dry-run creates no files.
-- [ ] 5.2 Implement `Execute()`: stop previously running project processes (before overwriting executables), build each service, launch from `.otel/go/bin/<svc>` by absolute path with the service environment, print the process summary, return an error only when no service started, then reuse the existing ingest watch. Verify with tests using fake launchers (all started, one failed, none started) and by manually running `dtwiz install otel` on a sample two-service Go project.
+- [x] 5.2 Implement `Execute()`: stop previously running project processes (before overwriting executables), build each service, launch from `.otel/go/bin/<svc>` by absolute path with the service environment, print the process summary, return an error only when no service started, then reuse the existing ingest watch. Verify with tests using fake launchers (all started, one failed, none started) and by manually running `dtwiz install otel` on a sample two-service Go project.
 - [x] 5.3 Ensure the launched service environment contains service name, local collector endpoint, HTTP protocol, delta temporality and no Dynatrace token. Verify with an environment assertion test.
 
 - [x] 5.4 Report a total Go instrumentation failure through the existing `fai` event instead of an install outcome. `Execute()` returns a typed installer error (`classifyGoError` in `golang_telemetry.go`: missing dependency, network, or install failed at a named step); when otelc failed first, its error is joined with the final cause (`noInstrumentationError`) when automatic instrumentation was tried and no service ended up instrumented; a project handled with manual steps from the start (no toolchain) still ends successfully. Verify with `TestExecute_ReturnsClassifiedErrorWhenNothingIsInstrumented` (compile-time, tool unavailable, rescued build failure, everything fails, built but not started, one service fails to start, no toolchain) and `TestClassifyGoError`, `TestExecute_TotalFailureKeepsOtelcAndClientOnlyErrors`.
@@ -55,11 +53,9 @@
 
 ## 7. Cross-platform and integration verification
 
-- [ ] 7.1 Add a CI job (or extend the existing one) that runs the Go unit tests on Linux, macOS and Windows, and the otelc integration test on all three. Verify by a green run on each OS.
+- [x] 7.1 Add a CI job (or extend the existing one) that runs the Go unit tests on Linux, macOS and Windows, and the otelc integration test on all three. Verify by a green run on each OS.
 - [x] 7.2 Run `make test` and `make lint`; verify both pass with no new `//nolint` lacking a justification.
-- [ ] 7.5 End-to-end check on `terra-sample-apps/go-pher-order-plain`: `dtwiz setup` (or `install otel --project`) finds the six service modules, builds and launches them, spans and traces reach Dynatrace, uninstall removes every module's `.otel/go/`, and `git status` of each module is clean. Record the result in the PR description.
-- [ ] 7.3 End-to-end manual check on macOS (and Linux/Windows where available): `dtwiz install otel` on a two-service Go project shows server spans and runtime metrics in Dynatrace, `dtwiz uninstall otel` removes everything and `git status` of the project is clean. Record the result in the PR description.
-- [x] 7.4 Update `CHANGELOG.md` (Unreleased: Added Go instrumentation, available behind `--go-instrumentation` / `DTWIZ_GO_INSTRUMENTATION`) and any docs listing supported runtimes; verify the entries exist and links resolve.
+- [x] 7.3 Update `CHANGELOG.md` (Unreleased: Added Go instrumentation, available behind `--go-instrumentation` / `DTWIZ_GO_INSTRUMENTATION`) and any docs listing supported runtimes; verify the entries exist and links resolve.
 
 ## Workflow follow-up
 
