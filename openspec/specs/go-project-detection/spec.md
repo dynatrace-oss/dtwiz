@@ -1,14 +1,14 @@
-# Spec Delta
+# go-project-detection Specification
 
 ## Purpose
 
 Define how dtwiz discovers Go projects, associates them with running Go processes, and splits a selected project into the services that can be instrumented.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Go project discovery
 
-The system SHALL detect Go projects by scanning the current directory and common development directories for `go.mod` files, using the same scan scope and ignore rules as other runtimes. Automatic Go instrumentation SHALL be available only when the `GoInstrumentation` feature flag is enabled (`--go-instrumentation` or `DTWIZ_GO_INSTRUMENTATION=true`), independently of `AllRuntimes`.
+The system SHALL detect Go projects by scanning the current directory and common development directories for `go.mod` files, using the same scan scope and ignore rules as other runtimes. Automatic Go instrumentation is generally available and is not gated by a feature flag.
 
 #### Scenario: Go project found
 
@@ -23,18 +23,11 @@ The system SHALL detect Go projects by scanning the current directory and common
 - **THEN** the Go project is still listed
 - **AND** selecting it leads to the manual-steps outcome rather than an automatic build
 
-#### Scenario: Go flag enabled
+#### Scenario: No feature flag required
 
-- **GIVEN** the `GoInstrumentation` feature flag is enabled and `AllRuntimes` is not
+- **GIVEN** no feature flag is set
 - **WHEN** a Go project exists in the scan scope
 - **THEN** it is detected and offered for automatic instrumentation
-
-#### Scenario: Go flag not enabled
-
-- **GIVEN** the `GoInstrumentation` feature flag is not enabled
-- **WHEN** a Go project exists in the scan scope
-- **THEN** no Go build, launch or file creation takes place
-- **AND** Go behaves as before this change
 
 ### Requirement: Go project selection by path
 
@@ -70,7 +63,7 @@ The system SHALL associate running Go processes with detected Go projects, inclu
 
 ### Requirement: Service discovery from main packages
 
-For a selected Go project the system SHALL find every directory that contains a `package main` (excluding test files, `testdata` and ignored directories), searching up to 5 directory levels below the module root. Nested modules, which have their own `go.mod`, SHALL NOT be searched and are detected as separate projects. Each found directory is one service.
+For a selected Go project the system SHALL find every directory that contains a `package main` (excluding test files, `testdata` and ignored directories), searching up to 5 directory levels below the module root. Nested modules, which have their own `go.mod`, SHALL NOT be searched and are detected as separate projects, with one exception: when the project directory contains a `go.work`, the modules listed in its `use` directives that lie inside the project directory SHALL be searched as well, in addition to the root module. `use` entries outside the project directory SHALL be ignored. Each found directory is one service and remembers the module it belongs to.
 
 #### Scenario: Single main at module root
 
@@ -92,9 +85,22 @@ For a selected Go project the system SHALL find every directory that contains a 
 
 #### Scenario: Nested module
 
-- **GIVEN** a nested directory with its own `go.mod`
+- **GIVEN** a nested directory with its own `go.mod` that is not listed in a `go.work` of the project
 - **WHEN** services are discovered for the parent project
 - **THEN** the nested module's `package main` directories are not included
+
+#### Scenario: Workspace root without its own main
+
+- **GIVEN** a project directory with a `go.work` listing six service modules, whose root module contains only a library file
+- **WHEN** services are discovered
+- **THEN** one service is found in each of the six modules
+- **AND** the system does not report that no service was found
+
+#### Scenario: Workspace module outside the project
+
+- **GIVEN** a `go.work` whose `use` directive points at a directory outside the project directory
+- **WHEN** services are discovered
+- **THEN** that module's `package main` directories are not included
 
 #### Scenario: No main package
 
@@ -102,23 +108,22 @@ For a selected Go project the system SHALL find every directory that contains a 
 - **WHEN** it is selected for instrumentation
 - **THEN** the system reports that no service was found and nothing is changed
 
-### Requirement: Go workspaces are not auto-instrumented
+### Requirement: Go workspace modules are instrumented individually
 
-The system SHALL recognize a Go project that belongs to a Go workspace, meaning a `go.work` file exists in the project directory or in any parent directory. Such a project SHALL still be listed, but selecting it SHALL NOT build or launch anything. The system SHALL explain that Go workspaces are not supported for automatic instrumentation, install the OTel Collector as for any other project, and print the manual instrumentation steps with a link to the Dynatrace Go OpenTelemetry walkthrough.
+The system SHALL recognize a Go project that belongs to a Go workspace, meaning a `go.work` file exists in the project directory or in any parent directory. Each service of such a project SHALL be built and launched from its own module on its own, never in workspace mode, as described in the `go-otel-instrumentation` capability. A workspace project SHALL be listed like any other Go project.
 
 #### Scenario: Project with go.work at its root
 
-- **GIVEN** a project directory that contains a `go.work` file
+- **GIVEN** a project directory that contains a `go.work` file listing several service modules
 - **WHEN** the user selects it for instrumentation
-- **THEN** the preview explains that Go workspaces are not auto-instrumented and shows that the OTel Collector will be installed
-- **AND** after confirmation the OTel Collector is installed and manual steps are printed
-- **AND** nothing is built or launched for the application
+- **THEN** the preview lists every service of every listed module with its module
+- **AND** after confirmation each service is built and launched from its own module
 
 #### Scenario: Module inside a workspace
 
 - **GIVEN** a module whose parent directory contains a `go.work` file
 - **WHEN** the user selects the module for instrumentation
-- **THEN** the same message and manual steps are shown
+- **THEN** only that module's services are built, on their own, and the parent's other modules are not touched
 
 #### Scenario: Workspace project is still listed
 
@@ -130,7 +135,7 @@ The system SHALL recognize a Go project that belongs to a Go workspace, meaning 
 
 - **GIVEN** `--project` points at a project that belongs to a workspace
 - **WHEN** `dtwiz install otel --project <path>` runs
-- **THEN** the OTel Collector is installed, the manual steps are shown and the command exits successfully
+- **THEN** the project is instrumented as in the scenarios above
 
 ### Requirement: Service naming
 

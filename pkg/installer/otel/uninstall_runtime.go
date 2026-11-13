@@ -11,4 +11,5 @@ type RuntimeCleaner interface {
 var runtimeCleaners = []RuntimeCleaner{
 	pythonCleaner{},
 	nodeCleaner{},
+	goCleaner{},
 }

@@ -16,7 +16,6 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
-	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/environment"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/internal/rum"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
@@ -292,12 +291,11 @@ type detectedProject struct {
 }
 
 func detectAvailableRuntimes() []runtimeInfo {
-	allEnabled := featureflags.IsEnabled(featureflags.AllRuntimes)
 	return []runtimeInfo{
 		{name: "Python", binName: "python3", enabled: true, detect: detectPythonRuntimeProjects},
 		{name: "Java", binName: "java", enabled: true, detect: detectJavaRuntimeProjects},
 		{name: "Node.js", binName: "node", enabled: true, detect: detectNodeRuntimeProjects},
-		{name: "Go", binName: "go", enabled: allEnabled, detect: detectGoRuntimeProjects},
+		{name: "Go", binName: "go", enabled: true, detect: detectGoRuntimeProjects},
 	}
 }
 
@@ -423,6 +421,18 @@ var manualLanguages = []manualLanguageEntry{
 	{Key: "o", Name: "Other language", URLSlug: "other"},
 }
 
+// activeManualLanguages returns the manual-instruction languages offered to the
+// user. Go is dropped because it is auto-instrumented.
+func activeManualLanguages() []manualLanguageEntry {
+	langs := make([]manualLanguageEntry, 0, len(manualLanguages))
+	for _, lang := range manualLanguages {
+		if lang.URLSlug != "go" {
+			langs = append(langs, lang)
+		}
+	}
+	return langs
+}
+
 func printProjectList(projects []detectedProject) {
 	for i, p := range projects {
 		line := fmt.Sprintf("  [%d]  %s  %s  (%s)", i+1, p.Runtime, p.Path, strings.Join(p.Markers, ", "))
@@ -442,7 +452,7 @@ func printProjectList(projects []detectedProject) {
 	}
 	fmt.Println()
 	display.ColorMuted.Println("  Following languages don't support automatic project detection yet:")
-	for _, lang := range manualLanguages {
+	for _, lang := range activeManualLanguages() {
 		fmt.Printf("  [%s]  %-14s — OTel instrumentation guide shown after install\n", lang.Key, lang.Name)
 	}
 	fmt.Println()
@@ -463,7 +473,7 @@ func selectProject(projects []detectedProject) (detectedProject, string, bool) {
 	if answer == "" || answer == "s" {
 		return detectedProject{}, "", false
 	}
-	for _, lang := range manualLanguages {
+	for _, lang := range activeManualLanguages() {
 		if answer == lang.Key {
 			return detectedProject{}, lang.URLSlug, true
 		}
@@ -478,8 +488,6 @@ func selectProject(projects []detectedProject) (detectedProject, string, bool) {
 
 func createRuntimePlan(proj detectedProject, httpPort int, token, envURL, platformToken string) InstrumentationPlan {
 	collectorEndpoint := fmt.Sprintf("http://127.0.0.1:%d", httpPort)
-	svcName := environment.ProjectServiceName(proj.Path)
-
 	switch proj.Runtime {
 	case "Python":
 		plan := buildPythonInstrumentationPlan(proj.ScannedProject, collectorEndpoint, envURL, platformToken)
@@ -496,21 +504,18 @@ func createRuntimePlan(proj detectedProject, httpPort int, token, envURL, platfo
 		}
 		return plan
 	case "Go":
-		goProj := GoProject{
-			ScannedProject: proj.ScannedProject,
-			ModuleName:     proj.ModuleName,
+		plan := buildGoInstrumentationPlan(proj, collectorEndpoint)
+		if plan == nil {
+			return nil
 		}
-		return &GoInstrumentationPlan{
-			Project: goProj,
-			EnvVars: environment.GenerateBaseOtelEnvVars(collectorEndpoint, svcName),
-		}
+		return plan
 	}
 	return nil
 }
 
 var createRuntimePlanFn = createRuntimePlan
 
-// inferRuntimeFromPath returns "Java", "Node.js", "Python", or "" based on which
+// inferRuntimeFromPath returns "Java", "Node.js", "Python", "Go", or "" based on which
 // marker files or directories are present directly inside path.
 func inferRuntimeFromPath(path string) string {
 	hasFile := func(name string) bool {
@@ -531,6 +536,9 @@ func inferRuntimeFromPath(path string) string {
 		if hasFile(m) {
 			return "Python"
 		}
+	}
+	if hasFile("go.mod") {
+		return "Go"
 	}
 	return ""
 }
@@ -594,6 +602,8 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 			matchProcessesToProjects(projects, detectJavaProcesses())
 		case "Node.js":
 			matchProcessesToProjects(projects, detectNodeProcesses())
+		case "Go":
+			matchProcessesToProjects(projects, detectGoProcesses())
 		default:
 			matchProcessesToProjects(projects, detectPythonProcesses())
 		}

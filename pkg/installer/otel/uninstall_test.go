@@ -511,3 +511,22 @@ func TestCollectorToProcessInfo_NativeFields(t *testing.T) {
 		t.Errorf("containerRuntime should be empty for native process, got %q", p.containerRuntime)
 	}
 }
+
+func TestFindNodeOtelDirs_RegisteredFoundFromAnyDirectory(t *testing.T) {
+	useTempRegistry(t)
+	otelDir := filepath.Join(t.TempDir(), "app", ".otel")
+	if err := os.MkdirAll(otelDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	pkg := `{"dependencies":{"@opentelemetry/auto-instrumentations-node":"latest"}}`
+	if err := os.WriteFile(filepath.Join(otelDir, "package.json"), []byte(pkg), 0644); err != nil {
+		t.Fatal(err)
+	}
+	registerOtelDir(otelDir)
+	helpers.SetTestWorkingDir(t, t.TempDir()) // unrelated working directory
+
+	got := findNodeOtelDirs()
+	if len(got) != 1 || got[0] != otelDir {
+		t.Fatalf("findNodeOtelDirs = %v, want [%s]", got, otelDir)
+	}
+}

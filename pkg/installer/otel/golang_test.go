@@ -3,7 +3,6 @@ package otel
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/dynatrace-oss/dtwiz/test/helpers"
@@ -81,70 +80,9 @@ func TestExtractGoModuleName_MissingOrWithoutModule(t *testing.T) {
 	})
 }
 
-func TestDetectGoPlan_NoGoOnPath(t *testing.T) {
-	t.Setenv("PATH", "")
-
-	plan := DetectGoPlan("http://127.0.0.1:4318")
-	if plan != nil {
-		t.Fatalf("expected nil plan, got %#v", plan)
-	}
-}
-
-func TestDetectGoPlan_FindsProject(t *testing.T) {
-	dir := t.TempDir()
-	goMod := "module github.com/example/myapp\n\ngo 1.21\n"
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(goMod), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	helpers.SetTestWorkingDir(t, dir)
-	setTestStdin(t, "1\n")
-
-	plan := DetectGoPlan("http://127.0.0.1:4318")
-	if plan == nil {
-		t.Fatal("expected Go plan")
-	}
-	if plan.Project.ModuleName != "github.com/example/myapp" {
-		t.Fatalf("ModuleName = %q, want %q", plan.Project.ModuleName, "github.com/example/myapp")
-	}
-}
-
 func TestGoInstrumentationPlan_Runtime(t *testing.T) {
 	plan := &GoInstrumentationPlan{}
 	if got := plan.Runtime(); got != "Go" {
 		t.Fatalf("Runtime() = %q, want %q", got, "Go")
-	}
-}
-
-func TestGoInstrumentationPlan_PrintPlanSteps(t *testing.T) {
-	plan := &GoInstrumentationPlan{Project: GoProject{ScannedProject: ScannedProject{Path: "/tmp/go-svc"}, ModuleName: "github.com/example/go-svc"}}
-
-	output := helpers.CaptureStdout(t, func() {
-		plan.PrintPlanSteps()
-	})
-
-	checks := []string{"/tmp/go-svc", "github.com/example/go-svc", "go get go.opentelemetry.io/otel", "go get go.opentelemetry.io/otel/sdk"}
-	for _, check := range checks {
-		if !strings.Contains(output, check) {
-			t.Fatalf("expected output to contain %q, got:\n%s", check, output)
-		}
-	}
-}
-
-func TestGoInstrumentationPlan_Execute(t *testing.T) {
-	plan := &GoInstrumentationPlan{
-		Project: GoProject{ScannedProject: ScannedProject{Path: "/tmp/go-svc"}},
-		EnvVars: map[string]string{"OTEL_SERVICE_NAME": "go-svc"},
-	}
-
-	output := helpers.CaptureStdout(t, func() {
-		_ = plan.Execute()
-	})
-
-	checks := []string{"cd /tmp/go-svc", "go get go.opentelemetry.io/otel", "export OTEL_SERVICE_NAME=\"go-svc\"", "Initialize the OTel SDK in your main() function."}
-	for _, check := range checks {
-		if !strings.Contains(output, check) {
-			t.Fatalf("expected output to contain %q, got:\n%s", check, output)
-		}
 	}
 }

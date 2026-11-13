@@ -162,13 +162,9 @@ func TestDetectAvailableRuntimes_DefaultEnabled(t *testing.T) {
 
 	for _, rt := range runtimes {
 		switch rt.name {
-		case "Python", "Node.js", "Java":
+		case "Python", "Node.js", "Java", "Go":
 			if !rt.enabled {
 				t.Errorf("%s should be enabled by default, got enabled=false", rt.name)
-			}
-		case "Go":
-			if rt.enabled {
-				t.Errorf("%s should be disabled by default, got enabled=true", rt.name)
 			}
 		}
 	}
@@ -376,7 +372,7 @@ func TestSelectProject(t *testing.T) {
 		{name: "invalid input skips", input: "xyz\n", wantOK: false, wantIdx: -1},
 		{name: "out of range skips", input: "9\n", wantOK: false, wantIdx: -1},
 		{name: "valid project selection", input: "2\n", wantOK: true, wantIdx: 1},
-		{name: "language key selects go", input: "g\n", wantOK: true, wantIdx: -1, wantLang: "go"},
+		{name: "go is not a manual language", input: "g\n", wantOK: false, wantIdx: -1},
 		{name: "language key selects php", input: "p\n", wantOK: true, wantIdx: -1, wantLang: "php"},
 		{name: "language key selects rust", input: "u\n", wantOK: true, wantIdx: -1, wantLang: "rust"},
 		{name: "language key selects other", input: "o\n", wantOK: true, wantIdx: -1, wantLang: "other"},
@@ -568,31 +564,11 @@ func TestCreateRuntimePlan(t *testing.T) {
 		}
 	})
 
-	t.Run("go returns plan with module name", func(t *testing.T) {
-		projectDir := t.TempDir()
-
-		plan := createRuntimePlan(detectedProject{
-			ScannedProject: ScannedProject{Path: projectDir, Markers: []string{"go.mod"}},
-			Runtime:        "Go",
-			ModuleName:     "github.com/example/svc",
-		}, httpPort, token, envURL, platformToken)
-
-		goPlan, ok := plan.(*GoInstrumentationPlan)
-		if !ok {
-			t.Fatalf("expected GoInstrumentationPlan, got %T", plan)
-		}
-		if goPlan.Project.ModuleName != "github.com/example/svc" {
-			t.Fatalf("unexpected module name: %s", goPlan.Project.ModuleName)
-		}
-	})
-
 	t.Run("go plan uses collector endpoint from httpPort", func(t *testing.T) {
-		projectDir := t.TempDir()
+		stubGoToolchain(t, true)
+		root := newGoProject(t, map[string]string{"main.go": mainSrc})
 
-		plan := createRuntimePlan(detectedProject{
-			ScannedProject: ScannedProject{Path: projectDir, Markers: []string{"go.mod"}},
-			Runtime:        "Go",
-		}, 4320, token, envURL, platformToken)
+		plan := createRuntimePlan(goDetected(root), 4320, token, envURL, platformToken)
 
 		goPlan, ok := plan.(*GoInstrumentationPlan)
 		if !ok {
@@ -1620,5 +1596,91 @@ func TestRenderOtelTemplate_DebugExporter_Excluded(t *testing.T) {
 	}
 	if strings.Contains(out, "- debug") {
 		t.Errorf("unexpected '- debug' in pipeline exporters (Debug=false):\n%s", out)
+	}
+}
+
+func TestActiveManualLanguages_ExcludesGo(t *testing.T) {
+	for _, l := range activeManualLanguages() {
+		if l.URLSlug == "go" {
+			t.Fatal("Go is auto-instrumented and must not be in the manual language list")
+		}
+	}
+}
+
+func manualGoPlanForTest() *GoInstrumentationPlan {
+	return &GoInstrumentationPlan{
+		Project:           GoProject{ScannedProject: ScannedProject{Path: "/tmp/shop"}},
+		CollectorEndpoint: "http://127.0.0.1:4318",
+		EnvVars:           map[string]string{"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"},
+		ManualReason:      goReasonNoTool,
+	}
+}
+
+func setupGoManualInstall(t *testing.T) string {
+	t.Helper()
+	stubExtensionPreview(t)
+	stubActivation(t)
+	stubRoutePreview(t)
+	tmpDir := setupAutoConfirmedTempInstall(t)
+
+	projectDir := filepath.Join(tmpDir, "gosvc")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projectDir, "go.mod"), []byte("module x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	origCreatePlan := createRuntimePlanFn
+	createRuntimePlanFn = func(_ detectedProject, _ int, _, _, _ string) InstrumentationPlan { return manualGoPlanForTest() }
+	t.Cleanup(func() { createRuntimePlanFn = origCreatePlan })
+	return projectDir
+}
+
+func TestInstallOtelCollectorWithProject_GoManualPlan_InstructionsAfterCollector(t *testing.T) {
+	projectDir := setupGoManualInstall(t)
+
+	collectorInstalled := false
+	origExecute := executeCollectorPlanFn
+	executeCollectorPlanFn = func(_ *collectorPlan, _, _ string, _ bool) error {
+		collectorInstalled = true
+		return nil
+	}
+	t.Cleanup(func() { executeCollectorPlanFn = origExecute })
+
+	var err error
+	out := helpers.CaptureStdout(t, func() {
+		_, err = InstallOtelCollectorWithProject("https://env.example.com", "tok", "dt0s16.test", projectDir, false)
+	})
+	if err != nil {
+		t.Fatalf("manual outcome must succeed: %v", err)
+	}
+	if !collectorInstalled {
+		t.Fatal("collector installation step must run for a manual Go plan")
+	}
+	instr := strings.Index(out, "can't be autoinstrumented")
+	if instr < 0 {
+		t.Fatalf("manual instructions should be printed:\n%s", out)
+	}
+	if strings.Contains(out, "Select another project?") {
+		t.Fatal("a manual plan must not trigger the 'Select another project?' prompt")
+	}
+}
+
+func TestInstallOtelCollectorWithProject_GoManualPlan_CollectorFailure(t *testing.T) {
+	projectDir := setupGoManualInstall(t)
+
+	origExecute := executeCollectorPlanFn
+	executeCollectorPlanFn = func(_ *collectorPlan, _, _ string, _ bool) error { return errors.New("collector failed") }
+	t.Cleanup(func() { executeCollectorPlanFn = origExecute })
+
+	var err error
+	out := helpers.CaptureStdout(t, func() {
+		_, err = InstallOtelCollectorWithProject("https://env.example.com", "tok", "dt0s16.test", projectDir, false)
+	})
+	if err == nil || !strings.Contains(err.Error(), "collector failed") {
+		t.Fatalf("collector failure must be reported, got %v", err)
+	}
+	if strings.Contains(out, "can't be autoinstrumented") {
+		t.Fatalf("manual instructions must not be presented as ready after a collector failure:\n%s", out)
 	}
 }
