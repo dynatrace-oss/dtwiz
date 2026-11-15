@@ -178,3 +178,15 @@ When `dtwiz install otel` runs without `--project` and one or more projects are 
 - **WHEN** the terminal supports OSC 8 hyperlinks
 - **THEN** the link to the OpenTelemetry walkthroughs documentation renders as a clickable hyperlink
 - **AND** WHEN the terminal does not support OSC 8 hyperlinks, the plain documentation URL is shown instead
+
+---
+
+### Requirement: Go projects are listed as auto-instrumentable
+
+Detected Go projects SHALL appear in the detected-projects list of `dtwiz install otel` like Python, Java, and Node.js projects, and Go SHALL NOT be offered in the list of languages without automatic project detection (the manual-languages list).
+
+#### Scenario: Go projects detected
+
+- **WHEN** the interactive project list is printed
+- **THEN** detected Go projects are listed together with the other runtimes' projects
+- **AND** Go is not shown in the manual-languages list

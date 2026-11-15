@@ -6,13 +6,13 @@
 
 ## What Changes
 
-- `dtwiz install otel` (and `dtwiz setup`) detects Go projects, matches them to running Go processes, lets the user pick one, finds every `package main` directory (up to 5 levels deep inside the module), names each service after its folder, and after one confirmation builds and launches each service with Dynatrace-ready `OTEL_*` settings.
+- `dtwiz install otel` (and `dtwiz setup`) detects Go projects, matches them to running Go processes, lets the user pick one, finds every `package main` directory (up to 5 levels deep inside the module, and inside each module of a `go.work` workspace), names each service after its folder, and after one confirmation builds and launches each service with Dynatrace-ready `OTEL_*` settings.
 - Instrumentation is chosen **per service**, in this order:
   1. **Compile-time (otelc)** — server and client spans, library coverage, no source or `go.mod` change left behind. Requires a Go version new enough for the latest otelc (Go 1.26 for v1.2.0); otelc is installed at `@latest`.
   2. **Client-only fallback** — an SDK bootstrap injected at build time (traces/metrics/logs, outgoing HTTP spans only) when otelc is unavailable or its build fails for that service.
   3. **Manual steps** — the OTel Collector is still installed, and instructions are printed when neither can be applied (no Go toolchain, build failures in both tiers, module already uses its own OTel SDK).
 - Everything dtwiz generates lives in a per-module `.otel/` directory; project sources are never modified, and `go.mod`/`go.sum` are backed up before an otelc build and restored afterwards.
-- Go workspaces (`go.work`) are **not supported in this first version**: a project inside a workspace is detected, and dtwiz still installs the OTel Collector and prints manual Go instrumentation steps instead of building it.
+- Go workspaces (`go.work`) are supported by building each workspace module on its own: services are discovered in the root module and in every module listed in the `go.work` `use` directives inside the project, each is built from its own module directory with `GOWORK=off` (own `.otel/go/`, own `go.mod`/`go.sum` backup), and a per-module pre-flight sends a module that depends on a workspace sibling only through `go.work` to manual steps with the reason, while the other modules are still instrumented.
 - Linux, macOS and Windows are supported.
 - `dtwiz uninstall otel` also detects and removes Go instrumentation added by dtwiz: stops its running services, deletes the generated `.otel/` directories and the isolated otelc copy dtwiz installed.
 - Automatic Go instrumentation is gated behind a new, separate feature flag `GoInstrumentation` (`--go-instrumentation` / `DTWIZ_GO_INSTRUMENTATION`, off by default), independent of `AllRuntimes`. With the flag off, Go behaves exactly as today (including the existing `AllRuntimes` behavior and manual-languages menu). With it on, Go is detected, auto-instrumented, and removed from the "manual languages" menu. The Go part of `dtwiz uninstall otel` is behind the same flag: with it off, uninstall does not look for or remove Go artifacts. Removing the gate is a later, separate change.
@@ -23,14 +23,14 @@ Rollback: uninstall removes all generated artifacts; because sources and `go.mod
 
 ### New Capabilities
 
-- `go-project-detection`: how Go projects are discovered, matched to running processes, and split into services (`package main` directories, service naming, `go.work` workspaces recognized).
+- `go-project-detection`: how Go projects are discovered, matched to running processes, and split into services (`package main` directories, service naming, `go.work` workspace modules searched for services).
 - `go-otel-instrumentation`: how a selected Go project is instrumented, built and launched — tier selection per service, plan preview, build isolation and `go.mod` protection, Dynatrace-ready environment, cross-platform behavior, failure fallbacks.
 - `go-otel-uninstall`: how `dtwiz uninstall otel` finds and removes Go instrumentation artifacts and processes.
 
 ### Modified Capabilities
 
 - `otel-collector-install`: the requirement "Go instrumentation guidance uses the local collector endpoint" changes — the local collector endpoint now applies to the environment of launched Go services and to the manual-steps fallback.
-- `otel-project-scan`: the supported-runtimes notice must list Go among the auto-instrumented runtimes.
+- `otel-project-scan`: with the flag on, Go projects are listed with the other runtimes and Go leaves the manual-languages list.
 
 ## Impact
 
