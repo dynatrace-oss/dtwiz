@@ -2,7 +2,7 @@
 
 ## 1. Feature flag
 
-- [x] 1.1 Register `OneAgentHostProperties` in `pkg/featureflags/featureflags.go` (`oneagent-host-properties`, `DTWIZ_ONEAGENT_HOST_PROPERTIES`, default `false`, description ending "(development only)"). Verify with new cases in `pkg/featureflags/featureflags_test.go`: default off, env `true`/`1` on, and the flag appears in `List()`.
+- [x] 1.1 Register `OneAgentHostProperties` in `pkg/featureflags/featureflags.go` (`oneagent-host-properties`, `DTWIZ_ONEAGENT_HOST_PROPERTIES`, default `false`, description ending "(experimental)"). Verify with new cases in `pkg/featureflags/featureflags_test.go`: default off, env `true`/`1` on, and the flag appears in `List()`.
 
 ## 2. Validation and installer argv
 

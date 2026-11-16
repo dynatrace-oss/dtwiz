@@ -49,7 +49,7 @@ var registry = []CLIFeatureFlag{
 		"oneagent-host-properties",
 		"DTWIZ_ONEAGENT_HOST_PROPERTIES",
 		false,
-		"enable --host-property on install oneagent (development only)",
+		"enable --host-property on install oneagent (experimental)",
 		false,
 	},
 }
