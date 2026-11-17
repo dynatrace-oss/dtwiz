@@ -1,6 +1,7 @@
 package oneagent
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -8,6 +9,9 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 )
 
 // withRootCertURL overrides the package-level CA URL for the duration of the
@@ -189,6 +193,64 @@ func TestFetchDynatraceRootCA_NetworkError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "Dynatrace root CA") {
 		t.Errorf("error = %q, want CA error message", err)
+	}
+}
+
+// Reproduces the hyo68781 failures (Oct 16): the installer downloaded fine, then the signature
+// check could not fetch the Dynatrace root CA. dtwiz reported install_failed with no cause. It
+// must report network_error and say it was the root CA that was unreachable.
+func TestVerifyInstallerSignature_CAUnreachable_ReportedAsNetworkError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses /bin/sh fake openssl")
+	}
+	binDir := t.TempDir()
+	createStubFile(t, filepath.Join(binDir, "openssl"), "#!/bin/sh\nexit 99\n", 0o755)
+	t.Setenv("PATH", binDir)
+
+	caSrv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	caURL := caSrv.URL
+	caSrv.Close() // nothing listens: the host is blocked or unreachable
+	withRootCertURL(t, caURL)
+
+	installerPath := filepath.Join(t.TempDir(), "fake-installer.sh")
+	if err := os.WriteFile(installerPath, []byte("payload"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := VerifyInstallerSignature(Environment{OS: "linux", Arch: "x86"}, installerPath, false)
+
+	errType, attrs := selfmonitoring.ClassifyError(err)
+	if errType != installer.ErrTypeNetworkError {
+		t.Fatalf("reported as %q, want %q (error: %v)", errType, installer.ErrTypeNetworkError, err)
+	}
+	if attrs["network.failure_reason"] != "root_ca_unreachable" || attrs["network.url"] != caURL {
+		t.Errorf("attrs = %v, want root_ca_unreachable for %s", attrs, caURL)
+	}
+}
+
+func TestFetchDynatraceRootCA_FailuresAreNetworkErrors(t *testing.T) {
+	httpErrSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer httpErrSrv.Close()
+
+	closedSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	closedURL := closedSrv.URL
+	closedSrv.Close()
+
+	for name, url := range map[string]string{"http_status": httpErrSrv.URL, "connection_refused": closedURL} {
+		t.Run(name, func(t *testing.T) {
+			_, err := fetchDynatraceRootCA(url)
+
+			var netErr *installer.NetworkError
+			if !errors.As(err, &netErr) {
+				t.Fatalf("error %v is not a NetworkError", err)
+			}
+			// The reason is a telemetry value (network.failure_reason), so it is pinned literally.
+			if netErr.Reason != "root_ca_unreachable" || netErr.URL != url {
+				t.Errorf("NetworkError = %+v, want reason root_ca_unreachable for %s", netErr, url)
+			}
+		})
 	}
 }
 

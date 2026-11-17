@@ -1,11 +1,15 @@
 package oneagent
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
 )
 
 func newEndpointServer(t *testing.T, status int, body string) *httptest.Server {
@@ -84,6 +88,82 @@ func TestResolveEndpoints_Unauthorized(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "401") {
 		t.Errorf("error = %q, want 401 in message", err)
+	}
+}
+
+func TestResolveEndpoints_AuthFailuresAreAuthErrors(t *testing.T) {
+	tests := []struct {
+		name       string
+		status     int
+		wantReason string
+	}{
+		{"401 unauthorized", http.StatusUnauthorized, "authentication_failed"},
+		{"403 forbidden", http.StatusForbidden, "insufficient_permissions"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := newEndpointServer(t, tt.status, "denied")
+			defer srv.Close()
+
+			_, err := ResolveEndpoints(newTestClassicClient(t, srv.URL))
+
+			var authErr *installer.AuthError
+			if !errors.As(err, &authErr) {
+				t.Fatalf("error %v is not an AuthError", err)
+			}
+			if authErr.Reason != tt.wantReason {
+				t.Errorf("Reason = %q, want %q", authErr.Reason, tt.wantReason)
+			}
+			if !strings.Contains(err.Error(), "InstallerDownload") {
+				t.Errorf("error %q does not name the InstallerDownload scope", err)
+			}
+		})
+	}
+}
+
+// Reproduces mqa14477 (Oct 16): a valid token without the installer permission gets 403 on the
+// connection-info call. dtwiz reported install_failed; it must report auth_error with the
+// insufficient_permissions reason so the failure is actionable.
+func TestResolveEndpoints_403_ReportedAsAuthError(t *testing.T) {
+	srv := newEndpointServer(t, http.StatusForbidden, "")
+	defer srv.Close()
+
+	_, err := ResolveEndpoints(newTestClassicClient(t, srv.URL))
+
+	errType, attrs := selfmonitoring.ClassifyError(err)
+	if errType != installer.ErrTypeAuthError {
+		t.Fatalf("reported as %q, want %q (error: %v)", errType, installer.ErrTypeAuthError, err)
+	}
+	if attrs["auth.failure_reason"] != "insufficient_permissions" {
+		t.Errorf("attrs = %v, want auth.failure_reason=insufficient_permissions", attrs)
+	}
+}
+
+func TestResolveEndpoints_ServerErrorIsNotAuthError(t *testing.T) {
+	srv := newEndpointServer(t, http.StatusServiceUnavailable, "")
+	defer srv.Close()
+
+	_, err := ResolveEndpoints(newTestClassicClient(t, srv.URL))
+
+	var authErr *installer.AuthError
+	if errors.As(err, &authErr) {
+		t.Errorf("503 classified as AuthError: %v", err)
+	}
+}
+
+func TestResolveEndpoints_NetworkErrorIsNetworkError(t *testing.T) {
+	srv := newEndpointServer(t, http.StatusOK, "")
+	c := newTestClassicClient(t, srv.URL)
+	srv.Close()
+
+	_, err := ResolveEndpoints(c)
+
+	var netErr *installer.NetworkError
+	if !errors.As(err, &netErr) {
+		t.Fatalf("error %v is not a NetworkError", err)
+	}
+	if netErr.Reason != "environment_not_reachable" || !strings.Contains(netErr.URL, endpointsAPIPath) {
+		t.Errorf("NetworkError = %+v, want environment_not_reachable for %s", netErr, endpointsAPIPath)
 	}
 }
 
