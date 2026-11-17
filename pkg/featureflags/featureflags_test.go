@@ -216,3 +216,33 @@ func TestApplyCLIOverrides_UnsetFlagDoesNotStompEnvVar(t *testing.T) {
 		t.Errorf("expected source env, got %s", source)
 	}
 }
+
+func TestIsEnabled_OneAgentHostProperties_DefaultFalse(t *testing.T) {
+	t.Setenv("DTWIZ_ONEAGENT_HOST_PROPERTIES", "")
+	if IsEnabled(OneAgentHostProperties) {
+		t.Error("expected OneAgentHostProperties to be disabled by default")
+	}
+}
+
+func TestIsEnabled_OneAgentHostProperties_EnvTrue(t *testing.T) {
+	t.Setenv("DTWIZ_ONEAGENT_HOST_PROPERTIES", "1")
+	if !IsEnabled(OneAgentHostProperties) {
+		t.Error("expected OneAgentHostProperties to be enabled with DTWIZ_ONEAGENT_HOST_PROPERTIES=1")
+	}
+}
+
+func TestList_IncludesOneAgentHostProperties(t *testing.T) {
+	t.Setenv("DTWIZ_ONEAGENT_HOST_PROPERTIES", "")
+	for _, f := range List() {
+		if f.Name == "oneagent-host-properties" {
+			if f.EnvVar != "DTWIZ_ONEAGENT_HOST_PROPERTIES" {
+				t.Errorf("expected env var DTWIZ_ONEAGENT_HOST_PROPERTIES, got %s", f.EnvVar)
+			}
+			if f.Enabled {
+				t.Error("expected oneagent-host-properties disabled by default")
+			}
+			return
+		}
+	}
+	t.Error("expected oneagent-host-properties in List()")
+}
