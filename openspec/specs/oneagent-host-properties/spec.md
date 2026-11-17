@@ -1,6 +1,7 @@
 # oneagent-host-properties Specification
 
 ## Purpose
+
 Define how `dtwiz install oneagent` assigns custom host properties to the host at install time. Hosts then arrive in Dynatrace already tagged with ownership and context such as team, environment or cost center.
 
 ## Requirements
