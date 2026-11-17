@@ -1,7 +1,6 @@
 package gcp
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -205,10 +204,6 @@ func installGCPWithRunner(
 
 	dtPrincipal, err := dtc.dtServiceAccount()
 	if err != nil {
-		if errors.Is(err, errNoPrincipal) {
-			fmt.Println("  GCP is currently in Preview. Please first subscribe to it on https://docs.dynatrace.com/docs/whats-new/preview-releases.")
-			return installer.ErrInstallCancelled
-		}
 		return fmt.Errorf("resolving Dynatrace principal: %w", err)
 	}
 

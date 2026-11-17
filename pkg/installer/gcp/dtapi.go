@@ -37,7 +37,7 @@ const (
 
 // errNoPrincipal is returned by dtServiceAccount when the gcp-dynatrace-principal
 // schema exists but contains no service-account email — indicating the GCP integration
-// is not yet provisioned on this tenant (currently a Preview feature).
+// is not provisioned on this tenant.
 var errNoPrincipal = errors.New("no Dynatrace GCP principal found")
 
 type connRef struct {

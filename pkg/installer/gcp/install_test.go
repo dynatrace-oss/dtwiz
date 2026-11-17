@@ -255,34 +255,28 @@ func TestGCPDTPrincipalUnresolvedFailsBeforeMutations(t *testing.T) {
 	}
 }
 
-func TestGCPPreviewNoticeWhenNoPrincipal(t *testing.T) {
+func TestInstallGCP_NoPrincipal_ReturnsError(t *testing.T) {
+	// Arrange
 	defer stubExecLookPath(t)()
-
 	mutating := 0
 	dtc := happyFakeDTClient()
 	dtc.dtSAErr = errNoPrincipal
 
-	var out string
-	err := func() error {
-		r, w, _ := os.Pipe()
-		old := os.Stdout
-		os.Stdout = w
-		runErr := installGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, happyGcloudRunner(&mutating), noSleep, dtc)
-		os.Stdout = old
-		w.Close()
-		b, _ := io.ReadAll(r)
-		out = string(b)
-		return runErr
-	}()
+	// Act
+	var err error
+	out := captureStdout(t, func() {
+		err = installGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, happyGcloudRunner(&mutating), noSleep, dtc)
+	})
 
-	if !errors.Is(err, installer.ErrInstallCancelled) {
-		t.Fatalf("expected ErrInstallCancelled, got: %v", err)
+	// Assert
+	if !errors.Is(err, errNoPrincipal) {
+		t.Fatalf("expected error wrapping errNoPrincipal, got: %v", err)
 	}
-	if !strings.Contains(out, "Preview") {
-		t.Errorf("expected Preview notice in output; got:\n%s", out)
+	if errors.Is(err, installer.ErrInstallCancelled) {
+		t.Errorf("missing principal must fail, not report a cancelled install")
 	}
-	if !strings.Contains(out, "docs.dynatrace.com") {
-		t.Errorf("expected docs URL in output; got:\n%s", out)
+	if strings.Contains(out, "Preview") {
+		t.Errorf("expected no Preview notice in output; got:\n%s", out)
 	}
 	if mutating != 0 {
 		t.Errorf("expected 0 mutating gcloud calls, got %d", mutating)
