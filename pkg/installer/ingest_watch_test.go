@@ -3,8 +3,10 @@ package installer
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -1403,7 +1405,7 @@ func TestTrackWatchSignals_MeasuresFromSessionStart(t *testing.T) {
 func TestWatchIngest_NoTokenFiresNeitherCallback(t *testing.T) {
 	var snapshots, completions int
 
-	watchIngest("https://abc12345.example.com", "", "now()-1h", nil, "", false, "",
+	watchIngest("https://abc12345.example.com", "", "now()-1h", nil, "", false, "", false,
 		func(WatchSessionResult) { snapshots++ },
 		func(WatchSessionResult) { completions++ })
 
@@ -1464,5 +1466,247 @@ func TestSnapshotEmitter_CoalescesSameCycleSignals(t *testing.T) {
 	poll(watchState{Hosts: watchSection{Count: 1}, Services: watchSection{Count: 3}, Logs: watchSection{Count: 7}})
 	if emissions != 2 {
 		t.Errorf("emissions = %d after a third signal appeared, want 2", emissions)
+	}
+}
+
+// ── watch loop: exit-on-data ────────────────────────────────────────────────
+
+// newWatchLoopServer returns a DQL server whose hosts query returns one host from
+// the poll number hostsFromPoll onward (1-based), and empty results otherwise.
+// hostsFromPoll 0 never returns data. polls reports how many polls ran so far.
+func newWatchLoopServer(t *testing.T, hostsFromPoll int) (server *httptest.Server, polls func() int) {
+	t.Helper()
+	var mu sync.Mutex
+	count := 0
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			Query string `json:"query"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Errorf("decode query payload: %v", err)
+			return
+		}
+		records := []map[string]interface{}{}
+		if strings.Contains(payload.Query, `fields id, name, type`) {
+			mu.Lock()
+			count++
+			poll := count
+			mu.Unlock()
+			if hostsFromPoll > 0 && poll >= hostsFromPoll {
+				records = append(records, map[string]interface{}{
+					"id":   "HOST-51166F7740C48393",
+					"name": "dt-host",
+					"type": "HOST",
+				})
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
+			"result": map[string]interface{}{"records": records},
+		}); err != nil {
+			t.Errorf("encode query response: %v", err)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server, func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return count
+	}
+}
+
+// shortenWatchTimings sets the poll interval and timeout for one test. The timeout
+// is compared against elapsed time truncated to whole seconds, so it must be at
+// least one second to let any poll run.
+func shortenWatchTimings(t *testing.T, interval, timeout time.Duration) {
+	t.Helper()
+	oldInterval, oldTimeout := watchPollInterval, watchTimeout
+	watchPollInterval, watchTimeout = interval, timeout
+	t.Cleanup(func() { watchPollInterval, watchTimeout = oldInterval, oldTimeout })
+}
+
+// captureStdout runs fn with os.Stdout redirected to a pipe and returns what it
+// wrote. The pipe also makes stdout a non-TTY for the watch loop. Tests using it
+// must NOT call t.Parallel() because they mutate the process-global os.Stdout.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	old := os.Stdout
+	os.Stdout = w
+	done := make(chan string)
+	go func() {
+		var sb strings.Builder
+		_, _ = io.Copy(&sb, r)
+		done <- sb.String()
+	}()
+	defer func() {
+		os.Stdout = old
+		_ = r.Close()
+	}()
+	fn()
+	_ = w.Close()
+	return <-done
+}
+
+// lastWatchFrame returns the output from the start of the last rendered frame.
+func lastWatchFrame(out string) string {
+	if i := strings.LastIndex(out, "Watching for new data in Dynatrace"); i >= 0 {
+		return out[i:]
+	}
+	return ""
+}
+
+func TestWatchIngest_ExitOnData_ExitsOnFirstPollWithData(t *testing.T) {
+	// Arrange
+	shortenWatchTimings(t, 10*time.Millisecond, time.Minute)
+	server, polls := newWatchLoopServer(t, 1)
+	var result WatchSessionResult
+
+	// Act
+	out := captureStdout(t, func() {
+		result = watchIngest(server.URL, "dt0s16.token", "now()-1h", nil, "", false, "", true, nil, nil)
+	})
+
+	// Assert
+	if result.ExitReason != "first_data" {
+		t.Errorf("ExitReason = %q, want %q", result.ExitReason, "first_data")
+	}
+	if _, ok := result.FirstDataMs["hst"]; !ok {
+		t.Errorf("FirstDataMs = %v, want an entry for hst", result.FirstDataMs)
+	}
+	if got := polls(); got != 1 {
+		t.Errorf("polls = %d, want 1", got)
+	}
+	frame := lastWatchFrame(out)
+	if frame == "" {
+		t.Fatalf("no frame rendered; output: %q", out)
+	}
+	if strings.Contains(frame, "Press Enter") {
+		t.Errorf("final frame contains the Press Enter hint: %q", frame)
+	}
+	if !strings.Contains(frame, "Dynatrace QuickStart") {
+		t.Errorf("final frame is missing the QuickStart link: %q", frame)
+	}
+}
+
+func TestWatchIngest_ExitOnData_ExitsWhenDataArrivesOnLaterPoll(t *testing.T) {
+	// Arrange
+	shortenWatchTimings(t, 10*time.Millisecond, time.Minute)
+	server, polls := newWatchLoopServer(t, 2)
+	var result WatchSessionResult
+
+	// Act
+	out := captureStdout(t, func() {
+		result = watchIngest(server.URL, "dt0s16.token", "now()-1h", nil, "", false, "", true, nil, nil)
+	})
+
+	// Assert
+	if result.ExitReason != "first_data" {
+		t.Errorf("ExitReason = %q, want %q", result.ExitReason, "first_data")
+	}
+	if got := polls(); got != 2 {
+		t.Errorf("polls = %d, want 2", got)
+	}
+	if !strings.Contains(out, "Press Enter") {
+		t.Errorf("waiting frame before the data is missing the Press Enter hint: %q", out)
+	}
+	if strings.Contains(lastWatchFrame(out), "Press Enter") {
+		t.Errorf("final frame contains the Press Enter hint: %q", lastWatchFrame(out))
+	}
+}
+
+func TestWatchIngest_ExitOnData_SnapshotSentBeforeReturn(t *testing.T) {
+	// Arrange
+	shortenWatchTimings(t, 10*time.Millisecond, time.Minute)
+	server, _ := newWatchLoopServer(t, 1)
+	var mu sync.Mutex
+	var events []string
+	var snapshot WatchSessionResult
+	onSnapshot := func(r WatchSessionResult) {
+		// Slow enough that a snapshot sent from a goroutine would land after
+		// watchIngest returned, which is the race this test guards against.
+		time.Sleep(50 * time.Millisecond)
+		mu.Lock()
+		defer mu.Unlock()
+		events = append(events, "snapshot")
+		snapshot = r
+	}
+	onComplete := func(WatchSessionResult) {
+		mu.Lock()
+		defer mu.Unlock()
+		events = append(events, "complete")
+	}
+
+	// Act
+	captureStdout(t, func() {
+		watchIngest(server.URL, "dt0s16.token", "now()-1h", nil, "", false, "", true, onSnapshot, onComplete)
+	})
+
+	// Assert
+	mu.Lock()
+	defer mu.Unlock()
+	if strings.Join(events, ",") != "snapshot,complete" {
+		t.Errorf("events by the time watchIngest returned = %v, want [snapshot complete]", events)
+	}
+	if _, ok := snapshot.FirstDataMs["hst"]; !ok {
+		t.Errorf("snapshot FirstDataMs = %v, want an entry for hst", snapshot.FirstDataMs)
+	}
+}
+
+func TestWatchIngest_ExitOnData_TimeoutWithoutData(t *testing.T) {
+	// Arrange
+	shortenWatchTimings(t, 50*time.Millisecond, time.Second)
+	server, _ := newWatchLoopServer(t, 0)
+	var mu sync.Mutex
+	snapshots := 0
+	onSnapshot := func(WatchSessionResult) {
+		mu.Lock()
+		defer mu.Unlock()
+		snapshots++
+	}
+	var result WatchSessionResult
+
+	// Act
+	out := captureStdout(t, func() {
+		result = watchIngest(server.URL, "dt0s16.token", "now()-1h", nil, "", false, "", true, onSnapshot, nil)
+	})
+
+	// Assert
+	if result.ExitReason != "timeout" {
+		t.Errorf("ExitReason = %q, want %q", result.ExitReason, "timeout")
+	}
+	if strings.Contains(out, "Continue watching?") {
+		t.Errorf("output contains the continue prompt: %q", out)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if snapshots != 0 {
+		t.Errorf("snapshots = %d, want 0", snapshots)
+	}
+}
+
+func TestWatchIngest_NoExitOnData_KeepsPollingAfterData(t *testing.T) {
+	// Arrange
+	shortenWatchTimings(t, 50*time.Millisecond, time.Second)
+	server, polls := newWatchLoopServer(t, 1)
+	var result WatchSessionResult
+
+	// Act
+	out := captureStdout(t, func() {
+		result = watchIngest(server.URL, "dt0s16.token", "now()-1h", nil, "", false, "", false, nil, nil)
+	})
+
+	// Assert
+	if result.ExitReason != "timeout" {
+		t.Errorf("ExitReason = %q, want %q", result.ExitReason, "timeout")
+	}
+	if got := polls(); got < 3 {
+		t.Errorf("polls = %d, want at least 3: the watch must keep polling after data arrives", got)
+	}
+	if !strings.Contains(lastWatchFrame(out), "Press Enter") {
+		t.Errorf("last frame is missing the Press Enter hint: %q", lastWatchFrame(out))
 	}
 }

@@ -176,7 +176,7 @@ The `main` channel is rebuilt automatically on every push to `main` and is inten
 | `dtwiz update otel` | Patch an existing OTel Collector config with the Dynatrace exporter |
 | `dtwiz update azure` | Reconcile the Dynatrace Azure Monitor integration's monitoring configuration |
 | `dtwiz update gcp` | Reconcile the Dynatrace Google Cloud integration's monitoring configuration |
-| `dtwiz watch` | Live-watch for newly ingested data in Dynatrace (services, logs, traces, etc.) |
+| `dtwiz watch` | Live-watch for newly ingested data in Dynatrace (services, logs, traces, etc.); `--exit-on-data` stops after the first data arrives, or at the 10-minute timeout without prompting |
 | `dtwiz status` | Show Dynatrace connection status and system state |
 
 ## Flags

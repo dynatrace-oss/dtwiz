@@ -67,7 +67,7 @@ dtwiz recommend --json
 | `dtwiz install <method>` | Install a specific ingestion method |
 | `dtwiz update <method>` | Reconcile an existing configuration (`azure`, `gcp`; `otel` is experimental) |
 | `dtwiz uninstall <method>` | Remove an installed method (`oneagent`, `kubernetes`, `otel`, `aws`, `aws-lambda`, `azure`, `gcp`, `self`) |
-| `dtwiz watch [--from <time>]` | Poll Dynatrace and show a live ingest summary |
+| `dtwiz watch [--from <time>] [--exit-on-data]` | Poll Dynatrace and show a live ingest summary; `--exit-on-data` stops after the first data arrives, or at the 10-minute timeout without prompting |
 | `dtwiz version` | Print the dtwiz version |
 
 All `install`, `update`, and `uninstall` commands support `--dry-run` (preview only) and `--yes`/`-y` (skip confirmation prompts). After a successful install, dtwiz watches until new data arrives.

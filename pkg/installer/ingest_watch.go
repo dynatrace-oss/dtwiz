@@ -23,7 +23,8 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
-const (
+// Variables rather than constants so in-package tests can shorten them.
+var (
 	watchPollInterval = 5 * time.Second
 	watchTimeout      = 10 * time.Minute
 )
@@ -108,27 +109,36 @@ type WatchSessionResult struct {
 // fromClause is injected directly into DQL queries — accepts RFC3339 timestamps
 // or DQL relative expressions (e.g. "now()-1h").
 func WatchIngest(envURL, pToken, fromClause string) WatchSessionResult {
-	return watchIngest(envURL, pToken, fromClause, nil, "", false, "", nil, nil)
+	return watchIngest(envURL, pToken, fromClause, nil, "", false, "", false, nil, nil)
 }
 
 // WatchIngestWithEvent is like WatchIngest but calls onSnapshot each time a new
 // signal type first receives data, and onComplete when the session ends — both
 // without waiting for the user to exit the watch display.
 func WatchIngestWithEvent(envURL, pToken, fromClause string, onSnapshot, onComplete func(WatchSessionResult)) WatchSessionResult {
-	return watchIngest(envURL, pToken, fromClause, nil, "", false, "", onSnapshot, onComplete)
+	return watchIngest(envURL, pToken, fromClause, nil, "", false, "", false, onSnapshot, onComplete)
+}
+
+// WatchIngestStandalone is the watch behind the standalone `dtwiz watch` command
+// and must not be used for post-install watches. It behaves like
+// WatchIngestWithEvent, except that when exitOnData is true the session ends on
+// its own after the first poll that finds data, or at the timeout without
+// asking whether to continue.
+func WatchIngestStandalone(envURL, pToken, fromClause string, exitOnData bool, onSnapshot, onComplete func(WatchSessionResult)) WatchSessionResult {
+	return watchIngest(envURL, pToken, fromClause, nil, "", false, "", exitOnData, onSnapshot, onComplete)
 }
 
 // WatchIngestOtel is like WatchIngest but also shows a call to action to
 // instrument the application when manualLang is the URL slug of a language
 // the user selected for manual instrumentation (e.g. "go", "php").
 func WatchIngestOtel(envURL, pToken, fromClause, manualLang string) {
-	watchIngest(envURL, pToken, fromClause, nil, "", false, manualLang, nil, nil)
+	watchIngest(envURL, pToken, fromClause, nil, "", false, manualLang, false, nil, nil)
 }
 
 // WatchIngestOtelWithEvent is like WatchIngestOtel but reports snapshot and
 // completion events the way WatchIngestWithEvent does.
 func WatchIngestOtelWithEvent(envURL, pToken, fromClause, manualLang string, onSnapshot, onComplete func(WatchSessionResult)) {
-	watchIngest(envURL, pToken, fromClause, nil, "", false, manualLang, onSnapshot, onComplete)
+	watchIngest(envURL, pToken, fromClause, nil, "", false, manualLang, false, onSnapshot, onComplete)
 }
 
 // WatchIngestCloudFromTime is like WatchIngest but calls WatchIngestCloud.
@@ -145,27 +155,27 @@ func WatchIngestCloudFromTime(envURL, pToken string, startTime time.Time) {
 // The caller sends status messages to statusCh; the most recent message is
 // shown on every render. Passing a nil channel disables status updates.
 func WatchIngestWithStatus(envURL, pToken, fromClause string, statusCh <-chan string) {
-	watchIngest(envURL, pToken, fromClause, statusCh, "", false, "", nil, nil)
+	watchIngest(envURL, pToken, fromClause, statusCh, "", false, "", false, nil, nil)
 }
 
 // WatchIngestAWS is like WatchIngestWithStatus but additionally scopes the
 // cloud-platform signal queries (metrics + da-* logs) to a specific AWS
 // account ID so noise from other accounts in the same tenant is filtered out.
 func WatchIngestAWS(envURL, pToken, fromClause string, statusCh <-chan string, awsAccountID string) {
-	watchIngest(envURL, pToken, fromClause, statusCh, awsAccountID, true, "", nil, nil)
+	watchIngest(envURL, pToken, fromClause, statusCh, awsAccountID, true, "", false, nil, nil)
 }
 
 // WatchIngestCloud is like WatchIngest but shows a "See your cloud resources
 // in the Clouds app" footer instead of the QuickStart link. Use this for
 // AWS, GCP, and Azure installs.
 func WatchIngestCloud(envURL, pToken, fromClause string) {
-	watchIngest(envURL, pToken, fromClause, nil, "", true, "", nil, nil)
+	watchIngest(envURL, pToken, fromClause, nil, "", true, "", false, nil, nil)
 }
 
 // WatchIngestCloudWithEvent is like WatchIngestCloud but reports snapshot and
 // completion events the way WatchIngestWithEvent does.
 func WatchIngestCloudWithEvent(envURL, pToken, fromClause string, onSnapshot, onComplete func(WatchSessionResult)) {
-	watchIngest(envURL, pToken, fromClause, nil, "", true, "", onSnapshot, onComplete)
+	watchIngest(envURL, pToken, fromClause, nil, "", true, "", false, onSnapshot, onComplete)
 }
 
 // WatchIngestCloudFromTimeWithEvent is like WatchIngestCloudFromTime but reports
@@ -182,7 +192,7 @@ func WatchIngestCloudFromTimeWithEvent(envURL, pToken string, startTime time.Tim
 // completion events. Installers that call it themselves must mark the end of the
 // install work (MarkInstallDone/MarkInstallDoneAt) so the watch session is not counted.
 func WatchIngestAWSWithEvent(envURL, pToken, fromClause string, statusCh <-chan string, awsAccountID string, onSnapshot, onComplete func(WatchSessionResult)) {
-	watchIngest(envURL, pToken, fromClause, statusCh, awsAccountID, true, "", onSnapshot, onComplete)
+	watchIngest(envURL, pToken, fromClause, statusCh, awsAccountID, true, "", false, onSnapshot, onComplete)
 }
 
 // otelLangNames maps a manual-language URL slug to its display name.
@@ -197,7 +207,7 @@ var otelLangNames = map[string]string{
 	"rust":   "Rust",
 }
 
-func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsAccountID string, cloudInstall bool, manualLang string, onSnapshot, onComplete func(WatchSessionResult)) (result WatchSessionResult) {
+func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsAccountID string, cloudInstall bool, manualLang string, exitOnData bool, onSnapshot, onComplete func(WatchSessionResult)) (result WatchSessionResult) {
 	if pToken == "" {
 		fmt.Println("  Platform token required for watch. Set --platform-token or DT_PLATFORM_TOKEN.")
 		return
@@ -307,8 +317,9 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsA
 		}
 
 		// After 10 minutes, prompt the user to decide whether to continue.
+		// Exit-on-data sessions are unattended, so they end like a non-TTY one.
 		if elapsed >= watchTimeout {
-			if !isTTY {
+			if !isTTY || exitOnData {
 				result.ExitReason = "timeout"
 				return
 			}
@@ -337,9 +348,17 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsA
 
 		state := pollAll(appsURL, pToken, fromClause, awsAccountID, &qs)
 		trackWatchSignals(&result, sessionStart, state)
+		// finalFrame marks the frame that ends an exit-on-data session.
+		finalFrame := exitOnData && len(result.FirstDataMs) > 0
 		if onSnapshot != nil && emitter.due(len(result.FirstDataMs)) {
 			snap := snapEvent("snapshot") // clone synchronously, before the goroutine
-			go onSnapshot(snap)           // asynchronous — must not block the watch display loop
+			if finalFrame {
+				// The session ends right after this frame: send synchronously so the
+				// event is registered before the process flushes pending sends and exits.
+				onSnapshot(snap)
+			} else {
+				go onSnapshot(snap) // asynchronous, must not block the watch display loop
+			}
 		}
 
 		var buf strings.Builder
@@ -381,9 +400,11 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsA
 			fmt.Fprintf(&buf, "    %s\n", linkFn(quickstartURL(appsURL, fromClause), "→ Open Dynatrace QuickStart"))
 		}
 		highlight.Fprint(&buf, separator)
-		buf.WriteString("\n")
-		dim.Fprint(&buf, " Press Enter to continue or keep watching...")
-		buf.WriteString("\n")
+		if !finalFrame {
+			buf.WriteString("\n")
+			dim.Fprint(&buf, " Press Enter to continue or keep watching...")
+			buf.WriteString("\n")
+		}
 
 		output := buf.String()
 		lineCount := strings.Count(output, "\n")
@@ -399,6 +420,11 @@ func watchIngest(envURL, pToken, fromClause string, statusCh <-chan string, awsA
 		if !isTTY {
 			// Non-TTY: print a separator between updates
 			fmt.Println("---")
+		}
+
+		if finalFrame {
+			result.ExitReason = "first_data"
+			return
 		}
 	}
 }

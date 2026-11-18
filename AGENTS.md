@@ -13,7 +13,9 @@ dtwiz setup                  # interactive: analyze → recommend → pick → i
 dtwiz analyze [--json]       # detect platform, containers, K8s, agents, cloud, services
 dtwiz recommend [--json]     # ranked ingestion recommendations
 dtwiz status                 # connection status + system analysis
-dtwiz watch [--from <time>]  # poll Dynatrace every 5s and display live ingest summary
+dtwiz watch [--from <time>] [--exit-on-data]
+                             # poll Dynatrace every 5s and display live ingest summary;
+                             # --exit-on-data stops after the first data, or at the 10-min timeout without prompting
 dtwiz install <method>       # oneagent | kubernetes | otel | otel-collector | aws | aws-lambda | azure | gcp
 dtwiz update <method>        # otel (patch existing OTel Collector config) | azure | gcp (reconcile monitoring config)
 dtwiz uninstall <method>     # oneagent | kubernetes | otel | aws | aws-lambda | azure | gcp | self
