@@ -1,24 +1,21 @@
 name: Preview Cleanup
 
+# Snapshots are created per pushed branch (preview.yml), so they are removed when
+# the branch is deleted.
 on:
-  pull_request:
-    types:
-      - closed
   delete:
 
 jobs:
   cleanup:
     runs-on: ubuntu-latest
-    if: |
-      (github.event_name == 'pull_request' && github.event.pull_request.head.ref != 'main') ||
-      (github.event_name == 'delete' && github.event.ref_type == 'branch' && github.event.ref != 'main')
+    if: github.event.ref_type == 'branch' && github.event.ref != 'main'
     permissions:
       contents: write
     steps:
       - name: Derive branch name
         id: branch
         env:
-          BRANCH: ${{ github.event.ref || github.event.pull_request.head.ref }}
+          BRANCH: ${{ github.event.ref }}
         run: |
           # Match the tag naming used by the preview workflow.
           TAG="snapshot-$(echo "$BRANCH" | tr '/' '-')"
@@ -33,12 +30,28 @@ jobs:
 
       - name: Delete preview release and tag
         run: |
-          if gh release view "${{ steps.branch.outputs.tag }}" > /dev/null 2>&1; then
-            gh release delete "${{ steps.branch.outputs.tag }}" --yes
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release delete "$TAG" --yes
           fi
-          if gh api "repos/${{ github.repository }}/git/ref/tags/${{ steps.branch.outputs.encoded_tag }}" > /dev/null 2>&1; then
-            gh api -X DELETE "repos/${{ github.repository }}/git/refs/tags/${{ steps.branch.outputs.encoded_tag }}"
+
+          # gh fills in {owner}/{repo} from GH_REPO.
+          TAG_REF_PATH="repos/{owner}/{repo}/git/refs/tags/$ENCODED_TAG"
+
+          # The tag may already be gone (another run or replication lag); treat that as success.
+          if output="$(gh api --method DELETE "$TAG_REF_PATH" 2>&1)"; then
+            echo "Tag $TAG deleted"
+            exit 0
           fi
+
+          if grep -q "Reference does not exist" <<< "$output"; then
+            echo "Tag $TAG already deleted"
+            exit 0
+          fi
+
+          echo "$output" >&2
+          exit 1
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.branch.outputs.tag }}
+          ENCODED_TAG: ${{ steps.branch.outputs.encoded_tag }}
