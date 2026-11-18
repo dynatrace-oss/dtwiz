@@ -1405,9 +1405,12 @@ func TestTrackWatchSignals_MeasuresFromSessionStart(t *testing.T) {
 func TestWatchIngest_NoTokenFiresNeitherCallback(t *testing.T) {
 	var snapshots, completions int
 
-	watchIngest("https://abc12345.example.com", "", "now()-1h", nil, "", false, "", false,
-		func(WatchSessionResult) { snapshots++ },
-		func(WatchSessionResult) { completions++ })
+	watchIngest(watchOptions{
+		envURL:     "https://abc12345.example.com",
+		from:       "now()-1h",
+		onSnapshot: func(WatchSessionResult) { snapshots++ },
+		onComplete: func(WatchSessionResult) { completions++ },
+	})
 
 	if snapshots != 0 || completions != 0 {
 		t.Errorf("snapshots = %d, completions = %d; want 0 and 0", snapshots, completions)
@@ -1567,7 +1570,7 @@ func TestWatchIngest_ExitOnData_ExitsOnFirstPollWithData(t *testing.T) {
 
 	// Act
 	out := captureStdout(t, func() {
-		result = watchIngest(server.URL, "dt0s16.token", "now()-1h", nil, "", false, "", true, nil, nil)
+		result = watchIngest(watchOptions{envURL: server.URL, platformToken: "dt0s16.token", from: "now()-1h", exitOnData: true})
 	})
 
 	// Assert
@@ -1600,7 +1603,7 @@ func TestWatchIngest_ExitOnData_ExitsWhenDataArrivesOnLaterPoll(t *testing.T) {
 
 	// Act
 	out := captureStdout(t, func() {
-		result = watchIngest(server.URL, "dt0s16.token", "now()-1h", nil, "", false, "", true, nil, nil)
+		result = watchIngest(watchOptions{envURL: server.URL, platformToken: "dt0s16.token", from: "now()-1h", exitOnData: true})
 	})
 
 	// Assert
@@ -1642,7 +1645,7 @@ func TestWatchIngest_ExitOnData_SnapshotSentBeforeReturn(t *testing.T) {
 
 	// Act
 	captureStdout(t, func() {
-		watchIngest(server.URL, "dt0s16.token", "now()-1h", nil, "", false, "", true, onSnapshot, onComplete)
+		watchIngest(watchOptions{envURL: server.URL, platformToken: "dt0s16.token", from: "now()-1h", exitOnData: true, onSnapshot: onSnapshot, onComplete: onComplete})
 	})
 
 	// Assert
@@ -1671,7 +1674,7 @@ func TestWatchIngest_ExitOnData_TimeoutWithoutData(t *testing.T) {
 
 	// Act
 	out := captureStdout(t, func() {
-		result = watchIngest(server.URL, "dt0s16.token", "now()-1h", nil, "", false, "", true, onSnapshot, nil)
+		result = watchIngest(watchOptions{envURL: server.URL, platformToken: "dt0s16.token", from: "now()-1h", exitOnData: true, onSnapshot: onSnapshot})
 	})
 
 	// Assert
@@ -1696,7 +1699,7 @@ func TestWatchIngest_NoExitOnData_KeepsPollingAfterData(t *testing.T) {
 
 	// Act
 	out := captureStdout(t, func() {
-		result = watchIngest(server.URL, "dt0s16.token", "now()-1h", nil, "", false, "", false, nil, nil)
+		result = watchIngest(watchOptions{envURL: server.URL, platformToken: "dt0s16.token", from: "now()-1h"})
 	})
 
 	// Assert
