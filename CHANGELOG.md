@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `install gcp`: removed the Preview subscription notice; a missing Dynatrace GCP principal now fails with an error instead of exiting as cancelled.
 - `install.ps1` no longer accepts the install directory positionally; use `-InstallDir <dir>`.
 - The `dtwiz` skill (`skills/dtwiz/SKILL.md`) now matches the CLI (Windows install, platform-token auth, Kubernetes, AWS, Docker and update details, `--yes`, `watch`) and drops the internal URL-family and token-type tables.
 - `dtwiz install otel`: Go projects are instrumented without source changes. dtwiz installs the latest `otelc` into its own tool directory (`~/.opentelemetry/go/bin`), builds each `package main` service into `<module>/.otel/go/bin/`, restores `go.mod`/`go.sum` afterwards, and launches the services against the local collector. Per service it falls back to client-only instrumentation (outgoing HTTP calls) and then to manual steps; Go workspaces (`go.work`) and modules that already configure the OpenTelemetry SDK are handled with manual steps or skipped. `dtwiz uninstall otel` stops the launched services and removes the generated files and dtwiz's own `otelc`.
