@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 )
 
 // ErrInstallCancelled is returned by installers when the user declines the
@@ -251,8 +253,8 @@ func RunCommandWithExitCode(argv []string, quiet bool) (int, error) {
 		cmd.Stdout = &captured
 		cmd.Stderr = &captured
 	} else {
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		cmd.Stdout = display.Stream
+		cmd.Stderr = display.Stream
 	}
 	runErr := cmd.Run()
 	if runErr == nil {

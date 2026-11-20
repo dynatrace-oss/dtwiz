@@ -139,9 +139,9 @@ This behavior applies in both the standalone `dtwiz install otel-node` flow (via
 - **GIVEN** a Node.js project (regular, Next.js, or Nuxt) is selected
 - **AND** the project directory does not contain a `node_modules/` subdirectory
 - **WHEN** `Execute()` prepares to launch
-- **THEN** it prints "Installing project dependencies..."
+- **THEN** it shows a step "Installed project dependencies"
 - **AND** `installNodeProjectDeps()` runs `npm ci` (if `package-lock.json` exists) or `npm install`
-- **AND** on success it prints "done." and execution continues normally
+- **AND** on success the step ends as `✓` and execution continues normally
 
 #### Scenario: node_modules/ missing and install fails
 
@@ -149,7 +149,7 @@ This behavior applies in both the standalone `dtwiz install otel-node` flow (via
 - **AND** the project directory does not contain a `node_modules/` subdirectory
 - **AND** `npm install` / `npm ci` exits non-zero
 - **WHEN** `Execute()` calls `installNodeProjectDeps()` as its first step
-- **THEN** it prints "failed." with the npm error output
+- **THEN** the step is shown as `✗ <label>  failed` with the npm error output
 - **AND** it exits without running any framework build, creating `.otel/`, or launching any process
 
 #### Scenario: node_modules/ already present — no-op
@@ -190,9 +190,9 @@ For Next.js projects, `next start` requires a production build in `.next/`. If `
 - **AND** `.next/` does not exist
 - **AND** `package.json` contains a `"build"` script
 - **WHEN** `Execute()` prepares to launch
-- **THEN** it prints "Building Next.js project (npm run build)..."
+- **THEN** it shows a step "Built Next.js project"
 - **AND** runs `npm run build` via `runBuildScript()`
-- **AND** on success prints "done." and continues normally
+- **AND** on success the step ends as `✓` and execution continues normally
 
 #### Scenario: .next/ missing — auto-build fails (no build script)
 
@@ -200,7 +200,7 @@ For Next.js projects, `next start` requires a production build in `.next/`. If `
 - **AND** `.next/` does not exist
 - **AND** `package.json` has no `"build"` script
 - **WHEN** `Execute()` calls `runBuildScript()`
-- **THEN** it prints "failed." with an error indicating to add a build script
+- **THEN** the step is shown as `✗ <label>  failed` with an error indicating to add a build script
 - **AND** exits without creating `.otel/` or launching any process
 
 #### Scenario: .next/ already exists — build skipped
@@ -231,9 +231,9 @@ For Nuxt projects, the system SHALL launch the Nitro server directly using `node
 - **AND** `.output/server/index.mjs` does not exist
 - **AND** `package.json` contains a `"build"` script
 - **WHEN** `Execute()` prepares to launch
-- **THEN** it prints "Building Nuxt project (npm run build)..."
+- **THEN** it shows a step "Built Nuxt project"
 - **AND** runs `npm run build` via `buildNuxtProject()`
-- **AND** on success prints "done." and continues normally
+- **AND** on success the step ends as `✓` and execution continues normally
 
 #### Scenario: Nuxt auto-build fails — no build script
 
@@ -241,7 +241,7 @@ For Nuxt projects, the system SHALL launch the Nitro server directly using `node
 - **AND** `.output/server/index.mjs` does not exist
 - **AND** `package.json` has no `"build"` script
 - **WHEN** `Execute()` calls `buildNuxtProject()`
-- **THEN** it prints "failed." with an error indicating to add a build script or run `npx nuxt build` manually
+- **THEN** the step is shown as `✗ <label>  failed` with an error indicating to add a build script or run `npx nuxt build` manually
 - **AND** exits without creating `.otel/` or launching any process
 
 #### Scenario: Nuxt auto-build fails — npm run build exits non-zero
@@ -251,7 +251,7 @@ For Nuxt projects, the system SHALL launch the Nitro server directly using `node
 - **AND** `package.json` contains a `"build"` script
 - **AND** `npm run build` exits with a non-zero code
 - **WHEN** `Execute()` calls `buildNuxtProject()`
-- **THEN** it prints "failed." with the npm error output
+- **THEN** the step is shown as `✗ <label>  failed` with the npm error output
 - **AND** exits without creating `.otel/` or launching any process
 
 #### Scenario: Nuxt build output already exists — build skipped
@@ -280,7 +280,7 @@ After launching the instrumented process, the system SHALL use `PrintProcessSumm
 
 - **GIVEN** the instrumented process is running and sending telemetry
 - **WHEN** `PrintProcessSummary()` checks process status
-- **THEN** it reports alive services with detected ports
+- **THEN** it reports each alive service as a `✓ <name>  → http://localhost:<port> · PID <pid> · log: <file>` line under a `✓ Started services` step
 - **AND** the user sees "Waiting for traffic — send requests to your services to generate traces and metrics."
 
 #### Scenario: All processes crashed
@@ -288,7 +288,7 @@ After launching the instrumented process, the system SHALL use `PrintProcessSumm
 - **GIVEN** all launched processes have crashed during the settle window
 - **WHEN** `PrintProcessSummary()` returns no alive services
 - **THEN** the "Waiting for traffic" prompt is NOT shown
-- **AND** the user sees "No services are running — check the logs above for errors."
+- **AND** the "Started services" step is shown as `✗ … failed` ("none of the N service(s) is running") and each crashed service as a `✗` line with its error
 
 ### Requirement: Preview and dry-run
 

@@ -23,7 +23,8 @@ func UninstallOneAgentV2(opts UninstallOptions) error {
 	}
 	logger.Debug("existing OneAgent detected")
 
-	printPlan()
+	display.InstallHeader("dtwiz · OneAgent uninstall")
+	printPlan(opts.DryRun)
 
 	if opts.DryRun {
 		display.PrintStatusLine("dry-run", "no changes made", display.ColorMuted)
@@ -31,7 +32,7 @@ func UninstallOneAgentV2(opts UninstallOptions) error {
 	}
 
 	if !opts.Quiet {
-		ok, err := installer.ConfirmProceed("  Proceed with OneAgent uninstall?")
+		ok, err := installer.ConfirmProceed("  Apply?")
 		if err != nil {
 			return fmt.Errorf("reading confirmation: %w", err)
 		}
@@ -41,10 +42,14 @@ func UninstallOneAgentV2(opts UninstallOptions) error {
 		}
 	}
 
-	if err := runUninstallFn(); err != nil {
-		return err
+	// sudo may prompt for a password, which a spinner would overwrite.
+	if !opts.Quiet {
+		if err := primeUninstallSudo(); err != nil {
+			return err
+		}
 	}
 
-	display.PrintStatusLine("result", "OneAgent uninstalled successfully", display.ColorOK)
-	return nil
+	return display.RunStep("Uninstalled OneAgent", func(*display.Step) error {
+		return runUninstallFn()
+	})
 }

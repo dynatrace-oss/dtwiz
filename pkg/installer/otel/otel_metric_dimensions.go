@@ -144,7 +144,7 @@ func applyOTLPMetricDimensions(ctx context.Context, c otlpMetricDimensionsClient
 		display.PrintWarning("Advanced OTLP metric dimensions", err)
 		return
 	}
-	display.ColorOK.Println("  ✓ Advanced OTLP metric dimensions enabled")
+	display.StepDone("Advanced OTLP metric dimensions enabled", "")
 }
 
 func printOTLPMetricDimensionsPlan(plan *otlpMetricDimensionsPlan) {

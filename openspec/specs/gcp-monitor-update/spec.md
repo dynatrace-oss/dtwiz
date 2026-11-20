@@ -79,7 +79,7 @@ The system SHALL require exactly one `dtwiz-gcp` connection with a bound service
 
 ### Requirement: Preview and confirmation
 
-The system SHALL present a preview with the environment, project, service account, connection name (marked unchanged), and configuration name, followed by the numbered monitoring-configuration steps (one update per existing configuration, or a single create when none exists). It SHALL note that authentication is left unchanged. It SHALL prompt a single `Apply?` confirmation; `--dry-run` SHALL stop after the preview and decline SHALL cancel without making any changes.
+The system SHALL present a compact preview with the project, connection name (marked unchanged), and the monitoring configuration to update (environment and service account with `-v`/`--debug`). The numbered monitoring-configuration steps (one update per existing configuration, or a single create when none exists) SHALL be shown only with `-v`/`--debug` or `--dry-run`. It SHALL note that authentication is left unchanged. It SHALL prompt a single `Apply?` confirmation; `--dry-run` SHALL stop after the preview and decline SHALL cancel without making any changes.
 
 #### Scenario: Dry run previews only
 

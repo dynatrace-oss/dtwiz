@@ -57,7 +57,7 @@ installed, the system SHALL wait for the extension to become active before proce
 - **GIVEN** the `da-aws` extension is not yet installed in the tenant
 - **WHEN** the installer calls the extension activation API
 - **THEN** it waits for the extension to report `ACTIVE` before continuing to monitoring config creation
-- **AND** prints `✓ Extension is active`
+- **AND** the install step line shows the wait as its detail and ends as `✓` when the extension is active
 
 #### Scenario: Already-installed extension is accepted
 
@@ -87,7 +87,7 @@ latest installed extension version.
 
 ### Requirement: CloudFormation deployment preview and confirmation
 
-Before deploying, the system SHALL print the full `aws cloudformation deploy` command
+Before deploying, the system SHALL print a compact summary (account, region, stack). With `-v`/`--debug` or `--dry-run` it SHALL also print the full `aws cloudformation deploy` command
 with token values masked (first 10 characters followed by `***`). It SHALL then prompt
 for a single `Apply?` confirmation (default yes). On `--dry-run` it prints the preview
 and exits without prompting or deploying.
@@ -95,7 +95,7 @@ and exits without prompting or deploying.
 #### Scenario: Token values masked in preview
 
 - **GIVEN** the deploy command includes `pDtApiToken` and `pDtIngestToken` values
-- **WHEN** the preview is printed
+- **WHEN** the command is printed (`-v`/`--debug` or `--dry-run`)
 - **THEN** each token value is shown as the first 10 characters followed by `***`
 
 #### Scenario: Dry-run stops before deployment

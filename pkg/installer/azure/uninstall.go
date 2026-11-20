@@ -45,7 +45,7 @@ func azureGatherClientIDs(runner cmdRunner, conns []connRef, names []string, env
 
 	issuer, issuerErr := azureIssuerURL(envURL)
 	if issuerErr != nil {
-		display.ColorWarning.Printf("  Warning: skipping App Registration display-name cleanup: %v\n", issuerErr)
+		display.StepWarn("Skipped App Registration display-name cleanup", issuerErr.Error())
 	} else {
 		for _, name := range names {
 			ids, err := azureListAppIDsByName(runner, name)
@@ -59,11 +59,11 @@ func azureGatherClientIDs(runner cmdRunner, conns []connRef, names []string, env
 				}
 				ok, verr := azureAppHasDtwizFedCred(runner, id, issuer)
 				if verr != nil {
-					display.ColorWarning.Printf("  Warning: skipping App Registration %s named %q: could not verify it was created by dtwiz (%v)\n", id, name, verr)
+					display.StepWarn(fmt.Sprintf("Skipped App Registration %s named %q", id, name), fmt.Sprintf("could not verify it was created by dtwiz (%v)", verr))
 					continue
 				}
 				if !ok {
-					display.ColorWarning.Printf("  Warning: skipping App Registration %s named %q: it lacks the dtwiz federated credential, so it was not created by dtwiz\n", id, name)
+					display.StepWarn(fmt.Sprintf("Skipped App Registration %s named %q", id, name), "it lacks the dtwiz federated credential, so it was not created by dtwiz")
 					continue
 				}
 				set[id] = true
@@ -90,7 +90,7 @@ func UninstallAzure(envURL, platformToken string, dryRun bool) error {
 func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc dtclient) error {
 	var monConfigIDs []string
 	var conns []connRef
-	if err := installer.RunConcurrently(
+	if err := installer.RunConcurrentlyWithSpinner("Looking up Azure integration resources",
 		func() (err error) { monConfigIDs, err = dtc.findAllMonitoringConfigs(integrationPrefix); return },
 		func() (err error) { conns, err = dtc.findAllConnections(integrationPrefix); return },
 	); err != nil {
@@ -123,7 +123,7 @@ func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc 
 		return nil
 	}
 
-	azureUninstallPrintPreview(envURL, monConfigIDs, conns, allClientIDs, integrationPrefix+"*", integrationPrefix+"*")
+	azureUninstallPrintPreview(envURL, monConfigIDs, conns, allClientIDs, integrationPrefix+"*", integrationPrefix+"*", dryRun)
 
 	if proceed, err := installer.ShouldProceed(dryRun, "Uninstall"); !proceed {
 		return err
@@ -134,9 +134,6 @@ func uninstallAzureWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc 
 		return err
 	}
 
-	fmt.Println()
-	display.ColorMessage.Println("  Azure Monitor integration removed.")
-	fmt.Println()
 	return nil
 }
 
@@ -151,64 +148,40 @@ func runUninstallSteps(offset, total int, monConfigIDs []string, conns []connRef
 	step := offset
 	var errs []error
 
-	for _, id := range monConfigIDs {
+	// run shows one step. hard failures are collected as errors; soft failures
+	// (legacy resources, which may belong to someone else) only warn.
+	run := func(label string, hard bool, fn func() error) {
 		step++
-		fmt.Printf("  Step %d/%d: Delete Azure monitoring configuration...\n", step, total)
-		if err := dtc.deleteMonitoring(id); err != nil {
-			display.ColorWarning.Printf("  Warning: step %d failed: %v\n", step, err)
-			errs = append(errs, fmt.Errorf("step %d: %w", step, err))
-			continue
+		logger.Debug("uninstall step", "step", step, "total", total, "label", label)
+		if hard {
+			if err := display.RunStep(label, func(*display.Step) error { return fn() }); err != nil {
+				errs = append(errs, fmt.Errorf("step %d: %w", step, err))
+			}
+			return
 		}
-		display.ColorOK.Println("  ✓ Monitoring configuration deleted")
+		if err := fn(); err != nil {
+			display.StepWarn("Skipped "+label, "legacy resource cleanup failed (continuing): "+err.Error())
+			return
+		}
+		display.StepDone(label, "")
+	}
+
+	for _, id := range monConfigIDs {
+		run("Deleted monitoring configuration", true, func() error { return dtc.deleteMonitoring(id) })
 	}
 
 	for _, clientID := range currentClientIDs {
-		step++
-		fmt.Printf("  Step %d/%d: Delete Monitoring Reader role assignment...\n", step, total)
-		if err := azureDeleteRoleAssignment(runner, clientID); err != nil {
-			display.ColorWarning.Printf("  Warning: step %d failed: %v\n", step, err)
-			errs = append(errs, fmt.Errorf("step %d: %w", step, err))
-		} else {
-			display.ColorOK.Println("  ✓ Role assignment deleted")
-		}
-
-		step++
-		fmt.Printf("  Step %d/%d: Delete Azure App Registration...\n", step, total)
-		if err := azureDeleteApp(runner, clientID); err != nil {
-			display.ColorWarning.Printf("  Warning: step %d failed: %v\n", step, err)
-			errs = append(errs, fmt.Errorf("step %d: %w", step, err))
-		} else {
-			display.ColorOK.Println("  ✓ App Registration deleted (Service Principal + federated credential removed)")
-		}
+		run("Deleted Monitoring Reader role assignment", true, func() error { return azureDeleteRoleAssignment(runner, clientID) })
+		run("Deleted App Registration", true, func() error { return azureDeleteApp(runner, clientID) })
 	}
 
 	for _, clientID := range legacyClientIDs {
-		step++
-		fmt.Printf("  Step %d/%d: Delete Monitoring Reader role assignment (legacy)...\n", step, total)
-		if err := azureDeleteRoleAssignment(runner, clientID); err != nil {
-			display.ColorWarning.Printf("  Warning: step %d skipped: legacy resource cleanup failed (continuing): %v\n", step, err)
-		} else {
-			display.ColorOK.Println("  ✓ Role assignment deleted")
-		}
-
-		step++
-		fmt.Printf("  Step %d/%d: Delete Azure App Registration (legacy)...\n", step, total)
-		if err := azureDeleteApp(runner, clientID); err != nil {
-			display.ColorWarning.Printf("  Warning: step %d skipped: legacy resource cleanup failed (continuing): %v\n", step, err)
-		} else {
-			display.ColorOK.Println("  ✓ App Registration deleted (Service Principal + federated credential removed)")
-		}
+		run("Deleted Monitoring Reader role assignment (legacy)", false, func() error { return azureDeleteRoleAssignment(runner, clientID) })
+		run("Deleted App Registration (legacy)", false, func() error { return azureDeleteApp(runner, clientID) })
 	}
 
 	for _, c := range conns {
-		step++
-		fmt.Printf("  Step %d/%d: Delete Dynatrace Azure connection...\n", step, total)
-		if err := dtc.deleteConnection(c.objectID); err != nil {
-			display.ColorWarning.Printf("  Warning: step %d failed: %v\n", step, err)
-			errs = append(errs, fmt.Errorf("step %d: %w", step, err))
-		} else {
-			display.ColorOK.Println("  ✓ Connection deleted")
-		}
+		run("Deleted Dynatrace connection", true, func() error { return dtc.deleteConnection(c.objectID) })
 	}
 
 	return errors.Join(errs...)
@@ -230,37 +203,40 @@ func azureUninstallBuildSteps(monConfigIDs []string, conns []connRef, clientIDs 
 	return steps
 }
 
-func azureUninstallPrintPreview(envURL string, monConfigIDs []string, conns []connRef, clientIDs []string, configName, connName string) {
+func azureUninstallPrintPreview(envURL string, monConfigIDs []string, conns []connRef, clientIDs []string, configName, connName string, showPlan bool) {
 	fmt.Println()
-	display.ColorMessage.Println("  Dynatrace Azure Monitor Integration: Uninstall")
-	fmt.Println()
-	fmt.Printf("  Environment: %s\n", envURL)
-	if len(conns) > 0 {
-		for _, c := range conns {
-			fmt.Printf("  Connection:  %s (id: %s)\n", connName, c.objectID)
-		}
-	} else {
-		fmt.Printf("  Connection:  %s: not found, skipping\n", connName)
+	display.Header("dtwiz · Azure uninstall")
+	rows := []string{}
+	for range conns {
+		rows = append(rows, "Removes", "Dynatrace Azure connection")
+	}
+	if len(clientIDs) > 0 {
+		rows = append(rows, "Removes", fmt.Sprintf("%d App Registration(s) and role assignment(s)", len(clientIDs)))
+	}
+	for range monConfigIDs {
+		rows = append(rows, "Removes", "Azure monitoring configuration")
+	}
+	display.PrintAlignedStatusLines(display.ColorDefault, rows...)
+	display.Detail("environment: %s", envURL)
+	for _, c := range conns {
+		display.Detail("connection: %s (id: %s)", connName, c.objectID)
 	}
 	for _, clientID := range clientIDs {
-		fmt.Printf("  App Registration: %s\n", clientID)
+		display.Detail("app registration: %s", clientID)
 	}
-	if len(monConfigIDs) > 0 {
-		for _, id := range monConfigIDs {
-			fmt.Printf("  Monitoring config: %s (id: %s)\n", configName, id)
+	for _, id := range monConfigIDs {
+		display.Detail("monitoring config: %s (id: %s)", configName, id)
+	}
+
+	if showPlan || logger.Enabled() {
+		fmt.Println()
+		display.PrintSectionDivider()
+		display.ColorMessage.Println("  Steps to be executed:")
+		display.PrintSectionDivider()
+		for i, s := range azureUninstallBuildSteps(monConfigIDs, conns, clientIDs, configName, connName) {
+			fmt.Printf("  Step %d: %s\n", i+1, s)
 		}
-	} else {
-		fmt.Printf("  Monitoring config: %s: not found, skipping\n", configName)
+		display.PrintSectionDivider()
 	}
-	fmt.Println()
-	display.PrintSectionDivider()
-	display.ColorMessage.Println("  Steps to be executed:")
-	display.PrintSectionDivider()
-
-	for i, s := range azureUninstallBuildSteps(monConfigIDs, conns, clientIDs, configName, connName) {
-		fmt.Printf("  Step %d: %s\n", i+1, s)
-	}
-
-	display.PrintSectionDivider()
 	fmt.Println()
 }

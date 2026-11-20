@@ -3,12 +3,13 @@
 package installer
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 )
 
 // UninstallSelf removes the dtwiz binary from disk and strips the PATH
@@ -30,18 +31,18 @@ func UninstallSelf() error {
 
 	// Show preview and confirm.
 	fmt.Println()
-	fmt.Printf("  This will uninstall dtwiz:\n")
-	fmt.Println()
-	fmt.Printf("    Binary  : %s\n", exePath)
+	display.Header("dtwiz · uninstall dtwiz")
+	rows := []string{"Removes", exePath}
 	if profilePath != "" {
-		fmt.Printf("    Profile : remove PATH entry from %s\n", profilePath)
+		rows = append(rows, "Updates", "remove PATH entry from "+profilePath)
 	}
+	display.PrintAlignedStatusLines(display.ColorDefault, rows...)
 	fmt.Println()
-	fmt.Print("  Proceed? [Y/n]: ")
-	reader := bufio.NewReader(os.Stdin)
-	answer, _ := reader.ReadString('\n')
-	answer = strings.TrimSpace(strings.ToLower(answer))
-	if answer != "" && answer != "y" && answer != "yes" {
+	ok, err := ConfirmQuestion("  Apply?")
+	if err != nil {
+		return fmt.Errorf("reading confirmation: %w", err)
+	}
+	if !ok {
 		return fmt.Errorf("uninstall aborted")
 	}
 	fmt.Println()
@@ -49,9 +50,9 @@ func UninstallSelf() error {
 	// 1. Remove the PATH block from the shell profile.
 	if profilePath != "" {
 		if err := removeInstallerPathBlock(profilePath, installDir); err != nil {
-			fmt.Printf("  Warning: could not update %s: %v\n", profilePath, err)
+			display.StepWarn("Could not update "+profilePath, err.Error())
 		} else {
-			fmt.Printf("  Removed PATH entry from %s\n", profilePath)
+			display.StepDone("Removed PATH entry", profilePath)
 		}
 	}
 
@@ -59,9 +60,7 @@ func UninstallSelf() error {
 	if err := os.Remove(exePath); err != nil {
 		return fmt.Errorf("removing binary %s: %w", exePath, err)
 	}
-	fmt.Printf("  Removed %s\n", exePath)
-	fmt.Println()
-	fmt.Println("  dtwiz uninstalled.")
+	display.StepDone("Removed dtwiz binary", exePath)
 	return nil
 }
 

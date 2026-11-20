@@ -248,7 +248,7 @@ func installPythonWindows() error {
 	}
 	if refreshErr := installer.RefreshWindowsPath(); refreshErr != nil {
 		logger.Debug("installPythonWindows: RefreshWindowsPath failed", "error", refreshErr)
-		fmt.Printf("  Warning: could not refresh PATH: %v\n", refreshErr)
+		display.StepWarn("Could not refresh PATH", refreshErr.Error())
 	} else {
 		logger.Debug("installPythonWindows: PATH refreshed from registry")
 	}
@@ -296,22 +296,18 @@ func InstallDemo(envURL, token, platformTok string, dryRun bool) error {
 	}
 
 	fmt.Println()
-	display.ColorMessage.Println("  Dynatrace Demo Installation (schnitzel)")
-	fmt.Println()
-	fmt.Println("  This will:")
+	display.InstallHeader("dtwiz · OpenTelemetry demo (schnitzel)")
 
-	step := 1
+	rows := []string{}
 	if !demoExists {
-		fmt.Printf("  %d) Download schnitzel → %s\n", step, demoPath)
-		step++
+		rows = append(rows, "Downloads", "schnitzel demo app")
 	}
 	if pythonCmd != nil {
-		fmt.Printf("  %d) Install %s\n", step, describeDemoInstallCmd(pythonCmd))
-		step++
+		rows = append(rows, "Installs", describeDemoInstallCmd(pythonCmd))
 	}
-	fmt.Printf("  %d) Install OTel Collector\n", step)
-	step++
-	fmt.Printf("  %d) Auto-instrument the schnitzel Python app\n", step)
+	rows = append(rows, "Installs", "OTel Collector", "Instruments", "schnitzel Python app")
+	display.PrintAlignedStatusLines(display.ColorDefault, rows...)
+	display.Detail("demo path: %s", demoPath)
 	fmt.Println()
 
 	if dryRun {
@@ -319,7 +315,7 @@ func InstallDemo(envURL, token, platformTok string, dryRun bool) error {
 		return nil
 	}
 
-	ok, err := installer.ConfirmProceed("  Proceed with installation?")
+	ok, err := installer.ConfirmProceed("  Apply?")
 	if err != nil {
 		return fmt.Errorf("reading confirmation: %w", err)
 	}
@@ -330,16 +326,18 @@ func InstallDemo(envURL, token, platformTok string, dryRun bool) error {
 	fmt.Println()
 
 	if !demoExists {
-		fmt.Println("  Downloading schnitzel demo app...")
-		if err := downloadDemoExamples(demoPath); err != nil {
+		if err := display.RunStep("Downloaded schnitzel demo app", func(*display.Step) error {
+			return downloadDemoExamples(demoPath)
+		}); err != nil {
 			return err
 		}
-		fmt.Println("  Demo downloaded.")
 	}
 
 	// Step 2: Install missing Python prerequisites if needed
 	if pythonCmd != nil {
-		fmt.Printf("  Installing %s...\n", describeDemoInstallCmd(pythonCmd))
+		// The installer may ask for a password and streams its own output, so no
+		// spinner here: print what is running, then the result.
+		display.PrintlnColored(display.ColorMuted, "Installing %s…", describeDemoInstallCmd(pythonCmd))
 		var installErr error
 		if runtime.GOOS == "windows" {
 			installErr = installPythonWindows()
@@ -349,10 +347,12 @@ func InstallDemo(envURL, token, platformTok string, dryRun bool) error {
 		if installErr != nil {
 			return fmt.Errorf("Python installation failed: %w", installErr) //nolint:staticcheck // ST1005: keep brand capitalization
 		}
-		fmt.Println("  Python dependencies installed.")
+		display.StepDone("Installed Python dependencies", "")
 	}
 
 	installer.AutoConfirm = true
+	previewAlreadyShown = true
+	defer func() { previewAlreadyShown = false }()
 	_, err = InstallOtelCollectorWithProject(envURL, token, platformTok, demoPath, dryRun)
 	return err
 }

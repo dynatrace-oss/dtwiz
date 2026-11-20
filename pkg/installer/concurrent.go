@@ -3,6 +3,8 @@ package installer
 import (
 	"errors"
 	"sync"
+
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 )
 
 // RunConcurrently runs every fn in its own goroutine, waits for all of them to
@@ -21,4 +23,10 @@ func RunConcurrently(fns ...func() error) error {
 	}
 	wg.Wait()
 	return errors.Join(errs...)
+}
+
+// RunConcurrentlyWithSpinner is RunConcurrently with a spinner (present-tense
+// label) shown while the functions run, for lookups that can take seconds.
+func RunConcurrentlyWithSpinner(label string, fns ...func() error) error {
+	return display.RunQuiet(label, func(*display.Step) error { return RunConcurrently(fns...) })
 }

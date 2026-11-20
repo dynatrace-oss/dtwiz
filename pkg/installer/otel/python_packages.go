@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -149,9 +150,8 @@ func ensureFrameworkInstrumentations(pythonBin string, pip *pipCommand) error {
 	missing, err := queryBootstrapRequirements(pythonBin, installed)
 	if err != nil {
 		logger.Debug("bootstrap internal API unavailable", "error", err)
-		fmt.Printf("\n    Warning: could not detect missing instrumentation packages: %v\n", err)
-		fmt.Printf("    Run manually to install framework instrumentations:\n")
-		fmt.Printf("      %s -m opentelemetry.instrumentation.bootstrap -a install\n", pythonBin)
+		display.StepWarn("Could not detect missing instrumentation packages",
+			fmt.Sprintf("run manually: %s -m opentelemetry.instrumentation.bootstrap -a install", pythonBin))
 		return nil // non-fatal: services will start but may lack trace spans
 	}
 	if len(missing) == 0 {
@@ -160,18 +160,11 @@ func ensureFrameworkInstrumentations(pythonBin string, pip *pipCommand) error {
 	}
 
 	logger.Debug("installing missing packages via pip", "count", len(missing))
-	fmt.Printf("\n    opentelemetry-bootstrap did not install framework instrumentations.\n")
-	fmt.Printf("    Detected %d missing packages — installing directly:\n", len(missing))
-	for _, pkg := range missing {
-		fmt.Printf("      %s\n", pkg)
-	}
+	display.Detail("opentelemetry-bootstrap did not install framework instrumentations; installing %d missing packages directly: %s",
+		len(missing), strings.Join(missing, " "))
 
 	if err := installPackages(pip, missing); err != nil {
-		fmt.Println()
-		fmt.Println("    Some instrumentation packages failed to install.")
-		fmt.Printf("    To install them manually, run:\n")
-		fmt.Printf("      %s -m pip install %s\n", pythonBin, strings.Join(missing, " "))
-		return err
+		return fmt.Errorf("%w\n    install them manually: %s -m pip install %s", err, pythonBin, strings.Join(missing, " "))
 	}
 
 	// Final verification — report any remaining gaps.
@@ -189,13 +182,8 @@ func ensureFrameworkInstrumentations(pythonBin string, pip *pipCommand) error {
 	}
 	if len(stillMissing) > 0 {
 		logger.Debug("post-install verification found remaining gaps", "still_missing", len(stillMissing))
-		fmt.Println()
-		fmt.Printf("    Warning: %d instrumentation packages are still not installed:\n", len(stillMissing))
-		for _, pkg := range stillMissing {
-			fmt.Printf("      %s\n", pkg)
-		}
-		fmt.Printf("    To install manually:\n")
-		fmt.Printf("      %s -m pip install %s\n", pythonBin, strings.Join(stillMissing, " "))
+		display.StepWarn(fmt.Sprintf("%d instrumentation packages are still not installed", len(stillMissing)),
+			fmt.Sprintf("install manually: %s -m pip install %s", pythonBin, strings.Join(stillMissing, " ")))
 	} else {
 		logger.Debug("all missing packages successfully installed", "count", len(missing))
 	}
@@ -225,7 +213,7 @@ func installProjectDeps(pip *pipCommand, projectPath string) (string, error) {
 			args = append(args, srcPath)
 		}
 		full := pip.name + " " + strings.Join(args, " ")
-		fmt.Printf("\n    %s\n", full)
+		display.Detail("%s", full)
 		logger.Debug("running pip install from source", "pip", pip.name, "source", src.file, "args", args)
 		cmd := exec.Command(pip.name, args...)
 		cmd.Dir = projectPath
