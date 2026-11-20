@@ -9,7 +9,10 @@ import (
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 )
 
-var watchFromFlag string
+var (
+	watchFromFlag       string
+	watchExitOnDataFlag bool
+)
 
 var watchCmd = &cobra.Command{
 	Use:   "watch",
@@ -38,11 +41,12 @@ var watchCmd = &cobra.Command{
 			fromClause = StartTime.UTC().Format(installer.IngestTimeFormat)
 		}
 
-		installer.WatchIngestWithEvent(envURL, pTok, fromClause, buildWatchSnapshotEventCallback(cmd), buildWatchEventCallback(cmd))
+		installer.WatchIngestStandalone(envURL, pTok, fromClause, watchExitOnDataFlag, buildWatchSnapshotEventCallback(cmd), buildWatchEventCallback(cmd))
 	},
 }
 
 func init() {
 	watchCmd.Flags().StringVar(&watchFromFlag, "from", "", `start time for queries — RFC3339 (e.g. "2026-04-21T14:30:05Z") or DQL relative (e.g. "now()-1h"); defaults to dtwiz start time`)
+	watchCmd.Flags().BoolVar(&watchExitOnDataFlag, "exit-on-data", false, "stop after the first data arrives, or at the 10-minute timeout without prompting")
 	rootCmd.AddCommand(watchCmd)
 }

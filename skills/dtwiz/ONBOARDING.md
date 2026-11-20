@@ -164,6 +164,10 @@ using their `title`.
     entry, use it, with the entry number in each label.
   - If the picker cannot show every entry (many tools allow only about four), show the complete
     numbered list as plain text and ask for the number instead.
+- Right before you run the install command, note the current time in UTC. You need it for the
+  data check after the install. Get it in the install tab with
+  `date -u +%Y-%m-%dT%H:%M:%SZ` (PowerShell:
+  `(Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")`).
 - Map the chosen recommendation's `method` to a command, and run it with `--yes` (the one
   exception is the project-listing run for `otel` below):
   - `otel`: ask the user once, "Instrument one of your applications, or host monitoring only?"
@@ -252,6 +256,13 @@ using their `title`.
     process group and kills the Collector too. On Windows use `Stop-Process -Id <pid>` for the
     dtwiz process only (untested). If you cannot find the PID, leave the watch running and tell
     the user they can press Enter in the install tab when they are done.
+- To check for data without a watch you have to close, run
+  `dtwiz watch --exit-on-data --from <install time>` in the install tab once its watch is
+  closed, with the UTC time you noted before the install. This also works when the install
+  watch ended before any data showed up. It waits until data arrives and then exits on its own,
+  or exits after 10 minutes if nothing arrives, without a prompt. So wait for the command to
+  finish and read its output. Always pass `--from`. Without it, the check only counts data from
+  the moment the check itself started, and can miss what arrived during the install.
 
 ### Step 5: Show what arrived (dtctl)
 

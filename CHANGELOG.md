@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - AI-agent onboarding: `skills/dtwiz/ONBOARDING.md` has a paste-ready prompt and step-by-step agent instructions so Claude, Cursor or any coding agent can connect this machine and its apps, Kubernetes clusters and AWS, Azure or GCP accounts to Dynatrace with dtwiz, setting up only what the user chooses, while the platform token never enters the chat.
 - `install.sh --yes`/`-y` and `install.ps1 -Yes`/`-y` skip the install confirmation for unattended installs (CI, AI agents). The install preview is still printed.
+- `dtwiz watch --exit-on-data` stops the watch after the first data arrives, or at the 10-minute timeout without asking whether to continue, so scripts and AI agents get a quick answer. The watch after an install is unchanged.
 
 ### Changed
 

@@ -254,7 +254,7 @@ var setupCmd = &cobra.Command{
 		if setupDryRun {
 			return nil
 		}
-		// AWS scopes its watch to the account (WatchIngestAWS); Azure and GCP run their
+		// AWS scopes its watch to the account (WatchIngestAWSWithEvent); Azure and GCP run their
 		// own generic watch from inside the installer. Only the methods below use the
 		// generic post-install watch.
 		fromClause := StartTime.UTC().Format(installer.IngestTimeFormat)
