@@ -4,35 +4,58 @@ import (
 	"encoding/json"
 	"strings"
 	"sync"
+	"time"
 )
 
-// detectGCP checks for a gcloud CLI with an active account.
+// gcloudReadTimeout bounds each gcloud config/auth read during detection.
+const gcloudReadTimeout = 20 * time.Second
+
+// detectGCP checks for a gcloud CLI with an active account and an active project.
 func detectGCP() *GCPInfo {
+	return detectGCPWith(runCmdWithTimeout, detectGCPServices)
+}
+
+// detectGCPWith resolves the active account first, then the project, mirroring the
+// installer preflight. run must return stdout only: gcloud prints notices and warnings
+// (e.g. "WARNING: The following filter keys were not present ...") to stderr, which
+// must never be mistaken for an account or project value.
+func detectGCPWith(
+	run func(timeout time.Duration, command string, args ...string) (string, error),
+	probeServices func() ([]GCPService, bool),
+) *GCPInfo {
 	info := &GCPInfo{}
 
-	ok, out := runCmd("gcloud", "config", "get-value", "project")
-	projectID := CleanGCloudConfigValue(out)
-	if !ok || projectID == "" || strings.Contains(projectID, "(unset)") {
-		if ok {
-			// gcloud is available but no project is set — check if the user is authenticated.
-			authOK, acctOut := runCmd("gcloud", "auth", "list", "--filter=status:ACTIVE", "--format=value(account)")
-			if authOK {
-				if acct := strings.TrimSpace(acctOut); acct != "" {
-					info.Authenticated = true
-					info.Account = acct
-				}
-			}
-		}
+	acctOut, err := run(gcloudReadTimeout, "gcloud", "auth", "list", "--filter=status:ACTIVE", "--format=value(account)")
+	if err != nil {
+		return info // gcloud missing or failing: treat as not signed in
+	}
+	account := firstLine(acctOut)
+	if account == "" {
+		return info
+	}
+	info.Authenticated = true
+	info.Account = account
+
+	projOut, err := run(gcloudReadTimeout, "gcloud", "config", "get-value", "project")
+	projectID := CleanGCloudConfigValue(projOut)
+	if err != nil || projectID == "" || strings.Contains(projectID, "(unset)") {
 		return info
 	}
 	info.Available = true
 	info.ProjectID = projectID
 
-	_, acct := runCmd("gcloud", "config", "get-value", "account")
-	info.Account = CleanGCloudConfigValue(acct)
-
-	info.Services, info.ServicesAuthError = detectGCPServices()
+	info.Services, info.ServicesAuthError = probeServices()
 	return info
+}
+
+// firstLine returns the first non-empty trimmed line of out.
+func firstLine(out string) string {
+	for _, line := range strings.Split(out, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			return line
+		}
+	}
+	return ""
 }
 
 // CleanGCloudConfigValue extracts the value from `gcloud config get-value ...` output.

@@ -22,6 +22,14 @@ const (
 // ErrPlatformUnsupported is returned when the current OS or architecture is not supported.
 var ErrPlatformUnsupported = errors.New("platform not supported")
 
+// ErrAlreadyReported marks an error whose cause has already been shown to the user
+// (for example in an info box). The command still fails with a non-zero exit status,
+// but the root command does not print an extra "Error: ..." line for it.
+// Wrap it together with a typed error so self-monitoring can still classify the failure:
+//
+//	fmt.Errorf("%w: %w", installer.ErrAlreadyReported, &installer.ConfigError{...})
+var ErrAlreadyReported = errors.New("already reported")
+
 // AuthError indicates authentication failure.
 type AuthError struct {
 	// Reason is one of: invalid_token, environment_not_reachable, authentication_failed,

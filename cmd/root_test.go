@@ -1,7 +1,12 @@
 package cmd
 
 import (
+	"bytes"
+	"errors"
+	"fmt"
 	"testing"
+
+	"github.com/spf13/cobra"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
 	"github.com/dynatrace-oss/dtwiz/pkg/selfmonitoring"
@@ -208,5 +213,49 @@ func TestPersistentPreRunOwnership(t *testing.T) {
 			t.Errorf("%q no longer overrides PersistentPreRun, so root now fires the inv event; "+
 				"remove its own fireInvokedEvent call and drop it from this test", name)
 		}
+	}
+}
+
+// ── printExecuteError ────────────────────────────────────────────────────────
+
+func TestPrintExecuteError_PlainErrorPrintsCobraFormat(t *testing.T) {
+	// Arrange
+	var stderr bytes.Buffer
+	cmd := &cobra.Command{Use: "test"}
+	cmd.SetErr(&stderr)
+	err := errors.New("something broke")
+
+	// Act
+	printExecuteError(cmd, err)
+
+	// Assert
+	if got, want := stderr.String(), "Error: something broke\n"; got != want {
+		t.Errorf("stderr = %q, want %q", got, want)
+	}
+}
+
+func TestPrintExecuteError_AlreadyReportedPrintsNothing(t *testing.T) {
+	// Arrange
+	var stderr bytes.Buffer
+	cmd := &cobra.Command{Use: "test"}
+	cmd.SetErr(&stderr)
+	err := fmt.Errorf("%w: %w", installer.ErrAlreadyReported, &installer.ConfigError{MissingFields: []string{"gcloud.project"}})
+
+	// Act
+	printExecuteError(cmd, err)
+
+	// Assert
+	if stderr.Len() != 0 {
+		t.Errorf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestRootCmd_SilencesCobraErrorPrinting(t *testing.T) {
+	// Act
+	silenced := rootCmd.SilenceErrors
+
+	// Assert
+	if !silenced {
+		t.Error("rootCmd.SilenceErrors = false; Execute must be the only place that prints errors")
 	}
 }

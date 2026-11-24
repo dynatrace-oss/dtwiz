@@ -69,6 +69,12 @@ func TestClassifyError(t *testing.T) {
 			wantAttrs: map[string]string{"config.missing_fields": "DT_ENVIRONMENT,DT_PLATFORM_TOKEN"},
 		},
 		{
+			name:      "already-reported ConfigError → config_error",
+			err:       fmt.Errorf("%w: %w", installer.ErrAlreadyReported, &installer.ConfigError{MissingFields: []string{"gcloud.project"}}),
+			wantType:  installer.ErrTypeConfigError,
+			wantAttrs: map[string]string{"config.missing_fields": "gcloud.project"},
+		},
+		{
 			name:      "DependencyMissingError → dependency_missing",
 			err:       &installer.DependencyMissingError{Name: "az"},
 			wantType:  installer.ErrTypeDependencyMissing,

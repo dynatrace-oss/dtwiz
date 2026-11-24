@@ -299,7 +299,7 @@ func GenerateRecommendations(system *analyzer.SystemInfo) []Recommendation {
 		gcpUnlockCommand := "gcloud auth login"
 		if system.GCP != nil && system.GCP.Authenticated {
 			gcpDetectionInfo = "no project selected"
-			gcpUnlockCommand = "gcloud config set project <PROJECT_ID>"
+			gcpUnlockCommand = "`gcloud projects list`, then `gcloud config set project <PROJECT_ID>`"
 		}
 		recs = append(recs, Recommendation{
 			Method:        MethodGCP,

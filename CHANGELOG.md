@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `dotnet-otel` feature flag (`--dotnet-otel` or `DTWIZ_DOTNET_OTEL=true`, off by default) gating upcoming .NET OpenTelemetry auto-instrumentation support.
 
+### Changed
+
+- `dtwiz install gcp`, `update gcp` and `uninstall gcp` show an info box instead of a one-line error when `gcloud` has no active account or project. The box names the logged-in account and lists the commands to fix it (`gcloud auth login`, or `gcloud projects list` and `gcloud config set project <PROJECT_ID>`) followed by the command to re-run. The command exits non-zero and is reported to self-monitoring as `config_error`.
+- `dtwiz uninstall gcp` no longer runs without an active `gcloud` project. Previously it removed only the Dynatrace resources and silently left the GCP service account and its Viewer binding in place; now it removes nothing and explains how to select the project.
+- `dtwiz setup` shows `` `gcloud projects list`, then `gcloud config set project <PROJECT_ID>` `` as the GCP unlock hint when you are signed in to `gcloud` without a project.
+
+### Fixed
+
+- `dtwiz setup` and `dtwiz analyze` no longer report a logged-out `gcloud` as signed in. A `gcloud` warning was read as the account name, so `setup` suggested selecting a project instead of `gcloud auth login`; and a logged-out user with a project configured was offered GCP setup. GCP now counts as available only with an active account and project.
+
 ## [1.16.0] - 2026-11-18
 
 ### Added

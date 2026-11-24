@@ -96,12 +96,8 @@ func TestGCPUninstallDryRun(t *testing.T) {
 func TestGCPUninstallStepCount(t *testing.T) {
 	conns := []connRef{{objectID: "c1", serviceAccountEmail: "dtwiz-gcp@my-project.iam.gserviceaccount.com"}}
 	// 1 mon config + 1 connection + (1 current SA * 2 steps) + (0 legacy * 2) = 4
-	if got := uninstallStepCount([]string{"m1"}, conns, []string{"dtwiz-gcp@my-project.iam.gserviceaccount.com"}, nil, "my-project"); got != 4 {
+	if got := uninstallStepCount([]string{"m1"}, conns, []string{"dtwiz-gcp@my-project.iam.gserviceaccount.com"}, nil); got != 4 {
 		t.Errorf("step count = %d, want 4", got)
-	}
-	// without a project, SA steps are skipped: 1 mon + 1 conn = 2
-	if got := uninstallStepCount([]string{"m1"}, conns, []string{"dtwiz-gcp@my-project.iam.gserviceaccount.com"}, nil, ""); got != 2 {
-		t.Errorf("step count (no project) = %d, want 2", got)
 	}
 }
 
@@ -129,5 +125,48 @@ func TestGCPGatherServiceAccounts(t *testing.T) {
 	wantLegacy := gcpServiceAccountEmail(integrationPrefix, "my-project")
 	if legacySAs[0] != wantLegacy {
 		t.Errorf("legacy SA = %q, want %q", legacySAs[0], wantLegacy)
+	}
+}
+
+func TestGCPUninstall_PreflightGuidanceDeletesNothing(t *testing.T) {
+	tests := []struct {
+		name           string
+		account        string
+		project        string
+		wantBox        string
+		wantField      string
+		wantLeftBehind bool
+	}{
+		{name: "no project", account: "jane@example.com", project: "(unset)", wantBox: "no gcloud project is selected", wantField: "gcloud.project", wantLeftBehind: true},
+		{name: "no account", account: "", project: "my-project", wantBox: "no gcloud account is logged in", wantField: "gcloud.account"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			defer stubExecLookPath(t)()
+			other := 0
+			dtc := &recordingDTClient{}
+			var err error
+
+			// Act
+			out := captureStdout(t, func() {
+				err = uninstallGCPWithRunner("https://abc.live.dynatrace.com", false, preflightOnlyRunner(tt.account, tt.project, &other), dtc)
+			})
+
+			// Assert
+			if !strings.Contains(out, "Google Cloud uninstall not run: "+tt.wantBox) {
+				t.Errorf("guidance box missing, output:\n%s", out)
+			}
+			if got := strings.Contains(out, "would stay behind"); got != tt.wantLeftBehind {
+				t.Errorf("left-behind paragraph shown = %v, want %v", got, tt.wantLeftBehind)
+			}
+			assertConfigErrorFor(t, err, tt.wantField)
+			if calls := dtc.recorded(); len(calls) != 0 {
+				t.Errorf("expected no Dynatrace calls (not even discovery), got %v", calls)
+			}
+			if other != 0 {
+				t.Errorf("expected no gcloud calls beyond config reads, got %d", other)
+			}
+		})
 	}
 }
