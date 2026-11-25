@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `dotnet-otel` feature flag (`--dotnet-otel` or `DTWIZ_DOTNET_OTEL=true`, off by default) gating upcoming .NET OpenTelemetry auto-instrumentation support.
+
 ## [1.16.0] - 2026-11-18
 
 ### Added

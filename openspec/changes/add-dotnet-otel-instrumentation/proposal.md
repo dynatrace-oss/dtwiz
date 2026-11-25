@@ -11,7 +11,7 @@ dtwiz auto-instruments Java, Python, Node.js and Go projects with OpenTelemetry,
   - project discovery from `.sln`/`.slnx` and SDK-style project files under the existing scan scope;
   - service discovery: which projects are runnable (exe, web, worker) and which are not (libraries, test projects), with target framework and self-contained information read from the project file;
   - association of running .NET processes with detected projects, covering `dotnet run`, `dotnet <app>.dll` and native app-host executables, on Unix and Windows.
-- Gate everything behind a new feature flag `DTWIZ_DOTNET_OTEL` (`--dotnet-otel`, default off). With the flag off, behavior is unchanged: .NET stays in the manual-languages list and `--project` pointing at a .NET directory is not inferred as a runtime.
+- Gate everything behind a new feature flag `DTWIZ_DOTNET_OTEL` (`--dotnet-otel`, default off). With the flag off, behavior is unchanged: .NET stays in the manual-languages list (and is hidden from it while the flag is on) and `--project` pointing at a .NET directory is not inferred as a runtime.
 - With the flag on, step 1 lists .NET projects (with running PIDs) in the project picker. Selecting one ends in the existing manual-steps outcome until the later steps ship; nothing is installed or changed on the machine.
 - Detect, but do not yet instrument, .NET Framework projects, IIS (`w3wp.exe`) and Windows services; they are reported as not yet supported.
 - **No breaking changes.**

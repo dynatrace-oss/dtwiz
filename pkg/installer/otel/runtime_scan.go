@@ -352,7 +352,12 @@ func scanProjectDirs(markers []string, excludeNames []string, roots []string) []
 	workingDir := roots[0]
 
 	markerSet := make(map[string]struct{}, len(markers))
+	var suffixMarkers []string
 	for _, m := range markers {
+		if suffix, ok := strings.CutPrefix(m, "*"); ok && suffix != "" {
+			suffixMarkers = append(suffixMarkers, strings.ToLower(suffix))
+			continue
+		}
 		markerSet[m] = struct{}{}
 	}
 
@@ -384,6 +389,10 @@ func scanProjectDirs(markers []string, excludeNames []string, roots []string) []
 		matchedMarkers := make([]string, 0, len(markers))
 		for _, e := range entries {
 			if _, ok := markerSet[e.Name()]; ok {
+				matchedMarkers = append(matchedMarkers, e.Name())
+				continue
+			}
+			if matchesSuffixMarker(e, suffixMarkers) {
 				matchedMarkers = append(matchedMarkers, e.Name())
 			}
 		}
@@ -427,6 +436,21 @@ func scanProjectDirs(markers []string, excludeNames []string, roots []string) []
 	logger.Debug("scan complete", "total_dirs_checked", globalScanCount.Load())
 
 	return discoveredProjects
+}
+
+// matchesSuffixMarker reports whether a regular file's name ends with one of
+// the (lowercased) suffixes, such as ".csproj" for the marker "*.csproj".
+func matchesSuffixMarker(e os.DirEntry, suffixes []string) bool {
+	if len(suffixes) == 0 || e.IsDir() {
+		return false
+	}
+	name := strings.ToLower(e.Name())
+	for _, suffix := range suffixes {
+		if strings.HasSuffix(name, suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 func matchingProcessIDs(dirPath string, processes []DetectedProcess) []int {

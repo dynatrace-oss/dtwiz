@@ -176,6 +176,9 @@ func TestDetectAvailableRuntimes_UnlockAll(t *testing.T) {
 	runtimes := detectAvailableRuntimes()
 
 	for _, rt := range runtimes {
+		if rt.name == dotNetRuntimeName {
+			continue // gated by its own flag, not by AllRuntimes
+		}
 		if !rt.enabled {
 			t.Errorf("%s should be enabled when DTWIZ_ALL_RUNTIMES=true, got enabled=false", rt.name)
 		}
