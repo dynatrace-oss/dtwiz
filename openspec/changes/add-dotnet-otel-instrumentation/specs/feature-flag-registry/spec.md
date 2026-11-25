@@ -12,13 +12,6 @@ The registry SHALL contain a flag with CLI name `--dotnet-otel`, environment var
 - **WHEN** the flag is checked
 - **THEN** it is disabled
 
-#### Scenario: Env var enables it
-
-- **GIVEN** `DTWIZ_DOTNET_OTEL=true` is set
-- **WHEN** the flag is checked
-- **THEN** it is enabled
-- **AND** `List()` reports `Name: "dotnet-otel"`, `EnvVar: "DTWIZ_DOTNET_OTEL"`, `Source: "env"`
-
 #### Scenario: CLI flag overrides env var
 
 - **GIVEN** `DTWIZ_DOTNET_OTEL=false` is set
