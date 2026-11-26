@@ -40,6 +40,20 @@ func assertConfigErrorFor(t *testing.T, err error, field string) {
 
 var allVerbs = []string{verbInstall, verbUpdate, verbUninstall}
 
+// assertDynatraceOnlyHint fails unless the --dynatrace-only escape hatch is shown in the
+// uninstall boxes, after the re-run step, and nowhere else.
+func assertDynatraceOnlyHint(t *testing.T, verb, out string) {
+	t.Helper()
+	hint := "dtwiz uninstall gcp --dynatrace-only"
+	if verb != verbUninstall {
+		if strings.Contains(out, "--dynatrace-only") {
+			t.Errorf("%s box must not offer --dynatrace-only:\n%s", verb, out)
+		}
+		return
+	}
+	assertInOrder(t, out, "Re-run:", "Project deleted or no longer accessible?", hint)
+}
+
 func TestReportPreflight_NoProject(t *testing.T) {
 	for _, verb := range allVerbs {
 		t.Run(verb, func(t *testing.T) {
@@ -62,6 +76,7 @@ func TestReportPreflight_NoProject(t *testing.T) {
 			if leftBehind != (verb == verbUninstall) {
 				t.Errorf("left-behind paragraph shown = %v, want only for uninstall", leftBehind)
 			}
+			assertDynatraceOnlyHint(t, verb, out)
 			assertConfigErrorFor(t, err, "gcloud.project")
 		})
 	}
@@ -85,6 +100,7 @@ func TestReportPreflight_NoAccount(t *testing.T) {
 			if strings.Contains(out, "gcloud projects list") || strings.Contains(out, "Logged in as") {
 				t.Errorf("no-account box must not show project guidance:\n%s", out)
 			}
+			assertDynatraceOnlyHint(t, verb, out)
 			assertConfigErrorFor(t, err, "gcloud.account")
 		})
 	}

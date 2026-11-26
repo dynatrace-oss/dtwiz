@@ -8,7 +8,7 @@ Defines the shared `gcloud` readiness checks that every GCP command runs before 
 
 ### Requirement: Active account and project checked before any GCP command runs
 
-Before discovering, previewing or mutating anything, `dtwiz install gcp`, `dtwiz update gcp` and `dtwiz uninstall gcp` SHALL check in order: the `gcloud` CLI is on `PATH`, `gcloud` has an active account, and `gcloud` has an active project. Values read from `gcloud` configuration SHALL be parsed the same way as during system detection.
+Before discovering, previewing or mutating anything, `dtwiz install gcp`, `dtwiz update gcp` and `dtwiz uninstall gcp` (except with `--dynatrace-only`) SHALL check in order: the `gcloud` CLI is on `PATH`, `gcloud` has an active account, and `gcloud` has an active project.
 
 #### Scenario: Account checked before project
 
@@ -76,6 +76,7 @@ When no project is active, the system SHALL NOT run the command. It SHALL print 
 - **WHEN** the user runs `dtwiz uninstall gcp`
 - **THEN** the info box names uninstall as the command that was not run and shows `dtwiz uninstall gcp` as the command to re-run
 - **AND** the box states that without a project only the Dynatrace resources could be removed, leaving the GCP service account and its project binding in place
+- **AND** the box ends with `dtwiz uninstall gcp --dynatrace-only` as the option for a deleted or inaccessible project
 - **AND** nothing is deleted
 
 #### Scenario: Project unset reported as "(unset)"
@@ -95,6 +96,18 @@ When no account is active, the system SHALL NOT run the command. It SHALL print 
 - **THEN** an info box says the install was not run because no `gcloud` account is logged in
 - **AND** it shows `gcloud auth login` and `dtwiz install gcp` as the steps to follow
 - **AND** no resource is created or changed
+
+#### Scenario: Uninstall while logged out offers the Dynatrace-only option
+
+- **GIVEN** `gcloud` has no active account
+- **WHEN** the user runs `dtwiz uninstall gcp`
+- **THEN** the not-logged-in box ends with `dtwiz uninstall gcp --dynatrace-only` as the option for a deleted or inaccessible project
+
+#### Scenario: Dynatrace-only option offered for uninstall only
+
+- **GIVEN** `gcloud` has no active account or no active project
+- **WHEN** the user runs `dtwiz install gcp` or `dtwiz update gcp`
+- **THEN** the guidance box does not mention `--dynatrace-only`
 
 ### Requirement: Guidance shown on dry run
 

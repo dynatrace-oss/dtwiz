@@ -63,13 +63,27 @@ func rerunCommand(verb string) string {
 	return "dtwiz " + verb + " gcp"
 }
 
-func noAccountGuidance(verb string) []string {
+// dynatraceOnlyHint is appended to the uninstall boxes: without it, a deleted or
+// inaccessible project would leave the Dynatrace resources impossible to remove.
+func dynatraceOnlyHint(verb string) []string {
+	if verb != verbUninstall {
+		return nil
+	}
 	return []string{
+		"",
+		"Project deleted or no longer accessible? Remove only the Dynatrace side:",
+		"   " + display.ColorEmphasis.Sprint(rerunCommand(verb)+" --"+DynatraceOnlyFlag),
+	}
+}
+
+func noAccountGuidance(verb string) []string {
+	lines := []string{
 		guidanceHeading(verb, "no gcloud account is logged in"),
 		"",
 		guidanceStep(1, "Log in", "gcloud auth login"),
 		guidanceStep(2, "Re-run", rerunCommand(verb)),
 	}
+	return append(lines, dynatraceOnlyHint(verb)...)
 }
 
 func noProjectGuidance(verb, account string) []string {
@@ -86,10 +100,11 @@ func noProjectGuidance(verb, account string) []string {
 			"the GCP service account and its Viewer binding would stay behind.",
 		)
 	}
-	return append(lines,
+	lines = append(lines,
 		"",
 		guidanceStep(1, "Find your project ID", "gcloud projects list"),
 		guidanceStep(2, "Select it", "gcloud config set project <PROJECT_ID>"),
 		guidanceStep(3, "Re-run", rerunCommand(verb)),
 	)
+	return append(lines, dynatraceOnlyHint(verb)...)
 }

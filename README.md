@@ -173,7 +173,7 @@ The `main` channel is rebuilt automatically on every push to `main` and is inten
 | `dtwiz uninstall aws` | Remove the Dynatrace AWS CloudFormation stack and monitoring configuration |
 | `dtwiz uninstall aws-lambda` | Remove Dynatrace Lambda Layer from all functions |
 | `dtwiz uninstall azure` | Remove the Dynatrace Azure Monitor integration |
-| `dtwiz uninstall gcp` | Remove the Dynatrace Google Cloud integration |
+| `dtwiz uninstall gcp` | Remove the Dynatrace Google Cloud integration; `--dynatrace-only` removes only the Dynatrace side, without `gcloud`, when the project was deleted or is no longer accessible |
 | `dtwiz uninstall self` | Remove the dtwiz binary and its PATH entry |
 | `dtwiz update otel` | Patch an existing OTel Collector config with the Dynatrace exporter |
 | `dtwiz update azure` | Reconcile the Dynatrace Azure Monitor integration's monitoring configuration |

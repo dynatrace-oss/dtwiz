@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `dotnet-otel` feature flag (`--dotnet-otel` or `DTWIZ_DOTNET_OTEL=true`, off by default) gating upcoming .NET OpenTelemetry auto-instrumentation support.
+- `dtwiz uninstall gcp --dynatrace-only` removes only the Dynatrace connection and monitoring configuration, without `gcloud`, for a project that was deleted or is no longer accessible. The preview lists the GCP service accounts that stay behind. The uninstall guidance boxes point to it.
 
 ### Changed
 

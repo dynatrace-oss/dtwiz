@@ -92,11 +92,29 @@ Callers adapt it: detection maps the result to `Authenticated`/`Available` and o
 
 *Alternative:* keep `runCmd` and filter out lines starting with `WARNING:`. That's fragile against other gcloud notices, and stdout is the documented channel for `--format` output.
 
+### 9. `dtwiz uninstall gcp --dynatrace-only`
+
+Uninstall needs an active account and project to remove the GCP service account and its binding (decision 5). When the project was deleted, or the user lost access to it, that can never succeed, and without an escape hatch the Dynatrace connection and monitoring configuration could not be removed with dtwiz at all.
+
+A local flag `--dynatrace-only` on `dtwiz uninstall gcp` (name exported as `gcp.DynatraceOnlyFlag`, so the command and the box can't drift apart) routes to `uninstallDynatraceOnly` in `pkg/installer/gcp/uninstall_dynatrace_only.go`. It:
+
+- does not run `gcloud` at all, so neither the CLI nor a login is needed;
+- discovers monitoring configurations and connections concurrently, as the full uninstall does;
+- previews them, plus a warning that GCP resources stay in place, listing the service-account emails bound to the discovered connections (the email contains the project, so the user can still clean up if the project exists);
+- reuses the existing step runner with no service-account steps, so step numbering, best-effort deletion and `--dry-run`/`--yes` behave as in the full uninstall.
+
+Both uninstall guidance boxes (no account, no project) end with `Project deleted or no longer accessible? Remove only the Dynatrace side:` and the command. Install and update boxes don't show it.
+
+*Why a flag rather than falling back automatically:* a missing project is usually a forgotten `gcloud config set project`, and an automatic fallback would bring back the silent partial cleanup this change removes. The flag makes leaving GCP resources behind an explicit choice.
+
+*Alternative:* detect a deleted project (e.g. `gcloud projects describe` returning NOT_FOUND) and offer the fallback. It still needs a login and access, which is exactly what's missing when the user lost access.
+
 ## Risks / Trade-offs
 
 - [The root error-printing change touches every command] → Reproduce cobra's exact output (`Error:` prefix to stderr) and add a root-level test for both paths: a normal error is printed, an already-reported error is not.
 - [`dtwiz setup` → install with no account shows `dtwiz install gcp` as the re-run command, not `dtwiz setup`] → Accepted. It's correct and runnable. Setup already hides GCP when there's no project, so only the rare "logged out, project set" case reaches it.
-- [Uninstall behavior change: scripts that relied on DT-only cleanup without a project now fail] → The box states the cause and the fix. Called out as BREAKING in the proposal and the PR.
+- [Uninstall behavior change: scripts that relied on DT-only cleanup without a project now fail] → The box states the cause, the fix, and `--dynatrace-only` for a deliberate DT-only cleanup. Called out as BREAKING in the proposal and the PR.
+- [Project deleted but still selected in `gcloud`] → Preflight passes; the service-account steps fail and are reported, while the best-effort runner still deletes the Dynatrace resources. Re-running with `--dynatrace-only` then reports nothing left to remove.
 - [`unlock_command` in `recommend --json` now contains prose] → No known consumer parses it as a single command.
 - [Expired credentials pass the account check] → Same as today. The failure surfaces at step 1 with gcloud's own error, and `setup` flags it through the service probes (`ServicesAuthError`).
 

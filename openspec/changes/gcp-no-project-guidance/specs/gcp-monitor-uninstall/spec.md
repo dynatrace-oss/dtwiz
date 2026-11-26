@@ -4,7 +4,7 @@
 
 ### Requirement: Uninstall requires an active account and project
 
-Before discovering or deleting anything, the system SHALL run the shared GCP preflight checks (see `gcp-cli-preflight`). A missing `gcloud` account or project SHALL stop the uninstall with the matching guidance box and `dtwiz uninstall gcp` as the command to re-run, so Dynatrace and GCP resources are never removed separately.
+Unless `--dynatrace-only` is set, before discovering or deleting anything, the system SHALL run the shared GCP preflight checks (see `gcp-cli-preflight`). A missing `gcloud` account or project SHALL stop the uninstall with the matching guidance box and `dtwiz uninstall gcp` as the command to re-run, so Dynatrace and GCP resources are only removed separately when the user asks for it.
 
 #### Scenario: No active project stops uninstall
 
@@ -18,6 +18,41 @@ Before discovering or deleting anything, the system SHALL run the shared GCP pre
 - **GIVEN** `gcloud` has no active account
 - **WHEN** the user runs `dtwiz uninstall gcp`
 - **THEN** the not-logged-in guidance box is shown with `dtwiz uninstall gcp` as the command to re-run
+- **AND** nothing is deleted
+
+### Requirement: Dynatrace-only uninstall
+
+`dtwiz uninstall gcp` SHALL accept a `--dynatrace-only` flag for a project that was deleted or is no longer accessible. With it, the system SHALL NOT run or require `gcloud`. It SHALL discover, preview and delete only the Dynatrace monitoring configurations and connections, with the same confirmation, `--dry-run`, step numbering and best-effort semantics as the full uninstall.
+
+#### Scenario: Works without gcloud
+
+- **GIVEN** the `gcloud` CLI is not installed
+- **WHEN** the user runs `dtwiz uninstall gcp --dynatrace-only`
+- **THEN** no dependency error is shown and the Dynatrace resources are discovered
+
+#### Scenario: Deleted project, Dynatrace side removed
+
+- **GIVEN** a Dynatrace GCP connection bound to `dtwiz-gcp-abc@old-project.iam.gserviceaccount.com` and a monitoring configuration exist, and the GCP project `old-project` was deleted
+- **WHEN** the user runs `dtwiz uninstall gcp --dynatrace-only` and confirms
+- **THEN** the monitoring configuration and the connection are deleted
+- **AND** no `gcloud` command runs
+
+#### Scenario: Nothing to remove
+
+- **GIVEN** no Dynatrace GCP connection or monitoring configuration exists
+- **WHEN** the user runs `dtwiz uninstall gcp --dynatrace-only`
+- **THEN** it reports that there is nothing to uninstall and deletes nothing
+
+### Requirement: Dynatrace-only preview names the GCP resources left behind
+
+The `--dynatrace-only` preview SHALL warn that GCP resources are left in place and SHALL list the service-account emails bound to the discovered connections, so the user can remove them if the project still exists.
+
+#### Scenario: Preview names what stays behind
+
+- **GIVEN** a discovered connection is bound to `dtwiz-gcp-abc@old-project.iam.gserviceaccount.com`
+- **WHEN** the user runs `dtwiz uninstall gcp --dynatrace-only --dry-run`
+- **THEN** the preview warns that GCP resources are left in place and names that service account
+- **AND** lists only Dynatrace deletion steps
 - **AND** nothing is deleted
 
 ### Requirement: Service-account discovery uses connections and the active project
@@ -84,4 +119,4 @@ The system SHALL delete in order: monitoring configurations, then per service ac
 ### Requirement: Service-account discovery tolerates a missing active project
 
 **Reason**: A project-less uninstall removed only the Dynatrace resources and silently left the GCP service account and its Viewer binding behind, with nothing in the output saying so.
-**Migration**: Select the project the integration was installed into (`gcloud projects list`, then `gcloud config set project <PROJECT_ID>`) and re-run `dtwiz uninstall gcp`. The guidance box shows these steps. Service-account discovery is now covered by "Service-account discovery uses connections and the active project".
+**Migration**: Select the project the integration was installed into (`gcloud projects list`, then `gcloud config set project <PROJECT_ID>`) and re-run `dtwiz uninstall gcp`. The guidance box shows these steps. If the project was deleted or is no longer accessible, run `dtwiz uninstall gcp --dynatrace-only` (see "Dynatrace-only uninstall"). Service-account discovery is now covered by "Service-account discovery uses connections and the active project".

@@ -69,10 +69,16 @@ func MonitoringConfigExists(envURL, platformToken string) (bool, error) {
 	return len(ids) > 0, err
 }
 
-func UninstallGCP(envURL, platformToken string, dryRun bool) error {
+// UninstallGCP removes the integration. With dynatraceOnly, only the Dynatrace
+// connections and monitoring configurations are removed and gcloud is not used at all,
+// for a project that was deleted or is no longer accessible.
+func UninstallGCP(envURL, platformToken string, dryRun, dynatraceOnly bool) error {
 	dtc, err := newSDKDTClient(envURL, platformToken)
 	if err != nil {
 		return err
+	}
+	if dynatraceOnly {
+		return uninstallDynatraceOnly(envURL, dryRun, dtc)
 	}
 	return uninstallGCPWithRunner(envURL, dryRun, realRunner, dtc)
 }
