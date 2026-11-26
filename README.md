@@ -57,6 +57,8 @@ irm https://raw.githubusercontent.com/dynatrace-oss/dtwiz/main/scripts/install.p
 dtwiz setup
 ```
 
+> Windows releases of `dtwiz` are code-signed by Dynatrace LLC. If Windows shows a **Windows protected your PC** dialog, see [Windows SmartScreen guidance](docs/troubleshooting/windows-smartscreen-guidance.md) for how to verify the signature before you run the file.
+
 ### Onboard with an AI agent
 
 Prefer to let Claude or Cursor do it? Paste the prompt from
