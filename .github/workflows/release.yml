@@ -1,5 +1,9 @@
 name: Release
 
+# Dispatch from the v* tag being released; signing is only allowed for v* tags.
+# The Windows exes are built and signed first, then GoReleaser swaps them in
+# before packaging (see the post-hook in .goreleaser.yaml).
+
 on:
   workflow_dispatch:
   # push:
@@ -7,7 +11,96 @@ on:
   #     - 'v*'
 
 jobs:
+  build:
+    name: Build Windows executables
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Build with GoReleaser
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          version: latest
+          args: build --clean --id dtwiz-windows
+        env:
+          GORELEASER_SNAPSHOT_TAG: ""
+          # Pin the version: snapshot-main can sit on the same commit.
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
+
+      # The sign workflow expects the exe at the artifact root.
+      - name: Stage unsigned Windows executables
+        run: |
+          set -euo pipefail
+          mkdir -p unsigned/amd64 unsigned/arm64
+          cp dist/dtwiz-windows_windows_amd64*/dtwiz.exe unsigned/amd64/dtwiz.exe
+          cp dist/dtwiz-windows_windows_arm64*/dtwiz.exe unsigned/arm64/dtwiz.exe
+
+      - name: Upload unsigned Windows amd64 executable
+        uses: actions/upload-artifact@v7
+        with:
+          name: unsigned-windows-amd64
+          path: unsigned/amd64/dtwiz.exe
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload unsigned Windows arm64 executable
+        uses: actions/upload-artifact@v7
+        with:
+          name: unsigned-windows-arm64
+          path: unsigned/arm64/dtwiz.exe
+          if-no-files-found: error
+          retention-days: 1
+
+  sign-windows-amd64:
+    name: Sign Windows amd64
+    needs: build
+    permissions:
+      contents: read
+      id-token: write # Federates into the cloud signing service
+    uses: Dynatrace/dt-sign-service-actions/.github/workflows/sign-windows.yml@v1
+    with:
+      unsigned-artifact-name: unsigned-windows-amd64
+      file-to-sign: dtwiz.exe
+      signed-artifact-name: signed-windows-amd64
+    # Map the synced *_AUTHENTICODE secrets to the sign workflow's input names.
+    secrets:
+      SIGNING_GCP_PROJECT_ID: ${{ secrets.SIGNING_GCP_PROJECT_ID }}
+      SIGNING_GCP_KMS_LOCATION: ${{ secrets.SIGNING_GCP_KMS_LOCATION }}
+      SIGNING_GCP_KMS_KEYRING: ${{ secrets.SIGNING_GCP_KMS_KEYRING }}
+      SIGNING_GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.SIGNING_GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      SIGNING_GCP_SERVICE_ACCOUNT: ${{ secrets.SIGNING_GCP_SERVICE_ACCOUNT }}
+      SIGNING_GCP_KMS_KEY: ${{ secrets.SIGNING_GCP_KMS_KEY_AUTHENTICODE }}
+      SIGNING_CODE_SIGNING_CERT: ${{ secrets.SIGNING_CODE_SIGNING_CERT_AUTHENTICODE }}
+
+  sign-windows-arm64:
+    name: Sign Windows arm64
+    needs: build
+    permissions:
+      contents: read
+      id-token: write # Federates into the cloud signing service
+    uses: Dynatrace/dt-sign-service-actions/.github/workflows/sign-windows.yml@v1
+    with:
+      unsigned-artifact-name: unsigned-windows-arm64
+      file-to-sign: dtwiz.exe
+      signed-artifact-name: signed-windows-arm64
+    secrets:
+      SIGNING_GCP_PROJECT_ID: ${{ secrets.SIGNING_GCP_PROJECT_ID }}
+      SIGNING_GCP_KMS_LOCATION: ${{ secrets.SIGNING_GCP_KMS_LOCATION }}
+      SIGNING_GCP_KMS_KEYRING: ${{ secrets.SIGNING_GCP_KMS_KEYRING }}
+      SIGNING_GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.SIGNING_GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      SIGNING_GCP_SERVICE_ACCOUNT: ${{ secrets.SIGNING_GCP_SERVICE_ACCOUNT }}
+      SIGNING_GCP_KMS_KEY: ${{ secrets.SIGNING_GCP_KMS_KEY_AUTHENTICODE }}
+      SIGNING_CODE_SIGNING_CERT: ${{ secrets.SIGNING_CODE_SIGNING_CERT_AUTHENTICODE }}
+
   release:
+    name: GoReleaser
+    needs: [sign-windows-amd64, sign-windows-arm64]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -18,6 +111,20 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+
+      - name: Download signed Windows amd64 executable
+        uses: actions/download-artifact@v8
+        with:
+          name: signed-windows-amd64
+          path: ${{ runner.temp }}/signed/amd64
+
+      - name: Download signed Windows arm64 executable
+        uses: actions/download-artifact@v8
+        with:
+          name: signed-windows-arm64
+          path: ${{ runner.temp }}/signed/arm64
+
+      # SIGNED_WINDOWS_DIR enables the post-hook that swaps in the signed exes.
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
@@ -26,3 +133,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_SNAPSHOT_TAG: ""
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
+          SIGNED_WINDOWS_DIR: ${{ runner.temp }}/signed
