@@ -19,6 +19,7 @@ type InstallOptions struct {
 	DryRun                bool
 	MonitoringMode        string
 	HostGroup             string
+	HostProperties        []string
 	NoVerifySignature     bool
 	SkipConnectivityCheck bool
 	ConnectivityCheckOnly bool
@@ -213,6 +214,9 @@ func printDryRun(env Environment, cfg AgentConfig, opts InstallOptions, updating
 	fmt.Printf("  Mode:       %s\n", cfg.MonitoringMode)
 	if opts.HostGroup != "" {
 		fmt.Printf("  Host group: %s\n", opts.HostGroup)
+	}
+	if len(opts.HostProperties) > 0 {
+		fmt.Printf("  Host props: %s\n", strings.Join(opts.HostProperties, ", "))
 	}
 	if argv, err := BuildInstallCommand(env, cfg, opts, "<installer>"); err == nil {
 		fmt.Printf("  Command:    %s\n", strings.Join(argv, " "))

@@ -24,7 +24,8 @@ var ErrPlatformUnsupported = errors.New("platform not supported")
 
 // AuthError indicates authentication failure.
 type AuthError struct {
-	// Reason is one of: invalid_token, environment_not_reachable, authentication_failed.
+	// Reason is one of: invalid_token, environment_not_reachable, authentication_failed,
+	// insufficient_permissions.
 	Reason string
 }
 

@@ -216,3 +216,123 @@ func TestApplyCLIOverrides_UnsetFlagDoesNotStompEnvVar(t *testing.T) {
 		t.Errorf("expected source env, got %s", source)
 	}
 }
+
+func TestIsEnabled_OneAgentHostProperties_DefaultFalse(t *testing.T) {
+	t.Setenv("DTWIZ_ONEAGENT_HOST_PROPERTIES", "")
+	if IsEnabled(OneAgentHostProperties) {
+		t.Error("expected OneAgentHostProperties to be disabled by default")
+	}
+}
+
+func TestIsEnabled_OneAgentHostProperties_EnvTrue(t *testing.T) {
+	t.Setenv("DTWIZ_ONEAGENT_HOST_PROPERTIES", "1")
+	if !IsEnabled(OneAgentHostProperties) {
+		t.Error("expected OneAgentHostProperties to be enabled with DTWIZ_ONEAGENT_HOST_PROPERTIES=1")
+	}
+}
+
+func TestList_IncludesOneAgentHostProperties(t *testing.T) {
+	t.Setenv("DTWIZ_ONEAGENT_HOST_PROPERTIES", "")
+	for _, f := range List() {
+		if f.Name == "oneagent-host-properties" {
+			if f.EnvVar != "DTWIZ_ONEAGENT_HOST_PROPERTIES" {
+				t.Errorf("expected env var DTWIZ_ONEAGENT_HOST_PROPERTIES, got %s", f.EnvVar)
+			}
+			if f.Enabled {
+				t.Error("expected oneagent-host-properties disabled by default")
+			}
+			return
+		}
+	}
+	t.Error("expected oneagent-host-properties in List()")
+}
+
+func TestIsEnabled_DotNetOtel_DefaultFalse(t *testing.T) {
+	// Arrange
+	ClearCLIOverrideForTest(t, DotNetOtel)
+	t.Setenv("DTWIZ_DOTNET_OTEL", "")
+
+	// Act
+	got := IsEnabled(DotNetOtel)
+
+	// Assert
+	if got {
+		t.Error("expected DotNetOtel to be disabled by default")
+	}
+}
+
+func TestIsEnabled_DotNetOtel_EnvTrueAndOne(t *testing.T) {
+	for _, v := range []string{"true", "1"} {
+		t.Run(v, func(t *testing.T) {
+			// Arrange
+			ClearCLIOverrideForTest(t, DotNetOtel)
+			t.Setenv("DTWIZ_DOTNET_OTEL", v)
+
+			// Act
+			got := IsEnabled(DotNetOtel)
+
+			// Assert
+			if !got {
+				t.Errorf("expected DotNetOtel enabled with DTWIZ_DOTNET_OTEL=%s", v)
+			}
+		})
+	}
+}
+
+func TestApplyCLIOverrides_DotNetOtel_CLIBeatsEnvVar(t *testing.T) {
+	// Arrange
+	ClearCLIOverrideForTest(t, DotNetOtel)
+	t.Setenv("DTWIZ_DOTNET_OTEL", "false")
+	fs := newFlagSet()
+	if err := fs.Parse([]string{"--dotnet-otel"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Act
+	ApplyCLIOverrides(fs)
+
+	// Assert
+	if !IsEnabled(DotNetOtel) {
+		t.Error("expected DotNetOtel enabled: CLI flag should beat env false")
+	}
+	if _, source := resolveFlag(getFlag(DotNetOtel)); source != "cli" {
+		t.Errorf("expected source cli, got %s", source)
+	}
+}
+
+func TestList_IncludesDotNetOtel(t *testing.T) {
+	// Arrange
+	ClearCLIOverrideForTest(t, DotNetOtel)
+	t.Setenv("DTWIZ_DOTNET_OTEL", "true")
+
+	// Act
+	flags := List()
+
+	// Assert
+	for _, f := range flags {
+		if f.Name == "dotnet-otel" {
+			if f.EnvVar != "DTWIZ_DOTNET_OTEL" {
+				t.Errorf("expected env var DTWIZ_DOTNET_OTEL, got %s", f.EnvVar)
+			}
+			if !f.Enabled || f.Source != "env" {
+				t.Errorf("expected enabled via env, got enabled=%v source=%s", f.Enabled, f.Source)
+			}
+			return
+		}
+	}
+	t.Error("expected dotnet-otel in List()")
+}
+
+func TestRegisterFlags_DotNetOtelAppearsInFlagSet(t *testing.T) {
+	// Act
+	f := newFlagSet().Lookup("dotnet-otel")
+
+	// Assert
+	if f == nil {
+		t.Fatal("expected --dotnet-otel to be registered")
+		return
+	}
+	if f.DefValue != "false" || f.Usage == "" {
+		t.Errorf("unexpected default/usage: %q / %q", f.DefValue, f.Usage)
+	}
+}

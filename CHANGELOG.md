@@ -9,14 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- AI-agent onboarding: `skills/dtwiz/ONBOARDING.md` has a paste-ready prompt and step-by-step agent instructions so Claude, Cursor or any coding agent can connect this machine and its apps, Kubernetes clusters and AWS, Azure or GCP accounts to Dynatrace with dtwiz, setting up only what the user chooses, while the platform token never enters the chat.
-- `install.sh --yes`/`-y` and `install.ps1 -Yes`/`-y` skip the install confirmation for unattended installs (CI, AI agents). The install preview is still printed.
+- `dotnet-otel` feature flag (`--dotnet-otel` or `DTWIZ_DOTNET_OTEL=true`, off by default) gating upcoming .NET OpenTelemetry auto-instrumentation support.
+
+## [1.16.0] - 2026-11-18
+
+### Added
+
+- `dtwiz install oneagent --host-property KEY[=VALUE]` (repeatable) assigns custom host properties through the installer's `--set-host-property`, behind the `oneagent-host-properties` feature flag (`--oneagent-host-properties` or `DTWIZ_ONEAGENT_HOST_PROPERTIES=true`).
 
 ### Changed
 
+- Self-monitoring: OneAgent install failures are now classified by cause. A 401/403 from the installer APIs is reported as an authentication error (`insufficient_permissions` for 403) with a hint to add the `InstallerDownload` scope or pass a `dt0c01.*` token with `--access-token`; unreachable tenant or root CA (`ca.dynatrace.com`) is reported as a network error instead of `install_failed`. A missing or invalid menu selection in `dtwiz setup` is reported as `config_error`.
+- Internal: dependency bumps (`spf13/pflag` 1.1.0, `golang.org/x/mod` 0.43.0, `golang.org/x/sys` 0.50.0, `golang.org/x/term` 0.48.0); preview cleanup once the branch is deleted; CODEOWNERS updated.
+
+## [1.15.0] - 2026-11-16
+
+### Added
+
+- AI-agent onboarding: `skills/dtwiz/ONBOARDING.md` has a paste-ready prompt and step-by-step agent instructions so Claude, Cursor or any coding agent can connect this machine and its apps, Kubernetes clusters and AWS, Azure or GCP accounts to Dynatrace with dtwiz, setting up only what the user chooses, while the platform token never enters the chat.
+- `install.sh --yes`/`-y` and `install.ps1 -Yes`/`-y` skip the install confirmation for unattended installs (CI, AI agents). The install preview is still printed.
+- `dtwiz watch --exit-on-data` stops the watch after the first data arrives, or at the 10-minute timeout without asking whether to continue, so scripts and AI agents get a quick answer. The watch after an install is unchanged.
+
+### Changed
+
+- `install gcp`: removed the Preview subscription notice; a missing Dynatrace GCP principal now fails with an error instead of exiting as cancelled.
 - `install.ps1` no longer accepts the install directory positionally; use `-InstallDir <dir>`.
 - The `dtwiz` skill (`skills/dtwiz/SKILL.md`) now matches the CLI (Windows install, platform-token auth, Kubernetes, AWS, Docker and update details, `--yes`, `watch`) and drops the internal URL-family and token-type tables.
 - `dtwiz install otel`: Go projects are instrumented without source changes. dtwiz installs the latest `otelc` into its own tool directory (`~/.opentelemetry/go/bin`), builds each `package main` service into `<module>/.otel/go/bin/`, restores `go.mod`/`go.sum` afterwards, and launches the services against the local collector. Per service it falls back to client-only instrumentation (outgoing HTTP calls) and then to manual steps; Go workspaces (`go.work`) and modules that already configure the OpenTelemetry SDK are handled with manual steps or skipped. `dtwiz uninstall otel` stops the launched services and removes the generated files and dtwiz's own `otelc`.
+- Internal: Dynatrace `dtctl` SDK bumped from 0.43.0 to 0.45.0 and Go toolchain to 1.26.10; new tests are required to follow the Arrange / Act / Assert structure; stale `cmd` test expectations repaired and machine-dependent OTel tests isolated; self-monitoring event documentation added under `docs/self-monitoring/`; OpenSpec changes planned for Go OTel instrumentation and OneAgent host properties.
 
 ## [1.14.0] - 2026-11-02
 
@@ -683,7 +703,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrap install scripts (`scripts/install.sh`, `scripts/install.ps1`)
 - Embedded Go templates for Dynakube CR, OTel Collector config, and AWS config
 
-[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.14.0...HEAD
+[Unreleased]: https://github.com/dynatrace-oss/dtwiz/compare/v1.16.0...HEAD
+[1.16.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.15.0...v1.16.0
+[1.15.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/dynatrace-oss/dtwiz/compare/v1.11.0...v1.12.0

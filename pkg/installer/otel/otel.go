@@ -349,6 +349,8 @@ func detectAvailableRuntimes() []runtimeInfo {
 		{name: "Java", binName: "java", enabled: true, detect: detectJavaRuntimeProjects},
 		{name: "Node.js", binName: "node", enabled: true, detect: detectNodeRuntimeProjects},
 		{name: "Go", binName: "go", enabled: true, detect: detectGoRuntimeProjects},
+		// Listed even when `dotnet` is not installed (empty binName): step 1 only detects.
+		{name: dotNetRuntimeName, binName: "", enabled: featureflags.IsEnabled(featureflags.DotNetOtel), detect: detectDotNetRuntimeProjects},
 	}
 }
 
@@ -409,7 +411,9 @@ func detectAllProjects(runtimes []runtimeInfo, roots []string) []detectedProject
 		var available bool
 		var stubOnly bool
 		var binPath string
-		if rt.binName == "python3" || rt.binName == "python" {
+		if rt.binName == "" {
+			available = true
+		} else if rt.binName == "python3" || rt.binName == "python" {
 			_, err := DetectPython()
 			available = err == nil
 			if !available {
@@ -475,13 +479,16 @@ var manualLanguages = []manualLanguageEntry{
 }
 
 // activeManualLanguages returns the manual-instruction languages offered to the
-// user. Go is dropped because it is auto-instrumented.
+// user. Go is dropped because it is auto-instrumented; .NET is dropped while
+// its project detection is enabled, since it is then offered as a detected project.
 func activeManualLanguages() []manualLanguageEntry {
+	dotNetDetected := featureflags.IsEnabled(featureflags.DotNetOtel)
 	langs := make([]manualLanguageEntry, 0, len(manualLanguages))
 	for _, lang := range manualLanguages {
-		if lang.URLSlug != "go" {
-			langs = append(langs, lang)
+		if lang.URLSlug == "go" || (lang.URLSlug == dotNetManualSlug && dotNetDetected) {
+			continue
 		}
+		langs = append(langs, lang)
 	}
 	return langs
 }
@@ -568,7 +575,7 @@ func createRuntimePlan(proj detectedProject, httpPort int, token, envURL, platfo
 
 var createRuntimePlanFn = createRuntimePlan
 
-// inferRuntimeFromPath returns "Java", "Node.js", "Python", "Go", or "" based on which
+// inferRuntimeFromPath returns "Java", "Node.js", "Python", "Go", ".NET" (flag-gated), or "" based on which
 // marker files or directories are present directly inside path.
 func inferRuntimeFromPath(path string) string {
 	hasFile := func(name string) bool {
@@ -592,6 +599,9 @@ func inferRuntimeFromPath(path string) string {
 	}
 	if hasFile("go.mod") {
 		return "Go"
+	}
+	if featureflags.IsEnabled(featureflags.DotNetOtel) && hasDotNetMarker(path) {
+		return dotNetRuntimeName
 	}
 	return ""
 }
@@ -687,22 +697,29 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 			return "", fmt.Errorf("could not detect runtime from project path: %s", projectPath)
 		}
 		projects := []ScannedProject{{Path: projectPath}}
-		_ = display.RunQuiet("Detecting running processes", func(*display.Step) error {
-			switch rt {
-			case "Java":
-				matchProcessesToProjects(projects, detectJavaProcesses())
-			case "Node.js":
-				matchProcessesToProjects(projects, detectNodeProcesses())
-			case "Go":
-				matchProcessesToProjects(projects, detectGoProcesses())
-			default:
-				matchProcessesToProjects(projects, detectPythonProcesses())
-			}
-			return nil
-		})
-		proj := detectedProject{ScannedProject: projects[0], Runtime: rt}
-		plan = createRuntimePlanFn(proj, cp.httpPort, token, envURL, platformToken)
-		planProj = proj
+		if rt == dotNetRuntimeName {
+			// Step 1 ends in the manual-steps outcome: no plan is built.
+			matchDotNetProcessesToProjects(projects, detectDotNetProcesses())
+			planProj = detectedProject{ScannedProject: projects[0], Runtime: rt}
+			manualLang = showDotNetStep1Outcome(planProj)
+		} else {
+			_ = display.RunQuiet("Detecting running processes", func(*display.Step) error {
+				switch rt {
+				case "Java":
+					matchProcessesToProjects(projects, detectJavaProcesses())
+				case "Node.js":
+					matchProcessesToProjects(projects, detectNodeProcesses())
+				case "Go":
+					matchProcessesToProjects(projects, detectGoProcesses())
+				default:
+					matchProcessesToProjects(projects, detectPythonProcesses())
+				}
+				return nil
+			})
+			proj := detectedProject{ScannedProject: projects[0], Runtime: rt}
+			plan = createRuntimePlanFn(proj, cp.httpPort, token, envURL, platformToken)
+			planProj = proj
+		}
 	} else {
 		roots, err := selectScanRoots()
 		if err != nil {
@@ -728,6 +745,11 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 			}
 			if lang != "" {
 				manualLang = lang
+				break
+			}
+			if selected.Runtime == dotNetRuntimeName {
+				manualLang = showDotNetStep1Outcome(selected)
+				planProj = selected
 				break
 			}
 			plan = createRuntimePlanFn(selected, cp.httpPort, token, envURL, platformToken)

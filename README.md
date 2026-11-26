@@ -176,7 +176,7 @@ The `main` channel is rebuilt automatically on every push to `main` and is inten
 | `dtwiz update otel` | Patch an existing OTel Collector config with the Dynatrace exporter |
 | `dtwiz update azure` | Reconcile the Dynatrace Azure Monitor integration's monitoring configuration |
 | `dtwiz update gcp` | Reconcile the Dynatrace Google Cloud integration's monitoring configuration |
-| `dtwiz watch` | Live-watch for newly ingested data in Dynatrace (services, logs, traces, etc.) |
+| `dtwiz watch` | Live-watch for newly ingested data in Dynatrace (services, logs, traces, etc.); `--exit-on-data` stops after the first data arrives, or at the 10-minute timeout without prompting |
 | `dtwiz status` | Show Dynatrace connection status and system state |
 
 ## Flags
@@ -197,6 +197,14 @@ Point `install otel`, `install otel-python`, `install otel-java`, or `install ot
 ```bash
 dtwiz install otel --project ./my-service
 dtwiz install otel-python --project ./my-python-app
+```
+
+### `--host-property <KEY[=VALUE]>`
+
+Assign custom host properties when installing OneAgent, for example to carry team, environment, or cost-center tags. Repeatable. Each value is passed to the OneAgent installer as `--set-host-property` and may contain only letters, digits, `.`, `_`, and `-`. _(Experimental; enable with `--oneagent-host-properties` or `DTWIZ_ONEAGENT_HOST_PROPERTIES=true`.)_
+
+```bash
+DTWIZ_ONEAGENT_HOST_PROPERTIES=true dtwiz install oneagent --host-property team=payments --host-property env=prod
 ```
 
 ## Self-monitoring
