@@ -25,7 +25,7 @@ Constraints that shape the approach:
 - Installing, verifying or launching anything (steps 2-5; their specs come later).
 - Instrumenting .NET Framework, IIS, Windows services, self-contained or native-AOT applications.
 - Evaluating MSBuild (imports, conditions, `Directory.Build.props`); project files are read statically.
-- Changing the manual-languages list or removing the flag.
+- Removing the flag, or changing the manual-languages list other than hiding `.NET` while the flag is on.
 
 ## Decisions
 

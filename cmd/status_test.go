@@ -263,3 +263,22 @@ func TestFeatureFlags_FlagDisabledAfterCLIOverrideCleared_SectionOmitted(t *test
 		t.Errorf("expected no Feature Flags section when flag is explicitly disabled, got %q", got)
 	}
 }
+
+func TestFeatureFlags_DotNetOtelEnabled_ListedWithSource(t *testing.T) {
+	// Arrange
+	featureflags.ClearCLIOverrideForTest(t, featureflags.DotNetOtel)
+	t.Setenv("DTWIZ_DOTNET_OTEL", "true")
+
+	// Act
+	got := captureOutput(t, func() {
+		printFeatureFlags()
+	})
+
+	// Assert
+	if !strings.Contains(got, "DTWIZ_DOTNET_OTEL") {
+		t.Errorf("expected DTWIZ_DOTNET_OTEL in output, got %q", got)
+	}
+	if !strings.Contains(got, "enabled (env)") {
+		t.Errorf("expected source 'env' in output, got %q", got)
+	}
+}

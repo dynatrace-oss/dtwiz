@@ -719,3 +719,110 @@ func TestParseWinProcessOutput_PipeDelimitedFields(t *testing.T) {
 		t.Errorf("WorkingDirectory field = %q", parts[2])
 	}
 }
+
+func TestScanProjectDirs_SuffixMarkerMatchesRealFileNames(t *testing.T) {
+	// Arrange
+	dir := t.TempDir()
+	realDir, _ := filepath.EvalSymlinks(dir)
+	for _, name := range []string{"Api.csproj", "App.sln", "readme.md"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(""), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	helpers.SetTestWorkingDir(t, dir)
+
+	// Act
+	projects := scanProjectDirs([]string{"*.csproj", "*.sln"}, nil, defaultScanRoots())
+
+	// Assert
+	found := false
+	for _, p := range projects {
+		if p.Path == dir || p.Path == realDir {
+			found = true
+			got := map[string]bool{}
+			for _, m := range p.Markers {
+				got[m] = true
+			}
+			if len(p.Markers) != 2 || !got["Api.csproj"] || !got["App.sln"] {
+				t.Errorf("markers = %v, want [Api.csproj App.sln]", p.Markers)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("expected project at %s in results %v", dir, projects)
+	}
+}
+
+func TestScanProjectDirs_ExactMarkerDoesNotMatchBySuffix(t *testing.T) {
+	// Arrange
+	dir := t.TempDir()
+	realDir, _ := filepath.EvalSymlinks(dir)
+	if err := os.WriteFile(filepath.Join(dir, "old-go.mod"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	helpers.SetTestWorkingDir(t, dir)
+
+	// Act
+	projects := scanProjectDirs([]string{"go.mod"}, nil, defaultScanRoots())
+
+	// Assert
+	for _, p := range projects {
+		if p.Path == dir || p.Path == realDir {
+			t.Errorf("exact marker must not match by suffix, got %v", p)
+		}
+	}
+}
+
+func TestScanProjectDirs_SuffixMarkerIgnoresDirectoriesNamedLikeMarker(t *testing.T) {
+	// Arrange
+	dir := t.TempDir()
+	realDir, _ := filepath.EvalSymlinks(dir)
+	if err := os.Mkdir(filepath.Join(dir, "fake.csproj"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	helpers.SetTestWorkingDir(t, dir)
+
+	// Act
+	projects := scanProjectDirs([]string{"*.csproj"}, nil, defaultScanRoots())
+
+	// Assert
+	for _, p := range projects {
+		if p.Path == dir || p.Path == realDir {
+			t.Errorf("directory named *.csproj must not match, got %v", p)
+		}
+	}
+}
+
+func TestScanProjectDirs_ExcludeNamesSkipSuffixMarkerMatches(t *testing.T) {
+	// Arrange
+	dir := t.TempDir()
+	for _, sub := range []string{"bin", "obj", "packages"} {
+		d := filepath.Join(dir, sub, "Copy")
+		if err := os.MkdirAll(d, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(d, "Copy.csproj"), []byte(""), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	legit := filepath.Join(dir, "src", "Api")
+	if err := os.MkdirAll(legit, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(legit, "Api.csproj"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	helpers.SetTestWorkingDir(t, dir)
+
+	// Act
+	projects := scanProjectDirs([]string{"*.csproj"}, []string{"bin", "obj", "packages"}, defaultScanRoots())
+
+	// Assert
+	if len(projects) != 1 || filepath.Base(projects[0].Path) != "Api" {
+		t.Errorf("expected only src/Api, got %v", projects)
+	}
+}

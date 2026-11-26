@@ -15,6 +15,7 @@ const (
 	AllRuntimes Flag = iota
 	Experimental
 	OneAgentHostProperties
+	DotNetOtel
 )
 
 // CLIFeatureFlag defines a single feature flag with its metadata.
@@ -50,6 +51,14 @@ var registry = []CLIFeatureFlag{
 		"DTWIZ_ONEAGENT_HOST_PROPERTIES",
 		false,
 		"enable --host-property on install oneagent (experimental)",
+		false,
+	},
+	{
+		DotNetOtel,
+		"dotnet-otel",
+		"DTWIZ_DOTNET_OTEL",
+		false,
+		"enable .NET OpenTelemetry auto-instrumentation (experimental)",
 		false,
 	},
 }

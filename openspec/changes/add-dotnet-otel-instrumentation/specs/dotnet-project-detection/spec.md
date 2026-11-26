@@ -8,7 +8,7 @@ Define how dtwiz discovers .NET projects, splits a selected project into the run
 
 ### Requirement: Detection is gated by the .NET feature flag
 
-The system SHALL detect .NET projects only while `DTWIZ_DOTNET_OTEL` (or `--dotnet-otel`) is enabled. While it is off, no .NET scan or process scan runs, .NET projects are not listed, and `--project` pointing at a .NET directory is not treated as a .NET project. The existing manual-steps entry for .NET remains available in both cases.
+The system SHALL detect .NET projects only while `DTWIZ_DOTNET_OTEL` (or `--dotnet-otel`) is enabled. While it is off, no .NET scan or process scan runs, .NET projects are not listed, and `--project` pointing at a .NET directory is not treated as a .NET project. While it is on, `.NET` is not offered in the list of languages without automatic detection, because .NET projects are detected; while it is off, that entry remains available.
 
 #### Scenario: Flag off
 
