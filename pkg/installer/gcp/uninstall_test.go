@@ -13,7 +13,7 @@ func uninstallGcloudRunner(project string) cmdRunner {
 		switch {
 		case gcloudArgs(args, "config", "get-value", "project"):
 			return project + "\n", nil
-		case gcloudArgs(args, "config", "get-value", "account"):
+		case gcloudArgs(args, "auth", "list"):
 			return "user@example.com\n", nil
 		default:
 			return "{}", nil

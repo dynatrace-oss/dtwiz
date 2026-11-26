@@ -15,30 +15,25 @@ func detectGCP() *GCPInfo {
 	return detectGCPWith(runCmdWithTimeout, detectGCPServices)
 }
 
-// detectGCPWith resolves the active account first, then the project, mirroring the
-// installer preflight. run must return stdout only: gcloud prints notices and warnings
-// (e.g. "WARNING: The following filter keys were not present ...") to stderr, which
-// must never be mistaken for an account or project value.
+// detectGCPWith reads the active account and project through ReadGCloudIdentity, the
+// same read the installer preflight uses. run must return stdout only.
 func detectGCPWith(
 	run func(timeout time.Duration, command string, args ...string) (string, error),
 	probeServices func() ([]GCPService, bool),
 ) *GCPInfo {
 	info := &GCPInfo{}
 
-	acctOut, err := run(gcloudReadTimeout, "gcloud", "auth", "list", "--filter=status:ACTIVE", "--format=value(account)")
-	if err != nil {
-		return info // gcloud missing or failing: treat as not signed in
-	}
-	account := firstLine(acctOut)
+	// A failing read (e.g. gcloud missing) keeps whatever was resolved before it:
+	// no account means not signed in, an account without a project is authenticated only.
+	account, projectID, _ := ReadGCloudIdentity(func(args ...string) (string, error) {
+		return run(gcloudReadTimeout, "gcloud", args...)
+	})
 	if account == "" {
 		return info
 	}
 	info.Authenticated = true
 	info.Account = account
-
-	projOut, err := run(gcloudReadTimeout, "gcloud", "config", "get-value", "project")
-	projectID := CleanGCloudConfigValue(projOut)
-	if err != nil || projectID == "" || strings.Contains(projectID, "(unset)") {
+	if projectID == "" {
 		return info
 	}
 	info.Available = true
@@ -46,35 +41,6 @@ func detectGCPWith(
 
 	info.Services, info.ServicesAuthError = probeServices()
 	return info
-}
-
-// firstLine returns the first non-empty trimmed line of out.
-func firstLine(out string) string {
-	for _, line := range strings.Split(out, "\n") {
-		if line = strings.TrimSpace(line); line != "" {
-			return line
-		}
-	}
-	return ""
-}
-
-// CleanGCloudConfigValue extracts the value from `gcloud config get-value ...` output.
-// In some environments (e.g. Cloud Shell with multiple named configurations) gcloud
-// prefixes the value with a "Your active configuration is: [...]" notice line; this
-// returns the last non-empty, non-notice line instead of the raw multi-line output.
-// Exported so pkg/installer/gcp (which already depends on pkg/analyzer, same direction
-// as pkg/installer/kubernetes.go) can parse the identical `gcloud config get-value`
-// output without pkg/analyzer importing pkg/installer, which would create an import cycle.
-func CleanGCloudConfigValue(out string) string {
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := strings.TrimSpace(lines[i])
-		if line == "" || strings.HasPrefix(line, "Your active configuration is:") {
-			continue
-		}
-		return line
-	}
-	return ""
 }
 
 type gcpServiceProbe struct {

@@ -3,7 +3,6 @@ package gcp
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
@@ -26,7 +25,8 @@ type noProjectError struct {
 func (e *noProjectError) Error() string { return errNoGCloudProject.Error() }
 func (e *noProjectError) Unwrap() error { return errNoGCloudProject }
 
-// gcpAccountInfo resolves the active gcloud account and project, in that order.
+// gcpAccountInfo resolves the active gcloud account and project, in that order, through
+// analyzer.ReadGCloudIdentity, the same read `dtwiz setup` uses for detection.
 // It never prints: callers render missing-account/project errors via reportPreflight.
 // It is also used by the in-place update path, which never creates resources.
 func gcpAccountInfo(runner cmdRunner) (projectID, account string, err error) {
@@ -34,29 +34,18 @@ func gcpAccountInfo(runner cmdRunner) (projectID, account string, err error) {
 		return "", "", fmt.Errorf("Google Cloud CLI (gcloud) not found: install it from https://cloud.google.com/sdk/docs/install: %w", &installer.DependencyMissingError{Name: "gcloud"}) //nolint:staticcheck // ST1005: "Google Cloud CLI" is a product name
 	}
 
-	acctOut, err := runner("gcloud", []string{"config", "get-value", "account"}, nil)
-	if err != nil {
+	account, projectID, err = analyzer.ReadGCloudIdentity(func(args ...string) (string, error) {
+		return runner("gcloud", args, nil)
+	})
+	switch {
+	case err != nil:
 		return "", "", fmt.Errorf("failed to read gcloud configuration: %w", err)
-	}
-	account = analyzer.CleanGCloudConfigValue(acctOut)
-	if isUnsetGCloudValue(account) {
+	case account == "":
 		return "", "", errNoGCloudAccount
-	}
-
-	projOut, err := runner("gcloud", []string{"config", "get-value", "project"}, nil)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to read gcloud configuration: %w", err)
-	}
-	projectID = analyzer.CleanGCloudConfigValue(projOut)
-	if isUnsetGCloudValue(projectID) {
+	case projectID == "":
 		return "", "", &noProjectError{account: account}
 	}
 
 	logger.Debug("gcloud config", "project", projectID, "account", account)
 	return projectID, account, nil
-}
-
-// isUnsetGCloudValue reports whether a cleaned `gcloud config get-value` result means "not set".
-func isUnsetGCloudValue(v string) bool {
-	return v == "" || strings.Contains(v, "(unset)")
 }

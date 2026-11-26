@@ -12,6 +12,7 @@ When `gcloud` has no active project, `dtwiz install gcp`, `update gcp` and `unin
 - `--dry-run` shows the same box, because without a project no accurate preview is possible.
 - These outcomes exit non-zero, are classified as `config_error` in self-monitoring, and print no extra `Error: ...` line beneath the box.
 - **BREAKING** (behavior): `dtwiz uninstall gcp` no longer runs without an active project. Today it removes the Dynatrace resources and silently skips the GCP service account and Viewer binding. Now it aborts before deleting anything, and the box explains that a project-less uninstall would leave GCP resources behind.
+- "Logged in" means the same thing everywhere: the account `gcloud auth list` reports as active, which requires stored credentials. Today the installer checks the `core/account` setting instead, which can name an account that was never logged in, so the preflight passes and the install fails at step 1.
 - The `dtwiz setup` unlock hint for an authenticated user with no project becomes `` `gcloud projects list`, then `gcloud config set project <PROJECT_ID>` ``. The backticks make it clear what is a command and what is prose.
 - `dtwiz setup` and `dtwiz analyze` detect a missing `gcloud` login correctly. Today a logged-out user is reported as signed in, because a gcloud warning on stderr is read as the account name, so `setup` shows the project hint instead of `gcloud auth login`. A logged-out user who still has a project configured is also reported as having GCP available. Detection now requires an active account before GCP counts as available.
 - dtwiz never changes `gcloud` configuration itself. Selecting the project stays an explicit user action.
@@ -36,7 +37,7 @@ Not in scope: an interactive project picker, persisting a project on the user's 
 - `pkg/installer/gcp/`: preflight (account check, typed errors), a new guidance-box renderer, and the install/update/uninstall entry points. Uninstall resolves the project before discovery.
 - `pkg/installer/errors.go`: a new shared `ErrAlreadyReported` sentinel.
 - `cmd/root.go`: the root command silences cobra's own error printing and prints errors itself, skipping errors already reported. All other errors keep their current `Error: ...` output and exit code 1.
-- `pkg/analyzer/detect_gcp.go`: GCP detection reads the active account from stdout only and checks it before the project. `dtwiz analyze --json` now also reports `authenticated: true` when GCP is available.
+- `pkg/analyzer/gcloud_identity.go` (new): `ReadGCloudIdentity`, the shared account-then-project read used by both `detect_gcp.go` and the installer preflight. GCP detection reads the active account from stdout only and checks it before the project. `dtwiz analyze --json` now also reports `authenticated: true` when GCP is available.
 - `pkg/recommender/recommender.go`: the GCP no-project unlock hint. This text is also exported in the `unlock_command` field of `dtwiz recommend --json`.
 - No new dependencies, and no feature flag: this is a UX fix to existing GCP commands.
 - Rollback: revert the change. The root error-printing change is the only cross-cutting piece, and it reproduces cobra's existing output exactly, so reverting it on its own is safe.

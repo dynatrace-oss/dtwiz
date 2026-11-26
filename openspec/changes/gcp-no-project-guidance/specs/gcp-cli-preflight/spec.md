@@ -29,6 +29,22 @@ Before discovering, previewing or mutating anything, `dtwiz install gcp`, `dtwiz
 - **WHEN** the check runs
 - **THEN** the active project is `my-project`
 
+### Requirement: Active account means stored credentials, read like system detection
+
+The active account SHALL be the account `gcloud auth list` reports as active, which requires stored credentials; an account that is only configured (the `core/account` setting) SHALL NOT count. Account and project SHALL be read by the same code as during system detection, from `gcloud`'s standard output only.
+
+#### Scenario: Configured account without credentials is not logged in
+
+- **GIVEN** `gcloud config get-value account` returns `jane@example.com`, but `gcloud` has no stored credentials for that account
+- **WHEN** the user runs `dtwiz install gcp`
+- **THEN** the not-logged-in guidance is shown
+
+#### Scenario: Setup and install agree on the login state
+
+- **GIVEN** any `gcloud` account and project state
+- **WHEN** `dtwiz setup` detects GCP and `dtwiz install gcp` runs its checks
+- **THEN** both treat the user as logged in, or both treat them as not logged in
+
 ### Requirement: No-project guidance box
 
 When no project is active, the system SHALL NOT run the command. It SHALL print an info box that states the command was not run because no `gcloud` project is selected, names the active `gcloud` account, and SHALL list in order: `gcloud projects list` to find the project ID, `gcloud config set project <PROJECT_ID>` to select it, and the GCP command to re-run.

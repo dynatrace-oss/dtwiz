@@ -32,7 +32,7 @@ func happyGcloudRunner(mutating *int) cmdRunner {
 		switch {
 		case name == "gcloud" && gcloudArgs(args, "config", "get-value", "project"):
 			return "my-project\n", nil
-		case name == "gcloud" && gcloudArgs(args, "config", "get-value", "account"):
+		case name == "gcloud" && gcloudArgs(args, "auth", "list"):
 			return "user@example.com\n", nil
 		case name == "gcloud" && gcloudArgs(args, "iam", "service-accounts", "create"):
 			if mutating != nil {
@@ -317,7 +317,7 @@ func TestGCPStep1PermissionDeniedIncludesRoleHint(t *testing.T) {
 		switch {
 		case gcloudArgs(args, "config", "get-value", "project"):
 			return "my-project\n", nil
-		case gcloudArgs(args, "config", "get-value", "account"):
+		case gcloudArgs(args, "auth", "list"):
 			return "user@example.com\n", nil
 		case gcloudArgs(args, "services", "enable"):
 			return "", fmt.Errorf("AUTH_PERMISSION_DENIED: Permission denied to enable service")
@@ -350,7 +350,7 @@ func TestGCPStep3PermissionDeniedIncludesRoleHint(t *testing.T) {
 		switch {
 		case gcloudArgs(args, "config", "get-value", "project"):
 			return "my-project\n", nil
-		case gcloudArgs(args, "config", "get-value", "account"):
+		case gcloudArgs(args, "auth", "list"):
 			return "user@example.com\n", nil
 		case gcloudArgs(args, "iam", "service-accounts", "create"):
 			return "", fmt.Errorf("AUTH_PERMISSION_DENIED: Permission denied to create service account")
@@ -385,7 +385,7 @@ func TestGCPStep4RetriesServiceAccountPropagation(t *testing.T) {
 		switch {
 		case gcloudArgs(args, "config", "get-value", "project"):
 			return "my-project\n", nil
-		case gcloudArgs(args, "config", "get-value", "account"):
+		case gcloudArgs(args, "auth", "list"):
 			return "user@example.com\n", nil
 		case gcloudArgs(args, "iam", "service-accounts", "create"):
 			return stockSACreateJSON, nil
@@ -426,7 +426,7 @@ func TestGCPStep5FailsAllCleanupHints(t *testing.T) {
 		switch {
 		case gcloudArgs(args, "config", "get-value", "project"):
 			return "my-project\n", nil
-		case gcloudArgs(args, "config", "get-value", "account"):
+		case gcloudArgs(args, "auth", "list"):
 			return "user@example.com\n", nil
 		case gcloudArgs(args, "iam", "service-accounts", "create"):
 			return stockSACreateJSON, nil
@@ -761,12 +761,12 @@ func TestGCPInstall_MarksInstallWorkTimeEnded(t *testing.T) {
 
 // ── preflight guidance ────────────────────────────────────────────────────────
 
-// preflightOnlyRunner answers the gcloud config reads with the given values and counts
+// preflightOnlyRunner answers the gcloud account and project reads with the given values and counts
 // every other gcloud call, which must not happen once preflight fails.
 func preflightOnlyRunner(account, project string, other *int) cmdRunner {
 	return func(_ string, args []string, _ []string) (string, error) {
 		switch {
-		case gcloudArgs(args, "config", "get-value", "account"):
+		case gcloudArgs(args, "auth", "list"):
 			return account, nil
 		case gcloudArgs(args, "config", "get-value", "project"):
 			return project, nil

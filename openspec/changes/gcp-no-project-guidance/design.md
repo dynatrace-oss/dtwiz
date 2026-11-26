@@ -14,13 +14,14 @@ Today the function reads the project first and the account second, and ignores t
 
 **Goals:**
 
-- One place decides whether `gcloud` is ready, and one place renders the guidance, shared by all three commands.
+- One place decides whether `gcloud` is ready, shared by system detection and all three commands, and one place renders the guidance.
+- A deleted or inaccessible project must not leave the Dynatrace resources impossible to remove.
 - Guidance is printed once, from the calling flow, never from a goroutine.
 - Only "already reported" errors are kept off the `Error:` line. Every other error prints exactly as before.
 
 **Non-Goals:**
 
-- Changing how `pkg/analyzer` detects GCP. It already distinguishes "authenticated, no project" for the recommender.
+- Detecting expired or reauth-required credentials. That needs a network call (`gcloud auth print-access-token`), which is slower and can prompt.
 - Making the box show the `setup` command as the re-run step (see Risks).
 
 ## Decisions
@@ -37,11 +38,9 @@ The renderer and box texts live in a new file, `pkg/installer/gcp/preflight_guid
 
 ### 2. Check order: CLI, then account, then project
 
-The account comes from `gcloud config get-value account`, the call that already exists and whose result is currently ignored. Empty or `(unset)` means not logged in. If a `gcloud config get-value` call itself fails, that becomes a wrapped system error (`failed to read gcloud configuration: %w`) instead of the current misleading "Not logged in" text.
+Account and project are read by the shared `analyzer.ReadGCloudIdentity` (decision 8). An empty account means not logged in. If a read itself fails, that becomes a wrapped system error (`failed to read gcloud configuration: %w`) instead of the current misleading "Not logged in" text.
 
 *Why account first:* `gcloud projects list` in the no-project box only works when logged in, so a user missing both gets the steps in the order they can follow them.
-
-*Alternative:* `gcloud auth list --filter=status:ACTIVE`, as in the analyzer. It's more exact, because it catches revoked credentials that still have a configured account, but it adds a subprocess call. Credential problems still surface at step 1 with gcloud's own error, so the config value is enough here.
 
 ### 3. Exit signalling: `ErrAlreadyReported` and `ConfigError`, joined
 
@@ -77,17 +76,19 @@ Every box starts with the same line pattern: `Google Cloud <verb> not run: <reas
 
 In `pkg/recommender/recommender.go`, the no-project `UnlockCommand` becomes `` `gcloud projects list`, then `gcloud config set project <PROJECT_ID>` ``. Rendering is unchanged.
 
-### 8. Analyzer: account first, stdout only
+### 8. One identity read for detection and preflight: `gcloud auth list`, stdout only
 
-`detectGCP` currently reads the project first and only runs `gcloud auth list` when no project is set. Its `runCmd` merges stdout and stderr. When logged out, `gcloud auth list --filter=status:ACTIVE --format=value(account)` writes nothing to stdout, exits 0, and prints `WARNING: The following filter keys were not present in any resource : status` to stderr. That warning was read as the account.
+`detectGCP` currently reads the project first and only runs `gcloud auth list` when no project is set. Its `runCmd` merges stdout and stderr. When logged out, `gcloud auth list --filter=status:ACTIVE --format=value(account)` writes nothing to stdout, exits 0, and prints `WARNING: The following filter keys were not present in any resource : status` to stderr. That warning was read as the account. The installer preflight used a different check, `gcloud config get-value account`, so `setup` and `install` could disagree about the same machine.
 
-New order, mirroring the installer preflight:
+A new `analyzer.ReadGCloudIdentity(read)` in `pkg/analyzer/gcloud_identity.go` is the single read for both:
 
-1. `gcloud auth list --filter=status:ACTIVE --format=value(account)`, stdout only. A failure (no gcloud) or empty output means not signed in, and detection stops.
-2. `gcloud config get-value project`, stdout only. Empty or `(unset)` means authenticated without a project.
-3. Only then GCP counts as available, and services are probed.
+1. `gcloud auth list --filter=status:ACTIVE --format=value(account)`, stdout only, first non-empty line. Empty means not logged in, and the project is not read.
+2. `gcloud config get-value project`, stdout only, with the Cloud Shell notice stripped. Empty or `(unset)` means no project.
+3. A failing read returns what was resolved so far plus the error.
 
-The commands are run through the existing stdout-only `runCmdWithTimeout` (`detect_kubernetes.go`), injected into a `detectGCPWith(run)` function so tests can feed it canned outputs, as `probeK8sSubVariant` does. The account now comes from `auth list`, which is the active account and replaces the separate `config get-value account` read, so the number of gcloud calls stays the same when a project is set.
+Callers adapt it: detection maps the result to `Authenticated`/`Available` and only then probes services; the preflight maps it to `errNoGCloudAccount`/`noProjectError` and turns a read failure into a system error. `read` is a stdout-only `func(args ...string) (string, error)`: detection wraps the existing `runCmdWithTimeout` (`detect_kubernetes.go`) through an injectable `detectGCPWith(run)`, the preflight wraps its `cmdRunner` (`installer.RealRunner` already returns stdout only). It lives in `pkg/analyzer` because `pkg/installer/gcp` already imports it; the reverse would be an import cycle. `CleanGCloudConfigValue` becomes package-private.
+
+*Why `auth list` over `config get-value account`:* `core/account` is only a setting. It stays set after `gcloud config set account x@y` without a login, or through `CLOUDSDK_CORE_ACCOUNT`, so the preflight passed and the install failed at step 1 with an auth error. `auth list` reports an account as ACTIVE only when credentials for it are stored. Both are local reads with no network call; neither catches expired credentials (see Non-Goals).
 
 *Alternative:* keep `runCmd` and filter out lines starting with `WARNING:`. That's fragile against other gcloud notices, and stdout is the documented channel for `--format` output.
 
@@ -97,7 +98,7 @@ The commands are run through the existing stdout-only `runCmdWithTimeout` (`dete
 - [`dtwiz setup` → install with no account shows `dtwiz install gcp` as the re-run command, not `dtwiz setup`] → Accepted. It's correct and runnable. Setup already hides GCP when there's no project, so only the rare "logged out, project set" case reaches it.
 - [Uninstall behavior change: scripts that relied on DT-only cleanup without a project now fail] → The box states the cause and the fix. Called out as BREAKING in the proposal and the PR.
 - [`unlock_command` in `recommend --json` now contains prose] → No known consumer parses it as a single command.
-- [Revoked credentials with a configured account pass the account check] → Same as today. The failure surfaces at step 1 with gcloud's own error.
+- [Expired credentials pass the account check] → Same as today. The failure surfaces at step 1 with gcloud's own error, and `setup` flags it through the service probes (`ServicesAuthError`).
 
 ## Migration Plan
 

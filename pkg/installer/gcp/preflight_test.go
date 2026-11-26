@@ -5,12 +5,12 @@ import (
 	"testing"
 )
 
-// gcloudConfigRunner answers `gcloud config get-value account|project` with the given
-// raw outputs and records which keys were read.
-func gcloudConfigRunner(account, project string, reads *[]string) cmdRunner {
+// gcloudIdentityRunner answers `gcloud auth list` (active account) and
+// `gcloud config get-value project` with the given raw stdout and records which were read.
+func gcloudIdentityRunner(account, project string, reads *[]string) cmdRunner {
 	return func(name string, args []string, _ []string) (string, error) {
 		switch {
-		case gcloudArgs(args, "config", "get-value", "account"):
+		case gcloudArgs(args, "auth", "list"):
 			*reads = append(*reads, "account")
 			return account, nil
 		case gcloudArgs(args, "config", "get-value", "project"):
@@ -25,7 +25,7 @@ func TestGCPAccountInfo_AccountAndProjectSet(t *testing.T) {
 	// Arrange
 	defer stubExecLookPath(t)()
 	var reads []string
-	runner := gcloudConfigRunner("jane@example.com\n", "my-project\n", &reads)
+	runner := gcloudIdentityRunner("jane@example.com\n", "my-project\n", &reads)
 
 	// Act
 	projectID, account, err := gcpAccountInfo(runner)
@@ -39,22 +39,22 @@ func TestGCPAccountInfo_AccountAndProjectSet(t *testing.T) {
 	}
 }
 
+// `gcloud auth list` prints no ACTIVE account when logged out, and also when the
+// core/account setting names an account without stored credentials.
 func TestGCPAccountInfo_NoAccount(t *testing.T) {
 	tests := []struct {
 		name    string
-		account string
 		project string
 	}{
-		{name: "empty account, project set", account: "", project: "my-project"},
-		{name: "unset account, project set", account: "(unset)", project: "my-project"},
-		{name: "unset account and project", account: "(unset)", project: "(unset)"},
+		{name: "project set", project: "my-project"},
+		{name: "project unset", project: "(unset)"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
 			defer stubExecLookPath(t)()
 			var reads []string
-			runner := gcloudConfigRunner(tt.account, tt.project, &reads)
+			runner := gcloudIdentityRunner("", tt.project, &reads)
 
 			// Act
 			_, _, err := gcpAccountInfo(runner)
@@ -88,7 +88,7 @@ func TestGCPAccountInfo_NoProjectCarriesAccount(t *testing.T) {
 			// Arrange
 			defer stubExecLookPath(t)()
 			var reads []string
-			runner := gcloudConfigRunner("jane@example.com\n", tt.project, &reads)
+			runner := gcloudIdentityRunner("jane@example.com\n", tt.project, &reads)
 
 			// Act
 			_, _, err := gcpAccountInfo(runner)
@@ -109,22 +109,21 @@ func TestGCPAccountInfo_CloudShellNoticeStripped(t *testing.T) {
 	// Arrange
 	defer stubExecLookPath(t)()
 	var reads []string
-	notice := "Your active configuration is: [cloudshell-123]\n"
-	runner := gcloudConfigRunner(notice+"jane@example.com\n", notice+"my-project\n", &reads)
+	runner := gcloudIdentityRunner("jane@example.com\n", "Your active configuration is: [cloudshell-123]\nmy-project\n", &reads)
 
 	// Act
-	projectID, account, err := gcpAccountInfo(runner)
+	projectID, _, err := gcpAccountInfo(runner)
 
 	// Assert
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if projectID != "my-project" || account != "jane@example.com" {
-		t.Errorf("got project=%q account=%q, want notice line stripped", projectID, account)
+	if projectID != "my-project" {
+		t.Errorf("got project=%q, want notice line stripped", projectID)
 	}
 }
 
-func TestGCPAccountInfo_ConfigReadFailureIsNotGuidance(t *testing.T) {
+func TestGCPAccountInfo_ReadFailureIsNotGuidance(t *testing.T) {
 	// Arrange
 	defer stubExecLookPath(t)()
 	cause := errors.New("exit status 1")

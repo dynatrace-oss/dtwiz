@@ -14,7 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `dtwiz install gcp`, `update gcp` and `uninstall gcp` show an info box instead of a one-line error when `gcloud` has no active account or project. The box names the logged-in account and lists the commands to fix it (`gcloud auth login`, or `gcloud projects list` and `gcloud config set project <PROJECT_ID>`) followed by the command to re-run. The command exits non-zero and is reported to self-monitoring as `config_error`.
-- `dtwiz uninstall gcp` no longer runs without an active `gcloud` project. Previously it removed only the Dynatrace resources and silently left the GCP service account and its Viewer binding in place; now it removes nothing and explains how to select the project.
+- `dtwiz uninstall gcp` no longer runs without an active `gcloud` account and project. Previously it removed only the Dynatrace resources and silently left the GCP service account and its Viewer binding in place; now it removes nothing and explains how to select the project.
+- `dtwiz install gcp`, `update gcp` and `uninstall gcp` treat `gcloud` as logged in only when the active account has stored credentials (`gcloud auth list`), the same check `dtwiz setup` uses. An account that is configured but was never logged in now shows the `gcloud auth login` guidance instead of failing at the first step.
 - `dtwiz setup` shows `` `gcloud projects list`, then `gcloud config set project <PROJECT_ID>` `` as the GCP unlock hint when you are signed in to `gcloud` without a project.
 
 ### Fixed
