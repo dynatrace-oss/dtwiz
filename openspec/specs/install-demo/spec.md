@@ -14,8 +14,8 @@ Before executing any action, `install demo` SHALL display a compact plan and pro
 
 - **WHEN** `~/.dtwiz/examples/schnitzel/` does not exist
 - **AND** `python3` is not on PATH
-- **THEN** the plan SHALL list the steps: download schnitzel from release, install Python, install OTel Collector, instrument the demo app
-- **AND** end with a single `Proceed with installation? [Y/n]` prompt (default yes)
+- **THEN** the compact plan SHALL list what will be downloaded, installed and instrumented: schnitzel from release, Python, the OTel Collector and the demo app
+- **AND** end with a single `Apply? [Y/n]` prompt (default yes)
 
 #### Scenario: Path missing, python present
 

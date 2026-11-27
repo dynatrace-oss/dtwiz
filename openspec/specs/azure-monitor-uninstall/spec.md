@@ -60,7 +60,7 @@ When no monitoring configurations, no connections, and no client IDs are discove
 
 ### Requirement: Preview and confirmation before deletion
 
-The system SHALL print a preview listing the environment, each connection, each App Registration, and each monitoring configuration found (or noting when one is absent), followed by the numbered deletion steps. Any credentials or tokens that appear in the preview SHALL be masked so they are never printed in plaintext. It SHALL prompt a single `Apply?` confirmation (default yes). On `--dry-run` it SHALL print the preview and stop; on decline it SHALL cancel without making any changes.
+The system SHALL print a compact preview of what will be removed (connections, App Registrations and monitoring configurations found), with identifiers and the numbered deletion steps shown only with `-v`/`--debug` or `--dry-run`. Any credentials or tokens that appear in the preview SHALL be masked so they are never printed in plaintext. It SHALL prompt a single `Apply?` confirmation (default yes). On `--dry-run` it SHALL print the preview and stop; on decline it SHALL cancel without making any changes.
 
 #### Scenario: Dry run previews deletions only
 
@@ -98,7 +98,7 @@ The system SHALL delete in order: monitoring configurations, then per app the ro
 
 ### Requirement: Step count reflects discovered resources
 
-The system SHALL compute the total number of deletion steps as one per monitoring configuration, two per app (role assignment plus app registration), and one per connection, and SHALL number the printed steps continuously against that total.
+The system SHALL compute the total number of deletion steps as one per monitoring configuration, two per app (role assignment plus app registration), and one per connection, and each deletion SHALL be shown as one step line (`✓ <label>`, or `✗ <label>  failed`) as it completes.
 
 #### Scenario: Step total computed
 

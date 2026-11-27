@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
@@ -208,19 +209,19 @@ func removeGoArtifacts(dirs []string, toolPath string) {
 	for _, d := range dirs {
 		backup, err := removeGoOtelDir(d)
 		if err != nil {
-			fmt.Printf("  Warning: could not remove %s: %v\n", d, err)
+			display.StepWarn(fmt.Sprintf("Could not remove %s", d), err.Error())
 		} else {
-			fmt.Printf("  Removed %s\n", d)
+			display.Detail("removed %s", d)
 		}
 		if backup != "" {
-			fmt.Printf("  Warning: kept %s — it holds go.mod/go.sum from an interrupted build; restore them from it and delete it.\n", backup)
+			display.StepWarn(fmt.Sprintf("Kept %s", backup), "it holds go.mod/go.sum from an interrupted build; restore them from it and delete it")
 		}
 	}
 	if toolPath != "" {
 		if err := removeIsolatedOtelc(toolPath); err != nil {
-			fmt.Printf("  Warning: could not remove %s: %v\n", toolPath, err)
+			display.StepWarn(fmt.Sprintf("Could not remove %s", toolPath), err.Error())
 		} else {
-			fmt.Printf("  Removed %s\n", toolPath)
+			display.Detail("removed %s", toolPath)
 		}
 	}
 }

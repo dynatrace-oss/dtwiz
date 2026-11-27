@@ -68,6 +68,28 @@ func InstallerDownloadURL(baseURL string, env Environment) (string, error) {
 // validateCredentials). On Unix the file permissions are tightened to 0o700.
 // The caller owns the returned path and is responsible for removing it.
 func DownloadInstaller(c *client.ClassicClient, env Environment) (string, error) {
+	return DownloadInstallerWithProgress(c, env, nil)
+}
+
+// progressReader reports the running byte count to onProgress as data is read.
+type progressReader struct {
+	r          io.Reader
+	read       int64
+	total      int64
+	onProgress func(read, total int64)
+}
+
+func (p *progressReader) Read(buf []byte) (int, error) {
+	n, err := p.r.Read(buf)
+	p.read += int64(n)
+	p.onProgress(p.read, p.total)
+	return n, err
+}
+
+// DownloadInstallerWithProgress is DownloadInstaller that additionally calls
+// onProgress (when non-nil) with the bytes read so far and the expected total
+// (-1 when unknown), so callers can render a live detail next to a spinner.
+func DownloadInstallerWithProgress(c *client.ClassicClient, env Environment, onProgress func(read, total int64)) (string, error) {
 	path, err := installerAPIPath(env)
 	if err != nil {
 		return "", err
@@ -116,10 +138,12 @@ func DownloadInstaller(c *client.ClassicClient, env Environment) (string, error)
 	defer tmpFile.Close()
 
 	totalBytes := resp.RawResponse.ContentLength // -1 when unknown
-	src := display.NewProgressReader(resp.RawBody(), totalBytes)
+	var src io.Reader = resp.RawBody()
+	if onProgress != nil {
+		src = &progressReader{r: src, total: totalBytes, onProgress: onProgress}
+	}
 
 	n, err := io.Copy(tmpFile, src)
-	src.Clear()
 	if err != nil {
 		tmpFile.Close()
 		_ = os.Remove(tmpFile.Name())
@@ -135,9 +159,7 @@ func DownloadInstaller(c *client.ClassicClient, env Environment) (string, error)
 	}
 
 	logger.Verbose("installer downloaded", "path", tmpFile.Name(), "size_bytes", n)
-	display.PrintStatusLine("installer",
-		fmt.Sprintf("%s (%s)", filepath.Base(tmpFile.Name()), display.HumanBytes(n)),
-		display.ColorOK)
+	display.Detail("installer: %s (%s)", filepath.Base(tmpFile.Name()), display.HumanBytes(n))
 	return tmpFile.Name(), nil
 }
 

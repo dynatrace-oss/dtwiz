@@ -143,6 +143,7 @@ var setupCmd = &cobra.Command{
 			}
 
 			display.Header("Installing: Demo app (schnitzel)")
+			display.MarkInstallHeaderShown()
 			installer.ResetInstallTelemetry()
 			demoInstErr := otel.InstallDemo(envURL, classicTok, platformTok, setupDryRun)
 			fireInstallReportEvent(cmd, "demo", demoInstErr)
@@ -188,6 +189,7 @@ var setupCmd = &cobra.Command{
 			headerVerb = "Updating"
 		}
 		display.Header(fmt.Sprintf("%s: %s", headerVerb, selected.Title))
+		display.MarkInstallHeaderShown()
 
 		c, err := setupClientFromCreds(envURL, classicTok, platformTok)
 		if err != nil {

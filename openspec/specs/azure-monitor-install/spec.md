@@ -87,7 +87,7 @@ The system SHALL check for an existing `dtwiz-azure` connection before installin
 
 ### Requirement: Preview and confirmation before applying
 
-The system SHALL print a preview showing the environment, tenant, subscription, connection name, and configuration name, followed by the numbered list of commands to be executed, with the platform token masked. It SHALL then prompt a single `Apply?` confirmation (default yes). On `--dry-run` it SHALL print the preview and stop without prompting or mutating; on decline it SHALL cancel without making any changes.
+The system SHALL print a compact preview showing the subscription, connection name, and configuration name (environment and tenant with `-v`/`--debug`). The preview SHALL show the numbered list of commands to be executed, with the platform token masked, only with `-v`/`--debug` or `--dry-run`. It SHALL then prompt a single `Apply?` confirmation (default yes). On `--dry-run` it SHALL print the preview and stop without prompting or mutating; on decline it SHALL cancel without making any changes.
 
 #### Scenario: Dry run shows preview only
 

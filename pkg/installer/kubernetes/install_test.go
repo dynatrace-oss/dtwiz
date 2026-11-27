@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/dynatrace-oss/dtwiz/pkg/analyzer"
+	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 	"github.com/dynatrace-oss/dtwiz/test/helpers"
 )
 
@@ -386,13 +387,35 @@ func TestPrintK8sPreview(t *testing.T) {
 			"helm install dynatrace-operator ...",
 		)
 	})
-	for _, want := range []string{
-		"my-cluster",
-		"EKS",
-		"helm install",
-	} {
+	for _, want := range []string{"my-cluster", "EKS", "Dynatrace Operator"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("printK8sPreview: expected %q in output, got: %q", want, out)
+		}
+	}
+	for _, hidden := range []string{"helm install", "kind: Secret"} {
+		if strings.Contains(out, hidden) {
+			t.Errorf("printK8sPreview: %q should only appear with -v, got: %q", hidden, out)
+		}
+	}
+}
+
+func TestPrintK8sPreview_VerboseShowsManifestAndCommands(t *testing.T) {
+	logger.Init(false, 1)
+	t.Cleanup(func() { logger.Init(false, 0) })
+	// The manifest goes through fmt (os.Stdout); the rest through color.Output.
+	var colorOut string
+	stdout := helpers.CaptureStdout(t, func() {
+		colorOut = helpers.CaptureOutput(t, func() {
+			printK8sPreview("my-cluster", "EKS", "https://abc123.live.dynatracelabs.com/api",
+				"kind: Secret\n", "helm install dynatrace-operator ...")
+		})
+	})
+	if !strings.Contains(stdout, "kind: Secret") {
+		t.Errorf("printK8sPreview -v: expected manifest in output, got: %q", stdout)
+	}
+	for _, want := range []string{"helm install", "kubectl apply"} {
+		if !strings.Contains(colorOut, want) {
+			t.Errorf("printK8sPreview -v: expected %q in output, got: %q", want, colorOut)
 		}
 	}
 }
