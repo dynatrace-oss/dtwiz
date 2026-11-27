@@ -214,6 +214,7 @@ When writing or updating tests, read [docs/contributing/testing.md](docs/contrib
 ### Code quality
 
 - Run `golangci-lint` with the existing configuration (see `.golangci.yml`)
+- **After creating or editing any Markdown file, run `make markdownlint` yourself** before you call the work done. This includes openspec artifacts (`proposal.md`, `design.md`, `tasks.md`, `specs/**/spec.md`), `README.md`, `CHANGELOG.md` and `docs/`. CI runs the same check, so a skipped run only surfaces after pushing. `make markdownlint-fix` fixes most findings automatically; re-run `make markdownlint` afterwards. It needs Docker or Podman; if neither is available, say so instead of skipping silently.
 - No `//nolint` without justification comment
 - Never shell out unnecessarily — use Go stdlib or libraries
 - Validate all user inputs (endpoints, paths, service names)
@@ -252,6 +253,7 @@ When the user talks about "specs", "a spec", "writing a spec", or "a change" the
 make build          # go build with ldflags version
 make test           # go test ./...
 make lint           # golangci-lint
+make markdownlint   # lint all Markdown files (Docker or Podman); markdownlint-fix to autofix
 ```
 
 Archives: `dtwiz_{version}_{os}_{arch}.tar.gz` (Linux/macOS), `.zip` (Windows).

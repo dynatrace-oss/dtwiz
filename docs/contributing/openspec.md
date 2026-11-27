@@ -35,6 +35,8 @@ When in doubt, open a GitHub Issue first and ask.
 
 Configuration lives in `openspec/config.yaml`.
 
+All artifacts are Markdown. Run `make markdownlint` after writing or editing them (and after any other Markdown change, such as `README.md` or `CHANGELOG.md`); CI runs the same check on every PR. `make markdownlint-fix` fixes most findings automatically.
+
 ## PR Structure
 
 1. **Proposal PR** *(optional)* — covers steps 1–2. Merge the OpenSpec artifacts before starting implementation. If skipped, include the artifacts in the first implementation PR instead.

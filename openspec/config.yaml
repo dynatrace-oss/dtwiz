@@ -2,7 +2,8 @@ schema: spec-driven
 
 context: |
   Tech stack: Go, Cobra CLI framework, Go templates (text/template)
-  Build: `make build` (go build with ldflags), `make test`, `make lint` (golangci-lint)
+  Build: `make build` (go build with ldflags), `make test`, `make lint` (golangci-lint), `make markdownlint` (Markdown, also run in CI)
+  After writing or editing any artifact of a change, run `make markdownlint` and fix its findings (`make markdownlint-fix` autofixes most) before reporting the artifact as done.
   Release: goreleaser, archives per OS/arch
   Domain: Dynatrace observability CLI — analyzes systems and deploys the best monitoring method automatically
 
