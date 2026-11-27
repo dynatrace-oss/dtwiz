@@ -56,28 +56,94 @@ Before showing the plan, the system SHALL check that the `dotnet` command is ava
 - **WHEN** the plan is built
 - **THEN** no prerequisite warning is shown
 
-### Requirement: Plan contents per service
+### Requirement: Plan lists the steps and how each service is instrumented
 
-The plan SHALL list every discovered service of the selected project with its name, target framework and whether it will be instrumented. Services that cannot be instrumented, namely .NET Framework, self-contained, native-AOT, or missing a required runtime, SHALL be listed with the reason and SHALL NOT be acted on. The plan SHALL include the instrumentation version and install location it will use and whether it will be downloaded or reused.
+The preview SHALL list, in this order and as commands or short steps: download (or reuse) and verify the instrumentation, stop the project's running processes, build the services that need it, and launch each service that can be instrumented with its service name. The activation environment SHALL be shown once for all services. Services that cannot be instrumented SHALL be named with their reason and no launch step. Other explanations SHALL be left out.
+
+#### Scenario: Two services with running processes
+
+- **GIVEN** a project with services `Frontend` and `Order` and two running processes of it
+- **WHEN** the plan preview is shown
+- **THEN** it lists downloading and verifying the instrumentation with its install location
+- **AND** then stopping those processes
+- **AND** then the build steps, if any
+- **AND** then one launch command per service together with the service name that service will report
+- **AND** the activation environment appears once, not per service
+
+#### Scenario: Stop comes after verification and before the build
+
+- **GIVEN** a service that needs a build and has a running process
+- **WHEN** the plan preview is shown
+- **THEN** the stop step is listed after verification and before the build step
 
 #### Scenario: Mixed supported and unsupported services
 
 - **GIVEN** a project with a `net8.0` web service and a service targeting `net48`
 - **WHEN** the plan preview is shown
-- **THEN** the web service is listed as instrumented
-- **AND** the `net48` service is listed as not supported yet with the reason
+- **THEN** the web service has a launch step
+- **AND** the `net48` service is named as skipped with the reason and has no launch step
+
+#### Scenario: No running processes
+
+- **GIVEN** no process of the project is running
+- **WHEN** the plan preview is shown
+- **THEN** no stop step is listed
 
 #### Scenario: Instrumentation already installed
 
 - **GIVEN** a usable instrumentation installation exists in the dtwiz directory
 - **WHEN** the plan preview is shown
-- **THEN** it shows the installed version and that it will be reused, or that it will be updated when a newer release is available
+- **THEN** a single step says the installed version in that directory is used
+- **AND** no download or verification step is listed
 
 #### Scenario: Instrumentation not installed
 
 - **GIVEN** no installation exists
 - **WHEN** the plan preview is shown
-- **THEN** it shows that the latest release will be downloaded and the directory it will be installed to
+- **THEN** the download step names the archive for this platform and the directory it is installed to
+- **AND** a verification step follows it
+
+### Requirement: Services are built only when needed
+
+A service SHALL be built only when it has no usable built library or when its sources are newer than that library. A built library is usable when it lies in the project's build output for one of the service's target frameworks and its runtime configuration file is beside it. The build SHALL run without the instrumentation environment. The launch step SHALL use the existing library when no build is needed.
+
+#### Scenario: Existing build is reused
+
+- **GIVEN** a service whose built library exists and no source of the project is newer
+- **WHEN** the plan preview is shown
+- **THEN** the service has no build step
+- **AND** its launch step uses the existing library and says it is an existing build
+
+#### Scenario: No build yet
+
+- **GIVEN** a service without a built library
+- **WHEN** the plan preview is shown
+- **THEN** a build step is listed for it
+- **AND** its launch step names the library the build produces
+
+#### Scenario: Sources changed since the last build
+
+- **GIVEN** a service whose built library exists but a source file of the project is newer
+- **WHEN** the plan preview is shown
+- **THEN** a build step is listed for it and says that sources changed since the last build
+
+#### Scenario: Several build configurations
+
+- **GIVEN** built libraries exist in more than one configuration
+- **WHEN** the plan is built
+- **THEN** the most recently built one is used
+
+#### Scenario: Incomplete build output
+
+- **GIVEN** a built library without its runtime configuration file
+- **WHEN** the plan is built
+- **THEN** the service is treated as not built
+
+#### Scenario: Build without instrumentation
+
+- **GIVEN** a build step is listed
+- **WHEN** the plan preview is shown
+- **THEN** the build is labelled as running without instrumentation
 
 ### Requirement: Nothing supported means manual steps
 
@@ -139,7 +205,7 @@ The system SHALL ask for confirmation after the preview, defaulting to yes. `--y
 
 ### Requirement: Outcome until launching ships
 
-Executing the plan SHALL install the instrumentation as specified in `dotnet-instrumentation-install` and SHALL then end in the manual-steps outcome, stating that launching the instrumented service automatically is not available yet. It SHALL NOT stop running processes or start any service until the launch step ships, and SHALL NOT modify the project.
+Executing the plan SHALL install the instrumentation as specified in `dotnet-instrumentation-install` and SHALL then end in the manual-steps outcome. Until launching ships it SHALL NOT stop running processes, build or start any service, SHALL NOT modify the project, and the preview SHALL say once that stopping, building and launching are not performed yet.
 
 #### Scenario: Install succeeded
 
@@ -148,6 +214,12 @@ Executing the plan SHALL install the instrumentation as specified in `dotnet-ins
 - **THEN** the user sees where the instrumentation was installed
 - **AND** the manual-steps outcome is shown
 - **AND** running instances of the project keep running
+
+#### Scenario: Preview states what is not performed yet
+
+- **GIVEN** launching is not available yet
+- **WHEN** the plan preview is shown
+- **THEN** it states once that stopping, building and launching the services are not performed yet
 
 #### Scenario: Install failed
 
@@ -162,3 +234,32 @@ Executing the plan SHALL install the instrumentation as specified in `dotnet-ins
 - **WHEN** the interruption is handled
 - **THEN** the operation stops promptly
 - **AND** no partially installed instrumentation is left behind
+
+### Requirement: Walkthrough link in the outcome
+
+The manual-steps outcome SHALL show "Instrument your .NET app" as a link to the Dynatrace .NET walkthrough: right after the statement that automatic launch is not available yet, and after the reason of a manual plan. Where the terminal cannot show links, the address SHALL be shown below the text. The link SHALL be shown once in the flow.
+
+#### Scenario: After a successful install
+
+- **GIVEN** the instrumentation was installed or found installed
+- **WHEN** execution ends
+- **THEN** the statement that automatic launch is not available yet is followed directly by "Instrument your .NET app"
+- **AND** that text is a link to the walkthrough
+
+#### Scenario: Terminal without link support
+
+- **GIVEN** the terminal cannot show links
+- **WHEN** the outcome is shown
+- **THEN** the walkthrough address is shown on the line below "Instrument your .NET app"
+
+#### Scenario: After a manual plan
+
+- **GIVEN** nothing can be instrumented automatically
+- **WHEN** execution ends
+- **THEN** the reason is followed by the same link
+
+#### Scenario: Not repeated
+
+- **GIVEN** the walkthrough link was shown
+- **WHEN** the ingest watch ends its output
+- **THEN** the link is not shown again

@@ -17,6 +17,7 @@ import (
 
 	"github.com/dynatrace-oss/dtwiz/pkg/featureflags"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
+	"github.com/dynatrace-oss/dtwiz/pkg/installer/otel/dotnet"
 	"github.com/dynatrace-oss/dtwiz/test/helpers"
 )
 
@@ -1685,5 +1686,160 @@ func TestInstallOtelCollectorWithProject_GoManualPlan_CollectorFailure(t *testin
 	}
 	if strings.Contains(out, "can't be autoinstrumented") {
 		t.Fatalf("manual instructions must not be presented as ready after a collector failure:\n%s", out)
+	}
+}
+
+// setupDotNetInstall prepares an isolated install of a .NET project with the
+// flag on and the given project file, and stubs the collector step. It returns
+// the project directory and a pointer that records whether the collector ran.
+func setupDotNetInstall(t *testing.T, projectFile, content string) (string, *bool) {
+	t.Helper()
+	stubExtensionPreview(t)
+	stubActivation(t)
+	stubRoutePreview(t)
+	tmpDir := setupAutoConfirmedTempInstall(t)
+	featureflags.SetCLIOverrideForTest(t, featureflags.DotNetOtel, true)
+
+	projectDir := filepath.Join(tmpDir, "app")
+	writeDotNetFile(t, projectDir, projectFile, content)
+
+	collectorRan := false
+	origExecute := executeCollectorPlanFn
+	executeCollectorPlanFn = func(_ *collectorPlan, _, _ string, _ bool) error {
+		collectorRan = true
+		return nil
+	}
+	t.Cleanup(func() { executeCollectorPlanFn = origExecute })
+	return projectDir, &collectorRan
+}
+
+func TestInstallOtelCollectorWithProject_DotNet_DryRunShowsPlanAndChangesNothing(t *testing.T) {
+	// Arrange
+	projectDir, collectorRan := setupDotNetInstall(t, "Api.csproj", dotNetWebNet8)
+	stubDotNet(t, true, runtimes8, nil)
+	fake := &fakeDotnetInstaller{}
+	stubDotnetInstaller(t, fake)
+
+	// Act
+	var err error
+	out := captureAll(t, func() {
+		_, err = InstallOtelCollectorWithProject("https://env.example.com", "tok", "dt0s16.test", projectDir, true)
+	})
+
+	// Assert
+	if err != nil {
+		t.Fatalf("dry run error = %v", err)
+	}
+	for _, want := range []string{".NET auto-instrumentation", "dotnet " + filepath.Join("bin", "Debug", "net8.0", "Api.dll") + "  (service: Api)", "no changes made"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
+	}
+	if fake.installs != 0 || *collectorRan {
+		t.Errorf("dry run must not install: installs=%d collectorRan=%v", fake.installs, *collectorRan)
+	}
+}
+
+func TestInstallOtelCollectorWithProject_DotNet_ConfirmedInstallsThenManualSteps(t *testing.T) {
+	// Arrange
+	projectDir, collectorRan := setupDotNetInstall(t, "Api.csproj", dotNetWebNet8)
+	stubDotNet(t, true, runtimes8, nil)
+	fake := &fakeDotnetInstaller{result: dotnet.Result{Dir: "/d", Version: "1.20.0"}}
+	stubDotnetInstaller(t, fake)
+
+	// Act
+	var slug string
+	var err error
+	out := captureAll(t, func() {
+		slug, err = InstallOtelCollectorWithProject("https://env.example.com", "tok", "dt0s16.test", projectDir, false)
+	})
+
+	// Assert
+	if err != nil {
+		t.Fatalf("error = %v", err)
+	}
+	if !*collectorRan || fake.installs != 1 {
+		t.Errorf("collectorRan=%v installs=%d, want true and 1", *collectorRan, fake.installs)
+	}
+	if slug != "" {
+		t.Errorf("manual slug = %q, want none: the ingest-watch footer must not repeat the walkthrough", slug)
+	}
+	if n := strings.Count(out, "dt-url.net/otel-dotnet"); n != 1 {
+		t.Errorf("walkthrough link shown %d times, want once:\n%s", n, out)
+	}
+}
+
+func TestInstallOtelCollectorWithProject_DotNet_DeclinedInstallsNothing(t *testing.T) {
+	// Arrange
+	projectDir, collectorRan := setupDotNetInstall(t, "Api.csproj", dotNetWebNet8)
+	stubDotNet(t, true, runtimes8, nil)
+	fake := &fakeDotnetInstaller{}
+	stubDotnetInstaller(t, fake)
+	installer.AutoConfirm = false
+	withStdin(t, "n\n")
+
+	// Act
+	var err error
+	captureAll(t, func() {
+		_, err = InstallOtelCollectorWithProject("https://env.example.com", "tok", "dt0s16.test", projectDir, false)
+	})
+
+	// Assert
+	if !errors.Is(err, installer.ErrInstallCancelled) {
+		t.Errorf("error = %v, want ErrInstallCancelled", err)
+	}
+	if fake.installs != 0 || *collectorRan {
+		t.Errorf("declined run must not install: installs=%d collectorRan=%v", fake.installs, *collectorRan)
+	}
+}
+
+func TestInstallOtelCollectorWithProject_DotNet_NothingInstrumentableGoesToManualSteps(t *testing.T) {
+	// Arrange
+	projectDir, collectorRan := setupDotNetInstall(t, "Legacy.csproj", dotNetExe48)
+	stubDotNet(t, true, runtimes8, nil)
+	fake := &fakeDotnetInstaller{}
+	stubDotnetInstaller(t, fake)
+
+	// Act
+	var slug string
+	var err error
+	out := captureAll(t, func() {
+		slug, err = InstallOtelCollectorWithProject("https://env.example.com", "tok", "dt0s16.test", projectDir, false)
+	})
+
+	// Assert
+	if err != nil {
+		t.Fatalf("manual outcome must succeed: %v", err)
+	}
+	if slug != "" || fake.installs != 0 || !*collectorRan {
+		t.Errorf("slug=%q installs=%d collectorRan=%v, want none, 0 and true", slug, fake.installs, *collectorRan)
+	}
+	if !strings.Contains(out, "dt-url.net/otel-dotnet") {
+		t.Errorf("the manual outcome should show the walkthrough link:\n%s", out)
+	}
+	if !strings.Contains(out, "Skipped: Legacy (.NET Framework, not supported yet)") {
+		t.Errorf("output should list the skipped service:\n%s", out)
+	}
+}
+
+func TestInstallOtelCollectorWithProject_DotNet_FlagOffIsNotInferred(t *testing.T) {
+	// Arrange
+	projectDir, _ := setupDotNetInstall(t, "Api.csproj", dotNetWebNet8)
+	featureflags.SetCLIOverrideForTest(t, featureflags.DotNetOtel, false)
+	fake := &fakeDotnetInstaller{}
+	stubDotnetInstaller(t, fake)
+
+	// Act
+	var err error
+	captureAll(t, func() {
+		_, err = InstallOtelCollectorWithProject("https://env.example.com", "tok", "dt0s16.test", projectDir, false)
+	})
+
+	// Assert
+	if err == nil || !strings.Contains(err.Error(), "could not detect runtime") {
+		t.Errorf("error = %v, want a runtime detection error", err)
+	}
+	if fake.installs != 0 {
+		t.Errorf("Install called %d times with the flag off", fake.installs)
 	}
 }

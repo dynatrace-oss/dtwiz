@@ -516,6 +516,8 @@ func createRuntimePlan(proj detectedProject, httpPort int, token, envURL, platfo
 			return nil
 		}
 		return plan
+	case dotNetRuntimeName:
+		return buildDotnetInstrumentationPlan(proj, collectorEndpoint)
 	}
 	return nil
 }
@@ -607,26 +609,21 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 			return "", fmt.Errorf("could not detect runtime from project path: %s", projectPath)
 		}
 		projects := []ScannedProject{{Path: projectPath}}
-		if rt == dotNetRuntimeName {
-			// Step 1 ends in the manual-steps outcome: no plan is built.
+		switch rt {
+		case "Java":
+			matchProcessesToProjects(projects, detectJavaProcesses())
+		case "Node.js":
+			matchProcessesToProjects(projects, detectNodeProcesses())
+		case "Go":
+			matchProcessesToProjects(projects, detectGoProcesses())
+		case dotNetRuntimeName:
 			matchDotNetProcessesToProjects(projects, detectDotNetProcesses())
-			planProj = detectedProject{ScannedProject: projects[0], Runtime: rt}
-			manualLang = showDotNetStep1Outcome(planProj)
-		} else {
-			switch rt {
-			case "Java":
-				matchProcessesToProjects(projects, detectJavaProcesses())
-			case "Node.js":
-				matchProcessesToProjects(projects, detectNodeProcesses())
-			case "Go":
-				matchProcessesToProjects(projects, detectGoProcesses())
-			default:
-				matchProcessesToProjects(projects, detectPythonProcesses())
-			}
-			proj := detectedProject{ScannedProject: projects[0], Runtime: rt}
-			plan = createRuntimePlanFn(proj, cp.httpPort, token, envURL, platformToken)
-			planProj = proj
+		default:
+			matchProcessesToProjects(projects, detectPythonProcesses())
 		}
+		proj := detectedProject{ScannedProject: projects[0], Runtime: rt}
+		plan = createRuntimePlanFn(proj, cp.httpPort, token, envURL, platformToken)
+		planProj = proj
 	} else {
 		roots, err := selectScanRoots()
 		if err != nil {
@@ -648,11 +645,6 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 			}
 			if lang != "" {
 				manualLang = lang
-				break
-			}
-			if selected.Runtime == dotNetRuntimeName {
-				manualLang = showDotNetStep1Outcome(selected)
-				planProj = selected
 				break
 			}
 			plan = createRuntimePlanFn(selected, cp.httpPort, token, envURL, platformToken)

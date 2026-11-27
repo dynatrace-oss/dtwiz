@@ -40,7 +40,9 @@ Upstream facts, verified against release v1.20.0 (2026-11-20) of `open-telemetry
 
 ### D3. Prerequisite check via `dotnet --list-runtimes`
 
-`dotnet` is located with the existing lookup seam; installed runtimes come from `dotnet --list-runtimes` (the `Microsoft.NETCore.App` and, for web services, `Microsoft.AspNetCore.App` lines) and are compared by major version with the service's target framework. Multi-target services pass when any listed framework is satisfied. Unknown frameworks pass with a note. A missing `dotnet` or no matching runtime gives per-service reasons and, if no service remains, the manual outcome. *Alternative:* require the SDK (rejected: published apps run with the runtime alone).
+`dotnet` is located with the existing lookup seam; installed runtimes come from `dotnet --list-runtimes` (the `Microsoft.NETCore.App` lines) and are compared by major version with the service's target framework: the same or a newer installed major passes, as the spec says. Multi-target services pass when any listed framework is satisfied. Unknown frameworks, and runtime listings that fail or cannot be parsed, pass with a note instead of blocking. A missing `dotnet` or no matching runtime gives per-service reasons and, if no service remains, the manual outcome. `Microsoft.AspNetCore.App` is not checked separately: the project reading does not record whether a service is a web service, and the ASP.NET runtime is installed together with the shared runtime in the usual installs. *Alternative:* require the SDK (rejected: published apps run with the runtime alone).
+
+A newer installed major only runs an older app when .NET rolls forward, which is not the default. Step 4 must therefore either set `DOTNET_ROLL_FORWARD` for the launched process or re-check strictly; this change does not launch anything.
 
 ### D4. Install location and layout
 
@@ -68,9 +70,23 @@ Steps 2 and 3 launch nothing, so no token or exporter environment is produced he
 
 The installer takes an `http.Client` (or `RoundTripper`) and a command runner, so tests serve a generated zip and checksum file from `httptest`, cover mismatch, missing checksum, traversal entry, layout failure, interrupted install and reuse, and stub `gh`. Platform selection is a pure function table-tested for every supported and unsupported combination, with libc detection behind a seam. No test uses the network or the real home directory (install root is injected).
 
+### D10. Preview shows the target procedure; execution does less
+
+The preview lists the whole procedure the feature is heading for, in the style of the Python, Java and Go previews: one command or step per line, the activation environment once, the service name per service. Order: download and verify, stop, build, launch. Stopping comes after verification so that a failed download or verification leaves the running services untouched, and before the build because on Windows a running service locks its output library and fails the build. `Execute` performs only the install; one line in the preview says that stopping, building and launching are not performed yet.
+
+The activation environment is computed in the `dotnet` package (`ActivationEnv`) so step 4 reuses the same code for the real launch.
+
+**Build and launch form** (follows Go: build with a clean environment, then launch the result). A service is launched as `dotnet <built library>`, with the environment above. The build runs without the profiler environment, which avoids instrumenting the SDK and MSBuild (what `dotnet run` would do). The build is skipped when a usable built library exists: `bin/<configuration>/<framework>/<assembly>.dll` with its `.runtimeconfig.json` beside it, for one of the service's frameworks; with several configurations the most recently written wins. It is not skipped when a source file of the project is newer than the library: the check walks the project directory (the solution directory, so library projects are covered), skipping `bin`, `obj` and the other ignored directories, and compares modification times of `.cs`, `.razor`, `.cshtml`, `.fs`, `.vb`, `.csproj`, `.props` and `appsettings*.json` files. It is the `make` heuristic, not MSBuild's own up-to-date check: it errs toward building, and when the walk is cut off at its file limit the build runs. *Alternatives:* always `dotnet build` (rejected: needless work and a touch of `bin`/`obj` when everything is current); relaunch the command line of the running process (not chosen: a second source of truth for the launch form; may be revisited in step 4).
+
+The library path of a service that still has to be built is the default output path (`bin/Debug/<framework>/<assembly>.dll`); a project with a custom output path gets the exact path in step 4, by asking MSBuild after the build. Not yet settled for step 4: `launchSettings.json` (a launched library ignores the launch profile that `dotnet run` applies) and `DOTNET_ROLL_FORWARD`.
+
+### D11. An existing installation is used as it is
+
+When the install directory holds a valid installation for the platform, `Install` returns it without looking up the latest release, downloading or verifying anything. The preview then has one line ("Use installed ...") and no verify line, so it shows exactly what runs, and a run works offline and is not exposed to GitHub API rate limits. Installations are not updated by dtwiz; a user who wants a newer release removes the directory (step 5 adds `dtwiz uninstall` support). Only an invalid or incomplete directory is reinstalled, through the same stage-and-swap, so a failure leaves its previous content untouched. *Alternatives:* check for a newer release on every run (rejected: the preview cannot say whether a download will happen, a network failure can block an installed setup, and a silent upgrade can change behavior between runs); an explicit update command or flag (a possible later addition, not needed now).
+
 ## Risks / Trade-offs
 
-- **Unpinned latest breaks on an upstream change** -> layout validation, reuse of an existing installation when unreachable, layout list kept in one tested place.
+- **Unpinned latest breaks on an upstream change** -> layout validation, an existing valid installation is used without any release lookup (D11), layout list kept in one tested place.
 - **Release asset or checksum file naming differs from the assumed names** -> verify against a real release before implementing (task); selection logic isolated in one function.
 - **GitHub API rate limiting for unauthenticated lookups** -> fall back to the release redirect URL for "latest"; report rate-limit errors as user-fixable, with reuse offered if an installation exists.
 - **libc detection is heuristic on Linux** -> detect through the loader/`ldd` output behind a seam; an undetectable libc is reported as unsupported with the manual outcome rather than guessed.

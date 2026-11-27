@@ -43,7 +43,7 @@ The system SHALL choose the upstream archive matching the operating system, C li
 
 ### Requirement: Latest release is downloaded
 
-The system SHALL install the latest upstream release and SHALL record the installed version. The download SHALL happen only after the plan was confirmed.
+When no usable installation exists, the system SHALL install the latest upstream release and SHALL record the installed version. The download SHALL happen only after the plan was confirmed.
 
 #### Scenario: Fresh install
 
@@ -139,11 +139,11 @@ The system SHALL extract the archive only below the install directory, rejecting
 
 The system SHALL make an installation visible only when it is complete and valid, so that a failed or interrupted install or update leaves the previous installation, or none, intact.
 
-#### Scenario: Failure during update
+#### Scenario: Failure while replacing an unusable installation
 
-- **GIVEN** version A is installed and an update to version B fails during extraction
+- **GIVEN** the install directory holds an unusable installation and installing the latest release fails during extraction
 - **WHEN** the command ends
-- **THEN** version A is still installed and usable
+- **THEN** the previous content of the install directory is untouched
 
 #### Scenario: Interrupted first install
 
@@ -154,29 +154,35 @@ The system SHALL make an installation visible only when it is complete and valid
 
 ### Requirement: Reuse of an existing installation
 
-When the latest release is the one already installed, the system SHALL reuse it without downloading. When the latest release cannot be determined and a valid installation exists, the system SHALL offer to reuse it, showing its version; otherwise it SHALL fail with an actionable error.
+When a usable installation exists, the system SHALL use it as it is: it SHALL NOT look up the latest release, download, verify or replace anything, and SHALL NOT need network access. An installation is usable when its layout is valid for the platform. The system SHALL NOT update an installation by itself.
 
-#### Scenario: Already current
+#### Scenario: Installation present
 
-- **GIVEN** the installed version equals the latest release
+- **GIVEN** a usable installation exists
 - **WHEN** the plan is executed
-- **THEN** nothing is downloaded and the installed version is reported
+- **THEN** nothing is downloaded or verified and the installed version is reported
 
-#### Scenario: Newer release available
+#### Scenario: Newer release exists
 
-- **GIVEN** an older version is installed and a newer release exists
+- **GIVEN** a usable installation of an older version exists and a newer release was published
 - **WHEN** the plan is executed
-- **THEN** the newer release is installed according to the requirements above
+- **THEN** the installed version is used and no newer release is looked up
 
-#### Scenario: Release unreachable with an installation present
+#### Scenario: Installation present without network
 
-- **GIVEN** the release cannot be reached and a valid installation exists
-- **WHEN** installation is planned
-- **THEN** the user is offered to reuse the existing installation with its version
+- **GIVEN** a usable installation exists and the release host cannot be reached
+- **WHEN** the plan is executed
+- **THEN** the installed version is used without error
+
+#### Scenario: Installation is unusable
+
+- **GIVEN** the install directory exists but its layout is invalid for the platform
+- **WHEN** the plan is executed
+- **THEN** the latest release is installed as for a fresh install and replaces the unusable content only after it was verified and validated
 
 #### Scenario: Release unreachable without an installation
 
-- **GIVEN** the release cannot be reached and no installation exists
+- **GIVEN** the release cannot be reached and no usable installation exists
 - **WHEN** installation is planned
 - **THEN** the command fails with an error that says to check the network connection and names the manual-steps walkthrough
 

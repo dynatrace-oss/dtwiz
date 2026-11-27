@@ -140,3 +140,25 @@ func TestService_FrameworkLabelUnknown(t *testing.T) {
 		t.Errorf("FrameworkLabel() = %q, want unknown", got)
 	}
 }
+
+func TestDiscoverServices_FrameworkFromDirectoryBuildProps(t *testing.T) {
+	// Arrange: the layout of the coffee-shop examples; the framework is only in the shared props.
+	root := t.TempDir()
+	writeFile(t, root, "Shop.slnx", `<Solution><Project Path="s-frontend/Frontend.csproj" /><Project Path="s-order/Order.csproj" /></Solution>`)
+	writeFile(t, root, "Directory.Build.props", `<Project><PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup></Project>`)
+	writeFile(t, root, "s-frontend/Frontend.csproj", `<Project Sdk="Microsoft.NET.Sdk.Web"/>`)
+	writeFile(t, root, "s-order/Order.csproj", `<Project Sdk="Microsoft.NET.Sdk.Web"/>`)
+
+	// Act
+	services := dotnet.DiscoverServices(root, []string{"Shop.slnx"})
+
+	// Assert
+	if len(services) != 2 {
+		t.Fatalf("got %d services, want 2: %+v", len(services), services)
+	}
+	for _, s := range services {
+		if got := s.FrameworkLabel(); got != "net11.0" {
+			t.Errorf("service %s framework = %q, want net11.0", s.Name, got)
+		}
+	}
+}

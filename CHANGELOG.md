@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `dotnet-otel` feature flag (`--dotnet-otel` or `DTWIZ_DOTNET_OTEL=true`, off by default) gating upcoming .NET OpenTelemetry auto-instrumentation support.
+- With the `dotnet-otel` flag on, selecting a .NET project in `dtwiz install otel` shows a plan (per-service framework and runtime prerequisite check) and, after confirmation, downloads the latest OpenTelemetry .NET automatic instrumentation release (an existing installation is used as it is), verifies it against the release checksum (and the release attestation when the GitHub CLI is signed in) and installs it into `~/.opentelemetry/dotnet`. Target framework and self-contained settings are also read from the applicable `Directory.Build.props`. Launching the instrumented service is not automated yet; the Dynatrace .NET walkthrough follows.
 
 ## [1.16.0] - 2026-11-18
 

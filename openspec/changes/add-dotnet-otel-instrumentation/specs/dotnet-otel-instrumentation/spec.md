@@ -24,7 +24,7 @@ All .NET OpenTelemetry behavior SHALL be available only while the `DTWIZ_DOTNET_
 
 ### Requirement: Delivery in steps behind the flag
 
-.NET instrumentation SHALL be delivered in steps: (1) project detection, (2) prerequisites and plan preview, (3) instrumentation installation, (4) launch of the instrumented services, (5) uninstall and ingest watch. A step that has not shipped SHALL end in the manual-steps outcome for .NET and SHALL NOT change the machine.
+.NET instrumentation SHALL be delivered in steps: (1) project detection, (2) prerequisites and plan preview, (3) instrumentation installation, (4) launch of the instrumented services, (5) uninstall and ingest watch. Steps MAY ship together (steps 2 and 3 do). A step that has not shipped SHALL end in the manual-steps outcome for .NET; until step 3 ships it SHALL NOT change the machine, and until step 4 ships it SHALL NOT stop or start processes.
 
 #### Scenario: Only detection has shipped
 
@@ -64,7 +64,7 @@ The instrumentation files SHALL be installed into a directory owned by dtwiz und
 
 ### Requirement: Latest upstream release, per platform
 
-The system SHALL install the latest release of the upstream OpenTelemetry .NET automatic instrumentation, choosing the archive that matches the operating system, C library (glibc or musl on Linux) and processor architecture. It SHALL reject unsupported combinations before downloading, naming the supported ones.
+When no usable installation exists, the system SHALL install the latest release of the upstream OpenTelemetry .NET automatic instrumentation, choosing the archive that matches the operating system, C library (glibc or musl on Linux) and processor architecture. It SHALL reject unsupported combinations before downloading, naming the supported ones.
 
 #### Scenario: Matching archive chosen
 
@@ -83,10 +83,16 @@ The system SHALL install the latest release of the upstream OpenTelemetry .NET a
 #### Scenario: Release cannot be reached
 
 - **GIVEN** the upstream release cannot be reached
-- **AND** an earlier installation exists in the dtwiz directory
+- **AND** a usable installation exists in the dtwiz directory
 - **WHEN** installation is planned
-- **THEN** the user is offered to reuse the existing installation, showing its version
-- **AND** otherwise the user gets an actionable error
+- **THEN** the existing installation is used and the release is not needed
+
+#### Scenario: Release cannot be reached and nothing is installed
+
+- **GIVEN** the upstream release cannot be reached
+- **AND** no usable installation exists
+- **WHEN** installation is planned
+- **THEN** the user gets an actionable error
 
 ### Requirement: Integrity verification of the download
 
