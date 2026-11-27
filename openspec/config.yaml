@@ -39,12 +39,35 @@ rules:
   proposal:
     - Include rollback plan for risky or architecture-level changes
     - Reference relevant feature flag names when new behavior is gated
+    - Why describes the user-visible problem concretely, including today's wrong behavior and its root cause when known
+    - What Changes states defaults, exit codes, error behavior and flag interactions, and ends with either "No breaking changes." or an inline **BREAKING** bullet giving old versus new behavior, plus a "Not in scope" line when scope could be misread
+    - Impact uses labelled bullets as they apply (**Code** with file paths, **Feature flags** with name, CLI flag and env var, **Self-monitoring**, **Dependencies**, **Docs**, **Rollback**, **Follow-ups**) and names any in-flight change that touches the same code
+    - Split large features into steps, with an umbrella capability for the overall plan and cross-step rules, and one change per step
+  design:
+    - Context references proposal.md for motivation instead of restating it, then lists only the current-state facts that shape the approach, naming real files and functions
+    - State external facts (upstream releases, CLI output, APIs) against a named version and date; if they are not verified yet, add a preparation task that verifies them and records the result in design.md
+    - Number every decision and title it with the choice made, as in "### D3. Availability becomes data", never a topic such as "Error handling"; other artifacts and later changes cite decisions as "design D3"
+    - Each decision states what is decided, why, and at least one alternative with the reason it was rejected ("*Alternative:* ... (rejected because ...)")
+    - Show contracts, not implementations, using layering diagrams, type and function signatures, the file new code goes into, and the exact user-facing strings (error texts, headings, JSON field names); no function bodies
+    - When an in-flight change touches the same code, add a coordination decision naming that change, the shared files, who resolves the conflict, and which behavior stays true once both land
+    - Every non-goal gives its reason and where the work goes instead (follow-up change, later step, never)
+    - Risks use "[Risk] → Mitigation", with a named test as the mitigation where possible; accepted risks say "Accepted." and why
+    - Open Questions holds only unknowns that can wait without changing specs, approach or tasks; write "None blocking." when there are none
   specs:
     - Use GIVEN/WHEN/THEN format for every scenario (GIVEN establishes state, WHEN describes the action, THEN states the observable outcome)
     - Describe WHAT the system does, not HOW — no method names, API endpoints, internal types, or implementation details
     - Reference existing patterns before introducing new ones
     - Document feature flag dependencies directly in scenarios
+    - Title each requirement with the behavior it guarantees, as in "Guidance outcome exits as a configuration failure"
+    - Make scenarios concrete, with named fixtures (paths, file names, accounts), the exact command run, and exact user-facing output and error strings
+    - Include negative assertions where they matter ("nothing is deleted", "no preview is printed") and an "unchanged" scenario for neighbouring behavior that must not move
+    - Every REMOVED requirement has a Reason and a Migration, and the Migration names the requirement that replaces it, if any
   tasks:
     - Reference concrete file paths from the key paths above
     - Always include relevant test layers
     - Define test cases derived from the spec to ensure coverage of new behavior and edge cases
+    - Start with a short preamble covering package layout, scope (including what is explicitly left to a later change) and test conventions (docs/contributing/testing.md)
+    - Order task groups by dependency, and put refactors with no visible behavior change in their own group, separate from behavior changes
+    - Each task names its file, cites the design decision and spec scenario it implements ("design D2", "spec - <capability> \"<Scenario>\""), and ends with "verify in <file>_test.go" followed by the enumerated test cases
+    - End with an integration group covering make test, make lint, make markdownlint, GOOS=windows go vet when platform code changes, openspec validate <change> --strict, and a manual run with exact commands that records any gaps
+    - Close with a "Workflow follow-up" section when later changes or an archive order depend on this one
