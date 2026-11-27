@@ -144,7 +144,7 @@ For a selected .NET project the system SHALL find every runnable service: a proj
 
 ### Requirement: Service details read from the project file
 
-For each service the system SHALL determine its name, its target framework or frameworks, whether it targets .NET Framework, and whether it is published self-contained. A service's name SHALL be its assembly name, or the project file name when none is set, and SHALL be made unique within the project when two services would share a name.
+For each service the system SHALL determine its name, its target framework or frameworks, whether it targets .NET Framework, and whether it is published self-contained. A service's name SHALL be its assembly name, or the project file name when none is set, and SHALL be made unique within the project when two services would share a name. Values the project file does not declare SHALL be taken from the `Directory.Build.props` that applies to it.
 
 #### Scenario: Target framework read
 
@@ -158,9 +158,36 @@ For each service the system SHALL determine its name, its target framework or fr
 - **WHEN** the service is discovered
 - **THEN** both frameworks are recorded
 
-#### Scenario: Framework inherited from shared build files
+#### Scenario: Framework inherited from Directory.Build.props
 
 - **GIVEN** the project file does not declare a target framework
+- **AND** the nearest `Directory.Build.props` above it declares `net8.0`
+- **WHEN** the service is discovered
+- **THEN** its target framework is `net8.0`
+
+#### Scenario: Project value wins over the shared value
+
+- **GIVEN** a `Directory.Build.props` declaring `net8.0`
+- **AND** a project file declaring `net9.0`
+- **WHEN** the service is discovered
+- **THEN** its target framework is `net9.0`
+
+#### Scenario: Shared files chained to a parent
+
+- **GIVEN** the nearest `Directory.Build.props` imports the `Directory.Build.props` of a parent directory
+- **AND** only the parent file declares the target framework
+- **WHEN** the service is discovered
+- **THEN** the framework of the parent file is used
+
+#### Scenario: Shared self-contained setting
+
+- **GIVEN** a `Directory.Build.props` enabling self-contained publishing
+- **WHEN** a service without its own setting is discovered
+- **THEN** it is flagged as self-contained
+
+#### Scenario: Framework not declared anywhere readable
+
+- **GIVEN** neither the project file nor a `Directory.Build.props` declares a target framework, or the declared value refers to another property
 - **WHEN** the service is discovered
 - **THEN** the service is still listed
 - **AND** its target framework is reported as unknown

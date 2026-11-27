@@ -24,7 +24,7 @@ Constraints that shape the approach:
 
 - Installing, verifying or launching anything (steps 2-5; their specs come later).
 - Instrumenting .NET Framework, IIS, Windows services, self-contained or native-AOT applications.
-- Evaluating MSBuild (imports, conditions, `Directory.Build.props`); project files are read statically.
+- Evaluating MSBuild (conditions, property references, other imports); project files and the applicable `Directory.Build.props` are read statically.
 - Removing the flag, or changing the manual-languages list other than hiding `.NET` while the flag is on.
 
 ## Decisions
@@ -39,7 +39,7 @@ A solution file (`.sln`/`.slnx`) makes its directory the project; project files 
 
 ### D3. Static project-file reading, SDK classification instead of MSBuild evaluation
 
-Services are classified by reading the project XML: executable `OutputType`, or a web/worker SDK, which implies an executable. Libraries (default) and test projects (`IsTestProject` or a test SDK package reference) are skipped. Target frameworks, assembly name and self-contained are read when declared; when they come from shared build files, the framework is `unknown` rather than guessed. Legacy non-SDK project files are treated as .NET Framework. *Alternative:* shell out to `dotnet msbuild -getProperty` (rejected for step 1: requires the SDK and slows detection; may be offered in step 2 when the SDK is present, to resolve `unknown`).
+Services are classified by reading the project XML: executable `OutputType`, or a web/worker SDK, which implies an executable. Libraries (default) and test projects (`IsTestProject` or a test SDK package reference) are skipped. Target frameworks, assembly name and self-contained are read when declared; unconditional values missing from the project file are taken from the `Directory.Build.props` that applies to it (nearest file upward, followed through the import of a parent file), later extended by `add-dotnet-otel-plan-and-install`; a value that cannot be read this way, for example one that references another property, is `unknown` rather than guessed. Legacy non-SDK project files are treated as .NET Framework. *Alternative:* shell out to `dotnet msbuild -getProperty` (rejected for step 1: requires the SDK and slows detection; may be offered in step 2 when the SDK is present, to resolve `unknown`).
 
 ### D4. Process detection by classification, not by filter term
 

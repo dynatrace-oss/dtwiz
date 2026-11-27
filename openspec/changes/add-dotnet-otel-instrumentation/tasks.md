@@ -48,5 +48,6 @@ Scope: step 1 only (flag and detection). Steps 2-5 (prerequisites and plan, inst
 
 ## Workflow follow-up
 
-- Write the detailed specs for steps 2-5 as separate changes after step 1 lands.
+- Steps 2 and 3 (prerequisites, plan, installation) are specified together in `add-dotnet-otel-plan-and-install`.
+- Write the detailed specs for steps 4 and 5 as separate changes after that.
 - Archive this change after review, keeping the `dotnet-otel-instrumentation` capability as the umbrella spec that later changes extend.

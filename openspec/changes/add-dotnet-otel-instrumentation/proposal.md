@@ -34,4 +34,4 @@ dtwiz auto-instruments Java, Python, Node.js and Go projects with OpenTelemetry,
 - **Dependencies**: none new for step 1. Later steps add an HTTPS download of the upstream release archive and hash/attestation checks.
 - **Docs**: flag description and, in later changes, user documentation for .NET.
 - **Rollback**: the flag is off by default and step 1 changes nothing on the machine, so rollback is leaving the flag off or reverting the new files; the only shared-code changes are the suffix-aware marker matching and the extra ignored directories, both covered by existing scan tests.
-- **Follow-ups (own specs later)**: prerequisites and plan (step 2), instrumentation provisioning (step 3), execute/launch (step 4), uninstall and watch (step 5); IIS, Windows services and .NET Framework instrumentation are a possible later change.
+- **Follow-ups (own specs later)**: prerequisites and plan (step 2) and instrumentation provisioning (step 3), specified together in `add-dotnet-otel-plan-and-install`; execute/launch (step 4); uninstall and watch (step 5); IIS, Windows services and .NET Framework instrumentation are a possible later change.
