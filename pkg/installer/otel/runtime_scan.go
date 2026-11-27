@@ -183,16 +183,31 @@ const largeScanThreshold = 10000
 // Shared across runtimes so the progress notice prints at most once per session.
 var globalScanCount atomic.Int64
 
-// defaultScanRoots returns the working directory as the sole scan root. Used by
-// callers that do not go through the interactive root selection (the per-runtime
-// install commands and process-correlation paths), preserving cwd-only scanning.
+// defaultScanRoots returns the working directory plus the bundled examples
+// root. Used by callers that do not go through the interactive root selection
+// (the per-runtime install commands and process-correlation paths).
 func defaultScanRoots() []string {
 	wd, err := os.Getwd()
 	if err != nil {
 		logger.Debug("could not determine working directory for scan", "error", err)
 		return nil
 	}
-	return []string{wd}
+	return withBundledExamplesRoot([]string{wd})
+}
+
+// withBundledExamplesRoot appends ~/.dtwiz/examples when it exists, so the demo
+// app is offered from any working directory. Duplicates with other roots are
+// harmless: scanProjectDirs reports each matched directory once.
+func withBundledExamplesRoot(roots []string) []string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return roots
+	}
+	bundledRoot := filepath.Join(home, ".dtwiz", "examples")
+	if _, err := os.Stat(bundledRoot); err != nil {
+		return roots
+	}
+	return append(roots, bundledRoot)
 }
 
 type scanChoice int
@@ -206,8 +221,17 @@ const (
 // selectScanRoots decides which directories the `install otel` scan should walk.
 // When the working directory lies outside the home tree it prompts the user with
 // a three-way choice; otherwise (same lineage as home) it scans the working
-// directory only. Returns installer.ErrInstallCancelled when the user aborts.
+// directory only. The bundled examples root is always appended. Returns
+// installer.ErrInstallCancelled when the user aborts.
 func selectScanRoots() ([]string, error) {
+	roots, err := selectWorkingScanRoots()
+	if err != nil {
+		return nil, err
+	}
+	return withBundledExamplesRoot(roots), nil
+}
+
+func selectWorkingScanRoots() ([]string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, fmt.Errorf("determining working directory: %w", err)
@@ -373,11 +397,12 @@ func scanProjectDirs(markers []string, excludeNames []string, roots []string) []
 			return false
 		}
 
+		// Progress notices go to stderr so machine-readable stdout (analyze projects --json) stays clean.
 		n := globalScanCount.Add(1)
 		if n == largeScanThreshold {
-			fmt.Printf("  Scanning %s, this may take a moment…\n", workingDir)
+			fmt.Fprintf(os.Stderr, "  Scanning %s, this may take a moment…\n", workingDir)
 		} else if n == 2*largeScanThreshold {
-			fmt.Printf("  Tip: run dtwiz from the directory where your code lives for a faster scan.\n")
+			fmt.Fprintf(os.Stderr, "  Tip: run dtwiz from the directory where your code lives for a faster scan.\n")
 		}
 
 		if rel, relErr := filepath.Rel(workingDir, dir); relErr == nil && rel != "." {
@@ -419,14 +444,6 @@ func scanProjectDirs(markers []string, excludeNames []string, roots []string) []
 
 	for _, root := range roots {
 		walkCandidateDirs(root, 0, dirMatches, shouldSkipDir)
-	}
-
-	// Also scan the bundled examples root (~/.dtwiz/examples) if it exists.
-	if home, err := os.UserHomeDir(); err == nil {
-		bundledRoot := filepath.Join(home, ".dtwiz", "examples")
-		if _, err := os.Stat(bundledRoot); err == nil {
-			walkCandidateDirs(bundledRoot, 0, dirMatches, shouldSkipDir)
-		}
 	}
 
 	subtreeCounts.Range(func(key, value any) bool {

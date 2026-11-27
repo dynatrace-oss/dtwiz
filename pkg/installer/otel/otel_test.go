@@ -154,6 +154,44 @@ func TestInferRuntimeFromPath(t *testing.T) {
 	}
 }
 
+func TestHasRuntimeMarkers(t *testing.T) {
+	tests := []struct {
+		name  string
+		files []string
+		id    RuntimeID
+		want  bool
+	}{
+		{"java pom.xml", []string{"pom.xml"}, RuntimeJava, true},
+		{"nodejs package.json", []string{"package.json"}, RuntimeNodeJS, true},
+		{"python requirements.txt", []string{"requirements.txt"}, RuntimePython, true},
+		{"go go.mod", []string{"go.mod"}, RuntimeGo, true},
+		{"dotnet csproj", []string{"Api.csproj"}, RuntimeDotNet, true},
+		{"python markers missing", []string{"package.json"}, RuntimePython, false},
+		{"both runtimes: nodejs", []string{"package.json", "requirements.txt"}, RuntimeNodeJS, true},
+		{"both runtimes: python", []string{"package.json", "requirements.txt"}, RuntimePython, true},
+		{"unknown identifier", []string{"package.json"}, RuntimeID("ruby"), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			dir := t.TempDir()
+			for _, f := range tt.files {
+				if err := os.WriteFile(filepath.Join(dir, f), []byte{}, 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// Act
+			got := hasRuntimeMarkers(dir, tt.id)
+
+			// Assert
+			if got != tt.want {
+				t.Errorf("hasRuntimeMarkers(%v, %q) = %v, want %v", tt.files, tt.id, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestDetectAvailableRuntimes_DefaultEnabled(t *testing.T) {
 	featureflags.ClearCLIOverrideForTest(t, featureflags.AllRuntimes)
 	t.Setenv("DTWIZ_ALL_RUNTIMES", "")
@@ -431,6 +469,31 @@ func TestDetectAllProjects_SkipsPythonStub(t *testing.T) {
 	projects := detectAllProjects(runtimes, defaultScanRoots())
 	if len(projects) != 0 {
 		t.Errorf("expected Python to be skipped when stub produces no version output, got %d project(s)", len(projects))
+	}
+}
+
+func TestDetectAllProjects_PrintsSkipLineForUnavailableRuntime(t *testing.T) {
+	// Arrange
+	stubRuntimeToolchain(t, nil, false)
+	detectorCalled := false
+	runtimes := []runtimeInfo{
+		{id: RuntimeNodeJS, name: "Node.js", binName: "node", enabled: true, detect: func([]string) []detectedProject {
+			detectorCalled = true
+			return nil
+		}},
+	}
+
+	// Act
+	output := helpers.CaptureStdout(t, func() {
+		detectAllProjects(runtimes, []string{t.TempDir()})
+	})
+
+	// Assert
+	if output != "  Skipping Node.js instrumentation — 'node' not found on PATH.\n" {
+		t.Errorf("unexpected output %q", output)
+	}
+	if detectorCalled {
+		t.Error("detector of an unavailable runtime must not run in the install flow")
 	}
 }
 
@@ -823,6 +886,37 @@ func TestInstallOtelCollectorWithProject_RoutesBeforeCollectorAndApp(t *testing.
 	}
 	if !plan.executed {
 		t.Fatal("expected instrumentation plan to execute")
+	}
+}
+
+func TestInstallOtelCollectorWithProjectRuntime_ExplicitRuntimeWins(t *testing.T) {
+	// Arrange
+	stubExtensionPreview(t)
+	stubActivation(t)
+	stubRoutePreview(t)
+	tmpDir := setupAutoConfirmedTempInstall(t)
+	projectDir := filepath.Join(tmpDir, "app")
+	writeTree(t, projectDir, map[string]string{"package.json": `{"scripts":{"start":"node server.js"}}`, "requirements.txt": "flask\n"})
+	var gotRuntime string
+	origCreatePlan := createRuntimePlanFn
+	createRuntimePlanFn = func(proj detectedProject, _ int, _, _, _ string) InstrumentationPlan {
+		gotRuntime = proj.Runtime
+		return nil
+	}
+	t.Cleanup(func() { createRuntimePlanFn = origCreatePlan })
+	origExecute := executeCollectorPlanFn
+	executeCollectorPlanFn = func(_ *collectorPlan, _, _ string, _ bool) error { return nil }
+	t.Cleanup(func() { executeCollectorPlanFn = origExecute })
+
+	// Act
+	_, err := InstallOtelCollectorWithProjectRuntime("https://env.example.com", "tok", "dt0s16.test", projectDir, RuntimePython, false)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("InstallOtelCollectorWithProjectRuntime() error = %v", err)
+	}
+	if gotRuntime != "Python" {
+		t.Errorf("plan built for runtime %q, want Python (inference would pick Node.js)", gotRuntime)
 	}
 }
 

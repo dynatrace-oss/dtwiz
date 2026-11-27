@@ -212,3 +212,73 @@ func TestInstallOneAgentCmd_HostProperty_HelpVisibility(t *testing.T) {
 		t.Errorf("expected --host-property listed when the feature flag is on, got:\n%s", out)
 	}
 }
+
+func TestInstallOtelCmd_RuntimeWithoutProjectFailsBeforeCredentials(t *testing.T) {
+	// Arrange
+	captureEvents(t)
+	withCleanCredentialFlags(t)
+	t.Setenv("DT_ENVIRONMENT", "")
+	t.Setenv("DT_PLATFORM_TOKEN", "")
+	origProject, origRuntime := otelProject, otelRuntime
+	t.Cleanup(func() { otelProject, otelRuntime = origProject, origRuntime })
+	otelProject, otelRuntime = "", "java"
+
+	// Act
+	err := installOtelCmd.RunE(installOtelCmd, nil)
+
+	// Assert
+	if err == nil || err.Error() != "--runtime requires --project" {
+		t.Errorf("error = %v, want %q", err, "--runtime requires --project")
+	}
+}
+
+func TestInstallOtelCmd_RuntimeHelpListsDotNetOnlyWithFlag(t *testing.T) {
+	tests := []struct {
+		name   string
+		dotNet bool
+	}{
+		{"flag off", false},
+		{"flag on", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			captureEvents(t)
+			featureflags.SetCLIOverrideForTest(t, featureflags.DotNetOtel, tt.dotNet)
+			var buf bytes.Buffer
+			installOtelCmd.SetOut(&buf)
+			t.Cleanup(func() { installOtelCmd.SetOut(nil) })
+
+			// Act
+			installCmd.HelpFunc()(installOtelCmd, nil)
+
+			// Assert
+			line := ""
+			for _, l := range strings.Split(buf.String(), "\n") {
+				if strings.Contains(l, "--runtime string") {
+					line = l
+				}
+			}
+			if !strings.Contains(line, "python, java, nodejs, go") {
+				t.Fatalf("--runtime usage missing identifiers, help:\n%s", buf.String())
+			}
+			if strings.Contains(line, "dotnet") != tt.dotNet {
+				t.Errorf("--runtime usage = %q, want dotnet listed = %v", line, tt.dotNet)
+			}
+		})
+	}
+}
+
+func TestInstallOtelPerRuntimeCmds_HaveNoRuntimeFlag(t *testing.T) {
+	for _, c := range []*cobra.Command{installOtelPythonCmd, installOtelNodeCmd, installOtelJavaCmd} {
+		t.Run(c.Name(), func(t *testing.T) {
+			// Act
+			flag := c.Flags().Lookup("runtime")
+
+			// Assert
+			if flag != nil {
+				t.Errorf("%s must not register --runtime", c.Name())
+			}
+		})
+	}
+}

@@ -30,8 +30,10 @@ func extractGoModuleName(goModPath string) string {
 	return ""
 }
 
+var goProjectMarkers = []string{"go.mod"}
+
 func detectGoProjects(roots []string) []GoProject {
-	scanned := scanProjectDirs([]string{"go.mod"}, nil, roots)
+	scanned := scanProjectDirs(goProjectMarkers, nil, roots)
 	projects := make([]GoProject, 0, len(scanned))
 	for _, s := range scanned {
 		moduleName := extractGoModuleName(filepath.Join(s.Path, "go.mod"))

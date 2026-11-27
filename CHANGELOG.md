@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `dotnet-otel` feature flag (`--dotnet-otel` or `DTWIZ_DOTNET_OTEL=true`, off by default) gating upcoming .NET OpenTelemetry auto-instrumentation support.
+- `dtwiz analyze projects` lists the projects `dtwiz install otel` can instrument, without credentials and without prompting, so scripts and AI agents no longer have to start `setup` or `install otel` and abort at the selection. It scans the working directory (or `--dir <path>`) only, `--runtime java,go` limits the listing to the given runtimes (`python`, `java`, `nodejs`, `go`, plus `dotnet` while `DTWIZ_DOTNET_OTEL=true`; exact match), and projects whose toolchain is missing are listed with the reason. `--json` prints one document with the scanned root, runtime availability and, per project, its status and the `install_command` that installs exactly that project.
+- `dtwiz install otel --project <path> --runtime <id>` selects the runtime of the project directory instead of inferring it, for directories that hold projects of more than one runtime. `--runtime` requires `--project` and fails when the directory has no markers for that runtime.
+
+### Changed
+
+- `dtwiz install otel`: the progress notice shown while scanning very large directory trees is now written to stderr.
 
 ## [1.16.0] - 2026-11-18
 

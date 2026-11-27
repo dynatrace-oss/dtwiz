@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -278,10 +277,14 @@ type InstrumentationPlan interface {
 }
 
 type runtimeInfo struct {
+	id      RuntimeID
 	name    string
 	binName string
 	enabled bool
-	detect  func(roots []string) []detectedProject
+	// endsInManualSteps marks runtimes whose `install otel` flow ends in the
+	// manual-steps outcome instead of instrumenting the application.
+	endsInManualSteps bool
+	detect            func(roots []string) []detectedProject
 }
 
 type detectedProject struct {
@@ -292,12 +295,12 @@ type detectedProject struct {
 
 func detectAvailableRuntimes() []runtimeInfo {
 	return []runtimeInfo{
-		{name: "Python", binName: "python3", enabled: true, detect: detectPythonRuntimeProjects},
-		{name: "Java", binName: "java", enabled: true, detect: detectJavaRuntimeProjects},
-		{name: "Node.js", binName: "node", enabled: true, detect: detectNodeRuntimeProjects},
-		{name: "Go", binName: "go", enabled: true, detect: detectGoRuntimeProjects},
+		{id: RuntimePython, name: "Python", binName: "python3", enabled: true, detect: detectPythonRuntimeProjects},
+		{id: RuntimeJava, name: "Java", binName: "java", enabled: true, detect: detectJavaRuntimeProjects},
+		{id: RuntimeNodeJS, name: "Node.js", binName: "node", enabled: true, detect: detectNodeRuntimeProjects},
+		{id: RuntimeGo, name: "Go", binName: "go", enabled: true, detect: detectGoRuntimeProjects},
 		// Listed even when `dotnet` is not installed (empty binName): step 1 only detects.
-		{name: dotNetRuntimeName, binName: "", enabled: featureflags.IsEnabled(featureflags.DotNetOtel), detect: detectDotNetRuntimeProjects},
+		{id: RuntimeDotNet, name: dotNetRuntimeName, binName: "", enabled: featureflags.IsEnabled(featureflags.DotNetOtel), endsInManualSteps: true, detect: detectDotNetRuntimeProjects},
 	}
 }
 
@@ -353,35 +356,8 @@ func detectAllProjects(runtimes []runtimeInfo, roots []string) []detectedProject
 			logger.Debug("skipping runtime (disabled)", "runtime", rt.name)
 			continue
 		}
-		// Python's binary may exist as a non-functional stub even when no real
-		// interpreter is installed, so run it to verify it's usable.
-		var available bool
-		var stubOnly bool
-		var binPath string
-		if rt.binName == "" {
-			available = true
-		} else if rt.binName == "python3" || rt.binName == "python" {
-			_, err := DetectPython()
-			available = err == nil
-			if !available {
-				var lookErr error
-				binPath, lookErr = exec.LookPath(rt.binName)
-				stubOnly = lookErr == nil // binary found but not usable
-			}
-		} else {
-			_, err := exec.LookPath(rt.binName)
-			available = err == nil
-		}
-		if !available {
-			if stubOnly {
-				if isWindowsStorePythonStub(binPath) {
-					fmt.Printf("  Skipping %s instrumentation — '%s' is a Windows Store stub, not a real interpreter.\n  Install Python 3 from https://python.org or disable it in Settings → Apps → Advanced app settings → App execution aliases.\n", rt.name, rt.binName)
-				} else {
-					fmt.Printf("  Skipping %s instrumentation — '%s' found on PATH but not usable.\n", rt.name, rt.binName)
-				}
-			} else {
-				fmt.Printf("  Skipping %s instrumentation — '%s' not found on PATH.\n", rt.name, rt.binName)
-			}
+		if availability := checkRuntimeAvailability(rt); !availability.available {
+			fmt.Print(availability.message)
 			continue
 		}
 		active = append(active, rt)
@@ -522,33 +498,44 @@ func createRuntimePlan(proj detectedProject, httpPort int, token, envURL, platfo
 
 var createRuntimePlanFn = createRuntimePlan
 
+// runtimeInferenceOrder is the precedence used when --project is given without
+// --runtime: the first runtime whose markers are present wins.
+var runtimeInferenceOrder = []RuntimeID{RuntimeJava, RuntimeNodeJS, RuntimePython, RuntimeGo, RuntimeDotNet}
+
+// hasRuntimeMarkers reports whether the project markers of runtime id are
+// present directly inside path (files or directories).
+func hasRuntimeMarkers(path string, id RuntimeID) bool {
+	hasAny := func(names []string) bool {
+		for _, name := range names {
+			if _, err := os.Stat(filepath.Join(path, name)); err == nil {
+				return true
+			}
+		}
+		return false
+	}
+	switch id {
+	case RuntimeJava:
+		return hasAny(javaProjectMarkers)
+	case RuntimeNodeJS:
+		return hasAny(nodeProjectMarkers)
+	case RuntimePython:
+		return hasAny(pythonProjectMarkers)
+	case RuntimeGo:
+		return hasAny(goProjectMarkers)
+	case RuntimeDotNet:
+		return hasDotNetMarker(path)
+	}
+	return false
+}
+
 // inferRuntimeFromPath returns "Java", "Node.js", "Python", "Go", ".NET" (flag-gated), or "" based on which
 // marker files or directories are present directly inside path.
 func inferRuntimeFromPath(path string) string {
-	hasFile := func(name string) bool {
-		_, err := os.Stat(filepath.Join(path, name))
-		return err == nil
-	}
-	for _, m := range javaProjectMarkers {
-		if hasFile(m) {
-			return "Java"
+	for _, id := range runtimeInferenceOrder {
+		rt, ok := activeRuntime(id)
+		if ok && hasRuntimeMarkers(path, id) {
+			return rt.name
 		}
-	}
-	for _, m := range nodeProjectMarkers {
-		if hasFile(m) {
-			return "Node.js"
-		}
-	}
-	for _, m := range pythonProjectMarkers {
-		if hasFile(m) {
-			return "Python"
-		}
-	}
-	if hasFile("go.mod") {
-		return "Go"
-	}
-	if featureflags.IsEnabled(featureflags.DotNetOtel) && hasDotNetMarker(path) {
-		return dotNetRuntimeName
 	}
 	return ""
 }
@@ -564,6 +551,13 @@ func InstallOtelCollector(envURL, token, platformToken string, dryRun bool) (str
 // auto-instrumentation for a pre-selected project path.
 // Returns the URL slug of the manually-selected language when the user chose one.
 func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath string, dryRun bool) (string, error) {
+	return InstallOtelCollectorWithProjectRuntime(envURL, token, platformToken, projectPath, "", dryRun)
+}
+
+// InstallOtelCollectorWithProjectRuntime is InstallOtelCollectorWithProject with
+// an explicit runtime for projectPath. An empty runtimeID infers the runtime from
+// the project's markers; callers validate runtimeID with ResolveProjectRuntime.
+func InstallOtelCollectorWithProjectRuntime(envURL, token, platformToken, projectPath string, runtimeID RuntimeID, dryRun bool) (string, error) {
 	if projectPath != "" {
 		if _, err := os.Stat(projectPath); err != nil {
 			return "", fmt.Errorf("project path not found: %s", projectPath)
@@ -603,6 +597,13 @@ func InstallOtelCollectorWithProject(envURL, token, platformToken, projectPath s
 	var manualLang string
 	if projectPath != "" {
 		rt := inferRuntimeFromPath(projectPath)
+		if runtimeID != "" {
+			selected, ok := activeRuntime(runtimeID)
+			if !ok {
+				return "", &UnknownRuntimeError{Value: string(runtimeID), Valid: ActiveRuntimeIDs()}
+			}
+			rt = selected.name
+		}
 		if rt == "" {
 			return "", fmt.Errorf("could not detect runtime from project path: %s", projectPath)
 		}
