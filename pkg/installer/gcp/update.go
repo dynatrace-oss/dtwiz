@@ -38,7 +38,10 @@ func updateGCPWithRunner(
 		func() (err error) { projectID, _, err = gcpAccountInfo(runner); return },
 	)
 	if err != nil {
-		return err
+		// Rendered here, after the fan-out, so the guidance box is printed once and never
+		// from a goroutine. A missing account/project takes precedence over DT lookup errors:
+		// those resurface on the re-run once gcloud is set up.
+		return reportPreflight(verbUpdate, err)
 	}
 
 	conn, err := selectUpdatableConnection(conns, name)

@@ -32,7 +32,7 @@ func happyGcloudRunner(mutating *int) cmdRunner {
 		switch {
 		case name == "gcloud" && gcloudArgs(args, "config", "get-value", "project"):
 			return "my-project\n", nil
-		case name == "gcloud" && gcloudArgs(args, "config", "get-value", "account"):
+		case name == "gcloud" && gcloudArgs(args, "auth", "list"):
 			return "user@example.com\n", nil
 		case name == "gcloud" && gcloudArgs(args, "iam", "service-accounts", "create"):
 			if mutating != nil {
@@ -317,7 +317,7 @@ func TestGCPStep1PermissionDeniedIncludesRoleHint(t *testing.T) {
 		switch {
 		case gcloudArgs(args, "config", "get-value", "project"):
 			return "my-project\n", nil
-		case gcloudArgs(args, "config", "get-value", "account"):
+		case gcloudArgs(args, "auth", "list"):
 			return "user@example.com\n", nil
 		case gcloudArgs(args, "services", "enable"):
 			return "", fmt.Errorf("AUTH_PERMISSION_DENIED: Permission denied to enable service")
@@ -350,7 +350,7 @@ func TestGCPStep3PermissionDeniedIncludesRoleHint(t *testing.T) {
 		switch {
 		case gcloudArgs(args, "config", "get-value", "project"):
 			return "my-project\n", nil
-		case gcloudArgs(args, "config", "get-value", "account"):
+		case gcloudArgs(args, "auth", "list"):
 			return "user@example.com\n", nil
 		case gcloudArgs(args, "iam", "service-accounts", "create"):
 			return "", fmt.Errorf("AUTH_PERMISSION_DENIED: Permission denied to create service account")
@@ -385,7 +385,7 @@ func TestGCPStep4RetriesServiceAccountPropagation(t *testing.T) {
 		switch {
 		case gcloudArgs(args, "config", "get-value", "project"):
 			return "my-project\n", nil
-		case gcloudArgs(args, "config", "get-value", "account"):
+		case gcloudArgs(args, "auth", "list"):
 			return "user@example.com\n", nil
 		case gcloudArgs(args, "iam", "service-accounts", "create"):
 			return stockSACreateJSON, nil
@@ -426,7 +426,7 @@ func TestGCPStep5FailsAllCleanupHints(t *testing.T) {
 		switch {
 		case gcloudArgs(args, "config", "get-value", "project"):
 			return "my-project\n", nil
-		case gcloudArgs(args, "config", "get-value", "account"):
+		case gcloudArgs(args, "auth", "list"):
 			return "user@example.com\n", nil
 		case gcloudArgs(args, "iam", "service-accounts", "create"):
 			return stockSACreateJSON, nil
@@ -757,4 +757,65 @@ func TestGCPInstall_MarksInstallWorkTimeEnded(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	assertInstallWorkTimeEnded(t)
+}
+
+// ── preflight guidance ────────────────────────────────────────────────────────
+
+// preflightOnlyRunner answers the gcloud account and project reads with the given values and counts
+// every other gcloud call, which must not happen once preflight fails.
+func preflightOnlyRunner(account, project string, other *int) cmdRunner {
+	return func(_ string, args []string, _ []string) (string, error) {
+		switch {
+		case gcloudArgs(args, "auth", "list"):
+			return account, nil
+		case gcloudArgs(args, "config", "get-value", "project"):
+			return project, nil
+		}
+		*other++
+		return "{}", nil
+	}
+}
+
+func TestGCPInstall_PreflightGuidanceStopsBeforeAnyWork(t *testing.T) {
+	tests := []struct {
+		name      string
+		account   string
+		project   string
+		dryRun    bool
+		wantBox   string
+		wantField string
+	}{
+		{name: "no project", account: "jane@example.com", project: "(unset)", wantBox: "no gcloud project is selected", wantField: "gcloud.project"},
+		{name: "no project, dry run", account: "jane@example.com", project: "(unset)", dryRun: true, wantBox: "no gcloud project is selected", wantField: "gcloud.project"},
+		{name: "no account", account: "", project: "my-project", wantBox: "no gcloud account is logged in", wantField: "gcloud.account"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			defer stubExecLookPath(t)()
+			other := 0
+			dtc := &recordingDTClient{}
+			var err error
+
+			// Act
+			out := captureStdout(t, func() {
+				err = installGCPWithRunner("https://abc.live.dynatrace.com", "dt0s16.fake.token", tt.dryRun, time.Time{}, preflightOnlyRunner(tt.account, tt.project, &other), noSleep, dtc)
+			})
+
+			// Assert
+			if !strings.Contains(out, "Google Cloud install not run: "+tt.wantBox) {
+				t.Errorf("guidance box missing, output:\n%s", out)
+			}
+			assertConfigErrorFor(t, err, tt.wantField)
+			if other != 0 {
+				t.Errorf("expected only gcloud config reads, got %d other gcloud calls", other)
+			}
+			if calls := dtc.recorded(); len(calls) != 0 {
+				t.Errorf("expected no Dynatrace calls, got %v", calls)
+			}
+			if strings.Contains(out, "[dry-run]") || strings.Contains(out, "Dynatrace Google Cloud Integration") {
+				t.Errorf("preview must not be printed:\n%s", out)
+			}
+		})
+	}
 }

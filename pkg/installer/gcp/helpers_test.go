@@ -349,3 +349,67 @@ func TestGCPRemoveProjectBinding_NotFoundIsSuccess(t *testing.T) {
 		t.Errorf("not-found should be success, got: %v", err)
 	}
 }
+
+// recordingDTClient records every dtclient call by name and otherwise behaves like an
+// empty tenant. Tests use it to assert that a flow stopped before touching Dynatrace.
+type recordingDTClient struct {
+	mu    sync.Mutex
+	calls []string
+}
+
+func (c *recordingDTClient) record(name string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls = append(c.calls, name)
+}
+
+func (c *recordingDTClient) recorded() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]string(nil), c.calls...)
+}
+
+func (c *recordingDTClient) installExtension() (bool, error) {
+	c.record("installExtension")
+	return false, nil
+}
+func (c *recordingDTClient) isExtensionActive() (bool, error) {
+	c.record("isExtensionActive")
+	return true, nil
+}
+func (c *recordingDTClient) createConnection(string) (string, error) {
+	c.record("createConnection")
+	return "conn-1", nil
+}
+func (c *recordingDTClient) dtServiceAccount() (string, error) {
+	c.record("dtServiceAccount")
+	return "dt-monitor@dynatrace.iam.gserviceaccount.com", nil
+}
+func (c *recordingDTClient) updateConnection(string, string, string) error {
+	c.record("updateConnection")
+	return nil
+}
+func (c *recordingDTClient) createMonitoring(string, string, string, string) error {
+	c.record("createMonitoring")
+	return nil
+}
+func (c *recordingDTClient) updateMonitoring(string, string, string, string, string) error {
+	c.record("updateMonitoring")
+	return nil
+}
+func (c *recordingDTClient) findAllConnections(string) ([]connRef, error) {
+	c.record("findAllConnections")
+	return nil, nil
+}
+func (c *recordingDTClient) deleteConnection(string) error {
+	c.record("deleteConnection")
+	return nil
+}
+func (c *recordingDTClient) findAllMonitoringConfigs(string) ([]string, error) {
+	c.record("findAllMonitoringConfigs")
+	return nil, nil
+}
+func (c *recordingDTClient) deleteMonitoring(string) error {
+	c.record("deleteMonitoring")
+	return nil
+}

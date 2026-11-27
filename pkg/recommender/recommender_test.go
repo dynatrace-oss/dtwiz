@@ -424,6 +424,53 @@ func TestGenerateRecommendations_UnavailableEntriesPresent(t *testing.T) {
 	}
 }
 
+func TestGenerateRecommendations_GCPUnlockCommand(t *testing.T) {
+	tests := []struct {
+		name string
+		gcp  *analyzer.GCPInfo
+		want string
+	}{
+		{
+			name: "not signed in",
+			gcp:  nil,
+			want: "gcloud auth login",
+		},
+		{
+			name: "authenticated without a project",
+			gcp:  &analyzer.GCPInfo{Authenticated: true, Account: "jane@example.com"},
+			want: "`gcloud projects list`, then `gcloud config set project <PROJECT_ID>`",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			system := &analyzer.SystemInfo{
+				Platform:         analyzer.PlatformLinux,
+				ContainerRuntime: analyzer.ContainerRuntimeNone,
+				Orchestrator:     analyzer.OrchestratorNone,
+				GCP:              tt.gcp,
+			}
+
+			// Act
+			recs := recommender.GenerateRecommendations(system)
+
+			// Assert
+			var got *recommender.Recommendation
+			for i := range recs {
+				if recs[i].Method == recommender.MethodGCP && recs[i].Unavailable {
+					got = &recs[i]
+				}
+			}
+			if got == nil {
+				t.Fatal("expected an unavailable GCP entry")
+			}
+			if got.UnlockCommand != tt.want {
+				t.Errorf("UnlockCommand = %q, want %q", got.UnlockCommand, tt.want)
+			}
+		})
+	}
+}
+
 func TestGenerateRecommendations_DetectedProviderNotUnavailable(t *testing.T) {
 	system := &analyzer.SystemInfo{
 		Platform:         analyzer.PlatformLinux,

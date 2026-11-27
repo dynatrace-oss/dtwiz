@@ -183,7 +183,7 @@ func installGCPWithRunner(
 ) error {
 	projectID, _, err := gcpAccountInfo(runner)
 	if err != nil {
-		return err
+		return reportPreflight(verbInstall, err)
 	}
 
 	name := integrationNameForEnv(envURL)

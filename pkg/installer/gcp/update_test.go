@@ -167,3 +167,47 @@ func TestGCPUpdate_MarksInstallWorkTimeEnded(t *testing.T) {
 	}
 	assertInstallWorkTimeEnded(t)
 }
+
+func TestGCPUpdate_PreflightGuidanceShownOnceWithoutWrites(t *testing.T) {
+	tests := []struct {
+		name      string
+		account   string
+		project   string
+		wantBox   string
+		wantField string
+	}{
+		{name: "no project", account: "jane@example.com", project: "(unset)", wantBox: "no gcloud project is selected", wantField: "gcloud.project"},
+		{name: "no account", account: "", project: "my-project", wantBox: "no gcloud account is logged in", wantField: "gcloud.account"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			defer stubExecLookPath(t)()
+			other := 0
+			dtc := &recordingDTClient{}
+			var err error
+
+			// Act
+			out := captureStdout(t, func() {
+				err = updateGCPWithRunner("https://abc.live.dynatrace.com", "tok", false, time.Time{}, preflightOnlyRunner(tt.account, tt.project, &other), noSleep, dtc)
+			})
+
+			// Assert
+			if n := strings.Count(out, "Google Cloud update not run: "+tt.wantBox); n != 1 {
+				t.Errorf("guidance box shown %d times, want exactly once:\n%s", n, out)
+			}
+			if !strings.Contains(out, "dtwiz update gcp") {
+				t.Errorf("re-run command missing:\n%s", out)
+			}
+			assertConfigErrorFor(t, err, tt.wantField)
+			for _, call := range dtc.recorded() {
+				if call != "findAllConnections" && call != "findAllMonitoringConfigs" {
+					t.Errorf("unexpected Dynatrace call %q after preflight failure", call)
+				}
+			}
+			if strings.Contains(out, "Dynatrace Google Cloud Integration") {
+				t.Errorf("preview must not be printed:\n%s", out)
+			}
+		})
+	}
+}

@@ -20,6 +20,7 @@ import (
 
 var uninstallDryRun bool
 var uninstallAutoConfirm bool
+var uninstallGCPDynatraceOnly bool
 
 var uninstallCmd = &cobra.Command{
 	Use:   "uninstall <method>",
@@ -184,7 +185,7 @@ var uninstallGCPCmd = &cobra.Command{
 			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
 			return err
 		}
-		if err := gcp.UninstallGCP(envURL, platformTok, uninstallDryRun); err != nil {
+		if err := gcp.UninstallGCP(envURL, platformTok, uninstallDryRun, uninstallGCPDynatraceOnly); err != nil {
 			if errors.Is(err, installer.ErrInstallCancelled) {
 				fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepCancelled), err)
 				return nil
@@ -218,6 +219,8 @@ func init() {
 	uninstallCmd.AddCommand(uninstallAWSCmd)
 	uninstallCmd.AddCommand(uninstallAWSLambdaCmd)
 	uninstallCmd.AddCommand(uninstallAzureCmd)
+	uninstallGCPCmd.Flags().BoolVar(&uninstallGCPDynatraceOnly, gcp.DynatraceOnlyFlag, false,
+		"remove only the Dynatrace connection and monitoring configuration, without gcloud (e.g. when the project was deleted); GCP resources are left in place")
 	uninstallCmd.AddCommand(uninstallGCPCmd)
 	uninstallCmd.AddCommand(uninstallOtelCmd)
 	uninstallCmd.AddCommand(uninstallSelfCmd)

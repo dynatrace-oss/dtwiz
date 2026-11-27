@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -87,8 +88,19 @@ func Execute(t time.Time) {
 	err := rootCmd.Execute()
 	selfmonitoring.Flush(500 * time.Millisecond)
 	if err != nil {
+		printExecuteError(rootCmd, err)
 		os.Exit(1)
 	}
+}
+
+// printExecuteError prints err the way cobra would ("Error: <msg>" on stderr), unless
+// the error was already shown to the user. Cobra's own printing is silenced on the root
+// command so this is the single place errors reach the terminal.
+func printExecuteError(cmd *cobra.Command, err error) {
+	if errors.Is(err, installer.ErrAlreadyReported) {
+		return
+	}
+	cmd.PrintErrln(cmd.ErrPrefix(), err.Error())
 }
 
 func init() {
@@ -114,6 +126,9 @@ func init() {
 	rootCmd.Run = func(cmd *cobra.Command, args []string) {
 		_ = cmd.Help()
 	}
+	// Errors are printed by Execute via printExecuteError, so already-reported
+	// errors can be kept off the "Error: ..." line.
+	rootCmd.SilenceErrors = true
 
 	rootCmd.PersistentFlags().BoolVar(&debugFlag, "debug", false, "enable debug logging")
 	rootCmd.PersistentFlags().CountVarP(&verbosityFlag, "verbose", "v", "verbose output")

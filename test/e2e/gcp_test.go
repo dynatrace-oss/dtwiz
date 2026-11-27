@@ -39,7 +39,7 @@ func TestGCPLifecycle(t *testing.T) {
 	// can create real GCP/Dynatrace resources before failing on a later step, and
 	// UninstallGCP is safe to call when there is nothing (or only partial state) to remove.
 	t.Cleanup(func() {
-		if err := gcp.UninstallGCP(env.EnvURL, env.PlatformToken, false); err != nil {
+		if err := gcp.UninstallGCP(env.EnvURL, env.PlatformToken, false, false); err != nil {
 			t.Logf("cleanup: uninstall failed: %v", err)
 		}
 	})
@@ -53,7 +53,7 @@ func TestGCPLifecycle(t *testing.T) {
 	requireGCPResources(t, env, true)
 
 	t.Log("uninstalling Google Cloud integration")
-	if err := gcp.UninstallGCP(env.EnvURL, env.PlatformToken, false); err != nil {
+	if err := gcp.UninstallGCP(env.EnvURL, env.PlatformToken, false, false); err != nil {
 		t.Fatalf("UninstallGCP: %v", err)
 	}
 

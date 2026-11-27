@@ -7,7 +7,6 @@ import (
 
 	"github.com/dynatrace-oss/dtwiz/pkg/display"
 	"github.com/dynatrace-oss/dtwiz/pkg/installer"
-	"github.com/dynatrace-oss/dtwiz/pkg/logger"
 )
 
 func ConnectionExists(envURL, platformToken string) (bool, error) {
@@ -46,14 +45,12 @@ func gcpGatherServiceAccounts(conns []connRef, currentName, projectID string) (c
 			current = append(current, c.serviceAccountEmail)
 		}
 	}
-	if projectID != "" {
-		if email := gcpServiceAccountEmail(currentName, projectID); !currentSet[email] {
-			currentSet[email] = true
-			current = append(current, email)
-		}
-		if legacyEmail := gcpServiceAccountEmail(integrationPrefix, projectID); !currentSet[legacyEmail] {
-			legacy = append(legacy, legacyEmail)
-		}
+	if email := gcpServiceAccountEmail(currentName, projectID); !currentSet[email] {
+		currentSet[email] = true
+		current = append(current, email)
+	}
+	if legacyEmail := gcpServiceAccountEmail(integrationPrefix, projectID); !currentSet[legacyEmail] {
+		legacy = append(legacy, legacyEmail)
 	}
 	sort.Strings(current)
 	sort.Strings(legacy)
@@ -72,29 +69,36 @@ func MonitoringConfigExists(envURL, platformToken string) (bool, error) {
 	return len(ids) > 0, err
 }
 
-func UninstallGCP(envURL, platformToken string, dryRun bool) error {
+// UninstallGCP removes the integration. With dynatraceOnly, only the Dynatrace
+// connections and monitoring configurations are removed and gcloud is not used at all,
+// for a project that was deleted or is no longer accessible.
+func UninstallGCP(envURL, platformToken string, dryRun, dynatraceOnly bool) error {
 	dtc, err := newSDKDTClient(envURL, platformToken)
 	if err != nil {
 		return err
+	}
+	if dynatraceOnly {
+		return uninstallDynatraceOnly(envURL, dryRun, dtc)
 	}
 	return uninstallGCPWithRunner(envURL, dryRun, realRunner, dtc)
 }
 
 func uninstallGCPWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc dtclient) error {
+	// Resolved before discovery: without a project the GCP service account and its
+	// binding can't be removed, so nothing is deleted rather than only the DT side.
+	projectID, _, err := gcpAccountInfo(runner)
+	if err != nil {
+		return reportPreflight(verbUninstall, err)
+	}
+
 	var monConfigIDs []string
 	var conns []connRef
-	err := installer.RunConcurrently(
+	err = installer.RunConcurrently(
 		func() (err error) { monConfigIDs, err = dtc.findAllMonitoringConfigs(integrationPrefix); return },
 		func() (err error) { conns, err = dtc.findAllConnections(integrationPrefix); return },
 	)
 	if err != nil {
 		return err
-	}
-
-	// Project ID is best-effort: cleanup proceeds even without an active gcloud project.
-	projectID, _, err := gcpAccountInfo(runner)
-	if err != nil {
-		logger.Debug("gcloud project unavailable during cleanup, continuing", "err", err)
 	}
 
 	currentName := integrationNameForEnv(envURL)
@@ -112,7 +116,7 @@ func uninstallGCPWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc dt
 		return err
 	}
 
-	totalSteps := uninstallStepCount(monConfigIDs, conns, currentSAEmails, legacySAEmails, projectID)
+	totalSteps := uninstallStepCount(monConfigIDs, conns, currentSAEmails, legacySAEmails)
 	if err := runUninstallSteps(totalSteps, projectID, monConfigIDs, conns, currentSAEmails, legacySAEmails, runner, dtc); err != nil {
 		return err
 	}
@@ -123,11 +127,8 @@ func uninstallGCPWithRunner(envURL string, dryRun bool, runner cmdRunner, dtc dt
 	return nil
 }
 
-func uninstallStepCount(monConfigIDs []string, conns []connRef, currentSAEmails, legacySAEmails []string, projectID string) int {
-	saSteps := 0
-	if projectID != "" {
-		saSteps = (len(currentSAEmails) + len(legacySAEmails)) * 2
-	}
+func uninstallStepCount(monConfigIDs []string, conns []connRef, currentSAEmails, legacySAEmails []string) int {
+	saSteps := (len(currentSAEmails) + len(legacySAEmails)) * 2
 	return len(monConfigIDs) + saSteps + len(conns)
 }
 
@@ -150,44 +151,41 @@ func runUninstallSteps(total int, projectID string, monConfigIDs []string, conns
 		display.ColorOK.Println("  ✓ Monitoring configuration deleted")
 	}
 
-	// Service-account cleanup only runs with an active gcloud project to target.
-	if projectID != "" {
-		for _, email := range currentSAEmails {
-			step++
-			fmt.Printf("  Step %d/%d: Remove project IAM binding...\n", step, total)
-			if err := gcpRemoveProjectBinding(runner, projectID, serviceAccountMember(email), viewerRole); err != nil {
-				display.ColorWarning.Printf("  Warning: step %d failed: %v\n", step, err)
-				errs = append(errs, fmt.Errorf("step %d: %w", step, err))
-			} else {
-				display.ColorOK.Println("  ✓ Project IAM binding removed")
-			}
-
-			step++
-			fmt.Printf("  Step %d/%d: Delete Google Cloud service account...\n", step, total)
-			if err := gcpDeleteServiceAccount(runner, email, projectID); err != nil {
-				display.ColorWarning.Printf("  Warning: step %d failed: %v\n", step, err)
-				errs = append(errs, fmt.Errorf("step %d: %w", step, err))
-			} else {
-				display.ColorOK.Println("  ✓ Service account deleted (impersonation binding removed)")
-			}
+	for _, email := range currentSAEmails {
+		step++
+		fmt.Printf("  Step %d/%d: Remove project IAM binding...\n", step, total)
+		if err := gcpRemoveProjectBinding(runner, projectID, serviceAccountMember(email), viewerRole); err != nil {
+			display.ColorWarning.Printf("  Warning: step %d failed: %v\n", step, err)
+			errs = append(errs, fmt.Errorf("step %d: %w", step, err))
+		} else {
+			display.ColorOK.Println("  ✓ Project IAM binding removed")
 		}
 
-		for _, email := range legacySAEmails {
-			step++
-			fmt.Printf("  Step %d/%d: Remove legacy project IAM binding...\n", step, total)
-			if err := gcpRemoveProjectBinding(runner, projectID, serviceAccountMember(email), viewerRole); err != nil {
-				display.ColorWarning.Printf("  Warning: legacy step %d failed (non-fatal): %v\n", step, err)
-			} else {
-				display.ColorOK.Println("  ✓ Legacy IAM binding removed")
-			}
+		step++
+		fmt.Printf("  Step %d/%d: Delete Google Cloud service account...\n", step, total)
+		if err := gcpDeleteServiceAccount(runner, email, projectID); err != nil {
+			display.ColorWarning.Printf("  Warning: step %d failed: %v\n", step, err)
+			errs = append(errs, fmt.Errorf("step %d: %w", step, err))
+		} else {
+			display.ColorOK.Println("  ✓ Service account deleted (impersonation binding removed)")
+		}
+	}
 
-			step++
-			fmt.Printf("  Step %d/%d: Delete legacy Google Cloud service account...\n", step, total)
-			if err := gcpDeleteServiceAccount(runner, email, projectID); err != nil {
-				display.ColorWarning.Printf("  Warning: legacy step %d failed (non-fatal): %v\n", step, err)
-			} else {
-				display.ColorOK.Println("  ✓ Legacy service account deleted")
-			}
+	for _, email := range legacySAEmails {
+		step++
+		fmt.Printf("  Step %d/%d: Remove legacy project IAM binding...\n", step, total)
+		if err := gcpRemoveProjectBinding(runner, projectID, serviceAccountMember(email), viewerRole); err != nil {
+			display.ColorWarning.Printf("  Warning: legacy step %d failed (non-fatal): %v\n", step, err)
+		} else {
+			display.ColorOK.Println("  ✓ Legacy IAM binding removed")
+		}
+
+		step++
+		fmt.Printf("  Step %d/%d: Delete legacy Google Cloud service account...\n", step, total)
+		if err := gcpDeleteServiceAccount(runner, email, projectID); err != nil {
+			display.ColorWarning.Printf("  Warning: legacy step %d failed (non-fatal): %v\n", step, err)
+		} else {
+			display.ColorOK.Println("  ✓ Legacy service account deleted")
 		}
 	}
 
@@ -211,13 +209,11 @@ func gcpUninstallBuildSteps(projectID string, monConfigIDs []string, conns []con
 	for range monConfigIDs {
 		steps = append(steps, fmt.Sprintf("DT Extensions API: delete monitoring configuration '%s'", configName))
 	}
-	if projectID != "" {
-		for _, email := range saEmails {
-			steps = append(steps, fmt.Sprintf("gcloud projects remove-iam-policy-binding %s --member=%s --role=%s",
-				projectID, serviceAccountMember(email), viewerRole))
-			steps = append(steps, fmt.Sprintf("gcloud iam service-accounts delete %s --project=%s  (removes impersonation binding)",
-				email, projectID))
-		}
+	for _, email := range saEmails {
+		steps = append(steps, fmt.Sprintf("gcloud projects remove-iam-policy-binding %s --member=%s --role=%s",
+			projectID, serviceAccountMember(email), viewerRole))
+		steps = append(steps, fmt.Sprintf("gcloud iam service-accounts delete %s --project=%s  (removes impersonation binding)",
+			email, projectID))
 	}
 	for _, c := range conns {
 		steps = append(steps, fmt.Sprintf("DT Settings API: delete GCP connection '%s' (id: %s)", connName, c.objectID))
@@ -230,9 +226,7 @@ func gcpUninstallPrintPreview(envURL, projectID string, monConfigIDs []string, c
 	display.ColorMessage.Println("  Dynatrace Google Cloud Integration: Uninstall")
 	fmt.Println()
 	fmt.Printf("  Environment: %s\n", envURL)
-	if projectID != "" {
-		fmt.Printf("  Project:     %s\n", projectID)
-	}
+	fmt.Printf("  Project:     %s\n", projectID)
 	if len(conns) > 0 {
 		for _, c := range conns {
 			fmt.Printf("  Connection:  %s (id: %s)\n", connName, c.objectID)
@@ -240,10 +234,8 @@ func gcpUninstallPrintPreview(envURL, projectID string, monConfigIDs []string, c
 	} else {
 		fmt.Printf("  Connection:  %s: not found, skipping\n", connName)
 	}
-	if projectID != "" {
-		for _, email := range saEmails {
-			fmt.Printf("  Service account: %s\n", email)
-		}
+	for _, email := range saEmails {
+		fmt.Printf("  Service account: %s\n", email)
 	}
 	if len(monConfigIDs) > 0 {
 		for _, id := range monConfigIDs {
