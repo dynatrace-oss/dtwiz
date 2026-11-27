@@ -19,8 +19,10 @@ var analyzeJSON bool
 var analyzeCmd = &cobra.Command{
 	Use:   "analyze",
 	Short: "Analyze the current system for observability configuration",
-	Long:  `Detect platform, container runtime, orchestration, existing agents, cloud providers, and running services.`,
-	Args:  cobra.NoArgs,
+	Long: `Detect platform, container runtime, orchestration, existing agents, cloud providers, and running services.
+
+Use "dtwiz analyze projects" to list the application projects that can be instrumented with OpenTelemetry.`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		info, err := analyzeSystem()
 		if err != nil {
@@ -44,7 +46,7 @@ var analyzeCmd = &cobra.Command{
 }
 
 func init() {
-	analyzeCmd.Flags().BoolVar(&analyzeJSON, "json", false, "output analysis as JSON")
+	analyzeCmd.PersistentFlags().BoolVar(&analyzeJSON, "json", false, "output as JSON")
 }
 
 // analyzeSystem runs AnalyzeSystem and enriches the result with cloud connection

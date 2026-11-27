@@ -198,6 +198,12 @@ var installOtelCmd = &cobra.Command{
 	Short: "Install OTel Collector and instrument your application",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Validated before credentials so a wrong flag fails fast.
+		runtimeID, err := otel.ResolveProjectRuntime(otelProject, otelRuntime)
+		if err != nil {
+			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
+			return err
+		}
 		envURL, accessTok, platformTok, err := getDtEnvironment()
 		if err != nil {
 			fireSelfMonitoringEventWithError(buildEventParams(cmd, selfmonitoring.StepFailed), err)
@@ -209,7 +215,7 @@ var installOtelCmd = &cobra.Command{
 			return err
 		}
 		installer.ResetInstallTelemetry()
-		manualLang, installErr := otel.InstallOtelCollectorWithProject(envURL, classicTok, platformTok, otelProject, installDryRun)
+		manualLang, installErr := otel.InstallOtelCollectorWithProjectRuntime(envURL, classicTok, platformTok, otelProject, runtimeID, installDryRun)
 		fireInstallEvents(cmd, installErr)
 		if installErr != nil {
 			if errors.Is(installErr, installer.ErrInstallCancelled) {
@@ -256,6 +262,10 @@ var installOtelCollectorCmd = &cobra.Command{
 }
 
 var otelProject string
+var otelRuntime string
+
+const installOtelRuntimeUsage = "runtime of the --project directory, instead of inferring it"
+
 var otelPythonServiceName string
 var installOtelPythonCmd = &cobra.Command{
 	Use:   "otel-python",
@@ -503,6 +513,7 @@ func init() {
 	installCmd.PersistentFlags().BoolVarP(&installAutoConfirm, "yes", "y", false, "skip confirmation prompts")
 
 	installOtelCmd.Flags().StringVar(&otelProject, "project", "", "path to the project to instrument (skips interactive scan)")
+	installOtelCmd.Flags().StringVar(&otelRuntime, "runtime", "", runtimeFlagUsage(installOtelRuntimeUsage))
 	installOtelPythonCmd.Flags().StringVar(&otelProject, "project", "", "path to the Python project to instrument (skips interactive scan)")
 	installOtelPythonCmd.Flags().StringVar(&otelPythonServiceName, "service-name", "", "OTEL_SERVICE_NAME for the instrumented application (default: my-service)")
 	installOtelNodeCmd.Flags().StringVar(&otelProject, "project", "", "path to the Node.js project to instrument (skips interactive scan)")
@@ -539,6 +550,7 @@ func init() {
 		featureflags.ApplyCLIOverrides(cmd.Flags())
 		installDockerCmd.Hidden = !featureflags.IsEnabled(featureflags.Experimental)
 		installOneAgentCmd.Flags().Lookup("host-property").Hidden = !featureflags.IsEnabled(featureflags.OneAgentHostProperties)
+		installOtelCmd.Flags().Lookup("runtime").Usage = runtimeFlagUsage(installOtelRuntimeUsage)
 		defaultInstallHelp(cmd, args)
 	})
 }

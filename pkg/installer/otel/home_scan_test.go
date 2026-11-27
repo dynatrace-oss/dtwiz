@@ -199,12 +199,98 @@ func TestPromptHomeScanChoice(t *testing.T) {
 
 // ── multi-root dedup ──────────────────────────────────────────────────────────
 
-// TestScanProjectDirs_MultiRootDedup scans [cwd, home] where a project lives
-// under the always-on ~/.dtwiz/examples/ root (itself under home). It must be
+// TestScanProjectDirs_MultiRootDedup scans [cwd, home] plus the bundled
+// ~/.dtwiz/examples/ root (itself under home) where a project lives. It must be
 // reported exactly once even though the home root and the examples root both
 // reach it.
 func TestScanProjectDirs_MultiRootDedup(t *testing.T) {
+	// Arrange
 	home := fakeHome(t)
+	writeBundledSchnitzel(t, home)
+	cwd := t.TempDir()
+	helpers.SetTestWorkingDir(t, cwd)
+	roots := withBundledExamplesRoot([]string{cwd, home})
+
+	// Act
+	projects := scanProjectDirs([]string{"requirements.txt"}, nil, roots)
+
+	// Assert
+	if count := countSchnitzel(projects); count != 1 {
+		t.Errorf("expected schnitzel exactly once across [cwd, home] + examples; got %d in %v", count, projects)
+	}
+}
+
+func TestSelectScanRoots_AppendsBundledExamples(t *testing.T) {
+	// Arrange
+	home := fakeHome(t)
+	writeBundledSchnitzel(t, home)
+	cwd := filepath.Join(home, "projects", "foo")
+	if err := os.MkdirAll(cwd, 0755); err != nil {
+		t.Fatal(err)
+	}
+	helpers.SetTestWorkingDir(t, cwd)
+
+	// Act
+	roots, err := selectScanRoots()
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(roots) != 2 || !rootsContain(roots, cwd) || !rootsContain(roots, filepath.Join(home, ".dtwiz", "examples")) {
+		t.Errorf("expected [cwd, examples], got %v", roots)
+	}
+}
+
+func TestSelectScanRoots_NoBundledExamplesWhenMissing(t *testing.T) {
+	// Arrange
+	home := fakeHome(t)
+	helpers.SetTestWorkingDir(t, home)
+
+	// Act
+	roots, err := selectScanRoots()
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(roots) != 1 {
+		t.Errorf("expected working directory only, got %v", roots)
+	}
+}
+
+func TestScanProjectDirs_SingleRootHasNoBundledExamples(t *testing.T) {
+	// Arrange
+	home := fakeHome(t)
+	writeBundledSchnitzel(t, home)
+	cwd := t.TempDir()
+
+	// Act
+	projects := scanProjectDirs([]string{"requirements.txt"}, nil, []string{cwd})
+
+	// Assert
+	if count := countSchnitzel(projects); count != 0 {
+		t.Errorf("expected no bundled examples for a single explicit root, got %v", projects)
+	}
+}
+
+func TestScanProjectDirs_BundledExamplesAsRoot(t *testing.T) {
+	// Arrange
+	home := fakeHome(t)
+	writeBundledSchnitzel(t, home)
+	examples := filepath.Join(home, ".dtwiz", "examples")
+
+	// Act
+	projects := scanProjectDirs([]string{"requirements.txt"}, nil, []string{examples})
+
+	// Assert
+	if count := countSchnitzel(projects); count != 1 {
+		t.Errorf("expected schnitzel when the examples directory is the root, got %v", projects)
+	}
+}
+
+func writeBundledSchnitzel(t *testing.T, home string) {
+	t.Helper()
 	bundled := filepath.Join(home, ".dtwiz", "examples", "schnitzel")
 	if err := os.MkdirAll(bundled, 0755); err != nil {
 		t.Fatal(err)
@@ -212,19 +298,14 @@ func TestScanProjectDirs_MultiRootDedup(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(bundled, "requirements.txt"), []byte("flask\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
+}
 
-	cwd := t.TempDir()
-	helpers.SetTestWorkingDir(t, cwd)
-
-	projects := scanProjectDirs([]string{"requirements.txt"}, nil, []string{cwd, home})
-
+func countSchnitzel(projects []ScannedProject) int {
 	count := 0
 	for _, p := range projects {
 		if strings.HasSuffix(filepath.ToSlash(p.Path), "schnitzel") {
 			count++
 		}
 	}
-	if count != 1 {
-		t.Errorf("expected schnitzel exactly once across [cwd, home] + examples; got %d in %v", count, projects)
-	}
+	return count
 }

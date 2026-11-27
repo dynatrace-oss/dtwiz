@@ -11,12 +11,18 @@ Go CLI that analyzes a system and deploys the best Dynatrace observability metho
 ```text
 dtwiz setup                  # interactive: analyze → recommend → pick → install
 dtwiz analyze [--json]       # detect platform, containers, K8s, agents, cloud, services
+dtwiz analyze projects [--dir <path>] [--runtime <id>[,<id>...]] [--json]
+                             # list OTel-instrumentable projects below cwd (or --dir);
+                             # read-only, no credentials, never prompts
+                             # ids: python | java | nodejs | go | dotnet (dotnet only with DTWIZ_DOTNET_OTEL)
 dtwiz recommend [--json]     # ranked ingestion recommendations
 dtwiz status                 # connection status + system analysis
 dtwiz watch [--from <time>] [--exit-on-data]
                              # poll Dynatrace every 5s and display live ingest summary;
                              # --exit-on-data stops after the first data, or at the 10-min timeout without prompting
 dtwiz install <method>       # oneagent | kubernetes | otel | otel-collector | aws | aws-lambda | azure | gcp
+dtwiz install otel --project <path> [--runtime <id>]
+                             # instrument one project; --runtime picks the runtime instead of inferring it
 dtwiz update <method>        # otel (patch existing OTel Collector config) | azure | gcp (reconcile monitoring config)
 dtwiz uninstall <method>     # oneagent | kubernetes | otel | aws | aws-lambda | azure | gcp | self
 ```
@@ -114,7 +120,7 @@ Dynatrace docs pages may fail through generic webpage extraction. To read them, 
 
 ## CLI conventions
 
-- **Args validation:** All leaf commands must set `Args: cobra.NoArgs`. Parent commands with required subcommands use `Args: cobra.MinimumNArgs(1)`.
+- **Args validation:** All leaf commands must set `Args: cobra.NoArgs`. Parent commands with required subcommands use `Args: cobra.MinimumNArgs(1)`. A parent whose bare verb is meaningful on its own may also be runnable (own `RunE`, `Args: cobra.NoArgs`), as `analyze` is with its `projects` subcommand.
 - **`--dry-run` pattern:** Defined once as a `PersistentFlags().BoolVar()` on the parent command (`installCmd`, `updateCmd`, `uninstallCmd`), shared by all subcommands via a package-level variable.
 - **`--yes`/`-y` auto-confirm:** Same pattern as `--dry-run` — one `PersistentFlags().BoolVarP()` per verb group, sets `installer.AutoConfirm`. When true, `ConfirmProceed()` returns immediately without prompting.
 - **`-v` / `--debug` flags:** Defined on root. `logger.Init(debugFlag, verbosityFlag)` is called in `PersistentPreRun` on root and reproduced in every `PersistentPreRun` that overrides root's.

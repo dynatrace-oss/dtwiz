@@ -44,14 +44,14 @@ pkg/installer/otel             domain (project_inventory.go, runtime_id.go)
   DetectProjects(ProjectQuery) (ProjectInventory, error)
         |
         v  ProjectInventory (no json tags, no colors, absolute paths)
-pkg/projectreport              presentation
+pkg/installer/otel/projectreport   presentation
   RenderText(io.Writer, ProjectInventory) error
   RenderJSON(io.Writer, ProjectInventory) error
 ```
 
 The domain stays in `pkg/installer/otel` because every detector it needs is unexported there. Exporting a small, intention-revealing API is far smaller than relocating the detectors. *Alternative:* a new `pkg/projects` that owns detection; rejected for this change (large move, mixed with logic changes).
 
-The presentation package is separate because rendering is a different concern from detection and is consumed by `cmd` only. *Alternatives:* put renderers in `pkg/display` (rejected: `display` holds generic, method-agnostic helpers) or in `pkg/installer/otel` (rejected: mixes presentation into the domain package).
+The presentation package is separate because rendering is a different concern from detection and is consumed by `cmd` only. It is a public subpackage of `otel`, next to the inventory it renders, and exports only `RenderText` and `RenderJSON`; the JSON types, status names and quoting stay unexported. *Alternatives:* put renderers in `pkg/display` (rejected: `display` holds generic, method-agnostic helpers); a top-level `pkg/projectreport` (rejected: separates the renderer from the only code it renders); `otel/internal/projectreport` behind a wrapper in `otel` (rejected: `cmd` cannot import an `internal` package, and a wrapper in `otel` would create an import cycle unless the inventory types moved to a third package); or in `pkg/installer/otel` itself (rejected: mixes presentation into the domain package).
 
 ### D2: Domain types
 
@@ -65,6 +65,7 @@ type ProjectQuery struct {
 
 type ProjectInventory struct {
     Roots    []string        // absolute
+    Filter   []RuntimeID     // as requested; empty when unfiltered (drives the "Runtimes:" text line)
     Runtimes []RuntimeStatus // only those in scope, in identifier-set order
     Projects []InventoryProject
 }
@@ -102,7 +103,7 @@ The binary check inside `detectAllProjects` is extracted into `checkRuntimeAvail
 
 ### D4: Bundled examples root moves to root selection
 
-`scanProjectDirs` stops appending `~/.dtwiz/examples/`. `selectScanRoots()` appends it (when it exists) to whatever roots it returns, in every branch. Because deduplication of matched directories happens inside a single `scanProjectDirs` call across all its roots, the "no duplicate when cwd is under examples" behavior is preserved. `DetectProjects` passes only its own root, so it gets no examples. *Alternative:* a boolean parameter on `scanProjectDirs` and all five detectors; rejected as it threads a flag through every signature for one caller difference.
+`scanProjectDirs` stops appending `~/.dtwiz/examples/`. `selectScanRoots()` appends it (when it exists) to whatever roots it returns, in every branch. `defaultScanRoots()`, used by the per-runtime commands (`otel-python`, `otel-node`, `otel-java`) and process correlation, appends it too, so those flows keep seeing the demo app as before. Because deduplication of matched directories happens inside a single `scanProjectDirs` call across all its roots, the "no duplicate when cwd is under examples" behavior is preserved. `DetectProjects` passes only its own root, so it gets no examples. *Alternative:* a boolean parameter on `scanProjectDirs` and all five detectors; rejected as it threads a flag through every signature for one caller difference.
 
 ### D5: Validation errors
 
@@ -120,7 +121,7 @@ Cobra prints returned errors to stderr and `cmd.Execute()` exits 1, which yields
 - `cmd/install.go` adds `--runtime` to `installOtelCmd` only (not `otel-python`/`otel-node`/`otel-java`, whose runtime is implied).
 - Before `getDtEnvironment()`, `cmd` calls `otel.ResolveProjectRuntime(projectPath, runtimeFlag) (RuntimeID, error)`, which rejects `--runtime` without `--project`, parses the value, and checks `hasRuntimeMarkers(path, id)`.
 - `hasRuntimeMarkers` reuses the per-runtime marker lists that `inferRuntimeFromPath` already checks; `inferRuntimeFromPath` is rewritten as "first runtime in inference order whose markers are present", so both share one marker definition.
-- `InstallOtelCollectorWithProject` gains a runtime argument; when non-empty it replaces `inferRuntimeFromPath(projectPath)`. `setup` and `InstallOtelCollector` pass empty.
+- `InstallOtelCollectorWithProjectRuntime` takes the runtime; when non-empty it replaces `inferRuntimeFromPath(projectPath)`. The existing `InstallOtelCollectorWithProject` delegates to it with an empty runtime, so its callers (`setup` via `InstallOtelCollector`, `install demo`, tests) stay unchanged.
 
 ### D7: Command wiring
 
@@ -152,7 +153,7 @@ That sibling change (.NET steps 2 and 3) is in flight and touches the same code:
 
 ## Risks / Trade-offs
 
-- [Detectors print to stdout somewhere other than `detectAllProjects`] → a JSON-output test captures stdout of `analyze projects --json` with an unavailable runtime and asserts it parses as a whole.
+- [Detectors print to stdout somewhere other than `detectAllProjects`] → a JSON-output test captures stdout of `analyze projects --json` with an unavailable runtime and asserts it parses as a whole. The only other writer on the detection path, the large-scan progress notice in `scanProjectDirs`, now goes to stderr, for `install otel` too; it looks the same on a terminal.
 - [Scanning unavailable runtimes costs time that `install otel` saves] → only in the inventory, and `--runtime` narrows it; `install otel` keeps skipping them.
 - [Moving the examples root changes `scanProjectDirs` behavior that existing tests rely on] → update `home_scan_test.go` and related tests to assert the root via `selectScanRoots`; keep the dedup scenario covered.
 - [Hidden-directory skip could hide `~/.dtwiz/examples` when passed as `--dir`] → the walk does not apply the skip to the root itself; covered by a test for `--dir ~/.dtwiz/examples`.

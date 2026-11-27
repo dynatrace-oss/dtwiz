@@ -24,6 +24,17 @@
       "console": "integratedTerminal"
     },
     {
+      "name": "dtwiz analyze projects",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "cwd": "${input:cwd}",
+      "args": "analyze projects ${input:flags}",
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal"
+    },
+    {
       "name": "dtwiz (attach to process)",
       "type": "go",
       "request": "attach",
@@ -52,13 +63,13 @@
     {
       "id": "subcommand",
       "type": "promptString",
-      "description": "Subcommand/method, e.g. otel, kubernetes (empty for setup, analyze, recommend, status, watch, version)",
+      "description": "Subcommand/method, e.g. otel, kubernetes, or projects for analyze (empty for setup, bare analyze, recommend, status, watch, version)",
       "default": ""
     },
     {
       "id": "flags",
       "type": "promptString",
-      "description": "Flags/args, e.g. --dry-run --experimental --from 1h (may be empty)",
+      "description": "Flags/args, e.g. --dry-run --experimental --from 1h, or --dir ~/work/shop --runtime java,go --json for analyze projects (may be empty)",
       "default": ""
     },
     {

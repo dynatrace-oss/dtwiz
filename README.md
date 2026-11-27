@@ -26,6 +26,7 @@
 - [Flags](#flags)
   - [`--yes` / `-y`](#--yes---y)
   - [`--project <path>`](#--project-path)
+  - [`--runtime <id>`](#--runtime-id)
 - [Self-monitoring](#self-monitoring)
 - [Demo](#demo)
 - [Example workflow](#example-workflow)
@@ -153,6 +154,7 @@ The `main` channel is rebuilt automatically on every push to `main` and is inten
 | --------- | ------------- |
 | `dtwiz setup` | Interactive analyze → recommend → install workflow |
 | `dtwiz analyze` | Detect platform, containers, K8s, existing agents, cloud, and services |
+| `dtwiz analyze projects` | List application projects that can be instrumented with OpenTelemetry (no credentials needed, never prompts) |
 | `dtwiz recommend` | Generate ranked ingestion recommendations |
 | `dtwiz install oneagent` | Install Dynatrace OneAgent on this host |
 | `dtwiz install kubernetes` | Deploy Dynatrace Operator on Kubernetes |
@@ -200,6 +202,23 @@ Point `install otel`, `install otel-python`, `install otel-java`, or `install ot
 dtwiz install otel --project ./my-service
 dtwiz install otel-python --project ./my-python-app
 ```
+
+### `--runtime <id>`
+
+On `install otel`, selects the runtime of the `--project` directory instead of inferring it, for example when one directory holds both a Node.js and a Python project. Accepted values, matched exactly: `python`, `java`, `nodejs`, `go` (plus `dotnet` while `DTWIZ_DOTNET_OTEL=true`). Requires `--project`.
+
+```bash
+dtwiz install otel --project ./api --runtime python
+```
+
+On `analyze projects`, `--runtime` takes a comma-separated list of the same values and limits the listing to those runtimes:
+
+```bash
+dtwiz analyze projects --runtime java,go
+dtwiz analyze projects --dir ~/work/shop
+```
+
+Every project listed by `analyze projects --json` carries the `install_command` that installs exactly that project.
 
 ### `--host-property <KEY[=VALUE]>`
 
@@ -250,10 +269,11 @@ dtwiz status
 
 ## JSON output
 
-`analyze` and `recommend` support `--json` for structured output:
+`analyze`, `analyze projects` and `recommend` support `--json` for structured output:
 
 ```bash
 dtwiz analyze --json | jq .platform
+dtwiz analyze projects --json | jq -r '.projects[] | select(.runtime == "nodejs") | .install_command'
 dtwiz recommend --json | jq '.[0].method'
 ```
 
