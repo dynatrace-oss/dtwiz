@@ -10,8 +10,9 @@ import (
 )
 
 // ProjectFile is the statically read content of a project file. MSBuild is not
-// evaluated: only unconditional properties of the file itself are read, so
-// values inherited from shared build files (Directory.Build.props) are absent.
+// evaluated: only unconditional properties are read, from the file itself and,
+// for values it does not declare, from the Directory.Build.props that applies
+// to it. Conditions and property references are not resolved.
 type ProjectFile struct {
 	Path          string
 	Name          string   // file name without extension
@@ -32,7 +33,8 @@ type msbuildProject struct {
 		Name string `xml:"Name,attr"`
 	} `xml:"Sdk"`
 	Imports []struct {
-		Sdk string `xml:"Sdk,attr"`
+		Sdk     string `xml:"Sdk,attr"`
+		Project string `xml:"Project,attr"`
 	} `xml:"Import"`
 	PropertyGroups []struct {
 		Condition  string `xml:"Condition,attr"`
@@ -53,31 +55,17 @@ var netFrameworkMoniker = regexp.MustCompile(`^net\d+$`)
 
 // ParseProjectFile reads a project file and classifies it.
 func ParseProjectFile(path string) (ProjectFile, error) {
-	data, err := os.ReadFile(path)
+	doc, err := readMSBuildFile(path)
 	if err != nil {
-		return ProjectFile{}, fmt.Errorf("reading project file: %w", err)
-	}
-	var doc msbuildProject
-	if err := xml.Unmarshal(data, &doc); err != nil {
-		return ProjectFile{}, fmt.Errorf("parsing project file %s: %w", path, err)
-	}
-	if doc.XMLName.Local != "Project" {
-		return ProjectFile{}, fmt.Errorf("parsing project file %s: root element is %q, want Project", path, doc.XMLName.Local)
+		return ProjectFile{}, err
 	}
 
-	props := map[string]string{}
-	for _, group := range doc.PropertyGroups {
-		if group.Condition != "" {
-			continue
-		}
-		for _, p := range group.Properties {
-			if p.Condition != "" {
-				continue
-			}
-			key := strings.ToLower(p.XMLName.Local)
-			if _, seen := props[key]; !seen {
-				props[key] = strings.TrimSpace(p.Value)
-			}
+	// Properties the project does not declare come from Directory.Build.props,
+	// which MSBuild imports before the project body: the project wins.
+	props := unconditionalProperties(doc)
+	for key, value := range sharedProperties(filepath.Dir(path)) {
+		if _, declared := props[key]; !declared {
+			props[key] = value
 		}
 	}
 
@@ -155,7 +143,8 @@ func ParseProjectFile(path string) (ProjectFile, error) {
 func splitFrameworks(value string) []string {
 	var out []string
 	for _, f := range strings.Split(value, ";") {
-		if f = strings.TrimSpace(f); f != "" {
+		// A reference to another property ("$(Tfm)") cannot be resolved here.
+		if f = strings.TrimSpace(f); f != "" && !strings.Contains(f, "$(") {
 			out = append(out, f)
 		}
 	}
@@ -163,3 +152,105 @@ func splitFrameworks(value string) []string {
 }
 
 func isTrue(v string) bool { return strings.EqualFold(strings.TrimSpace(v), "true") }
+
+// sharedBuildFile is the file MSBuild imports for every project below it.
+const sharedBuildFile = "Directory.Build.props"
+
+// maxSharedDepth bounds how many chained Directory.Build.props files are read.
+const maxSharedDepth = 8
+
+// readMSBuildFile parses an MSBuild file (project file or props file).
+func readMSBuildFile(path string) (msbuildProject, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return msbuildProject{}, fmt.Errorf("reading project file: %w", err)
+	}
+	var doc msbuildProject
+	if err := xml.Unmarshal(data, &doc); err != nil {
+		return msbuildProject{}, fmt.Errorf("parsing project file %s: %w", path, err)
+	}
+	if doc.XMLName.Local != "Project" {
+		return msbuildProject{}, fmt.Errorf("parsing project file %s: root element is %q, want Project", path, doc.XMLName.Local)
+	}
+	return doc, nil
+}
+
+// unconditionalProperties returns the lowercase-named properties of doc that
+// are not under a condition; the first declaration of a name wins.
+func unconditionalProperties(doc msbuildProject) map[string]string {
+	props := map[string]string{}
+	for _, group := range doc.PropertyGroups {
+		if group.Condition != "" {
+			continue
+		}
+		for _, p := range group.Properties {
+			if p.Condition != "" {
+				continue
+			}
+			key := strings.ToLower(p.XMLName.Local)
+			if _, seen := props[key]; !seen {
+				props[key] = strings.TrimSpace(p.Value)
+			}
+		}
+	}
+	return props
+}
+
+// sharedProperties returns the unconditional properties of the
+// Directory.Build.props files that apply to a project in dir: the nearest one
+// upward and, while a file imports its parent's Directory.Build.props, the
+// ones above it. A nearer file wins over a farther one. Unreadable files end
+// the search.
+func sharedProperties(dir string) map[string]string {
+	merged := map[string]string{}
+	for depth := 0; depth < maxSharedDepth; depth++ {
+		path := findFileAbove(dir, sharedBuildFile)
+		if path == "" {
+			break
+		}
+		doc, err := readMSBuildFile(path)
+		if err != nil {
+			break
+		}
+		for key, value := range unconditionalProperties(doc) {
+			if _, set := merged[key]; !set {
+				merged[key] = value
+			}
+		}
+		if !importsParentBuildFile(doc) {
+			break
+		}
+		fileDir := filepath.Dir(path)
+		if dir = filepath.Dir(fileDir); dir == fileDir {
+			break
+		}
+	}
+	return merged
+}
+
+// findFileAbove returns the path of the nearest file called name in dir or one
+// of its ancestors, or "".
+func findFileAbove(dir, name string) string {
+	for {
+		candidate := filepath.Join(dir, name)
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+}
+
+// importsParentBuildFile reports whether doc imports a Directory.Build.props
+// from above (the usual `GetPathOfFileAbove('Directory.Build.props', ...)`).
+func importsParentBuildFile(doc msbuildProject) bool {
+	for _, imp := range doc.Imports {
+		if strings.Contains(strings.ToLower(imp.Project), strings.ToLower(sharedBuildFile)) {
+			return true
+		}
+	}
+	return false
+}

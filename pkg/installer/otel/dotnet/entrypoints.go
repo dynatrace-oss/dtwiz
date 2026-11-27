@@ -18,7 +18,10 @@ const maxSearchDepth = 5
 
 // Service is a runnable .NET project that could be instrumented.
 type Service struct {
-	Name            string
+	Name string
+	// AssemblyName is the name of the built library (without extension); it
+	// differs from Name when two services share a name.
+	AssemblyName    string
 	ProjectFile     string // absolute path
 	Dir             string // absolute project directory
 	Frameworks      []string
@@ -121,6 +124,7 @@ func DiscoverServices(projectDir string, markers []string) []Service {
 		}
 		services = append(services, Service{
 			Name:            name,
+			AssemblyName:    name,
 			ProjectFile:     p,
 			Dir:             filepath.Dir(p),
 			Frameworks:      pf.Frameworks,
